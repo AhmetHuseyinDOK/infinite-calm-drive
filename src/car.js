@@ -1,0 +1,90 @@
+// A small two-tone kei car (think Honda N-Box / Suzuki Hustler), toon-shaded. Faces +Z in its local frame.
+import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { GRAD, withCloudShadow } from './materials.js';
+
+function plateTexture() {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 128;
+  const g = c.getContext('2d');
+  g.fillStyle = '#f2cf3a'; g.fillRect(0, 0, 256, 128);
+  g.strokeStyle = '#2f5a2f'; g.lineWidth = 6; g.strokeRect(5, 5, 246, 118);
+  const f = '"Hiragino Sans","Noto Sans CJK JP","Noto Sans JP",sans-serif';
+  g.fillStyle = '#2f5a2f'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.font = `700 30px ${f}`; g.fillText('品川 580', 128, 34);
+  g.font = `800 58px ${f}`; g.fillText('あ 12-34', 128, 86);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+function glassTexture() {
+  const c = document.createElement('canvas'); c.width = 64; c.height = 128;
+  const g = c.getContext('2d'), gr = g.createLinearGradient(0, 0, 0, 128);
+  gr.addColorStop(0, '#9fbfe6'); gr.addColorStop(0.45, '#4a6690'); gr.addColorStop(1, '#1d2638');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 128);
+  g.fillStyle = 'rgba(255,255,255,0.35)'; g.beginPath(); g.moveTo(20, 0); g.lineTo(34, 0); g.lineTo(10, 128); g.lineTo(-4, 128); g.fill();
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+
+export function makeCar() {
+  const car = new THREE.Group();
+  const toon = (color, extra = {}) => withCloudShadow(new THREE.MeshToonMaterial({ color, gradientMap: GRAD, ...extra }));
+  const mBody = toon('#9fd8c8'), mRoof = toon('#e9e7e0'), mTrim = toon('#2a2c33'), mTyre = toon('#1b1c20'), mHub = toon('#c8ccd2');
+  const mGlass = withCloudShadow(new THREE.MeshToonMaterial({ color: '#ffffff', map: glassTexture(), gradientMap: GRAD }));
+  const mTail = new THREE.MeshToonMaterial({ color: '#c8303a', emissive: '#ff2a2a', emissiveIntensity: 0.4, gradientMap: GRAD });
+  const mAmber = new THREE.MeshToonMaterial({ color: '#f0a040', emissive: '#ff9a30', emissiveIntensity: 0.2, gradientMap: GRAD });
+  const mPlate = new THREE.MeshBasicMaterial({ map: plateTexture() });
+  // collect parts per material, then merge → ~9 draw calls for the whole car
+  const parts = new Map();
+  const m4 = new THREE.Matrix4(), e = new THREE.Euler(), q = new THREE.Quaternion(), one = new THREE.Vector3(1, 1, 1);
+  const add = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => {
+    const g = geo.index ? geo.toNonIndexed() : geo;
+    e.set(rx, ry, rz); q.setFromEuler(e); m4.compose(new THREE.Vector3(x, y, z), q, one); g.applyMatrix4(m4);
+    if (!parts.has(mat)) parts.set(mat, []);
+    parts.get(mat).push(g);
+  };
+  add(new RoundedBoxGeometry(1.48, 0.86, 3.38, 4, 0.15), mBody, 0, 0.77, 0);
+  add(new RoundedBoxGeometry(1.42, 0.66, 2.6, 4, 0.17), mBody, 0, 1.5, -0.25);
+  add(new RoundedBoxGeometry(1.38, 0.09, 2.5, 3, 0.04), mRoof, 0, 1.84, -0.25);
+  add(new THREE.PlaneGeometry(1.16, 0.5), mGlass, 0, 1.53, -1.556, 0, Math.PI, 0);
+  for (const s of [-1, 1]) {
+    add(new THREE.PlaneGeometry(2.25, 0.46), mGlass, s * 0.712, 1.54, -0.2, 0, (s * Math.PI) / 2, 0);
+    add(new RoundedBoxGeometry(0.1, 0.12, 0.2, 2, 0.04), mBody, s * 0.82, 1.2, 0.95);
+    add(new RoundedBoxGeometry(0.14, 0.48, 0.08, 2, 0.035), mTail, s * 0.64, 1.0, -1.67);
+    add(new RoundedBoxGeometry(0.12, 0.08, 0.06, 2, 0.02), mAmber, s * 0.64, 0.7, -1.67);
+  }
+  add(new THREE.PlaneGeometry(1.2, 0.52), mGlass, 0, 1.52, 1.056, -0.12, 0, 0);
+  add(new RoundedBoxGeometry(1.52, 0.22, 0.22, 2, 0.07), mTrim, 0, 0.42, -1.62);
+  add(new THREE.BoxGeometry(0.24, 0.04, 0.05), mTrim, 0, 0.84, -1.69);
+  add(new THREE.PlaneGeometry(0.34, 0.17), mPlate, 0, 0.72, -1.7, 0, Math.PI, 0);
+  for (const [x, z] of [[-0.67, 1.12], [0.67, 1.12], [-0.67, -1.12], [0.67, -1.12]]) {
+    add(new THREE.CylinderGeometry(0.29, 0.29, 0.2, 20), mTyre, x, 0.29, z, 0, 0, Math.PI / 2);
+    add(new THREE.CylinderGeometry(0.16, 0.16, 0.205, 12), mHub, x, 0.29, z, 0, 0, Math.PI / 2);
+  }
+  for (const [mat, list] of parts) {
+    const mesh = new THREE.Mesh(mergeGeometries(list), mat);
+    mesh.castShadow = mat !== mGlass && mat !== mPlate; mesh.receiveShadow = true;
+    car.add(mesh);
+  }
+  // rear wiper (its own mesh so it can sweep when it rains)
+  const wiperPivot = new THREE.Group(); wiperPivot.position.set(0.02, 1.3, -1.57); car.add(wiperPivot);
+  const wg = new THREE.BoxGeometry(0.52, 0.026, 0.02); wg.translate(0.27, 0, 0);
+  const wiper = new THREE.Mesh(wg, mTrim); wiper.rotation.z = 0.18; wiperPivot.add(wiper);
+  let wiperT = 0;
+  // headlights at night
+  const head = new THREE.SpotLight(0xfff0d0, 0, 70, 0.55, 0.65, 1.2);
+  head.position.set(0, 0.8, 1.6); head.target.position.set(0, 0, 18); car.add(head, head.target);
+
+  return {
+    group: car, mBody,
+    update(dt, speed, night, rain = 0) {
+      mTail.emissiveIntensity = 0.35 + night * 3.2;
+      if (rain > 0.15 || wiperT % 2.6 > 0.01) {
+        wiperT += dt;
+        const p = (wiperT % 2.6) / 2.6, sm = x => x * x * (3 - 2 * x);
+        const a = p < 0.25 ? sm(p / 0.25) : p < 0.5 ? sm(1 - (p - 0.25) / 0.25) : 0;
+        wiper.rotation.z = 0.18 + a * 2.5;
+        if (rain <= 0.15 && p >= 0.5) wiperT = 0;
+      }
+      head.intensity = night * 60;
+    },
+  };
+}

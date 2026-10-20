@@ -263,6 +263,7 @@ async function main() {
     camPos.lerp(tmp, 1 - Math.exp(-dt * 6)); look.lerp(lt, 1 - Math.exp(-dt * 5));
     camera.position.copy(camPos); camera.lookAt(look);
     if (QS.has('yaw')) camera.rotateY((parseFloat(QS.get('yaw')) * Math.PI) / 180); // test hook: look sideways
+    if (QS.has('pitch')) camera.rotateX((parseFloat(QS.get('pitch')) * Math.PI) / 180); // test hook: look up / down
     fwd.set(f.fx, 0, f.fz); right.set(f.rx, 0, f.rz);
 
     // lighting & atmosphere

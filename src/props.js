@@ -304,6 +304,7 @@ function shopHouse(G, M, r, s) {
       const i = Math.floor(r() * bays), xa = x0 + i * bw + 0.15, xb = x0 + (i + 1) * bw - 0.15, y = fy[f];
       c.box(xa, y - 0.12, -0.9, xb, y, 0, PAL.parapet);
       fq(a, xa, xb, y, y + 1.0, -0.9, 'rail'); nxq(a, xa, -0.9, 0, y, y + 1.0, 'rail'); pxq(a, xb, -0.9, 0, y, y + 1.0, 'rail');
+      if (r() < 0.45) laundry(c, xa + 0.1, xb - 0.1, y + 1.95, -0.55, r);
       if (r() < 0.6) acUnit(G, M, (xa + xb) / 2 + 0.6, y, -0.75);
     } else if (r() < 0.35) {
       const i = Math.floor(r() * bays); acUnit(G, M, x0 + (i + 0.5) * bw, fy[f] + 0.15, -0.3);
@@ -333,6 +334,11 @@ function apartment(G, M, r, s) {
     c.box(x0, y, -1.3, -x0, y + 1.1, -1.18, slab, null, { noBottom: true });
     for (let i = 0; i < bays; i++) fq(a, x0 + i * bw, x0 + (i + 1) * bw, y, y + 1.1, -1.305, bal, tint);
     for (let i = 0; i <= bays; i++) c.box(x0 + i * bw - 0.05, y, -1.18, x0 + i * bw + 0.05, y + 2.4, 0, mulC(tint, 0.92));
+    for (let i = 0; i < bays; i++) {
+      const q = r(), xa = x0 + i * bw + 0.2, xb = x0 + (i + 1) * bw - 0.2;
+      if (q < 0.34) laundry(c, xa, xb, y + 2.02, -0.98, r);
+      else if (q < 0.46) futon(c, xa + 0.25, Math.min(xb - 0.25, xa + 1.9), y + 1.1, -1.3, r);
+    }
     G.atlas.setM(M);
     for (let i = 0; i < bays; i++) if (r() < 0.55) { acUnit(G, M, x0 + (i + 0.78) * bw, y, -0.55); G.atlas.setM(M); G.color.setM(M); }
   }
@@ -443,6 +449,87 @@ export function pedestrianBridge(G, M, span, name) {
     for (let k = 0; k < n; k++) c.box(1.1 + k * 0.3, 0.15, lo, 1.1 + (k + 1) * 0.3, h - (k + 1) * rise + 0.04, hi, CONC);
     c.box(1.1, h - 0.1, lo - 0.05, 1.1 + n * 0.3, h - 0.02, lo + 0.05, STEEL); // a simple handrail line along the stair
   }
+}
+
+// ------------------------------------------------------------------ a little rural station (無人駅)
+/** platform along local x from xa to xb (road end at xRoad), beside the near track; local z = across the tracks */
+export function station(G, M, xa, xb, xRoad, idx, r) {
+  const c = G.color, top = 1.22, zE = 3.55, zB = 6.7, CONC = C('#c8c5bd'), EDGE = C('#ebe8de'), WOOD = C('#7a5a42'), WOOD2 = C('#5e4433'), ROOF = C('#4d5468');
+  c.setM(M);
+  c.box(xa, -1.4, zE, xb, top, zB, CONC, null, { noBottom: true });
+  c.box(xa, top, zE, xb, top + 0.025, zE + 0.32, EDGE);                        // white coping along the edge
+  c.box(xa, top, zE + 0.6, xb, top + 0.04, zE + 0.9, PAL.yellow);              // tactile strip (点字ブロック)
+  // ramp down to the road
+  const dir = Math.sign(xRoad - (xa + xb) / 2), xr0 = dir > 0 ? xb : xa, xr1 = xr0 + dir * 6.2;
+  const rz0 = zE + 0.9, rz1 = zB - 0.2;
+  const RP = (x, y, z) => [x, y, z];
+  if (dir > 0) c.quad(RP(xr1, 0.1, rz1), RP(xr1, 0.1, rz0), RP(xr0, top, rz0), RP(xr0, top, rz1), CONC);
+  else c.quad(RP(xr1, 0.1, rz0), RP(xr1, 0.1, rz1), RP(xr0, top, rz1), RP(xr0, top, rz0), CONC);
+  for (const z of [rz0, rz1]) { // sloped handrails on posts
+    const RAILC = C('#9aa0a6');
+    c.rod([xr1, 0.1 + 0.9, z], [xr0, top + 0.9, z], 0.03, 0.03, 5, RAILC);
+    for (let k = 0; k <= 3; k++) { const x = xr1 + ((xr0 - xr1) * k) / 3, y = 0.1 + ((top - 0.1) * k) / 3; c.box(x - 0.03, y, z - 0.03, x + 0.03, y + 0.9, z + 0.03, RAILC); }
+  }
+  // the platform's long side walls: weathered concrete panels instead of a blank face
+  G.atlas.setM(M);
+  for (let x = xa; x < xb - 0.01; x += 3) {
+    const x2 = Math.min(xb, x + 3);
+    G.atlas.quad([x, -0.6, zB + 0.004], [x2, -0.6, zB + 0.004], [x2, top, zB + 0.004], [x, top, zB + 0.004], C('#d8d4ca'), uv('concrete'));
+  }
+  c.setM(M);
+  // low fence along the back edge
+  for (let x = xa + 0.4; x < xb; x += 2) c.box(x - 0.05, top, zB - 0.12, x + 0.05, top + 1.0, zB - 0.02, C('#8f949a'));
+  for (const y of [0.45, 0.95]) c.box(xa, top + y, zB - 0.1, xb, top + y + 0.06, zB - 0.04, C('#8f949a'));
+  // the shelter (待合所): wooden walls, a sloping roof, a bench inside, the station's name on its back wall
+  const len = xb - xa, fromRoad = f => (dir > 0 ? xb - len * f : xa + len * f);
+  const xm = fromRoad(0.47), s0 = xm - 2.3, s1 = xm + 2.3, zf = zE + 1.35, zb = zB - 0.25;
+  c.box(s0, top, zb - 0.12, s1, top + 2.45, zb, WOOD);
+  for (const x of [s0, s1 - 0.12]) c.box(x, top, zf + 0.6, x + 0.12, top + 2.45, zb, WOOD2);
+  for (const x of [s0, s1 - 0.12]) c.box(x, top, zf, x + 0.12, top + 2.45, zf + 0.12, WOOD2);
+  c.quad([s1 + 0.4, top + 2.5, zf - 0.45], [s0 - 0.4, top + 2.5, zf - 0.45], [s0 - 0.4, top + 2.85, zb + 0.35], [s1 + 0.4, top + 2.85, zb + 0.35], ROOF);
+  c.quad([s0 - 0.4, top + 2.42, zf - 0.45], [s1 + 0.4, top + 2.42, zf - 0.45], [s1 + 0.4, top + 2.77, zb + 0.35], [s0 - 0.4, top + 2.77, zb + 0.35], C('#3a3f50'));
+  c.box(s0 + 0.3, top + 0.42, zb - 0.55, s1 - 0.3, top + 0.48, zb - 0.15, C('#8a6a4a'));
+  for (const x of [s0 + 0.4, s1 - 0.5]) c.box(x, top, zb - 0.5, x + 0.08, top + 0.42, zb - 0.2, PAL.metal);
+  G.atlas.setM(M);
+  G.atlas.quad([xm - 1.1, top + 1.55, zb + 0.005], [xm + 1.1, top + 1.55, zb + 0.005], [xm + 1.1, top + 2.03, zb + 0.005], [xm - 1.1, top + 2.03, zb + 0.005], W1, uv('ekiplate' + idx));
+  // the station-name board on two posts, printed on both faces
+  const bx = fromRoad(0.2), bz = zE + 1.6, bw = 1.25, by0 = top + 1.25, by1 = by0 + 0.95;
+  c.setM(M);
+  for (const x of [bx - bw + 0.12, bx + bw - 0.12]) c.cyl(x, top, bz, 0.05, 0.05, by1 - top + 0.05, 8, C('#6b7078'));
+  c.box(bx - bw, by0 - 0.03, bz - 0.03, bx + bw, by1 + 0.03, bz + 0.03, C('#3a3d42'));
+  G.atlas.setM(M);
+  G.atlas.quad([bx - bw, by0, bz + 0.035], [bx + bw, by0, bz + 0.035], [bx + bw, by1, bz + 0.035], [bx - bw, by1, bz + 0.035], W1, uv('ekimei' + idx));
+  G.atlas.quad([bx + bw, by0, bz - 0.035], [bx - bw, by0, bz - 0.035], [bx - bw, by1, bz - 0.035], [bx + bw, by1, bz - 0.035], W1, uv('ekimei' + idx));
+  // a bench out on the platform and a few old lamps
+  c.setM(M);
+  const bench = xm - dir * 4.2;
+  c.box(bench - 0.9, top + 0.42, zB - 1.25, bench + 0.9, top + 0.47, zB - 0.85, C('#3b6ea8'));
+  c.box(bench - 0.9, top + 0.47, zB - 0.88, bench + 0.9, top + 0.9, zB - 0.83, C('#3b6ea8'));
+  for (const x of [bench - 0.75, bench + 0.7]) c.box(x, top, zB - 1.2, x + 0.06, top + 0.42, zB - 0.9, PAL.metal);
+  for (let x = xa + 3; x < xb - 1; x += 9) oldLamp(G, sub(M, x, top, zB - 0.45));
+}
+
+// ------------------------------------------------------------------ washing on the balcony
+const CLOTH = ['#f4f4ef', '#f4f4ef', '#dfe9f3', '#f6d8de', '#f3e7b8', '#cfe3d2', '#3d4a6b', '#e9c9a8'].map(C);
+const FUTON = ['#f3dfe4', '#dde8f4', '#f4ecd6', '#d9ecdf', '#f6f2ea'].map(C);
+/** a laundry pole with shirts and towels hanging between xa and xb, top at y, plane at z (faces −z, the street) */
+export function laundry(c, xa, xb, y, z, r) {
+  c.rod([xa, y, z], [xb, y, z], 0.018, 0.018, 4, PAL.metal);
+  let x = xa + 0.12 + r() * 0.2;
+  while (x < xb - 0.35) {
+    const w = 0.28 + r() * 0.34, h = 0.36 + r() * 0.42, col = r.pick(CLOTH), zz = z + (r() - 0.5) * 0.06;
+    c.quad([x + w, y - h, zz], [x, y - h, zz], [x, y - 0.02, zz], [x + w, y - 0.02, zz], col);
+    c.quad([x, y - h, zz + 0.01], [x + w, y - h, zz + 0.01], [x + w, y - 0.02, zz + 0.01], [x, y - 0.02, zz + 0.01], mulC(col, 0.85));
+    if (r() < 0.4) c.box(x + w * 0.45, y - 0.02, zz - 0.02, x + w * 0.55, y + 0.06, zz + 0.02, C('#d8d8d0')); // a peg
+    x += w + 0.06 + r() * 0.22;
+  }
+}
+/** a futon airing over a balcony parapet whose outer face is at zFront and top at yTop */
+export function futon(c, xa, xb, yTop, zFront, r) {
+  const col = r.pick(FUTON), d = 0.11;
+  c.box(xa, yTop - 0.02, zFront - d, xb, yTop + 0.09, zFront + 0.22, col);
+  c.box(xa, yTop - 0.72, zFront - d, xb, yTop + 0.09, zFront - 0.005, col);
+  c.box(xa + 0.08, yTop - 0.5, zFront - d - 0.004, xb - 0.08, yTop - 0.42, zFront - d + 0.01, mulC(col, 0.86)); // a quilted seam
 }
 
 // ------------------------------------------------------------------ level crossing alarm post (static part)

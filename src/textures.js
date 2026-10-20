@@ -407,6 +407,24 @@ export function buildAtlas() {
   ['本町歩道橋', '桜町歩道橋', '駅前歩道橋'].forEach((t, i) => A.add('hodokyo' + i, 256, 44, (a, e, w, h) => {
     rect(a, 0, 0, w, h, '#1f4f96'); a.strokeStyle = '#fff'; a.lineWidth = 3; a.strokeRect(4, 4, w - 8, h - 8); textFit(a, t, w / 2, h / 2 + 1, w * 0.85, 28, '#fff', 800);
   }));
+  const ST = [['稲穂', 'いなほ', 'Inaho'], ['夕凪', 'ゆうなぎ', 'Yūnagi'], ['水鏡', 'みずかがみ', 'Mizukagami'], ['蛍野', 'ほたるの', 'Hotaruno']];
+  ST.forEach(([kan, hira, rom], i) => {
+    const prev = ST[(i + 3) % 4][0], next = ST[(i + 1) % 4][0];
+    A.add('ekimei' + i, 320, 124, (a, e, w, h) => { // the station-name board (駅名標)
+      rect(a, 0, 0, w, h, '#3a3d42'); rect(a, 4, 4, w - 8, h - 8, '#f8f8f3');
+      textFit(a, hira, w / 2, 20, w * 0.5, 15, '#2b2b2b', 700);
+      textFit(a, kan, w / 2, 52, w * 0.6, 40, '#151515', 900);
+      textFit(a, rom, w / 2, 80, w * 0.5, 12, '#555', 600);
+      rect(a, 4, h - 30, w - 8, 26, '#1f9a50');
+      a.fillStyle = '#fff'; font(a, 12, 700); a.textBaseline = 'middle';
+      a.textAlign = 'left'; a.fillText('← ' + prev, 12, h - 17); a.textAlign = 'right'; a.fillText(next + ' →', w - 12, h - 17);
+      grain(a, A, w, h, 0.06);
+      rect(e, 4, 4, w - 8, h - 8, '#8a8a84'); // gently lit at night
+    });
+    A.add('ekiplate' + i, 220, 48, (a, e, w, h) => {
+      rect(a, 0, 0, w, h, '#4b3326'); grain(a, A, w, h, 0.2); textFit(a, kan + '駅', w / 2, h / 2 + 1, w * 0.8, 30, '#f3ead8', 800);
+    });
+  });
   A.add('xing_plate', 128, 48, (a, e, w, h) => { rect(a, 0, 0, w, h, '#f6f6f2'); a.strokeStyle = '#d8231c'; a.lineWidth = 4; a.strokeRect(3, 3, w - 6, h - 6); textFit(a, '踏切注意', w / 2, h / 2, w * 0.8, 26, '#d8231c', 900); });
   A.add('rail', 240, 80, (a, e, w, h) => { // see-through balcony railing (alpha-tested)
     a.clearRect(0, 0, w, h);

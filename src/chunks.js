@@ -346,6 +346,13 @@ export class World {
       c.wire([PU[i], 5.35, -td], [PU[i + 1], 5.35, -td], 0.05, 0.011, WIRE, 6);
       c.wire([PU[i], 6.4, -td], [PU[i + 1], 6.4, -td], 0.45, 0.011, WIRE, 8);
     }
+    // a little unstaffed station beside the near track at most countryside crossings
+    const kx = Math.round((sx - XOFF) / XING);
+    if (w.country > 0.9 && hash2(kx, 17) < 0.7) {
+      const sd = hash2(kx, 19) < 0.5 ? -1 : 1, xa = sd > 0 ? rw + 9 : -(rw + 9 + 46), xb = sd > 0 ? rw + 9 + 46 : -(rw + 9);
+      P.station(G, M, xa, xb, sd * (rw + 9), Math.abs(kx) % 4, rng(Math.floor(hash2(kx, 23) * 4294967295)));
+      c.setM(M);
+    }
     // alarm posts (barrier arms + lamps are animated by the crossing rig)
     for (const p of xingPosts(this.path, sx)) {
       const m = new THREE.Matrix4().makeRotationY(p.yaw); m.setPosition(p.x - ox, p.y, p.z - oz);

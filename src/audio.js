@@ -49,6 +49,47 @@ export function makeAudio() {
     g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.22 * v, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.17);
     o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.2);
   }
+  // ---- creatures: sparrows, the bush warbler (ホーホケキョ), crows, gulls, frogs, crickets, a bicycle bell
+  const life = ac.createGain(); life.gain.value = 1; life.connect(master); const lifeVerb = ac.createGain(); lifeVerb.gain.value = 0.35; life.connect(lifeVerb); lifeVerb.connect(verb);
+  const out = (pan = (Math.random() - 0.5) * 1.4) => { if (!ac.createStereoPanner) return life; const n = ac.createStereoPanner(); n.pan.value = pan; n.connect(life); return n; };
+  function note(t, f0, f1, dur, vol, dest, type = 'sine', vib = 0) {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    if (vib) { const l = ac.createOscillator(), lg = ac.createGain(); l.frequency.value = vib; lg.gain.value = f0 * 0.012; l.connect(lg); lg.connect(o.frequency); l.start(t); l.stop(t + dur + 0.05); }
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + Math.min(0.04, dur * 0.25)); g.gain.setValueAtTime(vol, t + dur * 0.7); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(dest); o.start(t); o.stop(t + dur + 0.02);
+    return g;
+  }
+  function sparrow(t, v) {
+    const d = out(), n = 2 + Math.floor(Math.random() * 4), base = 3200 + Math.random() * 1500;
+    for (let i = 0; i < n; i++) { const s = t + i * (0.09 + Math.random() * 0.07); note(s, base, base * (1.2 + Math.random() * 0.3), 0.06, v * 0.022, d); }
+  }
+  function uguisu(t, v) { // hoo… ho-ke-kyo
+    const d = out(); note(t, 1120, 1390, 1.0, v * 0.03, d, 'sine', 5.5);
+    note(t + 1.15, 2350, 2150, 0.14, v * 0.03, d); note(t + 1.32, 1700, 1520, 0.13, v * 0.028, d); note(t + 1.5, 2750, 2480, 0.36, v * 0.032, d);
+  }
+  function crow(t, v) {
+    const d = out(), n = 1 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < n; i++) {
+      const s = t + i * 0.48, o = ac.createOscillator(), bp = ac.createBiquadFilter(), g = ac.createGain();
+      o.type = 'sawtooth'; o.frequency.setValueAtTime(560, s); o.frequency.exponentialRampToValueAtTime(420, s + 0.32);
+      bp.type = 'bandpass'; bp.frequency.value = 1150; bp.Q.value = 1.6;
+      g.gain.setValueAtTime(0.0001, s); g.gain.linearRampToValueAtTime(v * 0.03, s + 0.03); g.gain.exponentialRampToValueAtTime(0.0001, s + 0.36);
+      o.connect(bp); bp.connect(g); g.connect(d); o.start(s); o.stop(s + 0.4);
+    }
+  }
+  function gull(t, v) { const d = out(), n = 2 + Math.floor(Math.random() * 2); for (let i = 0; i < n; i++) note(t + i * 0.42, 1750, 1150, 0.36, v * 0.022, d, 'triangle', 11); }
+  function frog(t, v) { // one croak: a short buzzy pulse train
+    const d = out(), o = ac.createOscillator(), bp = ac.createBiquadFilter(), g = ac.createGain(), f = 240 + Math.random() * 220, n = 5 + Math.floor(Math.random() * 4);
+    o.type = 'square'; o.frequency.value = f; bp.type = 'bandpass'; bp.frequency.value = f * 2.4; bp.Q.value = 3;
+    g.gain.setValueAtTime(0.0001, t);
+    for (let i = 0; i < n; i++) { const s = t + i * 0.038; g.gain.linearRampToValueAtTime(v * 0.014, s + 0.008); g.gain.linearRampToValueAtTime(0.0001, s + 0.028); }
+    o.connect(bp); bp.connect(g); g.connect(d); o.start(t); o.stop(t + n * 0.038 + 0.05);
+  }
+  function cricket(t, v) { const d = out(), f = 4300 + Math.random() * 700; for (let i = 0; i < 3; i++) note(t + i * 0.055, f, f * 1.01, 0.035, v * 0.009, d); }
+  function bikeBell(t, v) { const d = out(); for (const s of [t, t + 0.22]) { note(s, 2650, 2600, 0.5, v * 0.018, d); note(s, 3950, 3900, 0.35, v * 0.008, d); } }
+  const nextLife = { sparrow: 2, uguisu: 6, crow: 8, gull: 3, frog: 1, cricket: 1, bike: 30 };
+  const every = rate => (rate > 1e-4 ? -Math.log(1 - Math.random() * 0.98) / rate : 1e9);
   const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
   const CHORDS = [[48, 55, 64, 71, 74], [45, 52, 60, 67, 71], [41, 48, 57, 64, 67], [43, 50, 59, 62, 69], [40, 47, 55, 62, 67], [41, 48, 55, 64, 69]];
   const SCALE = [72, 74, 76, 79, 81, 84, 86, 88];
@@ -84,6 +125,23 @@ export function makeAudio() {
       road.g.gain.setTargetAtTime(0.03 + sp * 0.06, t, 0.5); road.f.frequency.setTargetAtTime(250 + sp * 500, t, 0.5);
       const swell = 0.5 + 0.5 * Math.sin(t * 0.55) * Math.sin(t * 0.21 + 1);
       waves.g.gain.setTargetAtTime(w.coast * (0.012 + swell * 0.05), t, 0.3); waves.f.frequency.setTargetAtTime(400 + swell * 900, t, 0.3);
+      // creatures — how often each calls depends on zone, time of day and rain
+      const dry = 1 - Math.min(1, rv * 1.4), night = 1 - day, dusk = x.dusk || 0;
+      const rates = {
+        sparrow: day * dry * 0.22 * (0.3 + w.city * 0.5 + w.sakura + w.country * 0.8 + w.coast * 0.2),
+        uguisu: day * dry * w.sakura * 0.06,
+        crow: dry * (dusk * 0.14 + day * (w.city + w.country) * 0.012),
+        gull: day * w.coast * dry * 0.16,
+        frog: night * (w.country * 5 + w.sakura * 0.6 + w.coast * 0.3) * (1 + rv * 0.6),
+        cricket: night * dry * (1.6 - w.city * 1.1),
+        bike: day * dry * w.city * 0.014,
+      };
+      const voices = { sparrow, uguisu, crow, gull, frog, cricket, bike: bikeBell };
+      for (const k in rates) {
+        if (t < nextLife[k]) continue;
+        if (rates[k] > 1e-4) voices[k](t + 0.05, 0.6 + Math.random() * 0.4);
+        nextLife[k] = t + Math.max(0.12, every(rates[k] || 1e-6));
+      }
       const chirp = 0.5 + 0.5 * Math.sin(t * 7.0) * Math.sin(t * 0.4);
       cicada.g.gain.setTargetAtTime((w.country + w.sakura * 0.3) * day * 0.006 * chirp, t, 0.08);
     },

@@ -11,7 +11,7 @@ export const CH = 60;
 const NEAR = [0.7, 0.9, 1.5, 1.9, 2.0, 2.1, 2.65, 3.05, 3.4];
 const FAR = [7, 9, 11.5, 14.5, 18, 23, 29, 36, 45, 56, 70, 86, 104, 124, 140, 160, 185, 215];
 const POLE_SP = 32;
-const WIRE = [0.025, 0.026, 0.032];
+const WIRE = [0.025, 0.026, 0.032], BIRD = [0.05, 0.05, 0.065];
 const mod = (a, n) => ((a % n) + n) % n;
 /** true within m metres of a level crossing (keeps the track corridor clear) */
 const nearX = (s, m) => { const c = crossingNear(s); return !!c && Math.abs(s - c.s) < m; };
@@ -210,9 +210,20 @@ export class World {
         const QM = matAt(q.s, q.u, qy);
         const B = P.utilityPole({ color: new GB(), atlas: new GB({ uv: true }) }, QM, rng(Math.floor(hash2(k + 1, 31) * 4294967295)), {});
         G.color.setM(new THREE.Matrix4());
+        const sags = [];
         for (let i = 0; i < anchors.length; i++) {
           const a = anchors[i], b = B[i], sag = 0.35 + pr() * 0.4 + (i >= 7 ? 0.3 : 0);
+          sags.push(sag);
           G.color.wire([a.x, a.y, a.z], [b.x, b.y, b.z], sag, i >= 7 ? 0.022 : 0.015, WIRE, 10);
+        }
+        if (p.z !== 'coast' && pr() < 0.38) { // a few birds resting on a top wire
+          const i = Math.floor(pr() * 4), a = anchors[i], b = B[i], n = 1 + Math.floor(pr() * 4), t0 = 0.18 + pr() * 0.5;
+          for (let j = 0; j < n; j++) {
+            const tt = Math.min(0.92, t0 + j * (0.018 + pr() * 0.025));
+            const x = a.x + (b.x - a.x) * tt, z = a.z + (b.z - a.z) * tt, y = a.y + (b.y - a.y) * tt - sags[i] * 4 * tt * (1 - tt);
+            G.color.box(x - 0.07, y + 0.015, z - 0.07, x + 0.07, y + 0.19, z + 0.07, BIRD);
+            G.color.box(x - 0.045, y + 0.19, z - 0.045, x + 0.045, y + 0.27, z + 0.045, BIRD);
+          }
         }
       }
       if (p.z === 'city') {

@@ -7,6 +7,7 @@ import { setAtlas, setFoliage } from './props.js';
 import { World } from './chunks.js';
 import { makeSky, paintClouds, makeClouds, makeMountains, updateTOD, applyWeather, TOD } from './sky.js';
 import { makeWeather, makeRain } from './weather.js';
+import { makeBirds } from './birds.js';
 import { makeSea, foamMaterial } from './sea.js';
 import { makeCar } from './car.js';
 import { makePost } from './post.js';
@@ -69,6 +70,7 @@ async function main() {
   const rig = makeCrossingRig(); scene.add(rig.group);
   const train = makeTrain(); scene.add(train.group);
   const weather = makeWeather(QS), rain = makeRain(); scene.add(rain.mesh);
+  const birds = makeBirds(); scene.add(birds.mesh);
   let wet = weather.W.rain;
 
   // ------------------------------------------------------------ state
@@ -231,7 +233,7 @@ async function main() {
     if (Math.abs(f.x - world.origin.x) > 900 || Math.abs(f.z - world.origin.z) > 900) {
       const dx = Math.round(f.x) - world.origin.x, dz = Math.round(f.z) - world.origin.z;
       world.setOrigin(Math.round(f.x), Math.round(f.z));
-      camPos.x -= dx; camPos.z -= dz; look.x -= dx; look.z -= dz; parts.shift && parts.shift(dx, dz);
+      camPos.x -= dx; camPos.z -= dz; look.x -= dx; look.z -= dz; parts.shift && parts.shift(dx, dz); birds.shift(dx, dz);
     }
     const ox = world.origin.x, oz = world.origin.z;
 
@@ -299,11 +301,12 @@ async function main() {
     g.uDay.value = day(); g.uWarm.value = TOD.warm; g.uTime.value = t;
 
     rain.update(camera.position, t, rn, day());
+    birds.setFog(scene.fog.near); birds.update(dt, t, camera.position, fwd, right, w, day(), rn, car.group.position);
     const tp0 = performance.now(); parts.update(dt, t, camera.position, fwd, right, w.sakura, f.y, nightK, w.country + w.sakura * 0.4); const tp1 = performance.now();
     if (audio) {
       path.at(sx, fl); const dxc = Math.hypot(fl.x - world.origin.x - camera.position.x, fl.z - world.origin.z - camera.position.z);
       const trainD = train.st.active ? train.group.position.distanceTo(camera.position) : 1e9;
-      audio.update(st.speed / 15, w, day(), { bell: bell ? Math.pow(clamp(1 - dxc / 260, 0, 1), 1.5) : 0, train: Math.pow(clamp(1 - trainD / 230, 0, 1), 2), rain: rn, roof: st.cam !== 2 });
+      audio.update(st.speed / 15, w, day(), { bell: bell ? Math.pow(clamp(1 - dxc / 260, 0, 1), 1.5) : 0, train: Math.pow(clamp(1 - trainD / 230, 0, 1), 2), rain: rn, roof: st.cam !== 2, dusk: TOD.warm * (st.tod > 0.5 ? 1 : 0.3) });
     }
     zoneCard(zoneAt(st.s + 40));
 
@@ -324,7 +327,7 @@ async function main() {
     if (started && frames > 150 && dt > 0.03) slowT += dt; else slowT = Math.max(0, slowT - dt * 0.5);
     if (slowT > 3 && !QS.has('q')) { slowT = 0; stepDown(); }
   }
-  window.__dbg = { renderer, st, scene, camera, world, TOD, X, train, weather, U };
+  window.__dbg = { renderer, st, scene, camera, world, TOD, X, train, weather, U, birds };
   status('');
   $start.classList.add('ready');
   if (QS.has('auto')) begin();

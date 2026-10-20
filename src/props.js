@@ -150,9 +150,9 @@ function cards(G, cen, cx, cy, cz, R, cell, n, r, col, dark, yr, flat = 0) {
     let l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
     let ax = -nz, ay = 0, az = nx; l = Math.hypot(ax, az); if (l < 0.1) { ax = 1; az = 0; l = 1; } ax /= l; az /= l;
     let bx = ny * az - nz * ay, by = nz * ax - nx * az, bz = nx * ay - ny * ax;
-    const rot = r() * 6.28, cr = Math.cos(rot), sr = Math.sin(rot);
+    const rot = Math.PI + (r() - 0.5) * 0.9, cr = Math.cos(rot), sr = Math.sin(rot); // keep each clump's sunlit top facing up
     const Ax = ax * cr + bx * sr, Ay = ay * cr + by * sr, Az = az * cr + bz * sr, Bx = bx * cr - ax * sr, By = by * cr - ay * sr, Bz = bz * cr - az * sr;
-    const h = (R * (1.45 + r() * 0.5)) / 2;
+    const h = (R * (1.3 + r() * 0.45)) / 2;
     const ox = cx + (r() - 0.5) * R * 0.6, oy = cy + (r() - 0.5) * R * (flat ? 0.15 : 0.5), oz = cz + (r() - 0.5) * R * 0.6;
     const P = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([u, v]) => [ox + (Ax * u + Bx * v) * h, oy + (Ay * u + By * v) * h * (flat ? 0.6 : 1), oz + (Az * u + Bz * v) * h]);
     const N = P.map(p => {
@@ -162,6 +162,16 @@ function cards(G, cen, cx, cy, cz, R, cell, n, r, col, dark, yr, flat = 0) {
     });
     const Cc = P.map(p => mixC(dark, col, 0.45 + 0.55 * Math.max(0, Math.min(1, (p[1] - yr[0]) / (yr[1] - yr[0])))));
     G.leaf.card(P, N, uvr, Cc);
+  }
+}
+/** a roadside tuft of grass (or wildflowers): two crossed cards, shaded like the ground, bending in the breeze */
+export function tuft(G, M, r, kind = 'grass', s = 1) {
+  const uvr = FOL[kind], h = (0.42 + r() * 0.38) * s, w = h * 1.2, a0 = r() * Math.PI;
+  const UP = [0, 1, 0], N = [UP, UP, UP, UP], lo = [0.6, 0.64, 0.58], hi = [1, 1, 1];
+  G.leaf.setM(M);
+  for (const a of [a0, a0 + Math.PI / 2]) {
+    const cx = (Math.cos(a) * w) / 2, cz = (Math.sin(a) * w) / 2;
+    G.leaf.card([[-cx, -0.05, -cz], [cx, -0.05, cz], [cx, h, cz], [-cx, h, -cz]], N, uvr, [lo, lo, hi, hi]);
   }
 }
 export function treeBroad(G, M, r, s = 1) {

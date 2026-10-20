@@ -188,6 +188,7 @@ export class World {
     this.placeCoast(G, r, s0, s1, matAt, onGround, road, rwAt, H, foam, world);
     yield;
     yield* this.placeCountry(G, r, s0, s1, matAt, onGround, road, rwAt, H);
+    yield* this.placeVerge(G, r, s0, s1, matAt, H, rwAt);
     yield;
 
     // ---------- assemble ----------
@@ -413,6 +414,25 @@ export class World {
         const s = sr + ds + (r() - 0.5) * 1.5, uu = side * u;
         P.tree(G, matAt(s, uu, H(s, uu), r() * 6, false), sak ? 'sakura' : 'broad', r, sak ? r.range(1.0, 1.25) : r.range(0.9, 1.25));
       }
+    }
+  }
+
+  /** 雑草: tufts of grass and wildflowers along shoulders, ditch edges and verges (sparse weeds at the foot of city walls) */
+  *placeVerge(G, r, s0, s1, matAt, H, rwAt) {
+    for (const side of [-1, 1]) {
+      for (let s = s0 + r() * 1.2; s < s1; s += r.range(0.55, 1.5)) {
+        if (nearX(s, 10) || nearR(s, 31)) continue;
+        const z = zoneAt(s), rw = rwAt(s);
+        let u, dens, fl = 0.22, sc = 1;
+        if (z === 'country') { u = rw + (r() < 0.6 ? r.range(0.2, 0.62) : r.range(2.18, 2.75)); dens = 0.95; }
+        else if (z === 'sakura') { u = rw + 2.68 + r() * 1.3; dens = 0.55; fl = 0.3; }
+        else if (z === 'coast') { if (side < 0) continue; u = rw + 0.95 + r() * 1.7; dens = 0.75; fl = 0.18; }
+        else { if (nearSide(s, 5)) continue; u = rw + 3.02 + r() * 0.1; dens = 0.1; fl = 0.08; sc = 0.65; }
+        if (r() > dens) continue;
+        const uu = side * u;
+        P.tuft(G, matAt(s, uu, H(s, uu), r() * 6.28, false), r, r() < fl ? 'flowers' : 'grass', sc * r.range(0.8, 1.2));
+      }
+      yield;
     }
   }
 

@@ -26,6 +26,8 @@ export const U = {
   uOrigin: { value: new THREE.Vector2() },     // world-origin offset, so world-space patterns survive rebasing
   uSunDir: { value: new THREE.Vector3(0, 1, 0) },
   uSunCol: { value: new THREE.Color(1, 1, 1) },
+  uTuftV: { value: new THREE.Vector2(0, 0.333) }, // v-range of the grass-tuft row in the foliage atlas
+  uWind: { value: 1 },
 };
 
 function gradTex(vals) {
@@ -274,8 +276,23 @@ export function makeMaterials(atlasTex, folTex) {
     M.leaf.onBeforeCompile = sh => { // keep the spherical canopy normals on back faces too
       sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>', THREE.ShaderChunk.normal_fragment_begin.replace('gl_FrontFacing ? 1.0 : - 1.0', '1.0'));
       worldShade(sh);
+      sh.uniforms.uTuftV = U.uTuftV; sh.uniforms.uWind = U.uWind;
+      // a gentle breeze: whole crowns drift a few centimetres, grass tufts bend from the root
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', '#include <common>\nuniform float uTime, uWind; uniform vec2 uTuftV;')
+        .replace('#include <begin_vertex>', `#include <begin_vertex>
+{ vec4 wq = modelMatrix * vec4(transformed, 1.0);
+  float sw = sin(uTime * 1.2 + wq.x * 0.31 + wq.z * 0.23) * 0.65 + sin(uTime * 2.3 + wq.x * 0.83 - wq.z * 0.47) * 0.35;
+  float tuft = step(uv.y, uTuftV.y);
+  float wgt = mix(0.03, 0.09 * clamp((uv.y - uTuftV.x) / (uTuftV.y - uTuftV.x), 0.0, 1.0), tuft) * uWind;
+  transformed.x += sw * wgt; transformed.z += sw * wgt * 0.7; }`);
+      // cards seen edge-on smear into streaks: fade them out (raises the alpha-test threshold as they turn away)
+      sh.fragmentShader = sh.fragmentShader.replace('#include <alphatest_fragment>', `
+{ vec3 gN = normalize(cross(dFdx(vViewPosition), dFdy(vViewPosition)));
+  diffuseColor.a *= smoothstep(0.07, 0.3, abs(dot(gN, normalize(vViewPosition)))); }
+#include <alphatest_fragment>`);
     };
-    M.leaf.customProgramCacheKey = () => 'leaf-v2';
+    M.leaf.customProgramCacheKey = () => 'leaf-v3';
   }
   M.wire = new THREE.MeshBasicMaterial({ color: 0x23242c });
   // soft light pools under street lamps at night (additive)

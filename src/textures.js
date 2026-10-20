@@ -418,7 +418,7 @@ export function buildAtlas() {
 
 // ---------------- foliage clump textures (leaves, sakura blossom, pine needles) ----------------
 export function buildFoliage(renderer) {
-  const S = 1024, cv = canvas(S, S), g = cv.getContext('2d'), r = rng(321), cells = {};
+  const S = 1024, SH = 1536, cv = canvas(S, SH), g = cv.getContext('2d'), r = rng(321), cells = {};
   const PALS = {
     leafA: ['#2f6634', '#4a8a3e', '#6aa64a', '#94c460', '#c4e08a'],
     leafB: ['#476e2e', '#6a9238', '#8db44a', '#b4d066', '#e0ec9a'],
@@ -428,14 +428,18 @@ export function buildFoliage(renderer) {
   const paint = (name, ox, oy) => {
     const pal = PALS[name], C0 = 256, pine = name === 'pine', sak = name === 'sakura';
     g.save(); g.translate(ox, oy); g.beginPath(); g.rect(0, 0, 512, 512); g.clip();
-    const lobes = [[C0, C0, 140]];
-    for (let i = 0; i < (pine ? 6 : 7); i++) { const a = r() * 6.28, d = 30 + r() * 85; lobes.push([C0 + Math.cos(a) * d, C0 + Math.sin(a) * d * (pine ? 0.4 : 0.85), Math.min(70 + r() * 55, 228 - d)]); }
-    const N = sak ? 2100 : pine ? 2600 : 2200;
+    // a lumpy, cauliflower-like clump: a core plus many smaller rim lobes, so the outline is bumpy rather than a
+    // filled disc (a filled disc reads as a flat polygon once the card is tilted)
+    const lobes = [[C0, C0, pine ? 80 : 92]];
+    for (let i = 0; i < (pine ? 10 : 14); i++) { const a = r() * 6.28, d = 45 + r() * 120; lobes.push([C0 + Math.cos(a) * d, C0 + Math.sin(a) * d * (pine ? 0.42 : 0.9), Math.min(34 + r() * 52, 232 - d)]); }
+    const N = sak ? 2300 : pine ? 2600 : 2300;
     for (let i = 0; i < N; i++) {
       const L = lobes[Math.floor(r() * lobes.length)], a = r() * 6.28, d = Math.sqrt(r()) * L[2];
       const x = L[0] + Math.cos(a) * d, y = L[1] + Math.sin(a) * d * (pine ? 0.45 : 1);
-      const top = 1 - y / 512, rim = d / L[2];
-      let k = Math.min(4, Math.max(0, Math.floor(top * 2.2 + r() * 2.2 + (rim > 0.8 ? 0.6 : 0) - 0.3)));
+      const rim = d / L[2];
+      // even speckle (no light direction baked in): neighbouring cards then match where they cut through each other,
+      // and the canopy's light and shade come from the smooth canopy normals instead
+      let k = Math.min(4, Math.max(0, Math.floor(0.55 + r() * 2.7 + (rim > 0.82 ? 0.5 : 0))));
       g.fillStyle = pal[k];
       if (sak) {
         const sz = 7 + r() * 8; g.beginPath(); g.arc(x, y, sz, 0, 7); g.fill();
@@ -446,12 +450,48 @@ export function buildFoliage(renderer) {
         const sz = 9 + r() * 10; g.beginPath(); g.ellipse(x, y, sz, sz * 0.55, r() * 6.28, 0, 7); g.fill();
       }
     }
+    // stray blossoms / leaves just outside the clump: a lacy edge instead of a hard one
+    for (let i = 0; i < 90; i++) {
+      const a = r() * 6.28, d = 150 + r() * 85, x = C0 + Math.cos(a) * d, y = C0 + Math.sin(a) * d * (pine ? 0.45 : 0.92);
+      g.fillStyle = pal[1 + Math.floor(r() * 4)];
+      if (pine) { g.save(); g.translate(x, y); g.rotate((r() - 0.5) * 1.2); g.fillRect(-9, -1.6, 18, 3.2); g.restore(); }
+      else { g.beginPath(); g.arc(x, y, sak ? 6 + r() * 6 : 7 + r() * 6, 0, 7); g.fill(); }
+    }
     if (sak) for (let i = 0; i < 14; i++) { g.strokeStyle = 'rgba(150,90,100,0.35)'; g.lineWidth = 1.5; const x = C0 + (r() - 0.5) * 300, y = C0 + 60 + r() * 120; g.beginPath(); g.moveTo(x, y); g.lineTo(x + (r() - 0.5) * 40, y - 20 - r() * 30); g.stroke(); }
     g.restore();
-    cells[name] = { u0: ox / S, u1: (ox + 512) / S, v0: 1 - (oy + 512) / S, v1: 1 - oy / S };
+    cells[name] = { u0: ox / S, u1: (ox + 512) / S, v0: 1 - (oy + 512) / SH, v1: 1 - oy / SH };
+  };
+  // roadside tufts (雑草): a dense mass of pointed blades, dark at the root, sunlit at the tips; optional wildflowers
+  const tuft = (name, ox, oy, flowers) => {
+    g.save(); g.translate(ox, oy); g.beginPath(); g.rect(0, 0, 512, 512); g.clip();
+    const pal = ['#2c5a2a', '#3e7334', '#56903f', '#79ad4f', '#a8cc6c'], n = flowers ? 120 : 170;
+    for (let i = 0; i < n; i++) {
+      const bx = 256 + (r() - 0.5) * (flowers ? 330 : 380) * Math.sqrt(r()), h = 150 + r() * (flowers ? 230 : 300) * (1 - Math.abs(bx - 256) / 300);
+      const lean = (bx - 256) * 0.35 + (r() - 0.5) * 90, wB = 9 + r() * 9, tx = bx + lean, ty = 512 - h;
+      const k = Math.min(4, Math.floor(r() * 2.2 + (h / 380) * 2.6));
+      const gr = g.createLinearGradient(0, 512, 0, ty); gr.addColorStop(0, pal[0]); gr.addColorStop(0.6, pal[Math.max(1, k - 1)]); gr.addColorStop(1, pal[k]);
+      g.fillStyle = gr; g.beginPath(); g.moveTo(bx - wB / 2, 512);
+      g.quadraticCurveTo(bx - wB / 2 + lean * 0.3, 512 - h * 0.55, tx, ty);
+      g.quadraticCurveTo(bx + wB / 2 + lean * 0.3, 512 - h * 0.5, bx + wB / 2, 512); g.fill();
+    }
+    if (flowers) for (let i = 0; i < 16; i++) {
+      const fx = 110 + r() * 290, fy = 150 + r() * 200, kind = r();
+      g.strokeStyle = '#3e7334'; g.lineWidth = 5; g.beginPath(); g.moveTo(fx + (r() - 0.5) * 20, 512); g.quadraticCurveTo(fx + (r() - 0.5) * 30, (fy + 512) / 2, fx, fy); g.stroke();
+      if (kind < 0.55) { // 姫女苑-like white daisies
+        g.fillStyle = '#fbfaf2'; for (let p = 0; p < 12; p++) { const a = (p / 12) * 6.283; g.beginPath(); g.ellipse(fx + Math.cos(a) * 11, fy + Math.sin(a) * 11, 9, 4.5, a, 0, 7); g.fill(); }
+        g.fillStyle = '#f2c230'; g.beginPath(); g.arc(fx, fy, 8, 0, 7); g.fill();
+      } else if (kind < 0.85) { // dandelions
+        g.fillStyle = '#f6c62e'; g.beginPath(); g.arc(fx, fy, 15, 0, 7); g.fill(); g.fillStyle = '#ffe27a'; g.beginPath(); g.arc(fx - 3, fy - 3, 8, 0, 7); g.fill();
+      } else { // a little purple cluster
+        g.fillStyle = '#9b7fd6'; for (let p = 0; p < 6; p++) { g.beginPath(); g.arc(fx + (r() - 0.5) * 16, fy + (r() - 0.5) * 16, 6, 0, 7); g.fill(); }
+      }
+    }
+    g.restore();
+    cells[name] = { u0: ox / S, u1: (ox + 512) / S, v0: 1 - (oy + 512) / SH, v1: 1 - oy / SH };
   };
   paint('leafA', 0, 0); paint('leafB', 512, 0); paint('sakura', 0, 512); paint('pine', 512, 512);
+  tuft('grass', 0, 1024, false); tuft('flowers', 512, 1024, true);
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
-  return { tex, cells };
+  return { tex, cells, tuftV: [0, 1 - 1024 / SH] };
 }

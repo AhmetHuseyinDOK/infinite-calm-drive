@@ -53,7 +53,7 @@ async function main() {
   status('painting the town…');
   await new Promise(r => setTimeout(r, 10));
   const atlas = buildAtlas(); setAtlas(atlas);
-  const fol = buildFoliage(renderer); setFoliage(fol.cells);
+  const fol = buildFoliage(renderer); setFoliage(fol.cells); U.uTuftV.value.set(fol.tuftV[0], fol.tuftV[1]);
   const M = makeMaterials(atlas.textures(renderer), fol.tex);
   status('painting the clouds…');
   await new Promise(r => setTimeout(r, 10));
@@ -275,7 +275,7 @@ async function main() {
     const fogD = (w.city * 0.0022 + w.sakura * 0.0019 + w.coast * 0.0011 + w.country * 0.0014) * (1 + TOD.night * 0.25);
     scene.fog.near = fogD * (1 + 0.55 * ov + 0.45 * rn); scene.fog.far = world.ahead * 0.92;
     U.uSkyHor.value.copy(TOD.horizon); U.uSkyZen.value.copy(TOD.zenith); U.uTime.value = t;
-    U.uWet.value = wet; U.uOrigin.value.set(world.origin.x, world.origin.z);
+    U.uWet.value = wet; U.uOrigin.value.set(world.origin.x, world.origin.z); U.uWind.value = 1 + 0.8 * rn;
     U.uCloudSh.value = (1 - ov) * sstep(0.04, 0.3, TOD.sunEl) * (1 - TOD.night);
     const su = sky.material.uniforms;
     su.uNight.value = TOD.night; su.uWarm.value = TOD.warm; su.uTime.value = t; su.uCirrusCol.value.copy(TOD.cLit).lerp(TOD.horizon, 0.25);
@@ -309,7 +309,7 @@ async function main() {
 
     rain.update(camera.position, t, rn, day());
     birds.setFog(scene.fog.near); birds.update(dt, t, camera.position, fwd, right, w, day(), rn, car.group.position);
-    const tp0 = performance.now(); parts.update(dt, t, camera.position, fwd, right, w.sakura, f.y, nightK, w.country + w.sakura * 0.4); const tp1 = performance.now();
+    const tp0 = performance.now(); parts.update(dt, t, camera.position, fwd, right, w.sakura, f.y, nightK, (w.country + w.sakura * 0.4) * (1 - rn)); const tp1 = performance.now();
     if (audio) {
       path.at(sx, fl); const dxc = Math.hypot(fl.x - world.origin.x - camera.position.x, fl.z - world.origin.z - camera.position.z);
       const trainD = train.st.active ? train.group.position.distanceTo(camera.position) : 1e9;

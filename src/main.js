@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Path, zoneW, zoneAt, zparam, ZINFO, setStartZone, crossingS, crossingValid, XING, XOFF, riverNear } from './path.js';
+import { Path, zoneW, zoneAt, zparam, ZINFO, setStartZone, crossingS, crossingValid, XING, XOFF, riverNear, groundOffsetMix } from './path.js';
 import { makeCrossingRig, makeTrain, xingPosts } from './crossing.js';
 import { buildAtlas, buildFoliage } from './textures.js';
 import { makeMaterials, U } from './materials.js';
@@ -75,7 +75,7 @@ async function main() {
   let wet = weather.W.rain;
 
   // ------------------------------------------------------------ state
-  const st = { s: Math.max(100, parseFloat(QS.get('s')) || 140), u: -1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, cam: { low: 1, eye: 2, top: 3 }[QS.get('cam')] || 0 };
+  const st = { s: Math.max(100, parseFloat(QS.get('s')) || 140), u: -1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
   let started = false;
   status('building the road…');
   await new Promise(r => setTimeout(r, 10));
@@ -129,10 +129,26 @@ async function main() {
   canvas.addEventListener('touchcancel', () => { ptr = null; });
   function toggleSound() { if (audio) { audio.toggle(); $('snd').style.opacity = audio.muted ? 0.4 : 1; } }
   function toggleTime() { st.todPaused = !st.todPaused; $('tim').style.opacity = st.todPaused ? 0.4 : 1; }
-  function toggleCam() { st.cam = (st.cam + 1) % 3; }
+  const CAM_ORDER = [0, 1, 2, 4], CAM_ICON = { 0: '◐', 1: '◒', 2: '◉', 4: '🎬' };
+  function toggleCam() { st.cam = CAM_ORDER[(CAM_ORDER.indexOf(st.cam) + 1) % CAM_ORDER.length]; $('cam').textContent = CAM_ICON[st.cam] || '◐'; if (st.cam === 4) nextShot(); }
+  // ---- cinematic camera (mode 4): calm film-like shots with cuts — chase, side tracking, a fixed roadside shot
+  //      the car drives past, a high crane shot and eye level
+  const CINE = ['chase', 'side', 'road', 'crane', 'eye', 'side', 'road'];
+  const cine = { type: 'chase', t: 0, dur: 16, last: '', anchor: null, sideSign: 1 };
+  function nextShot() {
+    let type; do { type = CINE[Math.floor(Math.random() * CINE.length)]; } while (type === cine.last);
+    Object.assign(cine, { type, last: type, t: 0, dur: 13 + Math.random() * 8, sideSign: Math.random() < 0.5 ? 1 : -1 });
+    if (type === 'road') {
+      const sA = st.s + 40 + Math.random() * 18, rwA = zparam(sA, 'rw'), sd = Math.random() < 0.6 ? -1 : 1, uA = sd * (rwA + (sd < 0 ? 0.9 : 1.3));
+      const fa = path.at(sA, {}), gy = fa.y + groundOffsetMix(sA, uA, fa.y, rwA);
+      cine.anchor = { x: fa.x + fa.rx * uA, y: Math.max(gy, fa.y) + 1.05, z: fa.z + fa.rz * uA, s: sA };
+    }
+    camInit = false;
+  }
   const WX_ICON = { auto: '⛅', clear: '☀', cloudy: '☁', rain: '☂' };
   function cycleWeather() { $('wx').textContent = WX_ICON[weather.cycle()]; }
   $('wx').textContent = WX_ICON[weather.W.mode];
+  $('cam').textContent = CAM_ICON[st.cam] || '◐'; if (st.cam === 4) nextShot();
   $('wx').onclick = e => { e.stopPropagation(); cycleWeather(); };
   $('snd').onclick = e => { e.stopPropagation(); toggleSound(); };
   $('tim').onclick = e => { e.stopPropagation(); toggleTime(); };
@@ -181,6 +197,7 @@ async function main() {
   let last = performance.now(), t = 0, frames = 0, slowT = 0;
   const day = () => 1 - TOD.night;
   let ftAvg = 0;
+  const meteor = { p: -1, a: new THREE.Vector3(), b: new THREE.Vector3(), next: 5 };
   function frame(now) {
     requestAnimationFrame(frame);
     const ft0 = performance.now();
@@ -250,17 +267,46 @@ async function main() {
 
     // camera
     // camera rigs: 0 chase, 1 low "anime layout" angle, 2 eye level with no car (pure background art)
-    const R = [{ back: 8.2, up: 3.1, ahead: 22, lookY: 1.45, cu: 0.85, lu: 0.5 }, { back: 7.0, up: 1.3, ahead: 26, lookY: 2.9, cu: 0.85, lu: 0.5, side: 1.15 }, { back: -0.6, up: 1.55, ahead: 30, lookY: 2.3, cu: 1, lu: 0.6 },
-      { back: 0.01, up: parseFloat(QS.get('top')) || 45, ahead: 0, lookY: 0, cu: 0, lu: 0 }][st.cam]; // [3] = test-only top-down view
-    car.group.visible = st.cam !== 2;
+    const RIGS = [{ back: 8.2, up: 3.1, ahead: 22, lookY: 1.45, cu: 0.85, lu: 0.5 }, { back: 7.0, up: 1.3, ahead: 26, lookY: 2.9, cu: 0.85, lu: 0.5, side: 1.15 }, { back: -0.6, up: 1.55, ahead: 30, lookY: 2.3, cu: 1, lu: 0.6 },
+      { back: 0.01, up: parseFloat(QS.get('top')) || 45, ahead: 0, lookY: 0, cu: 0, lu: 0 }]; // [3] = test-only top-down view
+    const lt = new THREE.Vector3();
+    let follow = 6, hideCar = st.cam === 2;
+    if (st.cam === 4) {
+      cine.t += dt;
+      if (cine.t > cine.dur + (cine.type === 'road' ? 8 : 0) || (cine.type === 'road' && cine.anchor && st.s > cine.anchor.s + 24)) nextShot();
+      const cp = car.group.position, ty = cine.type;
+      if (ty === 'chase' || ty === 'eye') {
+        const R = RIGS[ty === 'eye' ? 2 : 0]; hideCar = ty === 'eye';
+        path.at(st.s - R.back, fc); path.at(st.s + R.ahead, fl);
+        tmp.set(fc.x + fc.rx * st.u * R.cu - ox, fc.y + R.up, fc.z + fc.rz * st.u * R.cu - oz);
+        lt.set(fl.x + fl.rx * st.u * R.lu - ox, fl.y + R.lookY, fl.z + fl.rz * st.u * R.lu - oz);
+      } else if (ty === 'side') { // tracking alongside, from a sidewalk / the verge
+        path.at(st.s + 1.5, fc);
+        const wz = zoneW(st.s), walk = wz.city + wz.sakura > 0.5; // track from the sidewalk where there is one (never through the sakura trunks)
+        const rwC = zparam(st.s, 'rw'), uC = cine.sideSign > 0 ? rwC + (walk ? 1.45 : 3.4) : -(rwC + 1.5);
+        const gy = fc.y + groundOffsetMix(st.s + 1.5, uC, fc.y, rwC);
+        tmp.set(fc.x + fc.rx * uC - ox, Math.max(gy + 1.55, fc.y + 1.25), fc.z + fc.rz * uC - oz);
+        lt.set(cp.x + f.fx * 2.5, cp.y + 0.9, cp.z + f.fz * 2.5); follow = 4;
+      } else if (ty === 'road' && cine.anchor) { // a fixed camera on the verge; the car drives past
+        tmp.set(cine.anchor.x - ox, cine.anchor.y, cine.anchor.z - oz);
+        lt.set(cp.x, cp.y + 0.85, cp.z); follow = 30;
+      } else { // crane: high and wide, rising slowly
+        path.at(st.s - 20, fc); path.at(st.s + 34, fl);
+        const hgt = 14 + Math.min(cine.t, 20) * 0.35;
+        tmp.set(fc.x + fc.rx * st.u * 0.4 - ox, fc.y + hgt, fc.z + fc.rz * st.u * 0.4 - oz);
+        lt.set(fl.x - ox, fl.y + 1.0, fl.z - oz); follow = 3;
+      }
+    } else {
+      const R = RIGS[st.cam];
+      path.at(st.s - R.back, fc); path.at(st.s + R.ahead, fl);
+      const cu = st.u * R.cu, cside = cu + (R.side || 0);
+      tmp.set(fc.x + fc.rx * cside - ox, fc.y + R.up, fc.z + fc.rz * cside - oz);
+      lt.set(fl.x + fl.rx * st.u * R.lu - ox, fl.y + R.lookY, fl.z + fl.rz * st.u * R.lu - oz);
+    }
+    car.group.visible = !hideCar;
     if (st.cam === 3) camera.up.set(f.fx, 0, f.fz); else camera.up.set(0, 1, 0);
-    path.at(st.s - R.back, fc); path.at(st.s + R.ahead, fl);
-    const cu = st.u * R.cu;
-    const cside = cu + (R.side || 0);
-    tmp.set(fc.x + fc.rx * cside - ox, fc.y + R.up, fc.z + fc.rz * cside - oz);
-    const lt = new THREE.Vector3(fl.x + fl.rx * st.u * R.lu - ox, fl.y + R.lookY, fl.z + fl.rz * st.u * R.lu - oz);
     if (!camInit) { camPos.copy(tmp); look.copy(lt); camInit = true; }
-    camPos.lerp(tmp, 1 - Math.exp(-dt * 6)); look.lerp(lt, 1 - Math.exp(-dt * 5));
+    camPos.lerp(tmp, 1 - Math.exp(-dt * follow)); look.lerp(lt, 1 - Math.exp(-dt * Math.min(follow, 8)));
     camera.position.copy(camPos); camera.lookAt(look);
     if (QS.has('yaw')) camera.rotateY((parseFloat(QS.get('yaw')) * Math.PI) / 180); // test hook: look sideways
     if (QS.has('pitch')) camera.rotateX((parseFloat(QS.get('pitch')) * Math.PI) / 180); // test hook: look up / down
@@ -280,7 +326,18 @@ async function main() {
     U.uCloudSh.value = (1 - ov) * sstep(0.04, 0.3, TOD.sunEl) * (1 - TOD.night);
     const su = sky.material.uniforms;
     su.uNight.value = TOD.night; su.uWarm.value = TOD.warm; su.uTime.value = t; su.uCirrusCol.value.copy(TOD.cLit).lerp(TOD.horizon, 0.25);
-    su.uCirrus.value = 0.6 * (1 - ov); su.uOvercast.value = ov;
+    su.uCirrus.value = 0.6 * (1 - ov) * (1 - 0.65 * sstep(0.4, 0.9, TOD.night)); su.uOvercast.value = ov;
+    su.uMilky.value = sstep(0.55, 0.95, TOD.night) * (1 - ov);
+    // shooting stars on clear nights, somewhere ahead of us
+    if (TOD.night > 0.65 && ov < 0.3) {
+      if (meteor.p < 0 && (meteor.next -= dt) < 0) {
+        const az = Math.atan2(f.fx, f.fz) + (Math.random() - 0.5) * 1.5, el = 0.45 + Math.random() * 0.6, d2 = 0.22 + Math.random() * 0.2, daz = (Math.random() - 0.5) * 0.6;
+        const dir = (e, a) => new THREE.Vector3(Math.cos(e) * Math.sin(a), Math.sin(e), Math.cos(e) * Math.cos(a));
+        meteor.a.copy(dir(el, az)); meteor.b.copy(dir(el - d2, az + daz)); meteor.p = 0; meteor.next = QS.has('meteors') ? 1 : 6 + Math.random() * 20;
+      }
+    }
+    if (meteor.p >= 0) { meteor.p += dt / 0.85; if (meteor.p > 1.3) meteor.p = -1; }
+    su.uMetP.value = meteor.p; su.uMetA.value.copy(meteor.a); su.uMetB.value.copy(meteor.b);
     su.uDeckLit.value.copy(TOD.horizon).lerp(TOD.cLit, 0.35); su.uDeckDark.value.copy(TOD.zenith).lerp(TOD.horizon, 0.25).multiplyScalar(0.82);
     sky.position.copy(camera.position);
     clouds.update(camera.position, dt);
@@ -335,7 +392,7 @@ async function main() {
     if (started && frames > 150 && dt > 0.03) slowT += dt; else slowT = Math.max(0, slowT - dt * 0.5);
     if (slowT > 3 && !QS.has('q')) { slowT = 0; stepDown(); }
   }
-  window.__dbg = { renderer, st, scene, camera, world, TOD, X, train, weather, U, birds };
+  window.__dbg = { renderer, st, scene, camera, world, TOD, X, train, weather, U, birds, cine };
   status('');
   $start.classList.add('ready');
   if (QS.has('auto')) begin();

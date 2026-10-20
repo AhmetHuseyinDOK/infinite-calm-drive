@@ -20,7 +20,7 @@ An endless, calm drive through anime Japan. No destination, no traffic, no way t
 |---|---|
 | Steer | ← → or touch the left / right side |
 | Speed | ↑ ↓ or drag up / down |
-| ◐ / `C` | camera: chase · low angle · eye level (no car) |
+| ◐ / `C` | camera: chase · low angle · eye level (no car) · 🎬 cinematic |
 | ⛅ / `R` | weather: auto · clear · cloudy · rain |
 | ♪ / `M` | sound on / off |
 | ☼ / `T` | pause the time of day |

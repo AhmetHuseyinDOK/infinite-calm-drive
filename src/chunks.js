@@ -181,13 +181,14 @@ export class World {
     yield;
     for (let s = s0; s < s1; s += 4) {
       const z = zoneAt(s);
-      if (z === 'coast' && zoneW(s).coast > 0.45) this.guardrail(G, s, Math.min(s + 4, s1), world, road, rwAt);
+      if ((z === 'coast' && zoneW(s).coast > 0.45) || (z === 'mountain' && zoneW(s).mountain > 0.45)) this.guardrail(G, s, Math.min(s + 4, s1), world, road, rwAt);
     }
     yield* this.placeCity(G, r, s0, s1, matAt, onGround, road, rwAt, walkW, H, ground, ox, oz);
     yield* this.placeSakura(G, r, s0, s1, matAt, onGround, road, rwAt, H);
     this.placeCoast(G, r, s0, s1, matAt, onGround, road, rwAt, H, foam, world);
     yield;
     yield* this.placeCountry(G, r, s0, s1, matAt, onGround, road, rwAt, H);
+    yield* this.placeMountain(G, r, s0, s1, matAt, onGround, road, rwAt, H);
     yield* this.placeVerge(G, r, s0, s1, matAt, H, rwAt);
     yield;
 
@@ -219,7 +220,7 @@ export class World {
     const s = k * POLE_SP + 6, z = zoneAt(s);
     if (z === 'sakura' || nearX(s, 6) || nearR(s, 34)) return null;
     const rw = zparam(s, 'rw');
-    const u = z === 'city' ? rw + 0.45 : z === 'coast' ? rw + 1.35 : rw + 2.35;
+    const u = z === 'city' ? rw + 0.45 : z === 'coast' ? rw + 1.35 : z === 'mountain' ? -(rw + 1.45) : rw + 2.35;
     return { s, u, z };
   }
   placePoles(c, s0, s1, r, G, matAt, H, world, road, rwAt) {
@@ -360,7 +361,7 @@ export class World {
     }
     // "railway crossing ahead" signs for both directions
     P.signPost(G, matAt(sx - 70, -(rwAt(sx - 70) + 0.6), road(sx - 70) + 0.15 * (sw > 0 ? 1 : 0)), 'sign_xing', 1, 2.2, 0.85);
-    P.signPost(G, matAt(sx + 70, rwAt(sx + 70) + 0.6, road(sx + 70) + 0.15 * (sw > 0 ? 1 : 0)), 'sign_xing', -1, 2.2, 0.85);
+    P.signPost(G, matAt(sx + 70, rwAt(sx + 70) + 0.6, road(sx + 70) + 0.15 * (sw > 0 ? 1 : 0)), 'sign_xing', 1, 2.2, 0.85); // for oncoming traffic
   }
 
   /** river crossing: flowing water, levee-top paths, a bridge with railings and named stone posts, trees on the banks */
@@ -424,6 +425,48 @@ export class World {
     }
   }
 
+  /** 紅葉の峠: maples, ginkgo and cedars on the slopes, chevrons on the bends, reflector posts along the guardrail */
+  *placeMountain(G, r, s0, s1, matAt, onGround, road, rwAt, H) {
+    const mw = s => zoneW(s).mountain;
+    if (mw(s0) < 0.3 && mw(s1) < 0.3) return;
+    for (const side of [-1, 1]) {
+      for (let s = s0 + r() * 4; s < s1; s += r.range(4.5, 8.5)) {
+        if (mw(s) < 0.45) continue;
+        const rw = rwAt(s), q = r();
+        if (side > 0) { // uphill: above the cut face, up the forest slope
+          const kind = q < 0.5 ? 'maple' : q < 0.72 ? 'ginkgo' : 'cedar';
+          P.tree(G, onGround(s, rw + r.range(17, 70), -0.25, r() * 6, false), kind, r, r.range(0.9, 1.3));
+        } else { // valley side: down the steep drop
+          const kind = q < 0.55 ? 'maple' : q < 0.8 ? 'cedar' : 'ginkgo';
+          P.tree(G, onGround(s, -(rw + r.range(3.5, 34)), -0.25, r() * 6, false), kind, r, r.range(0.95, 1.35));
+        }
+      }
+      yield;
+    }
+    for (let s = s0 + r() * 4; s < s1; s += r.range(3, 6)) { // the far mountainside across the valley, and the valley floor
+      if (mw(s) < 0.5) continue;
+      const far = r() < 0.7, u = -(rwAt(s) + (far ? r.range(108, 205) : r.range(36, 100)));
+      P.tree(G, onGround(s, u, -0.3, r() * 6, false), r() < 0.5 ? 'cedar' : r() < 0.75 ? 'maple' : 'ginkgo', r, r.range(1.1, 1.6));
+    }
+    yield;
+    // white reflector posts on the guardrail (視線誘導標)
+    G.color.setM(new THREE.Matrix4());
+    for (let s = Math.ceil(s0 / 10) * 10; s < s1; s += 10) {
+      if (mw(s) < 0.5) continue;
+      const rw = rwAt(s), M = matAt(s, -(rw + 0.95), road(s));
+      P.reflectorPost(G, M);
+    }
+    // chevrons on the outside of the sharper bends (線形誘導標)
+    for (let s = Math.ceil(s0 / 14) * 14; s < s1; s += 14) {
+      if (mw(s) < 0.6) continue;
+      const k = this.path.curv(s);
+      if (Math.abs(k) < 1 / 230) continue;
+      const rw = rwAt(s);
+      if (k > 0) P.signPost(G, matAt(s, rw + 0.42, road(s)), 'chev_l', -1, 1.25, 0.58); // bending left → signs on the right
+      else P.signPost(G, matAt(s, -(rw + 1.15), road(s)), 'chev_r', 1, 1.35, 0.58);       // bending right → behind the left guardrail
+    }
+  }
+
   /** 雑草: tufts of grass and wildflowers along shoulders, ditch edges and verges (sparse weeds at the foot of city walls) */
   *placeVerge(G, r, s0, s1, matAt, H, rwAt) {
     for (const side of [-1, 1]) {
@@ -434,6 +477,7 @@ export class World {
         if (z === 'country') { u = rw + (r() < 0.6 ? r.range(0.2, 0.62) : r.range(2.18, 2.75)); dens = 0.95; }
         else if (z === 'sakura') { u = rw + 2.68 + r() * 1.3; dens = 0.55; fl = 0.3; }
         else if (z === 'coast') { if (side < 0) continue; u = rw + 0.95 + r() * 1.7; dens = 0.75; fl = 0.18; }
+        else if (z === 'mountain') { u = side < 0 ? rw + 1.0 + r() * 0.35 : rw + 0.25 + r() * 0.2; dens = side < 0 ? 0.55 : 0.18; fl = 0.12; sc = 0.85; }
         else { if (nearSide(s, 5)) continue; u = rw + 3.02 + r() * 0.1; dens = 0.1; fl = 0.08; sc = 0.65; }
         if (r() > dens) continue;
         const uu = side * u;
@@ -463,7 +507,7 @@ export class World {
     for (const side of [-1, 1]) {
       let s = s0 + r() * 2;
       while (s < s1 - 2) {
-        if (zoneW(s).city < 0.62) { s += 4; continue; }
+        { const wz = zoneW(s); if (wz.city < 0.62 || wz.mountain > 0.1) { s += 4; continue; } } // not into the mountain's rising slope
         { const cx = crossingNear(s + 6); if (cx && s < cx.s + 8.5 && s + 14 > cx.s - 8.5) { s = Math.max(s + 1, cx.s + 8.5); continue; } }
         const cs = mod(s, 150);
         if (cs > 145.6 || cs < 3.4) { s += 1; continue; }          // side street at each crosswalk (≈ sc−4.4 … sc+3.4)
@@ -495,12 +539,12 @@ export class World {
       }
       // second row: taller buildings peeking over the street
       for (let s2 = s0 + r() * 10; s2 < s1 - 8; s2 += r.range(14, 26)) {
-        if (zoneW(s2).city < 0.7 || r() < 0.3 || nearX(s2, 18) || nearSide(s2, 15)) continue;
+        if (zoneW(s2).city < 0.7 || zoneW(s2).mountain > 0.1 || r() < 0.3 || nearX(s2, 18) || nearSide(s2, 15)) continue;
         const rw = rwAt(s2), M = matAt(s2, side * (rw + 3.2 + r.range(14, 20)), road(s2) + 0.1);
         P.building(G, M, r, { type: r() < 0.6 ? 'apt' : 'office', w: r.range(12, 18), d: 12, floors: r.int(6, 11), tint: r.pick(P.TINTS), litP: 0.4 });
       }
       // far towers for a skyline
-      if (zoneW(s0 + 30).city > 0.7 && r() < 0.65) {
+      if (zoneW(s0 + 30).city > 0.7 && zoneW(s0 + 30).mountain < 0.1 && r() < 0.65) {
         const sm = s0 + r() * CH; if (nearX(sm, 24) || nearSide(sm, 20)) continue;
         const M = matAt(sm, side * r.range(55, 150), road(sm));
         P.building(G, M, r, { type: 'tower', w: r.range(16, 26), d: r.range(16, 22), floors: r.int(12, 26), tint: r.pick(P.TINTS), litP: 0.45 });
@@ -509,7 +553,7 @@ export class World {
     // signs & mirrors at crossings
     const k0 = Math.ceil(s0 / 150), k1 = Math.floor((s1 - 0.01) / 150);
     for (let k = k0; k <= k1; k++) {
-      const sc = k * 150; if (zoneAt(sc) !== 'city') continue;
+      const sc = k * 150; if (zoneAt(sc) !== 'city' || zoneW(sc).mountain > 0.1) continue;
       const rw = rwAt(sc);
       yield* this.intersection(G, r, sc, k, matAt, road, rwAt, walkW, ground, ox, oz);
       P.signPost(G, matAt(sc - 1, -(rw + 0.4), road(sc) + 0.15), 'sign_blue', 1);
@@ -606,6 +650,8 @@ export class World {
     if (sv >= s0 && sv < s1 && zoneAt(sv) === 'country' && !nearR(sv, 40)) { const rw = rwAt(sv); P.vendingMachine(G, matAt(sv, -(rw + 0.95), road(sv) - 0.08), r); P.streetLamp(G, matAt(sv + 2, -(rw + 0.8), road(sv) - 0.08), r); }
     const sh = Math.floor((s0 + CH / 2) / 900) * 900 + 450;
     if (sh >= s0 && sh < s1 && zoneAt(sh) === 'country' && !nearR(sh, 40)) { const rw = rwAt(sh); P.smallShrine(G, onGround(sh, rw + 5), r); }
+    const sj = Math.floor((s0 + CH / 2) / 380) * 380 + 190;
+    if (sj >= s0 && sj < s1 && zoneAt(sj) === 'country' && !nearR(sj, 40) && !nearX(sj, 30)) { const rw = rwAt(sj), u = (hash2(Math.round(sj), 5) < 0.5 ? -1 : 1) * (rw + 2.75); P.jizo(G, onGround(sj, u, 0.0)); }
     for (let s = s0; s < s1; s += 30) {
       if (zoneAt(s) !== 'country') continue;
       const k = this.path.curv(s);

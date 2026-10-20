@@ -1,13 +1,15 @@
-// Drifting sakura petals and night fireflies around the camera.
+// Drifting sakura petals / autumn leaves and night fireflies around the camera.
 import * as THREE from 'three';
 
 export function makeParticles(glowTex) {
   const N = 420;
   const petalGeo = new THREE.PlaneGeometry(0.075, 0.05);
-  const petalMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffd0de'), side: THREE.DoubleSide });
+  const petalMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
   const petals = new THREE.InstancedMesh(petalGeo, petalMat, N);
   petals.frustumCulled = false; petals.count = 0;
-  const P = Array.from({ length: N }, () => ({ p: new THREE.Vector3(1e9, 0, 0), v: 0.5 + Math.random() * 0.7, ph: Math.random() * 6.28, sp: 0.6 + Math.random() * 1.6 }));
+  const PINK = new THREE.Color('#ffd0de'), AUTUMN = ['#c8321e', '#e0562a', '#ee8a30', '#f2b23a', '#a83a22'].map(c => new THREE.Color(c));
+  for (let i = 0; i < N; i++) petals.setColorAt(i, PINK);
+  const P = Array.from({ length: N }, () => ({ p: new THREE.Vector3(1e9, 0, 0), v: 0.5 + Math.random() * 0.7, ph: Math.random() * 6.28, sp: 0.6 + Math.random() * 1.6, leaf: false }));
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(1, 1, 1), rel = new THREE.Vector3();
 
   const FN = 90, fpos = new Float32Array(FN * 3), F = Array.from({ length: FN }, () => ({ p: new THREE.Vector3(1e9, 0, 0), ph: Math.random() * 6.28 }));
@@ -22,20 +24,26 @@ export function makeParticles(glowTex) {
   return {
     group: [petals, flies],
     shift(dx, dz) { for (const o of P) { o.p.x -= dx; o.p.z -= dz; } for (const o of F) { o.p.x -= dx; o.p.z -= dz; } },
-    update(dt, t, cam, fwd, right, wSakura, groundY, night, wFly) {
-      const n = Math.floor(N * Math.min(1, wSakura * 1.1));
+    update(dt, t, cam, fwd, right, wSakura, groundY, night, wFly, wAutumn = 0) {
+      const n = Math.floor(N * Math.min(1, wSakura * 1.1 + wAutumn * 0.55));
+      let recolor = false;
       petals.count = n;
       for (let i = 0; i < n; i++) {
         const o = P[i];
         rel.subVectors(o.p, cam);
         const along = rel.x * fwd.x + rel.z * fwd.z, side = rel.x * right.x + rel.z * right.z;
-        if (o.p.x > 1e8 || along < -6 || along > 55 || Math.abs(side) > 24 || o.p.y < groundY - 0.5) respawn(o, cam, fwd, right, o.p.x < 1e8);
+        if (o.p.x > 1e8 || along < -6 || along > 55 || Math.abs(side) > 24 || o.p.y < groundY - 0.5) {
+          respawn(o, cam, fwd, right, o.p.x < 1e8);
+          const leaf = Math.random() * (wSakura + wAutumn) < wAutumn;
+          if (leaf !== o.leaf || leaf) { o.leaf = leaf; petals.setColorAt(i, leaf ? AUTUMN[Math.floor(Math.random() * AUTUMN.length)] : PINK); recolor = true; }
+        }
         o.p.y -= o.v * dt;
         o.p.x += Math.sin(t * 0.7 + o.ph) * 0.4 * dt + 0.25 * dt; o.p.z += Math.cos(t * 0.5 + o.ph) * 0.3 * dt;
         e.set(t * o.sp + o.ph, t * o.sp * 0.7, o.ph); q.setFromEuler(e);
-        m.compose(o.p, q, sc); petals.setMatrixAt(i, m);
+        sc.setScalar(o.leaf ? 1.9 : 1); m.compose(o.p, q, sc); petals.setMatrixAt(i, m);
       }
       petals.instanceMatrix.needsUpdate = true;
+      if (recolor && petals.instanceColor) petals.instanceColor.needsUpdate = true;
       const fa = night * wFly;
       fmat.opacity = fa;
       flies.visible = fa > 0.01;

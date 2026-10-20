@@ -8,7 +8,7 @@ An endless, calm drive through anime Japan. No destination, no traffic, no way t
 
 ## What you'll see
 
-- **Four places that blend into each other and loop forever**: narrow city streets (街の灯), a cherry-blossom avenue (桜並木), a coastal road by the sea (海沿いの道) and rice-field countryside (田舎道).
+- **Five places that blend into each other and loop forever**: narrow city streets (街の灯), a cherry-blossom avenue (桜並木), a coastal road by the sea (海沿いの道), rice-field countryside (田舎道) and an autumn mountain pass (紅葉の峠).
 - **Painted-background look**: cel-shaded buildings with blue-tinted shadows, towering cumulus painted on the GPU, bloom and sun streaks, kanji shop signs, power lines, vending machines, bicycles, crosswalks.
 - **Level crossings (踏切)**: bells, flashing lamps and barrier arms; the car waits while a little commuter train rolls by.
 - **Day, night and weather**: golden hours, lit windows at night, overcast skies and gentle rain with wet roads, drifting cloud shadows on sunny days.
@@ -34,7 +34,7 @@ The page carries an X `player` card, so a post linking to the play URL shows the
 
 ## URL parameters
 
-`?env=city|sakura|coast|country` start zone · `&t=0..1` time of day · `&weather=clear|cloudy|rain` ·
+`?env=city|sakura|coast|country|mountain` start zone · `&t=0..1` time of day · `&weather=clear|cloudy|rain` ·
 `&cam=low|eye` · `&q=low|mid|high` quality · `&seed=` world seed.
 
 ## Build

@@ -124,6 +124,11 @@ export function signPost(G, M, cell, dir, h = 2.3, size = 0.6) {
   if (dir < 0) nxq(G.atlas, -0.05, -size / 2, size / 2, h - size / 2, h + size / 2, cell);
   else pxq(G.atlas, 0.05, -size / 2, size / 2, h - size / 2, h + size / 2, cell);
 }
+export function reflectorPost(G, M) { // 視線誘導標: a small white post with an amber reflector, on the guardrail
+  const c = G.color; c.setM(M);
+  c.box(-0.035, 0.84, -0.035, 0.035, 1.12, 0.035, C('#efefea'));
+  c.box(-0.06, 1.0, -0.06, 0.06, 1.1, 0.06, C('#f0a020'));
+}
 export function curveMirror(G, M, dir) {
   const c = G.color; c.setM(M);
   c.cyl(0, 0, 0, 0.05, 0.05, 3.3, 8, PAL.orange);
@@ -213,6 +218,29 @@ export function treePine(G, M, r, s = 1) {
     cards(G, [x, y - 0.8, z], x, y, z, rr * s * 1.3, 'pine', 9, r, [1, 1, 1], [0.62, 0.68, 0.74], [y - 0.7, y + 0.5], 1);
   }
 }
+export function treeMaple(G, M, r, s = 1) { // momiji: low, wide crown of red and orange
+  const h = r.range(4.5, 6.5) * s;
+  G.color.setM(M); G.color.cyl(0, 0, 0, 0.18 * s, 0.12 * s, h * 0.5, 7, PAL.trunkDark);
+  const tips = [];
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * 6.28 + r() * 0.8, L = (1.8 + r() * 1.4) * s, tip = [Math.cos(a) * L, h * (0.55 + r() * 0.2), Math.sin(a) * L];
+    G.color.rod([0, h * 0.38, 0], tip, 0.09 * s, 0.04 * s, 5, PAL.trunkDark); tips.push(tip);
+  }
+  G.leaf.setM(M);
+  const cen = [0, h * 0.7, 0], yr = [h * 0.45, h * 1.1], dark = [0.62, 0.52, 0.56];
+  for (const t of tips) cards(G, cen, t[0], t[1] + 0.4 * s, t[2], (1.15 + r() * 0.4) * s, 'momiji', 6, r, [1, 1, 1], dark, yr);
+  cards(G, cen, 0, h * 0.92, 0, 1.6 * s, 'momiji', 8, r, [1, 1, 1], dark, yr);
+}
+export function treeGinkgo(G, M, r, s = 1) { // a tall golden ginkgo
+  const h = r.range(8, 11) * s;
+  G.color.setM(M); G.color.cyl(0, 0, 0, 0.22 * s, 0.1 * s, h * 0.85, 7, PAL.trunk);
+  G.leaf.setM(M);
+  const cen = [0, h * 0.62, 0], yr = [h * 0.3, h * 1.02], dark = [0.68, 0.6, 0.52];
+  for (let i = 0; i < 7; i++) {
+    const y = h * (0.34 + i * 0.09), rad = (2.1 - i * 0.24) * s, a = r() * 6.28;
+    cards(G, cen, Math.cos(a) * rad * 0.35, y, Math.sin(a) * rad * 0.35, Math.max(0.7, rad) * 1.05, 'ginkgo', 5, r, [1, 1, 1], dark, yr);
+  }
+}
 export function treeCedar(G, M, r, s = 1) {
   const h = r.range(9, 14) * s;
   G.color.setM(M); G.color.cyl(0, 0, 0, 0.22 * s, 0.15 * s, h * 0.3, 6, PAL.trunkDark);
@@ -222,7 +250,7 @@ export function treeCedar(G, M, r, s = 1) {
 }
 
 // trees are built once per (kind, variant) and then stamped — much cheaper than rebuilding every tree
-const TREE_BUILDERS = { broad: treeBroad, sakura: treeSakura, pine: treePine, cedar: treeCedar };
+const TREE_BUILDERS = { broad: treeBroad, sakura: treeSakura, pine: treePine, cedar: treeCedar, maple: treeMaple, ginkgo: treeGinkgo };
 const TCACHE = {};
 export function tree(G, M, kind, r, s = 1) {
   const v = Math.floor(r() * 4), key = kind + v;
@@ -530,6 +558,23 @@ export function futon(c, xa, xb, yTop, zFront, r) {
   c.box(xa, yTop - 0.02, zFront - d, xb, yTop + 0.09, zFront + 0.22, col);
   c.box(xa, yTop - 0.72, zFront - d, xb, yTop + 0.09, zFront - 0.005, col);
   c.box(xa + 0.08, yTop - 0.5, zFront - d - 0.004, xb - 0.08, yTop - 0.42, zFront - d + 0.01, mulC(col, 0.86)); // a quilted seam
+}
+
+// ------------------------------------------------------------------ お地蔵さん: a little stone Jizo in a roadside shelter
+export function jizo(G, M) {
+  const c = G.color, STONE = C('#a19f97'), WOOD = C('#6b4a35'), ROOF = C('#4f4a44'), RED = C('#c8342a');
+  c.setM(M);
+  c.box(-0.62, -0.6, -0.46, 0.62, 0.32, 0.46, C('#8d8b84'));
+  for (const x of [-0.52, 0.48]) for (const z of [-0.36, 0.32]) c.box(x, 0.32, z, x + 0.05, 1.5, z + 0.05, WOOD);
+  c.box(-0.55, 1.42, 0.3, 0.55, 1.5, 0.4, WOOD);
+  c.quad([0.72, 1.46, -0.6], [-0.72, 1.46, -0.6], [-0.72, 1.78, 0.02], [0.72, 1.78, 0.02], ROOF);
+  c.quad([-0.72, 1.46, 0.62], [0.72, 1.46, 0.62], [0.72, 1.78, 0.02], [-0.72, 1.78, 0.02], ROOF);
+  c.cyl(0, 0.32, 0, 0.17, 0.13, 0.44, 10, STONE);
+  c.blob(0, 0.86, 0, 0.11, STONE, mulC(STONE, 0.8), 0);
+  c.cyl(0, 0.6, 0, 0.19, 0.11, 0.16, 10, RED, false);                 // red bib (よだれかけ)
+  c.cyl(0, 0.93, 0, 0.115, 0.03, 0.1, 8, RED);                       // knitted red cap
+  for (const x of [-0.32, 0.3]) c.cyl(x, 0.32, -0.18, 0.05, 0.06, 0.07, 8, C('#e9e6dc')); // little offering cups
+  c.box(-0.06, 0.32, -0.32, 0.06, 0.58, -0.28, C('#5b8d3d'));          // a sprig of greenery
 }
 
 // ------------------------------------------------------------------ level crossing alarm post (static part)

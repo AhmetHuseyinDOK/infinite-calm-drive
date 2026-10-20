@@ -319,7 +319,7 @@ async function main() {
     sun.position.copy(sun.target.position).addScaledVector(TOD.lightDir, 200);
     hemi.color.copy(TOD.hemiSky); hemi.groundColor.copy(TOD.hemiGround); hemi.intensity = TOD.hemiI;
     scene.fog.color.copy(TOD.fog);
-    const fogD = (w.city * 0.0022 + w.sakura * 0.0019 + w.coast * 0.0011 + w.country * 0.0014) * (1 + TOD.night * 0.25);
+    const fogD = (w.city * 0.0022 + w.sakura * 0.0019 + w.coast * 0.0011 + w.country * 0.0014 + w.mountain * 0.0017) * (1 + TOD.night * 0.25);
     scene.fog.near = fogD * (1 + 0.55 * ov + 0.45 * rn); scene.fog.far = world.ahead * 0.92;
     U.uSkyHor.value.copy(TOD.horizon); U.uSkyZen.value.copy(TOD.zenith); U.uTime.value = t;
     U.uWet.value = wet; U.uOrigin.value.set(world.origin.x, world.origin.z); U.uWind.value = 1 + 0.8 * rn;
@@ -367,11 +367,11 @@ async function main() {
 
     rain.update(camera.position, t, rn, day());
     birds.setFog(scene.fog.near); birds.update(dt, t, camera.position, fwd, right, w, day(), rn, car.group.position);
-    const tp0 = performance.now(); parts.update(dt, t, camera.position, fwd, right, w.sakura, f.y, nightK, (w.country + w.sakura * 0.4) * (1 - rn)); const tp1 = performance.now();
+    const tp0 = performance.now(); parts.update(dt, t, camera.position, fwd, right, w.sakura, f.y, nightK, (w.country + w.sakura * 0.4) * (1 - rn), w.mountain); const tp1 = performance.now();
     if (audio) {
       path.at(sx, fl); const dxc = Math.hypot(fl.x - world.origin.x - camera.position.x, fl.z - world.origin.z - camera.position.z);
       const trainD = train.st.active ? train.group.position.distanceTo(camera.position) : 1e9;
-      audio.update(st.speed / 15, w, day(), { bell: bell ? Math.pow(clamp(1 - dxc / 260, 0, 1), 1.5) : 0, train: Math.pow(clamp(1 - trainD / 230, 0, 1), 2), rain: rn, roof: st.cam !== 2, water: (() => { const rv = riverNear(st.s); return rv ? 1 - sstep(12, 150, Math.abs(st.s - rv.s)) : 0; })(), dusk: TOD.warm * (st.tod > 0.5 ? 1 : 0.3) });
+      audio.update(st.speed / 15, w, day(), { bell: bell ? Math.pow(clamp(1 - dxc / 260, 0, 1), 1.5) : 0, train: Math.pow(clamp(1 - trainD / 230, 0, 1), 2), rain: rn, roof: st.cam !== 2, water: (() => { const rv = riverNear(st.s); return Math.max(rv ? 1 - sstep(12, 150, Math.abs(st.s - rv.s)) : 0, w.mountain * 0.45); })(), dusk: TOD.warm * (st.tod > 0.5 ? 1 : 0.3) });
     }
     zoneCard(zoneAt(st.s + 40));
 

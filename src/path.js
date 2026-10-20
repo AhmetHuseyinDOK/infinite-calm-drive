@@ -1,12 +1,13 @@
 // The infinite road: a centre-line integrated from smooth curvature noise, plus the zone schedule.
 import { clamp, lerp, smooth, sstep, noise1, fbm1 } from './util.js';
 
-export const ZONES = ['city', 'sakura', 'coast', 'country'];
+export const ZONES = ['city', 'sakura', 'coast', 'country', 'mountain'];
 export const ZINFO = {
   city:    { jp: '街の灯',     en: 'City Streets',          curv: 1 / 1500, hill: 1.2, base: 4.0, rw: 3.1, speed: 10.5 },
   sakura:  { jp: '桜並木',     en: 'Cherry Blossom Avenue', curv: 1 / 520,  hill: 2.5, base: 4.5, rw: 3.3, speed: 11.5 },
   coast:   { jp: '海沿いの道', en: 'Coastal Road',          curv: 1 / 300,  hill: 1.6, base: 5.2, rw: 3.4, speed: 13.5 },
   country: { jp: '田舎道',     en: 'Country Road',          curv: 1 / 260,  hill: 7.0, base: 6.0, rw: 3.1, speed: 12.5 },
+  mountain: { jp: '紅葉の峠',   en: 'Autumn Mountain Pass',  curv: 1 / 150,  hill: 11,  base: 14,  rw: 3.0, speed: 10 },
 };
 export const ZONE_LEN = 1500, TRANS = 260, SEA = 0;
 
@@ -16,10 +17,11 @@ export function setStartZone(key) { START = Math.max(0, ZONES.indexOf(key)); }
 export function zoneMix(s) {
   const z = Math.floor(s / ZONE_LEN), l = s - z * ZONE_LEN;
   const t = smooth(clamp((l - (ZONE_LEN - TRANS)) / TRANS, 0, 1));
-  return { a: ZONES[(((z + START) % 4) + 4) % 4], b: ZONES[(((z + START + 1) % 4) + 4) % 4], t };
+  const n = ZONES.length;
+  return { a: ZONES[(((z + START) % n) + n) % n], b: ZONES[(((z + START + 1) % n) + n) % n], t };
 }
 export function zoneW(s) {
-  const m = zoneMix(s), w = { city: 0, sakura: 0, coast: 0, country: 0 };
+  const m = zoneMix(s), w = { city: 0, sakura: 0, coast: 0, country: 0, mountain: 0 };
   w[m.a] += 1 - m.t; w[m.b] += m.t;
   return w;
 }
@@ -120,6 +122,19 @@ export function groundOffset(zone, s, u, e, rw) {
       const b = a - (rw + 2.0);
       const abs = b < 26 ? lerp(1.25, -1.6, b / 26) : lerp(-1.6, -7, clamp((b - 26) / 20, 0, 1));
       return abs - e;
+    }
+    case 'mountain': {
+      if (u > 0) { // uphill: gutter, then a concrete-framed slope face (法面), then the forest slope
+        if (a < rw + 0.5) return -0.06;
+        if (a < rw + 1.0) return -0.32;                     // U-shaped concrete gutter (側溝)
+        const hf = 8 + 6 * noise1(s / 140, 61), d = a - (rw + 1.0);
+        if (d < hf) return d;                               // 45° face
+        return Math.min(hf + (d - hf) * 0.55, 70);
+      }
+      if (a < rw + 1.2) return -0.06;                       // shoulder (guardrail at rw + 0.95)
+      const d = a - (rw + 1.2);
+      if (d < 32) return -d * 1.1;                          // steep wooded drop into the valley
+      return -35.2 + sstep(105, 230, a) * 95 * (0.6 + 0.4 * noise1(s / 220, 67)); // valley floor, then the far mountainside
     }
     case 'country':
     default:

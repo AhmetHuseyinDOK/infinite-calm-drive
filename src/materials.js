@@ -79,9 +79,9 @@ vec3 roadCol(float s, float u, float rw){
   if (hash12(floor(pc) + 3.7) > 0.88 && pf.x > 0.12 && pf.x < 0.82 && pf.y > 0.1 && pf.y < 0.9) c *= 0.85;
   float cr = abs(vnoise(p*vec2(0.7, 1.3)) - 0.5);
   c *= 1.0 - 0.2*(1.0 - smoothstep(0.0, 0.025, cr))*step(0.62, vnoise(p*0.11 + 4.0));
-  float city = vZW.x, paint = 0.0;
+  float city = vZW.x, paint = 0.0, mtn = clamp(1.0 - dot(vZW, vec4(1.0)), 0.0, 1.0);
   paint += step(abs(a - (rw - 0.28)), 0.07);
-  paint += (1.0 - step(0.5, city)) * step(a, 0.07) * step(fract(s/10.0), 0.55);
+  paint += (1.0 - step(0.5, city)) * (1.0 - step(0.5, mtn)) * step(a, 0.07) * step(fract(s/10.0), 0.55);
   float cs = mod(s, 150.0);
   if (city > 0.5) {
     if (cs < 4.0 && a < rw - 0.45) paint += step(0.5, fract(u/0.9 + 0.25));
@@ -90,7 +90,61 @@ vec3 roadCol(float s, float u, float rw){
     if (dd < 1.0 && dd > 0.82) paint += 1.0;
   }
   paint = clamp(paint, 0.0, 1.0) * (0.8 + 0.2*vnoise(p*6.0));
-  return mix(c, L(vec3(0.96, 0.96, 0.93)), paint);
+  c = mix(c, L(vec3(0.96, 0.96, 0.93)), paint);
+  if (mtn > 0.01) {
+    float yl = step(0.5, mtn) * step(a, 0.075) * (0.85 + 0.15*vnoise(p*6.0));           // はみ出し禁止: solid yellow centre line
+    c = mix(c, L(vec3(0.95, 0.68, 0.12)), yl);
+    // fallen leaves: little scattered leaf shapes, thickest along the edges
+    vec2 q = p * 4.5, id = floor(q), fq = fract(q) - 0.5; float hh = hash12(id + 17.0);
+    float ang = hh * 6.2832; fq = mat2(cos(ang), -sin(ang), sin(ang), cos(ang)) * (fq + (vec2(hash12(id + 3.0), hash12(id + 9.0)) - 0.5) * 0.4);
+    float dens = mix(0.08, 0.6, smoothstep(rw - 2.2, rw - 0.3, a)) * mtn;
+    float lf = step(1.0 - dens, hash12(id + 41.0)) * (1.0 - smoothstep(0.16, 0.2, length(fq * vec2(1.0, 1.8))));
+    vec3 leaf = mix(L(vec3(0.78, 0.2, 0.1)), L(vec3(0.95, 0.62, 0.15)), hh);
+    c = mix(c, leaf, lf * 0.92);
+  }
+  return c;
+}
+// seen from a distance an autumn forest is a mass of individual crowns (a Worley pattern: each crown a soft dome,
+// darker in the gaps) whose colours cluster into regions — cedar, still-green, orange, red, gold
+vec3 autumnCanopy(vec2 p){
+  vec2 q = p / 3.2, iq = floor(q), fq = fract(q);
+  float best = 9.0; vec2 bid = vec2(0.0);
+  for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+    vec2 o = vec2(float(x), float(y)), id = iq + o;
+    vec2 pt = o + vec2(hash12(id), hash12(id + 7.7)) * 0.8 + 0.1 - fq;
+    float d = dot(pt, pt);
+    if (d < best) { best = d; bid = id; }
+  }
+  float region = fbm2(p * 0.025 + 13.0);
+  float pick = clamp(region * 1.25 - 0.12 + (hash12(bid + 3.1) - 0.5) * 0.55, 0.0, 0.999);
+  vec3 c = pick < 0.22 ? L(vec3(0.17, 0.28, 0.19)) : pick < 0.36 ? L(vec3(0.3, 0.42, 0.22)) : pick < 0.58 ? L(vec3(0.82, 0.44, 0.16))
+         : pick < 0.8 ? L(vec3(0.72, 0.22, 0.12)) : L(vec3(0.84, 0.64, 0.22));
+  float dome = 1.0 - smoothstep(0.0, 0.62, best);
+  vec2 cpt = bid + vec2(hash12(bid), hash12(bid + 7.7)) * 0.8 + 0.1 - q;                 // a soft lit side on every crown
+  float lit = 1.0 - smoothstep(0.0, 0.32, dot(cpt - vec2(0.16, 0.18), cpt - vec2(0.16, 0.18)));
+  return c * (0.55 + 0.5 * dome + 0.22 * lit) * (0.9 + 0.15 * vnoise(p * 1.7));
+}
+vec3 mountainGround(float s, float u, float rw){
+  vec2 p = vec2(s, u); float a = abs(u);
+  vec3 floorC = mix(L(vec3(0.44, 0.34, 0.2)), L(vec3(0.66, 0.4, 0.18)), fbm2(p * 0.07)) * (0.85 + 0.2 * vnoise(p * 1.8));
+  floorC = mix(floorC, L(vec3(0.34, 0.42, 0.22)), 0.38 * smoothstep(0.4, 0.7, fbm2(p * 0.03 + 3.0)));
+  if (u > 0.0) {
+    if (a < rw + 0.5) return L(vec3(0.55, 0.53, 0.5)) * (0.9 + 0.1 * vnoise(p * 3.0));
+    if (a < rw + 1.05) return L(vec3(0.66, 0.65, 0.62)) * (0.72 + 0.16 * vnoise(p * 2.0));   // concrete gutter
+    // 法面: a concrete lattice on the steep cut, blending into the wooded slope above it (smoothly, by steepness)
+    vec2 g = fract(vec2(s / 2.6, (a - rw - 1.0) * 1.414 / 2.6));
+    float beam = max(step(g.x, 0.11), step(g.y, 0.11));
+    vec3 cell = mix(L(vec3(0.56, 0.58, 0.3)), L(vec3(0.74, 0.6, 0.3)), vnoise(p * 0.8)) * (0.84 + 0.22 * vnoise(p * 4.0));
+    vec3 face = mix(cell, L(vec3(0.76, 0.75, 0.71)) * (0.88 + 0.12 * vnoise(p * 2.0)), beam);
+    return mix(face, autumnCanopy(p), smoothstep(0.76, 0.88, vWN.y));
+  }
+  if (a < rw + 1.2) return L(vec3(0.5, 0.48, 0.42)) * (0.85 + 0.2 * vnoise(p * 2.0));       // shoulder
+  float dw = abs(a - (rw + 75.0 + 14.0 * sin(s / 90.0)));                                    // a stream on the valley floor
+  if (dw < 4.0) return mix(L(vec3(0.12, 0.36, 0.4)), uSkyHor, 0.35) * (0.85 + 0.2 * vnoise(vec2(s * 0.3 - uTime, u)));
+  if (dw < 9.0) return L(vec3(0.62, 0.6, 0.56)) * (0.78 + 0.26 * hash12(floor(p * 3.0)));   // pale river stones
+  if (a < rw + 3.7) return floorC;                                                           // brush right below the rail
+  float meadow = smoothstep(rw + 31.0, rw + 36.0, a) * (1.0 - smoothstep(100.0, 112.0, a));  // the valley floor
+  return mix(autumnCanopy(p), mix(floorC, L(vec3(0.42, 0.52, 0.25)) * (0.85 + 0.2 * vnoise(p * 0.9)), 0.55), meadow);
 }
 vec3 sidewalkCol(float s, float u, float rw){
   float d = abs(u) - rw;
@@ -180,6 +234,8 @@ vec3 groundAlbedo(){
   if (vZW.y > 0.004) c += vZW.y * sakuraGround(s, u, rw);
   if (vZW.z > 0.004) c += vZW.z * coastGround(s, u, rw);
   if (vZW.w > 0.004) c += vZW.w * countryGround(s, u, rw);
+  float wMtn = clamp(1.0 - dot(vZW, vec4(1.0)), 0.0, 1.0);
+  if (wMtn > 0.004) c += wMtn * mountainGround(s, u, rw);
   gWater *= vZW.w * (1.0 - vRV);
   c = mix(c, riverBankCol(s, u), vRV);
   return c * (0.92 + 0.16*fbm2(vec2(s, u)*0.015));
@@ -225,18 +281,18 @@ export function groundMaterial() {
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
 attribute vec2 su; attribute vec4 zw; attribute vec2 rk; attribute float rv;
-varying vec2 vSU; varying vec4 vZW; varying vec2 vRK; varying float vWY; varying float vRV;`)
+varying vec2 vSU; varying vec4 vZW; varying vec2 vRK; varying float vWY; varying float vRV; varying vec3 vWN;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
-vSU = su; vZW = zw; vRK = rk; vRV = rv; vWY = (modelMatrix * vec4(position, 1.0)).y;`);
+vSU = su; vZW = zw; vRK = rk; vRV = rv; vWY = (modelMatrix * vec4(position, 1.0)).y; vWN = normalize(mat3(modelMatrix) * objectNormal);`);
     worldShade(sh, `
 uniform vec3 uSkyHor, uSkyZen, uSunDir, uSunCol; uniform float uWet, uNight;
-varying vec2 vSU; varying vec4 vZW; varying vec2 vRK; varying float vWY; varying float vRV;
+varying vec2 vSU; varying vec4 vZW; varying vec2 vRK; varying float vWY; varying float vRV; varying vec3 vWN;
 float gWater = 0.0;
 ${GROUND}`, WET + MIRROR);
     sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
 diffuseColor.rgb *= groundAlbedo();`);
   };
-  m.customProgramCacheKey = () => 'ground-v6';
+  m.customProgramCacheKey = () => 'ground-v11';
   return m;
 }
 

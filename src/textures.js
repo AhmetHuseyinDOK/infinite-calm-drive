@@ -425,6 +425,12 @@ export function buildAtlas() {
       rect(a, 0, 0, w, h, '#4b3326'); grain(a, A, w, h, 0.2); textFit(a, kan + '駅', w / 2, h / 2 + 1, w * 0.8, 30, '#f3ead8', 800);
     });
   });
+  for (const dirName of ['l', 'r']) A.add('chev_' + dirName, 96, 120, (a, e, w, h) => { // 線形誘導標: white chevrons on blue
+    rect(a, 0, 0, w, h, '#f4f4ef'); rect(a, 4, 4, w - 8, h - 8, '#1e5bb8');
+    a.fillStyle = '#f8f8f4'; a.beginPath();
+    const s = dirName === 'r' ? 1 : -1, cx = w / 2, cy = h / 2;
+    a.moveTo(cx - s * 26, cy - 40); a.lineTo(cx + s * 22, cy); a.lineTo(cx - s * 26, cy + 40); a.lineTo(cx - s * 8, cy + 40); a.lineTo(cx + s * 40, cy); a.lineTo(cx - s * 8, cy - 40); a.closePath(); a.fill();
+  });
   A.add('xing_plate', 128, 48, (a, e, w, h) => { rect(a, 0, 0, w, h, '#f6f6f2'); a.strokeStyle = '#d8231c'; a.lineWidth = 4; a.strokeRect(3, 3, w - 6, h - 6); textFit(a, '踏切注意', w / 2, h / 2, w * 0.8, 26, '#d8231c', 900); });
   A.add('rail', 240, 80, (a, e, w, h) => { // see-through balcony railing (alpha-tested)
     a.clearRect(0, 0, w, h);
@@ -436,12 +442,14 @@ export function buildAtlas() {
 
 // ---------------- foliage clump textures (leaves, sakura blossom, pine needles) ----------------
 export function buildFoliage(renderer) {
-  const S = 1024, SH = 1536, cv = canvas(S, SH), g = cv.getContext('2d'), r = rng(321), cells = {};
+  const S = 1024, SH = 2048, cv = canvas(S, SH), g = cv.getContext('2d'), r = rng(321), cells = {};
   const PALS = {
     leafA: ['#2f6634', '#4a8a3e', '#6aa64a', '#94c460', '#c4e08a'],
     leafB: ['#476e2e', '#6a9238', '#8db44a', '#b4d066', '#e0ec9a'],
     sakura: ['#c97f9e', '#e8a3bf', '#f6c3d5', '#ffdce8', '#fff6fa'],
     pine: ['#24503a', '#33684a', '#468052', '#5f9a5e', '#8cbc78'],
+    momiji: ['#8f1d18', '#bf321d', '#de5426', '#ef8a34', '#f7c062'],
+    ginkgo: ['#a87a1a', '#d3a11e', '#e9c232', '#f5da56', '#fff0a0'],
   };
   const paint = (name, ox, oy) => {
     const pal = PALS[name], C0 = 256, pine = name === 'pine', sak = name === 'sakura';
@@ -464,6 +472,12 @@ export function buildFoliage(renderer) {
         if (r() < 0.25) { g.fillStyle = pal[4]; g.beginPath(); g.arc(x - sz * 0.3, y - sz * 0.3, sz * 0.4, 0, 7); g.fill(); }
       } else if (pine) {
         g.save(); g.translate(x, y); g.rotate((r() - 0.5) * 1.2); g.fillRect(-11, -1.6, 22, 3.2); g.restore();
+      } else if (name === 'momiji') { // little five-pointed maple leaves
+        const sz = 8 + r() * 7; g.save(); g.translate(x, y); g.rotate(r() * 6.28); g.beginPath();
+        for (let q = 0; q < 10; q++) { const rr = q % 2 ? sz * 0.42 : sz, aa = (q / 10) * 6.2832; g.lineTo(Math.cos(aa) * rr, Math.sin(aa) * rr); }
+        g.closePath(); g.fill(); g.restore();
+      } else if (name === 'ginkgo') { // golden fans
+        const sz = 9 + r() * 7; g.save(); g.translate(x, y); g.rotate(r() * 6.28); g.beginPath(); g.moveTo(0, 0); g.arc(0, 0, sz, -0.95, 0.95); g.closePath(); g.fill(); g.restore();
       } else {
         const sz = 9 + r() * 10; g.beginPath(); g.ellipse(x, y, sz, sz * 0.55, r() * 6.28, 0, 7); g.fill();
       }
@@ -508,8 +522,9 @@ export function buildFoliage(renderer) {
     cells[name] = { u0: ox / S, u1: (ox + 512) / S, v0: 1 - (oy + 512) / SH, v1: 1 - oy / SH };
   };
   paint('leafA', 0, 0); paint('leafB', 512, 0); paint('sakura', 0, 512); paint('pine', 512, 512);
-  tuft('grass', 0, 1024, false); tuft('flowers', 512, 1024, true);
+  paint('momiji', 0, 1024); paint('ginkgo', 512, 1024);
+  tuft('grass', 0, 1536, false); tuft('flowers', 512, 1536, true); // tufts stay in the bottom row (the breeze shader keys on it)
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
-  return { tex, cells, tuftV: [0, 1 - 1024 / SH] };
+  return { tex, cells, tuftV: [0, 1 - 1536 / SH] };
 }

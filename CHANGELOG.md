@@ -2,6 +2,15 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-21 · 03:xx — A fifth place: the autumn mountain pass (紅葉の峠)
+- **紅葉の峠 — Autumn Mountain Pass**, after the countryside and before the city: a winding road with real climbs and bends. On the uphill side a concrete gutter and a cut slope faced with the classic concrete lattice (法面), crowned by forest; on the other side a guardrail with white reflector posts (視線誘導標), utility poles, and a steep drop into a valley with a stream and pale river stones, rising again to the far mountainside.
+- **Autumn colours**: new red/orange momiji and golden ginkgo trees (their leaf clumps painted as tiny maple stars and ginkgo fans) mixed with dark cedars; distant slopes are painted as a mass of individual crowns whose colours cluster into red, orange, gold and green patches.
+- **On the road**: a solid yellow no-overtaking centre line (はみ出し禁止), fallen leaves scattered thickest along the edges, blue chevron signs (線形誘導標) on the outside of sharp bends, and autumn leaves drifting through the air.
+- **Sound**: gusty wind in the trees and the stream far below; more crows and crickets, fewer town sounds.
+- **お地蔵さん**: little stone Jizo statues with red bibs and caps sit in roadside shelters along the country road.
+- Fixed: the "crossing ahead" sign meant for oncoming traffic faced the wrong way.
+- Test hook: `?env=mountain`.
+
 ## 2026-10-21 · 02:xx — Cinematic camera, the Milky Way and shooting stars
 - **🎬 Cinematic camera** (a fourth stop on the camera button): calm film-like shots that cut every ~15–20 s — the chase view, a tracking shot from the sidewalk or verge, a fixed roadside camera the car drives past, a high crane shot that slowly rises over the landscape, and eye level. It is the default inside the X post, so the card plays like a little film.
 - **The Milky Way** arches across clear nights: a faint, grainy band with darker dust lanes and a few more stars along it (hidden under overcast skies; the cirrus thins out at night so it shows).

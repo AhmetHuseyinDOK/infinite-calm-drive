@@ -24,6 +24,8 @@ export const U = {
   uWet: { value: 0 },                          // 0 dry … 1 soaked (rain)
   uCloudSh: { value: 0 },                      // strength of drifting cloud shadows
   uOrigin: { value: new THREE.Vector2() },     // world-origin offset, so world-space patterns survive rebasing
+  uSunDir: { value: new THREE.Vector3(0, 1, 0) },
+  uSunCol: { value: new THREE.Color(1, 1, 1) },
 };
 
 function gradTex(vals) {
@@ -125,9 +127,10 @@ vec3 countryGround(float s, float u, float rw){
     float rows = smoothstep(0.30, 0.48, abs(fract(pu/0.33) - 0.5));
     vec3 field = mix(L(vec3(0.47, 0.66, 0.24)), L(vec3(0.62, 0.76, 0.32)), h) * (0.88 + 0.14*rows);
     vec3 water = mix(uSkyHor, L(vec3(0.55, 0.68, 0.75)), 0.3);
-    if (h < 0.28) field = mix(water, field, rows*0.5);
+    if (h < 0.28) { field = mix(water, field, rows*0.5); gWater = 1.0 - rows * 0.5; }
     else if (h > 0.86) field = L(vec3(0.40, 0.52, 0.22)) * (0.88 + 0.16*rows);
     float ridge = max(max(step(f.x, 0.025), step(0.975, f.x)), max(step(f.y, 0.04), step(0.96, f.y)));
+    gWater *= 1.0 - ridge;
     return mix(field, L(vec3(0.52, 0.63, 0.30)), ridge) * (0.94 + 0.1*fbm2(p*0.03));
   }
   return mix(L(vec3(0.18, 0.34, 0.19)), L(vec3(0.30, 0.46, 0.24)), fbm2(p*0.04));
@@ -148,6 +151,12 @@ vec3 crossingPanel(float ds, float u){
   if ((t > 0.9 && t < 1.25) || abs(ds) > 3.05) c = mix(c, L(vec3(0.6, 0.59, 0.57)), 0.7);
   return c;
 }
+vec3 riverBankCol(float s, float u){
+  vec2 p = vec2(s, u);
+  vec3 g = mix(L(vec3(0.36, 0.56, 0.24)), L(vec3(0.56, 0.70, 0.30)), fbm2(p * 0.12)) * (0.88 + 0.16 * vnoise(p * 2.1));
+  float fl = smoothstep(0.78, 0.84, vnoise(p * 4.3));            // little yellow and white wildflowers
+  return mix(g, mix(L(vec3(0.98, 0.86, 0.3)), L(vec3(0.97, 0.97, 0.92)), step(0.5, vnoise(p * 1.7))), fl * 0.8);
+}
 vec3 groundAlbedo(){
   float s = vSU.x, u = vSU.y, rw = vRK.x, kind = vRK.y;
   if (kind > 0.5 && kind < 1.5) return roadCol(s, u, rw);
@@ -155,15 +164,34 @@ vec3 groundAlbedo(){
   if (kind > 2.5 && kind < 3.5) return L(vec3(0.80, 0.80, 0.78)) * (0.9 + 0.12*fbm2(vec2(s, u)*2.0));
   if (kind > 4.5 && kind < 5.5) return trackBed(s, u);
   if (kind > 5.5 && kind < 6.5) return crossingPanel(s, u);
+  if (kind > 8.5) return L(vec3(0.78, 0.72, 0.6)) * (0.86 + 0.18 * vnoise(vec2(s, u) * 3.0));   // levee-top path
   if (kind > 6.5) return L(vec3(0.95, 0.95, 0.92)) * (0.82 + 0.18 * vnoise(vec2(s, u) * 6.0));
   vec3 c = vec3(0.0);
   if (vZW.x > 0.004) c += vZW.x * cityGround(s, u, rw);
   if (vZW.y > 0.004) c += vZW.y * sakuraGround(s, u, rw);
   if (vZW.z > 0.004) c += vZW.z * coastGround(s, u, rw);
   if (vZW.w > 0.004) c += vZW.w * countryGround(s, u, rw);
+  gWater *= vZW.w * (1.0 - vRV);
+  c = mix(c, riverBankCol(s, u), vRV);
   return c * (0.92 + 0.16*fbm2(vec2(s, u)*0.015));
 }
 `;
+
+// flooded paddies mirror the sky: gradient + soft cloud patches + sun glint, rippled by the wind
+const MIRROR = /* glsl */`
+if (gWater > 0.01) {
+  vec3 V = normalize(vWP - cameraPosition);
+  vec3 R = reflect(V, vec3(0.0, 1.0, 0.0));
+  vec2 rip = vec2(vnoise(vWP.xz * 0.9 + uTime * 0.7), vnoise(vWP.zx * 0.9 - uTime * 0.6)) - 0.5;
+  R = normalize(R + vec3(rip.x, 0.0, rip.y) * 0.05);
+  float hgt = clamp(R.y, 0.0, 1.0);
+  vec3 sky = mix(uSkyHor, uSkyZen, pow(hgt, 0.55));
+  float cl = smoothstep(0.5, 0.78, fbm2(R.xz / (R.y + 0.12) * 1.1 + 7.0));
+  sky = mix(sky, mix(uSkyHor, vec3(1.0), 0.55) * (1.0 - 0.6 * uNight), cl * 0.55);
+  sky += uSunCol * pow(max(dot(R, uSunDir), 0.0), 260.0) * 3.0 * (1.0 - uNight);
+  float fr = 0.4 + 0.6 * pow(1.0 - clamp(-V.y, 0.0, 1.0), 3.0);
+  outgoingLight = mix(outgoingLight, sky, clamp(gWater * fr, 0.0, 0.9));
+}`;
 
 // wet ground: darker asphalt, a sky-coloured sheen (stronger at grazing angles), puddles with rain rings
 const WET = /* glsl */`
@@ -184,21 +212,22 @@ if (uWet > 0.01) {
 export function groundMaterial() {
   const m = new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: GRAD });
   m.onBeforeCompile = sh => {
-    sh.uniforms.uSkyHor = U.uSkyHor; sh.uniforms.uSkyZen = U.uSkyZen; sh.uniforms.uWet = U.uWet; sh.uniforms.uNight = U.uNight;
+    sh.uniforms.uSkyHor = U.uSkyHor; sh.uniforms.uSkyZen = U.uSkyZen; sh.uniforms.uWet = U.uWet; sh.uniforms.uNight = U.uNight; sh.uniforms.uSunDir = U.uSunDir; sh.uniforms.uSunCol = U.uSunCol;
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
-attribute vec2 su; attribute vec4 zw; attribute vec2 rk;
-varying vec2 vSU; varying vec4 vZW; varying vec2 vRK; varying float vWY;`)
+attribute vec2 su; attribute vec4 zw; attribute vec2 rk; attribute float rv;
+varying vec2 vSU; varying vec4 vZW; varying vec2 vRK; varying float vWY; varying float vRV;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
-vSU = su; vZW = zw; vRK = rk; vWY = (modelMatrix * vec4(position, 1.0)).y;`);
+vSU = su; vZW = zw; vRK = rk; vRV = rv; vWY = (modelMatrix * vec4(position, 1.0)).y;`);
     worldShade(sh, `
-uniform vec3 uSkyHor, uSkyZen; uniform float uWet, uNight;
-varying vec2 vSU; varying vec4 vZW; varying vec2 vRK; varying float vWY;
-${GROUND}`, WET);
+uniform vec3 uSkyHor, uSkyZen, uSunDir, uSunCol; uniform float uWet, uNight;
+varying vec2 vSU; varying vec4 vZW; varying vec2 vRK; varying float vWY; varying float vRV;
+float gWater = 0.0;
+${GROUND}`, WET + MIRROR);
     sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
 diffuseColor.rgb *= groundAlbedo();`);
   };
-  m.customProgramCacheKey = () => 'ground-v4';
+  m.customProgramCacheKey = () => 'ground-v5';
   return m;
 }
 

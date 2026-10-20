@@ -1,6 +1,6 @@
 // The world is built in 60 m chunks along the infinite road; each chunk merges its contents into a handful of meshes.
 import * as THREE from 'three';
-import { zoneMix, zoneW, zoneAt, zparam, groundOffsetMix, SEA, crossingS, crossingValid, crossingNear, XING, XOFF } from './path.js';
+import { zoneMix, zoneW, zoneAt, zparam, groundOffsetMix, SEA, crossingS, crossingValid, crossingNear, XING, XOFF, riverS, riverValid, riverNear, riverBank, RIV, ROFF, RIVER_DROP } from './path.js';
 import { xingPosts } from './crossing.js';
 import { GB } from './geom.js';
 import * as P from './props.js';
@@ -15,15 +15,17 @@ const WIRE = [0.025, 0.026, 0.032], BIRD = [0.05, 0.05, 0.065];
 const mod = (a, n) => ((a % n) + n) % n;
 /** true within m metres of a level crossing (keeps the track corridor clear) */
 const nearX = (s, m) => { const c = crossingNear(s); return !!c && Math.abs(s - c.s) < m; };
+/** true within m metres of a river (keeps houses, poles and trees out of the channel) */
+const nearR = (s, m) => { const r = riverNear(s); return !!r && Math.abs(s - r.s) < m; };
 
 class GroundB {
-  constructor() { this.P = []; this.N = []; this.SU = []; this.ZW = []; this.RK = []; this.I = []; }
+  constructor() { this.P = []; this.N = []; this.SU = []; this.ZW = []; this.RK = []; this.RV = []; this.I = []; }
   grid(nr, nc, fn) {
     const base = this.P.length / 3;
     for (let i = 0; i < nr; i++) for (let j = 0; j < nc; j++) {
       const v = fn(i, j);
       this.P.push(v[0], v[1], v[2]); this.N.push(v[3], v[4], v[5]); this.SU.push(v[6], v[7]);
-      this.ZW.push(v[8], v[9], v[10], v[11]); this.RK.push(v[12], v[13]);
+      this.ZW.push(v[8], v[9], v[10], v[11]); this.RK.push(v[12], v[13]); this.RV.push(v[14] || 0);
     }
     for (let i = 0; i < nr - 1; i++) for (let j = 0; j < nc - 1; j++) {
       const a = base + i * nc + j, b = a + 1, c = a + nc, d = c + 1;
@@ -37,14 +39,15 @@ class GroundB {
     g.setAttribute('su', new THREE.Float32BufferAttribute(this.SU, 2));
     g.setAttribute('zw', new THREE.Float32BufferAttribute(this.ZW, 4));
     g.setAttribute('rk', new THREE.Float32BufferAttribute(this.RK, 2));
+    g.setAttribute('rv', new THREE.Float32BufferAttribute(this.RV, 1));
     g.setIndex(this.I); g.computeBoundingSphere();
     return g;
   }
 }
 
 export class World {
-  constructor(scene, path, M, foamMat) {
-    this.path = path; this.M = M; this.foamMat = foamMat;
+  constructor(scene, path, M, foamMat, riverMat) {
+    this.path = path; this.M = M; this.foamMat = foamMat; this.riverMat = riverMat;
     this.group = new THREE.Group(); scene.add(this.group);
     this.chunks = new Map(); this.origin = { x: 0, z: 0 };
     this.ahead = 760; this.behind = 40;
@@ -78,7 +81,7 @@ export class World {
     const O = path.at(s0), ox = O.x, oz = O.z;
     const r = rng(Math.floor(hash2(c, 777) * 4294967295));
     const G = { atlas: new GB({ uv: true }), color: new GB(), foliage: new GB(), leaf: new GB({ uv: true }), lamp: new GB({ color: false }), pool: new GB({ uv: true, color: false }) };
-    const ground = new GroundB(), foam = [];
+    const ground = new GroundB(), foam = [], river = [];
     const f = {}, f2 = {};
 
     // ---------- helpers ----------
@@ -97,7 +100,8 @@ export class World {
 
     // ---------- terrain ----------
     {
-      const rows = 21, rwMid = rwAt(s0 + CH / 2);
+      const rr = riverNear(s0 + CH / 2), fine = !!rr && rr.s > s0 - 40 && rr.s < s1 + 40;
+      const rows = fine ? 61 : 21, rwMid = rwAt(s0 + CH / 2);
       const cols = (() => { const right = [0, ...NEAR]; const out = right.map(n => n); FAR.forEach(v => out.push(v - rwMid)); return out; })();
       // columns: −far … −rw | rw … far, expressed as offsets from the road edge
       const offs = [...cols.slice().reverse().map(v => -v), ...cols];
@@ -110,7 +114,7 @@ export class World {
         // normal = −du·R + 1·Up − ds·F (local frame), then to world
         let nx = -du * f.rx - ds * f.fx, ny = 1, nz = -du * f.rz - ds * f.fz; const nl = Math.hypot(nx, ny, nz); nx /= nl; ny /= nl; nz /= nl;
         const w = zw4(s);
-        return [f.x + f.rx * u - ox, y, f.z + f.rz * u - oz, nx, ny, nz, mod(s, S_WRAP), u, w[0], w[1], w[2], w[3], rw, 0];
+        return [f.x + f.rx * u - ox, y, f.z + f.rz * u - oz, nx, ny, nz, mod(s, S_WRAP), u, w[0], w[1], w[2], w[3], rw, 0, fine ? riverBank(s) : 0];
       });
     }
     yield;
@@ -154,6 +158,8 @@ export class World {
     {
       const kx = Math.ceil((s0 - XOFF) / XING), sx = crossingS(kx);
       if (sx < s1 && crossingValid(sx)) this.placeCrossing(G, ground, sx, matAt, road, rwAt, H, walkW, ox, oz);
+      const kr = Math.ceil((s0 - ROFF) / RIV), sr = riverS(kr);
+      if (sr < s1 && riverValid(sr)) this.placeRiver(G, ground, sr, matAt, road, rwAt, H, walkW, ox, oz, r, river);
     }
     yield;
     for (let s = s0; s < s1; s += 4) {
@@ -183,6 +189,7 @@ export class World {
       g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('su', new THREE.Float32BufferAttribute(su, 2)); g.setIndex(idx); g.computeBoundingSphere();
       add(g, this.foamMat, false, false, 1);
     }
+    for (const g of river) add(g, this.riverMat, false, true);
     grp.position.set(ox - this.origin.x, 0, oz - this.origin.z);
     return { group: grp, ox, oz, s0 };
   }
@@ -190,7 +197,7 @@ export class World {
   // poles + overhead wires (country / coast / city share the rule so wires connect across zones)
   poleSpec(k) {
     const s = k * POLE_SP + 6, z = zoneAt(s);
-    if (z === 'sakura' || nearX(s, 6)) return null;
+    if (z === 'sakura' || nearX(s, 6) || nearR(s, 34)) return null;
     const rw = zparam(s, 'rw');
     const u = z === 'city' ? rw + 0.45 : z === 'coast' ? rw + 1.35 : rw + 2.35;
     return { s, u, z };
@@ -289,6 +296,64 @@ export class World {
     P.signPost(G, matAt(sx + 70, rwAt(sx + 70) + 0.6, road(sx + 70) + 0.15 * (sw > 0 ? 1 : 0)), 'sign_xing', -1, 2.2, 0.85);
   }
 
+  /** river crossing: flowing water, levee-top paths, a bridge with railings and named stone posts, trees on the banks */
+  placeRiver(G, ground, sr, matAt, road, rwAt, H, walkW, ox, oz, r, river) {
+    const f0 = this.path.at(sr, {}), e = f0.y, rw = rwAt(sr), sw = walkW(sr), w = zoneW(sr), w4 = [w.city, w.sakura, w.coast, w.country];
+    const sak = w.sakura > 0.5, L = 222, edge = rw + sw + 0.5, wy = e - RIVER_DROP;
+    const xw = (ds, u, y) => [f0.x + f0.fx * ds + f0.rx * u - ox, y, f0.z + f0.fz * ds + f0.rz * u - oz];
+    // water surface (su = (Δs, u) so the shader can flow it along the channel)
+    {
+      const pos = [], su = [], idx = [], n = 74;
+      for (let i = 0; i <= n; i++) {
+        const u = -L + (2 * L * i) / n;
+        for (const ds of [12.5, -12.5]) { const p = xw(ds, u, wy); pos.push(p[0], p[1], p[2]); su.push(ds, u); }
+        if (i > 0) { const a = (i - 1) * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('su', new THREE.Float32BufferAttribute(su, 2));
+      g.setIndex(idx); g.computeBoundingSphere(); river.push(g);
+    }
+    // gravel paths along the top of both levees
+    for (const [dsA, dsB] of [[28.9, 25.7], [-25.7, -28.9]]) for (const [ua, ub] of [[-L, -(rw + 3.4)], [rw + 3.4, L]]) {
+      ground.grid(41, 2, (i, j) => { const u = ua + ((ub - ua) * i) / 40, ds = j ? dsB : dsA, p = xw(ds, u, e + 0.38); return [p[0], p[1], p[2], 0, 1, 0, ds, u, w4[0], w4[1], w4[2], w4[3], rw, 9, 1]; });
+    }
+    // the bridge, in a frame where x runs along the road and z across it
+    const M = matAt(sr, 0, e, 0, false), c = G.color, CONC = [0.74, 0.73, 0.7], RAIL = sak ? [0.78, 0.2, 0.15] : [0.55, 0.72, 0.64];
+    c.setM(M);
+    c.box(-24.5, -1.0, -edge, 24.5, -0.03, edge, CONC, null, { noBottom: false });
+    for (const zz of [-1, 1]) c.box(-24.5, -1.3, zz > 0 ? edge - 0.35 : -edge, 24.5, -0.95, zz > 0 ? edge : -edge + 0.35, [0.62, 0.61, 0.58]);
+    for (const x of [-8, 8]) c.box(x - 0.7, -RIVER_DROP - 1.4, -edge + 0.6, x + 0.7, -1.0, edge - 0.6, CONC);
+    for (const x of [-25.7, 25.7]) c.box(x - 1.2, -RIVER_DROP + 0.4, -edge - 0.4, x + 1.2, -0.05, edge + 0.4, CONC);
+    const yb = sw > 0 ? 0.15 : 0.0;
+    for (const zz of [-1, 1]) {
+      const z = zz * (edge - 0.14);
+      for (let x = -24; x <= 24.01; x += 2) c.box(x - 0.06, yb, z - 0.06, x + 0.06, yb + 1.0, z + 0.06, RAIL);
+      c.box(-24, yb + 0.95, z - 0.08, 24, yb + 1.08, z + 0.08, RAIL);
+      c.box(-24, yb + 0.48, z - 0.03, 24, yb + 0.54, z + 0.03, RAIL);
+      c.box(-24, yb + 0.06, z - 0.03, 24, yb + 0.12, z + 0.03, RAIL);
+    }
+    // stone end posts (親柱) carrying the bridge's name
+    const name = 'bridge' + (Math.abs(Math.round(sr / RIV)) % 4);
+    for (const x of [-25, 25]) for (const zz of [-1, 1]) {
+      const z = zz * (edge - 0.1), stone = [0.7, 0.69, 0.65];
+      c.box(x - 0.32, yb, z - 0.32, x + 0.32, yb + 1.45, z + 0.32, stone);
+      c.box(x - 0.38, yb + 1.45, z - 0.38, x + 0.38, yb + 1.58, z + 0.38, [0.62, 0.61, 0.57]);
+      G.atlas.setM(M);
+      const pl = (x < 0 ? -1 : 1) * 0.325, cell = name;
+      if (x < 0) G.atlas.quad([x - 0.325, yb + 0.3, z - 0.22], [x - 0.325, yb + 0.3, z + 0.22], [x - 0.325, yb + 1.3, z + 0.22], [x - 0.325, yb + 1.3, z - 0.22], [1, 1, 1], P.uvOf(cell));
+      else G.atlas.quad([x + 0.325, yb + 0.3, z + 0.22], [x + 0.325, yb + 0.3, z - 0.22], [x + 0.325, yb + 1.3, z - 0.22], [x + 0.325, yb + 1.3, z + 0.22], [1, 1, 1], P.uvOf(cell));
+      c.setM(M);
+    }
+    P.oldLamp(G, matAt(sr - 14, -(edge - 0.45), e + yb, 0, true)); P.oldLamp(G, matAt(sr + 14, edge - 0.45, e + yb, 0, true));
+    // trees along both banks: a sakura tunnel on the avenue, a few broad trees in the countryside
+    for (const ds of [-18, 18]) for (const side of [-1, 1]) {
+      for (let u = 11 + r() * 4; u < (sak ? 125 : 170); u += sak ? r.range(8.5, 11) : r.range(18, 34)) {
+        const s = sr + ds + (r() - 0.5) * 1.5, uu = side * u;
+        P.tree(G, matAt(s, uu, H(s, uu), r() * 6, false), sak ? 'sakura' : 'broad', r, sak ? r.range(1.0, 1.25) : r.range(0.9, 1.25));
+      }
+    }
+  }
+
   guardrail(G, sa, sb, world, road, rwAt) {
     G.color.setM(new THREE.Matrix4());
     const n = Math.max(1, Math.round((sb - sa) / 2));
@@ -365,27 +430,27 @@ export class World {
   *placeSakura(G, r, s0, s1, matAt, onGround, road, rwAt, H) {
     for (const side of [-1, 1]) {
       for (let s = s0 + r() * 4; s < s1; s += r.range(7.5, 10)) {
-        if (zoneW(s).sakura < 0.45) continue;
+        if (zoneW(s).sakura < 0.45 || nearR(s, 30)) continue;
         const rw = rwAt(s);
         P.tree(G, onGround(s, side * (rw + 3.7), 0, r() * 6), 'sakura', r, r.range(1.05, 1.3));
         if (r() < 0.45) P.tree(G, onGround(s + 3, side * (rw + r.range(9, 18)), 0, r() * 6), 'sakura', r, r.range(0.9, 1.25));
       }
       yield;
       for (let s = s0 + (side > 0 ? 0 : 12); s < s1; s += 24) {
-        if (zoneAt(s) !== 'sakura') continue;
+        if (zoneAt(s) !== 'sakura' || nearR(s, 30)) continue;
         const rw = rwAt(s);
         P.oldLamp(G, matAt(s, side * (rw + 2.25), road(s) + 0.15));
         if (mod(s, 48) < 24) P.stoneLantern(G, matAt(s + 6, side * (rw + 3.0), H(s + 6, side * (rw + 3.0))));
       }
       for (let s = s0 + r() * 15; s < s1; s += r.range(14, 24)) {
-        if (zoneAt(s) !== 'sakura' || r() < 0.35) continue;
+        if (zoneAt(s) !== 'sakura' || r() < 0.35 || nearR(s, 45)) continue;
         const rw = rwAt(s);
         P.building(G, onGround(s, side * (rw + r.range(20, 30))), r, { type: 'house', w: r.range(8, 11), d: r.range(7, 9), floors: r() < 0.6 ? 2 : 1, tint: r.pick(P.TINTS), litP: 0.45, fence: r() < 0.6 ? 1.4 : 0 });
       }
     }
     const k = Math.floor((s0 + CH / 2) / 480);
     const st = k * 480 + 240;
-    if (st >= s0 && st < s1 && zoneAt(st) === 'sakura') P.torii(G, matAt(st, 0, road(st), 0, false), rwAt(st) + 1.6, 6.4);
+    if (st >= s0 && st < s1 && zoneAt(st) === 'sakura' && !nearR(st, 60)) P.torii(G, matAt(st, 0, road(st), 0, false), rwAt(st) + 1.6, 6.4);
   }
 
   placeCoast(G, r, s0, s1, matAt, onGround, road, rwAt, H, foam, world) {
@@ -430,24 +495,24 @@ export class World {
   placeCountry(G, r, s0, s1, matAt, onGround, road, rwAt, H) {
     for (const side of [-1, 1]) {
       for (let s = s0 + r() * 20; s < s1; s += r.range(20, 40)) {
-        if (zoneAt(s) !== 'country' || r() < 0.55 || nearX(s, 16)) continue;
+        if (zoneAt(s) !== 'country' || r() < 0.55 || nearX(s, 16) || nearR(s, 48)) continue;
         const u = side * r.range(16, 95), M = onGround(s, u);
         P.building(G, M, r, { type: 'house', w: r.range(9, 13), d: r.range(8, 10), floors: r() < 0.45 ? 2 : 1, tint: r.pick(P.TINTS), litP: 0.5, fence: 0 });
         for (let t = 0; t < 2 + r() * 3; t++) { const tu = u + side * r.range(6, 14), ts = s + r.range(-8, 8); P.tree(G, onGround(ts, tu, 0, r() * 6), 'broad', r, r.range(0.9, 1.3)); }
       }
       for (let s = s0 + r() * 8; s < s1; s += r.range(5, 9)) {
-        if (zoneAt(s) !== 'country' || nearX(s, 7)) continue;
+        if (zoneAt(s) !== 'country' || nearX(s, 7) || nearR(s, 36)) continue;
         const u = side * r.range(140, 210);
         P.tree(G, onGround(s, u, -0.3, r() * 6, false), 'cedar', r, r.range(0.9, 1.4));
-        if (r() < 0.12 && !nearX(s + 2, 8)) P.tree(G, onGround(s + 2, side * r.range(10, 130), 0, r() * 6), 'broad', r, r.range(0.8, 1.2));
+        if (r() < 0.12 && !nearX(s + 2, 8) && !nearR(s + 2, 34)) P.tree(G, onGround(s + 2, side * r.range(10, 130), 0, r() * 6), 'broad', r, r.range(0.8, 1.2));
       }
     }
     const sb = Math.floor((s0 + CH / 2) / 600) * 600 + 300;
-    if (sb >= s0 && sb < s1 && zoneAt(sb) === 'country') { const rw = rwAt(sb); P.busStop(G, matAt(sb, -(rw + 1.6), road(sb) - 0.08), r); }
+    if (sb >= s0 && sb < s1 && zoneAt(sb) === 'country' && !nearR(sb, 40)) { const rw = rwAt(sb); P.busStop(G, matAt(sb, -(rw + 1.6), road(sb) - 0.08), r); }
     const sv = Math.floor((s0 + CH / 2) / 700) * 700 + 120;
-    if (sv >= s0 && sv < s1 && zoneAt(sv) === 'country') { const rw = rwAt(sv); P.vendingMachine(G, matAt(sv, -(rw + 0.95), road(sv) - 0.08), r); P.streetLamp(G, matAt(sv + 2, -(rw + 0.8), road(sv) - 0.08), r); }
+    if (sv >= s0 && sv < s1 && zoneAt(sv) === 'country' && !nearR(sv, 40)) { const rw = rwAt(sv); P.vendingMachine(G, matAt(sv, -(rw + 0.95), road(sv) - 0.08), r); P.streetLamp(G, matAt(sv + 2, -(rw + 0.8), road(sv) - 0.08), r); }
     const sh = Math.floor((s0 + CH / 2) / 900) * 900 + 450;
-    if (sh >= s0 && sh < s1 && zoneAt(sh) === 'country') { const rw = rwAt(sh); P.smallShrine(G, onGround(sh, rw + 5), r); }
+    if (sh >= s0 && sh < s1 && zoneAt(sh) === 'country' && !nearR(sh, 40)) { const rw = rwAt(sh); P.smallShrine(G, onGround(sh, rw + 5), r); }
     for (let s = s0; s < s1; s += 30) {
       if (zoneAt(s) !== 'country') continue;
       const k = this.path.curv(s);

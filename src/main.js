@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Path, zoneW, zoneAt, zparam, ZINFO, setStartZone, crossingS, crossingValid, XING, XOFF } from './path.js';
+import { Path, zoneW, zoneAt, zparam, ZINFO, setStartZone, crossingS, crossingValid, XING, XOFF, riverNear } from './path.js';
 import { makeCrossingRig, makeTrain, xingPosts } from './crossing.js';
 import { buildAtlas, buildFoliage } from './textures.js';
 import { makeMaterials, U } from './materials.js';
@@ -8,7 +8,7 @@ import { World } from './chunks.js';
 import { makeSky, paintClouds, makeClouds, makeMountains, updateTOD, applyWeather, TOD } from './sky.js';
 import { makeWeather, makeRain } from './weather.js';
 import { makeBirds } from './birds.js';
-import { makeSea, foamMaterial } from './sea.js';
+import { makeSea, foamMaterial, riverMaterial } from './sea.js';
 import { makeCar } from './car.js';
 import { makePost } from './post.js';
 import { makeAudio } from './audio.js';
@@ -59,7 +59,8 @@ async function main() {
   await new Promise(r => setTimeout(r, 10));
   const path = new Path();
   const foamMat = foamMaterial();
-  const world = new World(scene, path, M, foamMat);
+  const riverMat = riverMaterial();
+  const world = new World(scene, path, M, foamMat, riverMat);
   const sky = makeSky(); scene.add(sky);
   const clouds = makeClouds(paintClouds(renderer)); scene.add(clouds.group);
   const mountains = makeMountains(); scene.add(mountains.group);
@@ -282,6 +283,8 @@ async function main() {
     let seaW = 0; for (const d of [-150, 0, 250, 500, 800]) seaW = Math.max(seaW, zoneW(st.s + d).coast);
     sea.mesh.visible = seaW > 0.001;
     sea.update(camera.position, t, fogD * 0.8, sstep(0.0, 0.35, seaW));
+    riverMat.uniforms.uTime.value = t; riverMat.uniforms.uFogD.value = scene.fog.near; riverMat.uniforms.uNight.value = TOD.night; riverMat.uniforms.uSpecK.value = 1 - TOD.overcast * 0.85;
+    U.uSunDir.value.copy(TOD.lightDir); U.uSunCol.value.copy(TOD.sunCol);
     foamMat.uniforms.uTime.value = t; foamMat.uniforms.uLight.value.setRGB(1, 1, 1).multiplyScalar(0.35 + 0.65 * day());
     const nightK = sstep(0.15, 0.8, TOD.night);
     M.atlas.emissiveIntensity = 0.1 + nightK * 1.05;
@@ -306,7 +309,7 @@ async function main() {
     if (audio) {
       path.at(sx, fl); const dxc = Math.hypot(fl.x - world.origin.x - camera.position.x, fl.z - world.origin.z - camera.position.z);
       const trainD = train.st.active ? train.group.position.distanceTo(camera.position) : 1e9;
-      audio.update(st.speed / 15, w, day(), { bell: bell ? Math.pow(clamp(1 - dxc / 260, 0, 1), 1.5) : 0, train: Math.pow(clamp(1 - trainD / 230, 0, 1), 2), rain: rn, roof: st.cam !== 2, dusk: TOD.warm * (st.tod > 0.5 ? 1 : 0.3) });
+      audio.update(st.speed / 15, w, day(), { bell: bell ? Math.pow(clamp(1 - dxc / 260, 0, 1), 1.5) : 0, train: Math.pow(clamp(1 - trainD / 230, 0, 1), 2), rain: rn, roof: st.cam !== 2, water: (() => { const rv = riverNear(st.s); return rv ? 1 - sstep(12, 150, Math.abs(st.s - rv.s)) : 0; })(), dusk: TOD.warm * (st.tod > 0.5 ? 1 : 0.3) });
     }
     zoneCard(zoneAt(st.s + 40));
 

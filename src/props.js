@@ -20,6 +20,7 @@ const AWNINGS = ['#c8352b', '#2f7d4a', '#1f4e9c', '#e8c070', '#7a2f2f', '#3b6e8f
 let A = null;
 export function setAtlas(a) { A = a; }
 const uv = n => A.uv(n);
+export const uvOf = uv;
 const pickV = (r, base) => (A.has(base + '2') && r() < 0.5 ? base + '2' : base);
 
 export function sub(M, x, y, z, yaw = 0) {

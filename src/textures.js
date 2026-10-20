@@ -387,6 +387,10 @@ export function buildAtlas() {
     a.beginPath(); a.arc(w / 2 - 12, h / 2 + 15, 5, 0, 7); a.arc(w / 2 + 12, h / 2 + 15, 5, 0, 7); a.fill();
     textFit(a, '踏切', w / 2, h / 2 + 34, 40, 13, '#1b1b1b', 900);
   });
+  ['桜橋', '川原橋', '緑橋', '月見橋'].forEach((name, i) => A.add('bridge' + i, 64, 176, (a, e, w, h) => { // carved stone name plates on the bridge posts
+    rect(a, 0, 0, w, h, '#b9b5ab'); grain(a, A, w, h, 0.2);
+    rect(a, 6, 6, w - 12, h - 12, '#a7a398'); vText(a, name, w / 2, 14, h - 14, 34, '#3f3c37', 800);
+  }));
   A.add('xing_plate', 128, 48, (a, e, w, h) => { rect(a, 0, 0, w, h, '#f6f6f2'); a.strokeStyle = '#d8231c'; a.lineWidth = 4; a.strokeRect(3, 3, w - 6, h - 6); textFit(a, '踏切注意', w / 2, h / 2, w * 0.8, 26, '#d8231c', 900); });
   A.add('rail', 240, 80, (a, e, w, h) => { // see-through balcony railing (alpha-tested)
     a.clearRect(0, 0, w, h);

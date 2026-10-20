@@ -39,19 +39,44 @@ export function crossingNear(s) { const k = Math.round((s - XOFF) / XING), sx = 
 /** 1 within ±8 m of a crossing, easing to 0 by ±45 m — the road is levelled and straightened there */
 export function crossingW(s) { const c = crossingNear(s); return c ? 1 - sstep(8, 45, Math.abs(s - c.s)) : 0; }
 
+// ---- rivers crossed on a bridge (橋): countryside and the sakura avenue, never next to a level crossing
+export const RIV = 1150, ROFF = 820, RIVER_DROP = 4.6; // water surface sits RIVER_DROP below the road
+export const riverS = k => k * RIV + ROFF;
+export function riverValid(sr) {
+  if (sr < 400) return false;
+  for (const d of [-90, 0, 90]) { const w = zoneW(sr + d); if (w.country + w.sakura < 0.9) return false; }
+  const c = crossingNear(sr);
+  return !(c && Math.abs(c.s - sr) < 170);
+}
+export function riverNear(s) { const k = Math.round((s - ROFF) / RIV), sr = riverS(k); return riverValid(sr) ? { k, s: sr } : null; }
+/** 1 on the bridge, easing to 0 by ±70 m — the road is level and straight across a river */
+export function riverW(s) { const r = riverNear(s); return r ? 1 - sstep(30, 70, Math.abs(s - r.s)) : 0; }
+/** height (relative to the level road) of the river channel at distance d from the river's centre line */
+export function riverProfile(d) {
+  const wy = -RIVER_DROP;
+  if (d < 11) return wy - 1.3;                                 // riverbed
+  if (d < 16) return lerp(wy - 1.3, wy + 0.7, (d - 11) / 5);   // inner bank
+  if (d < 20) return wy + 0.7;                                 // riverside flats (河川敷)
+  if (d < 25.5) return lerp(wy + 0.7, 0.35, (d - 20) / 5.5);   // grassy levee slope (土手)
+  return 0.35;                                                 // levee-top path
+}
+
 const STEP = 2;
 export class Path {
   constructor() { this.X = [0]; this.Z = [0]; this.H = [0.3]; this.Y = [this.elev(0)]; }
   curv(s) {
     const v = (noise1(s / 300, 11) - 0.5) * 2 + (noise1(s / 95, 17) - 0.5) * 0.35;
     const a = Math.abs(v), c = a < 0.22 ? 0 : Math.sign(v) * (a - 0.22) / 0.78;
-    return c * zparam(s, 'curv') * (1 - crossingW(s));
+    return c * zparam(s, 'curv') * (1 - Math.max(crossingW(s), riverW(s)));
   }
   elevRaw(s) { return zparam(s, 'base') + zparam(s, 'hill') * (fbm1(s / 380, 29) - 0.5) * 2; }
   elev(s) {
-    const c = crossingNear(s); if (!c) return this.elevRaw(s);
-    const w = 1 - sstep(8, 45, Math.abs(s - c.s));
-    return w > 0 ? lerp(this.elevRaw(s), this.elevRaw(c.s), w) : this.elevRaw(s);
+    let y = this.elevRaw(s);
+    const c = crossingNear(s);
+    if (c) { const w = 1 - sstep(8, 45, Math.abs(s - c.s)); if (w > 0) y = lerp(y, this.elevRaw(c.s), w); }
+    const r = riverNear(s);
+    if (r) { const w = 1 - sstep(30, 70, Math.abs(s - r.s)); if (w > 0) y = lerp(y, this.elevRaw(r.s), w); }
+    return y;
   }
   ensure(s) {
     while ((this.X.length - 1) * STEP < s + STEP) {
@@ -107,5 +132,14 @@ export function groundOffset(zone, s, u, e, rw) {
 export function groundOffsetMix(s, u, e, rw) {
   const m = zoneMix(s);
   const a = groundOffset(m.a, s, u, e, rw);
-  return m.t > 0 ? lerp(a, groundOffset(m.b, s, u, e, rw), m.t) : a;
+  const base = m.t > 0 ? lerp(a, groundOffset(m.b, s, u, e, rw), m.t) : a;
+  const r = riverNear(s);
+  if (!r) return base;
+  const d = Math.abs(s - r.s);
+  if (d >= 36) return base;
+  let p = d < 29 ? riverProfile(d) : lerp(0.35, base, sstep(29, 36, d));
+  if (Math.abs(u) < rw + 3.2) p = Math.min(p, -0.08); // never poke up through the road or its sidewalks
+  return p;
 }
+/** 0…1 weight of the riverbank look at s (used by the ground shader) */
+export function riverBank(s) { const r = riverNear(s); return r ? 1 - sstep(27, 34, Math.abs(s - r.s)) : 0; }

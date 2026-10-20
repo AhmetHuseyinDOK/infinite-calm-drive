@@ -71,3 +71,37 @@ export function foamMaterial() {
       }`,
   });
 }
+
+/** a river: blue-green water flowing along the channel (su = (Δs, u)), mirroring the sky, with glints */
+export function riverMaterial() {
+  return new THREE.ShaderMaterial({
+    fog: false,
+    uniforms: {
+      uTime: { value: 0 }, uSunDir: { value: TOD.lightDir }, uSunCol: { value: TOD.sunCol }, uHorizon: { value: TOD.horizon }, uZenith: { value: TOD.zenith },
+      uFog: { value: TOD.fog }, uFogD: { value: 0.002 }, uNight: { value: 0 }, uSpecK: { value: 1 },
+    },
+    vertexShader: 'attribute vec2 su; varying vec2 vSU; varying vec3 vW; void main(){ vSU = su; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
+    fragmentShader: /* glsl */`
+      uniform float uTime, uFogD, uNight, uSpecK; uniform vec3 uSunDir, uSunCol, uHorizon, uZenith, uFog; varying vec2 vSU; varying vec3 vW;
+      ${GLSL_NOISE}
+      void main(){
+        vec3 V = normalize(vW - cameraPosition); float dist = length(cameraPosition - vW);
+        vec2 p = vec2(vSU.y * 0.22 - uTime * 0.55, vSU.x * 0.6);   // flows along the channel
+        float n1 = vnoise(p), n2 = vnoise(p * 2.7 + 5.0);
+        vec3 N = normalize(vec3((n1 - 0.5) * 0.25, 1.0, (n2 - 0.5) * 0.25));
+        vec3 R = reflect(V, N);
+        float hgt = clamp(R.y, 0.0, 1.0);
+        vec3 sky = mix(uHorizon, uZenith, pow(hgt, 0.55));
+        vec3 deep = mix(vec3(0.02, 0.12, 0.13), vec3(0.05, 0.2, 0.22), n1);
+        float fr = 0.3 + 0.7 * pow(1.0 - clamp(-V.y, 0.0, 1.0), 3.0);
+        vec3 col = mix(deep * (1.0 - 0.6 * uNight), sky, fr * 0.85);
+        float streak = smoothstep(0.72, 0.8, vnoise(vec2(vSU.y * 0.08 - uTime * 0.3, vSU.x * 1.4)));
+        col += streak * 0.06 * (1.0 - uNight);
+        col += uSunCol * pow(max(dot(R, uSunDir), 0.0), 180.0) * 4.0 * uSpecK * (1.0 - uNight * 0.7);
+        float edge = smoothstep(9.5, 11.5, abs(vSU.x));               // a little foam where it meets the banks
+        col = mix(col, vec3(0.85, 0.9, 0.92) * (1.0 - 0.7 * uNight), edge * 0.35 * vnoise(vec2(vSU.y * 0.5 - uTime, vSU.x)));
+        float fd = dist * uFogD;
+        gl_FragColor = vec4(mix(col, uFog, 1.0 - exp(-fd * fd)), 1.0);
+      }`,
+  });
+}

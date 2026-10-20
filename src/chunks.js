@@ -15,6 +15,8 @@ const WIRE = [0.025, 0.026, 0.032], BIRD = [0.05, 0.05, 0.065];
 const mod = (a, n) => ((a % n) + n) % n;
 /** true within m metres of a level crossing (keeps the track corridor clear) */
 const nearX = (s, m) => { const c = crossingNear(s); return !!c && Math.abs(s - c.s) < m; };
+/** true within m metres of a city side street (they open at every 150 m crosswalk) */
+const nearSide = (s, m) => Math.abs(s - Math.round(s / 150) * 150) < m;
 /** true within m metres of a river (keeps houses, poles and trees out of the channel) */
 const nearR = (s, m) => { const r = riverNear(s); return !!r && Math.abs(s - r.s) < m; };
 
@@ -30,6 +32,21 @@ class GroundB {
     for (let i = 0; i < nr - 1; i++) for (let j = 0; j < nc - 1; j++) {
       const a = base + i * nc + j, b = a + 1, c = a + nc, d = c + 1;
       this.I.push(a, b, c, b, d, c);
+    }
+  }
+  /** like grid(), but normals come from the grid's own neighbours (one height sample per vertex instead of five) */
+  gridN(nr, nc, fn) {
+    const base = this.P.length / 3;
+    this.grid(nr, nc, fn);
+    const P = this.P, N = this.N, at = (i, j) => (base + Math.min(nr - 1, Math.max(0, i)) * nc + Math.min(nc - 1, Math.max(0, j))) * 3;
+    for (let i = 0; i < nr; i++) for (let j = 0; j < nc; j++) {
+      const a = at(i, j - 1), b = at(i, j + 1), c = at(i - 1, j), d = at(i + 1, j);
+      const ux = P[b] - P[a], uy = P[b + 1] - P[a + 1], uz = P[b + 2] - P[a + 2];
+      const vx = P[d] - P[c], vy = P[d + 1] - P[c + 1], vz = P[d + 2] - P[c + 2];
+      let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+      if (ny < 0) { nx = -nx; ny = -ny; nz = -nz; }
+      const l = Math.hypot(nx, ny, nz) || 1, k = at(i, j);
+      N[k] = nx / l; N[k + 1] = ny / l; N[k + 2] = nz / l;
     }
   }
   build() {
@@ -80,7 +97,7 @@ export class World {
     const path = this.path, s0 = c * CH, s1 = s0 + CH;
     const O = path.at(s0), ox = O.x, oz = O.z;
     const r = rng(Math.floor(hash2(c, 777) * 4294967295));
-    const G = { atlas: new GB({ uv: true }), color: new GB(), foliage: new GB(), leaf: new GB({ uv: true }), lamp: new GB({ color: false }), pool: new GB({ uv: true, color: false }) };
+    const G = { atlas: new GB({ uv: true }), color: new GB(), foliage: new GB(), leaf: new GB({ uv: true }), lamp: new GB({ color: false }), sig: new GB({ color: false }), decal: new GB({ uv: true }), pool: new GB({ uv: true, color: false }) };
     const ground = new GroundB(), foam = [], river = [];
     const f = {}, f2 = {};
 
@@ -106,16 +123,16 @@ export class World {
       // columns: −far … −rw | rw … far, expressed as offsets from the road edge
       const offs = [...cols.slice().reverse().map(v => -v), ...cols];
       const nc = offs.length;
-      ground.grid(rows, nc, (i, j) => {
-        const s = s0 + (i / (rows - 1)) * CH, rw = rwAt(s), o = offs[j], u = o < 0 || (o === 0 && j < nc / 2) ? o - rw : o + rw;
-        path.at(s, f); const e = f.y;
-        const y = e + groundOffsetMix(s, u, e, rw);
-        const d = 0.6, du = (H(s, u + d) - H(s, u - d)) / (2 * d), ds = (H(s + d, u) - H(s - d, u)) / (2 * d);
-        // normal = −du·R + 1·Up − ds·F (local frame), then to world
-        let nx = -du * f.rx - ds * f.fx, ny = 1, nz = -du * f.rz - ds * f.fz; const nl = Math.hypot(nx, ny, nz); nx /= nl; ny /= nl; nz /= nl;
-        const w = zw4(s);
-        return [f.x + f.rx * u - ox, y, f.z + f.rz * u - oz, nx, ny, nz, mod(s, S_WRAP), u, w[0], w[1], w[2], w[3], rw, 0, fine ? riverBank(s) : 0];
-      });
+      // two halves (left / right of the road) so neither build step is long; normals from grid neighbours
+      const half = nc / 2, rowS = Array.from({ length: rows }, (_, i) => { const s = s0 + (i / (rows - 1)) * CH; path.at(s, f); return { s, f: { ...f }, rw: rwAt(s), w: zw4(s), rb: fine ? riverBank(s) : 0 }; });
+      for (const [j0, j1] of [[0, half], [half, nc]]) {
+        ground.gridN(rows, j1 - j0, (i, jj) => {
+          const R = rowS[i], F = R.f, j = j0 + jj, o = offs[j], u = o < 0 || (o === 0 && j < half) ? o - R.rw : o + R.rw;
+          const y = F.y + groundOffsetMix(R.s, u, F.y, R.rw);
+          return [F.x + F.rx * u - ox, y, F.z + F.rz * u - oz, 0, 1, 0, mod(R.s, S_WRAP), u, R.w[0], R.w[1], R.w[2], R.w[3], R.rw, 0, R.rb];
+        });
+        yield;
+      }
     }
     yield;
     // ---------- road ----------
@@ -159,18 +176,18 @@ export class World {
       const kx = Math.ceil((s0 - XOFF) / XING), sx = crossingS(kx);
       if (sx < s1 && crossingValid(sx)) this.placeCrossing(G, ground, sx, matAt, road, rwAt, H, walkW, ox, oz);
       const kr = Math.ceil((s0 - ROFF) / RIV), sr = riverS(kr);
-      if (sr < s1 && riverValid(sr)) this.placeRiver(G, ground, sr, matAt, road, rwAt, H, walkW, ox, oz, r, river);
+      if (sr < s1 && riverValid(sr)) yield* this.placeRiver(G, ground, sr, matAt, road, rwAt, H, walkW, ox, oz, r, river);
     }
     yield;
     for (let s = s0; s < s1; s += 4) {
       const z = zoneAt(s);
       if (z === 'coast' && zoneW(s).coast > 0.45) this.guardrail(G, s, Math.min(s + 4, s1), world, road, rwAt);
     }
-    yield* this.placeCity(G, r, s0, s1, matAt, onGround, road, rwAt, walkW, H);
+    yield* this.placeCity(G, r, s0, s1, matAt, onGround, road, rwAt, walkW, H, ground, ox, oz);
     yield* this.placeSakura(G, r, s0, s1, matAt, onGround, road, rwAt, H);
     this.placeCoast(G, r, s0, s1, matAt, onGround, road, rwAt, H, foam, world);
     yield;
-    this.placeCountry(G, r, s0, s1, matAt, onGround, road, rwAt, H);
+    yield* this.placeCountry(G, r, s0, s1, matAt, onGround, road, rwAt, H);
     yield;
 
     // ---------- assemble ----------
@@ -182,6 +199,8 @@ export class World {
     add(G.foliage.build(), this.M.foliage, true, true);
     add(G.leaf.build(), this.M.leaf, true, true); yield;
     add(G.lamp.build(), this.M.lamp, false, false);
+    add(G.sig.build(), this.M.sig, false, false);
+    add(G.decal.build(), this.M.decal, false, true, 1);
     add(G.pool.build(), this.M.pool, false, false, 2);
     if (foam.length) {
       const g = new THREE.BufferGeometry(), pos = [], su = [], idx = [];
@@ -247,6 +266,46 @@ export class World {
     }
   }
 
+  /** a city intersection: side streets lined with houses and wires, traffic signals, 止まれ markings, sometimes a 歩道橋 */
+  *intersection(G, r, sc, k, matAt, road, rwAt, walkW, ground, ox, oz) {
+    const f0 = this.path.at(sc, {}), e = road(sc), rw = rwAt(sc), sw = walkW(sc) || 3.0, cs = sc - 0.5, w = zoneW(sc), w4 = [w.city, w.sakura, w.coast, w.country];
+    const xw = (ds, u, y) => [f0.x + f0.fx * (ds - 0.5) + f0.rx * u - ox, y, f0.z + f0.fz * (ds - 0.5) + f0.rz * u - oz];
+    const front = rw + sw + 0.15;
+    for (const side of [-1, 1]) {
+      // the side street itself (kind 10: its own asphalt + white edge lines), just above the lots (which sit at +0.14)
+      const ua = side * (rw + sw), ub = side * 80;
+      ground.grid(21, 2, (i, j) => { const u = ua + ((ub - ua) * i) / 20, ds = (j ? -3.0 : 3.0) * side, p = xw(ds, u, e + 0.165); return [p[0], p[1], p[2], 0, 1, 0, ds * side, u, w4[0], w4[1], w4[2], w4[3], rw, 10]; });
+      // 止まれ painted in the lane that approaches the main road
+      {
+        const cu = side * (rw + sw + 3.2), cds = -side * 1.35, hw = 1.15, hh = 0.42;
+        const P0 = (rx, uy) => xw(cds + side * rx, cu - side * uy, e + 0.18);
+        G.decal.setM(new THREE.Matrix4());
+        G.decal.quad(P0(-hw, -hh), P0(hw, -hh), P0(hw, hh), P0(-hw, hh), [1, 1, 1], P.uvOf('tomare'));
+      }
+      // houses and little shops facing the side street, behind the main-street row
+      for (const bank of [-1, 1]) {
+        let u = front + 15 + r() * 3;
+        while (u < 52) {
+          const wd = r.range(5.5, 8.5), uc = side * (u + wd / 2), t = r();
+          const M = matAt(cs + bank * 3.3, uc, e + 0.14, bank > 0 ? Math.PI / 2 : -Math.PI / 2, false);
+          P.building(G, M, r, { type: t < 0.5 ? 'house' : 'shop', w: wd, d: r.range(7, 10), floors: t < 0.5 ? 2 : r.int(2, 3), tint: r.pick(P.TINTS), litP: 0.45, fence: 0 });
+          u += wd + r.range(0.2, 1.2);
+        }
+        yield;
+      }
+      // a couple of utility poles with wires running down the side street
+      const poles = [30, 54].map(uu => matAt(cs + 2.8, side * uu, e + 0.15, -Math.PI / 2, false));
+      const pr = rng(Math.floor(hash2(k, side > 0 ? 71 : 73) * 4294967295));
+      const an = poles.map(Mp => P.utilityPole(G, Mp, pr, { trans: pr() < 0.4 }));
+      G.color.setM(new THREE.Matrix4());
+      for (let i = 0; i < 7; i++) { const a = an[0][i], b = an[1][i]; G.color.wire([a.x, a.y, a.z], [b.x, b.y, b.z], 0.3 + pr() * 0.4, 0.014, WIRE, 10); }
+    }
+    // traffic signals for both directions (青 lit — it's always a calm green wave)
+    P.trafficSignal(G, matAt(sc - 9, -(rw + 0.55), e + 0.15, 0, true), 1, rw + 0.55 - 1.6);
+    P.trafficSignal(G, matAt(sc + 8, rw + 0.55, e + 0.15, 0, true), 1, rw + 0.55 - 1.6);
+    if (k % 3 === 1) P.pedestrianBridge(G, matAt(sc + 15, 0, e, 0, false), rw + sw + 0.1, 'hodokyo' + (Math.abs(k) % 3));
+  }
+
   /** level crossing: gravel bed + sleepers (shader), rails, rubber crossing panels, catenary, alarm posts, signs */
   placeCrossing(G, ground, sx, matAt, road, rwAt, H, walkW, ox, oz) {
     const f0 = this.path.at(sx, {}), e = f0.y, rw = rwAt(sx), sw = walkW(sx), edge = rw + sw + 0.2, L = 150, bedY = e + 0.18;
@@ -297,7 +356,7 @@ export class World {
   }
 
   /** river crossing: flowing water, levee-top paths, a bridge with railings and named stone posts, trees on the banks */
-  placeRiver(G, ground, sr, matAt, road, rwAt, H, walkW, ox, oz, r, river) {
+  *placeRiver(G, ground, sr, matAt, road, rwAt, H, walkW, ox, oz, r, river) {
     const f0 = this.path.at(sr, {}), e = f0.y, rw = rwAt(sr), sw = walkW(sr), w = zoneW(sr), w4 = [w.city, w.sakura, w.coast, w.country];
     const sak = w.sakura > 0.5, L = 222, edge = rw + sw + 0.5, wy = e - RIVER_DROP;
     const xw = (ds, u, y) => [f0.x + f0.fx * ds + f0.rx * u - ox, y, f0.z + f0.fz * ds + f0.rz * u - oz];
@@ -317,6 +376,7 @@ export class World {
     for (const [dsA, dsB] of [[28.9, 25.7], [-25.7, -28.9]]) for (const [ua, ub] of [[-L, -(rw + 3.4)], [rw + 3.4, L]]) {
       ground.grid(41, 2, (i, j) => { const u = ua + ((ub - ua) * i) / 40, ds = j ? dsB : dsA, p = xw(ds, u, e + 0.38); return [p[0], p[1], p[2], 0, 1, 0, ds, u, w4[0], w4[1], w4[2], w4[3], rw, 9, 1]; });
     }
+    yield;
     // the bridge, in a frame where x runs along the road and z across it
     const M = matAt(sr, 0, e, 0, false), c = G.color, CONC = [0.74, 0.73, 0.7], RAIL = sak ? [0.78, 0.2, 0.15] : [0.55, 0.72, 0.64];
     c.setM(M);
@@ -345,8 +405,10 @@ export class World {
       c.setM(M);
     }
     P.oldLamp(G, matAt(sr - 14, -(edge - 0.45), e + yb, 0, true)); P.oldLamp(G, matAt(sr + 14, edge - 0.45, e + yb, 0, true));
+    yield;
     // trees along both banks: a sakura tunnel on the avenue, a few broad trees in the countryside
     for (const ds of [-18, 18]) for (const side of [-1, 1]) {
+      yield;
       for (let u = 11 + r() * 4; u < (sak ? 125 : 170); u += sak ? r.range(8.5, 11) : r.range(18, 34)) {
         const s = sr + ds + (r() - 0.5) * 1.5, uu = side * u;
         P.tree(G, matAt(s, uu, H(s, uu), r() * 6, false), sak ? 'sakura' : 'broad', r, sak ? r.range(1.0, 1.25) : r.range(0.9, 1.25));
@@ -370,20 +432,22 @@ export class World {
     }
   }
 
-  *placeCity(G, r, s0, s1, matAt, onGround, road, rwAt, walkW, H) {
+  *placeCity(G, r, s0, s1, matAt, onGround, road, rwAt, walkW, H, ground, ox, oz) {
     for (const side of [-1, 1]) {
       let s = s0 + r() * 2;
       while (s < s1 - 2) {
         if (zoneW(s).city < 0.62) { s += 4; continue; }
         { const cx = crossingNear(s + 6); if (cx && s < cx.s + 8.5 && s + 14 > cx.s - 8.5) { s = Math.max(s + 1, cx.s + 8.5); continue; } }
         const cs = mod(s, 150);
-        if (cs > 143 || cs < 6) { s += 3; continue; }              // side street at each crosswalk
+        if (cs > 145.6 || cs < 3.4) { s += 1; continue; }          // side street at each crosswalk (≈ sc−4.4 … sc+3.4)
         const rw = rwAt(s), sw = walkW(s) || 3.0, front = rw + sw + 0.15;
         const t = r();
         const type = t < 0.42 ? 'shop' : t < 0.58 ? 'apt' : t < 0.68 ? 'office' : t < 0.82 ? 'house' : t < 0.88 ? 'konbini' : t < 0.94 ? 'parking' : 'gap';
         let w = type === 'shop' ? r.range(5, 9) : type === 'apt' ? r.range(10, 16) : type === 'office' ? r.range(10, 14) : type === 'house' ? r.range(7, 9.5)
           : type === 'konbini' ? r.range(12, 14) : type === 'parking' ? r.range(7, 11) : r.range(2, 3.5);
         if (s + w > s1) { if (s1 - s < 5 || type === 'konbini') break; w = s1 - s - 0.2; }
+        { const gap = Math.ceil((s + 4.4) / 150) * 150 - 4.4; // never build into the side-street mouth
+          if (s + w > gap - 0.1) { if (gap - 0.1 - s < 4) { s = gap + 7.9; continue; } w = gap - 0.1 - s; } }
         const sm = s + w / 2, e = road(sm), tint = r.pick(P.TINTS), litP = 0.42;
         if (type === 'parking') {
           const M = matAt(sm, side * (front + 3), e + 0.15);
@@ -404,13 +468,13 @@ export class World {
       }
       // second row: taller buildings peeking over the street
       for (let s2 = s0 + r() * 10; s2 < s1 - 8; s2 += r.range(14, 26)) {
-        if (zoneW(s2).city < 0.7 || r() < 0.3 || nearX(s2, 18)) continue;
+        if (zoneW(s2).city < 0.7 || r() < 0.3 || nearX(s2, 18) || nearSide(s2, 15)) continue;
         const rw = rwAt(s2), M = matAt(s2, side * (rw + 3.2 + r.range(14, 20)), road(s2) + 0.1);
         P.building(G, M, r, { type: r() < 0.6 ? 'apt' : 'office', w: r.range(12, 18), d: 12, floors: r.int(6, 11), tint: r.pick(P.TINTS), litP: 0.4 });
       }
       // far towers for a skyline
       if (zoneW(s0 + 30).city > 0.7 && r() < 0.65) {
-        const sm = s0 + r() * CH; if (nearX(sm, 24)) continue;
+        const sm = s0 + r() * CH; if (nearX(sm, 24) || nearSide(sm, 20)) continue;
         const M = matAt(sm, side * r.range(55, 150), road(sm));
         P.building(G, M, r, { type: 'tower', w: r.range(16, 26), d: r.range(16, 22), floors: r.int(12, 26), tint: r.pick(P.TINTS), litP: 0.45 });
       }
@@ -420,6 +484,7 @@ export class World {
     for (let k = k0; k <= k1; k++) {
       const sc = k * 150; if (zoneAt(sc) !== 'city') continue;
       const rw = rwAt(sc);
+      yield* this.intersection(G, r, sc, k, matAt, road, rwAt, walkW, ground, ox, oz);
       P.signPost(G, matAt(sc - 1, -(rw + 0.4), road(sc) + 0.15), 'sign_blue', 1);
       P.signPost(G, matAt(sc - 6, -(rw + 0.4), road(sc) + 0.15), 'sign_stop', 1, 2.1, 0.75);
       P.curveMirror(G, matAt(sc + 7, rw + 0.4, road(sc) + 0.15), -1);
@@ -492,8 +557,9 @@ export class World {
     if (lh >= s0 && lh < s1 && zoneAt(lh) === 'coast') P.lighthouse(G, matAt(lh, -(rwAt(lh) + 75), SEA - 1, 0, false));
   }
 
-  placeCountry(G, r, s0, s1, matAt, onGround, road, rwAt, H) {
+  *placeCountry(G, r, s0, s1, matAt, onGround, road, rwAt, H) {
     for (const side of [-1, 1]) {
+      yield;
       for (let s = s0 + r() * 20; s < s1; s += r.range(20, 40)) {
         if (zoneAt(s) !== 'country' || r() < 0.55 || nearX(s, 16) || nearR(s, 48)) continue;
         const u = side * r.range(16, 95), M = onGround(s, u);

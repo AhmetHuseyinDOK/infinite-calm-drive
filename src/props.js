@@ -400,6 +400,41 @@ export function parkedCar(G, M, r) {
   for (const [x, z] of [[-1.15, -0.62], [1.15, -0.62], [-1.15, 0.62], [1.15, 0.62]]) { c.box(x - 0.3, 0, z - 0.11, x + 0.3, 0.6, z + 0.11, PAL.black); }
 }
 
+// ------------------------------------------------------------------ city intersections
+/** a horizontal Japanese traffic signal on an arm over the lane; dir: +1 faces local +X, −1 faces −X */
+export function trafficSignal(G, M, dir, reach) {
+  const c = G.color, GRAY = C('#8d9096'), DARK = C('#3a3d42');
+  c.setM(M);
+  c.cyl(0, 0, 0, 0.11, 0.09, 6.0, 10, GRAY);
+  c.box(-0.05, 5.62, -reach - 0.1, 0.05, 5.74, 0.05, GRAY);
+  const z0 = -reach - 0.62, z1 = -reach + 0.62;
+  c.box(-0.14, 5.08, z0, 0.14, 5.56, z1, DARK);
+  const fx = dir * 0.141;
+  G.atlas.setM(M);
+  (dir > 0 ? pxq : nxq)(G.atlas, fx, z0, z1, 5.08, 5.56, 'signal');
+  const left = dir > 0 ? z1 : z0, step = dir > 0 ? -1 : 1;
+  for (let i = 0; i < 3; i++) { const zc = left + step * (0.2 + i * 0.4); c.box(dir > 0 ? 0.14 : -0.36, 5.47, zc - 0.15, dir > 0 ? 0.36 : -0.14, 5.5, zc + 0.15, DARK); }
+  const zg = left + step * 0.2;
+  G.sig.setM(M); G.sig.box(dir > 0 ? 0.145 : -0.16, 5.21, zg - 0.11, dir > 0 ? 0.16 : -0.145, 5.43, zg + 0.11, W1);
+}
+/** 歩道橋: a pedestrian overpass spanning ±span across the road, stairs down to both sidewalks */
+export function pedestrianBridge(G, M, span, name) {
+  const c = G.color, STEEL = C('#3d6ea8'), PANEL = C('#e8eef2'), CONC = C('#c7c5bf'), h = 5.35;
+  c.setM(M);
+  c.box(-1.1, h - 0.65, -span, 1.1, h, span, STEEL);
+  for (const x of [-1.1, 1.0]) { c.box(x, h, -span, x + 0.1, h + 1.1, span, PANEL); c.box(x - 0.02, h + 1.1, -span, x + 0.12, h + 1.18, span, STEEL); }
+  G.atlas.setM(M);
+  nxq(G.atlas, -1.105, -2.2, 2.2, h - 0.62, h - 0.06, name); pxq(G.atlas, 1.105, -2.2, 2.2, h - 0.62, h - 0.06, name);
+  c.setM(M);
+  for (const zs of [-1, 1]) {
+    const za = zs * (span - 1.65), zb = zs * (span - 0.15), lo = Math.min(za, zb), hi = Math.max(za, zb);
+    c.box(-0.45, 0.15, lo + 0.3, 0.45, h - 0.65, hi - 0.3, STEEL);           // column under the deck end
+    const n = 20, rise = (h - 0.15) / n;
+    for (let k = 0; k < n; k++) c.box(1.1 + k * 0.3, 0.15, lo, 1.1 + (k + 1) * 0.3, h - (k + 1) * rise + 0.04, hi, CONC);
+    c.box(1.1, h - 0.1, lo - 0.05, 1.1 + n * 0.3, h - 0.02, lo + 0.05, STEEL); // a simple handrail line along the stair
+  }
+}
+
 // ------------------------------------------------------------------ level crossing alarm post (static part)
 export function alarmPost(G, M) {
   const c = G.color; c.setM(M);

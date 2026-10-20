@@ -151,6 +151,12 @@ vec3 crossingPanel(float ds, float u){
   if ((t > 0.9 && t < 1.25) || abs(ds) > 3.05) c = mix(c, L(vec3(0.6, 0.59, 0.57)), 0.7);
   return c;
 }
+vec3 sideStreet(float ds, float u){
+  vec2 p = vec2(ds, u);
+  vec3 c = L(vec3(0.6, 0.59, 0.58)) * (0.9 + 0.14 * fbm2(p * 0.45) + 0.1 * (hash12(floor(p * 22.0)) - 0.5));
+  float paint = step(abs(abs(ds) - 2.62), 0.06) * (0.8 + 0.2 * vnoise(p * 6.0));
+  return mix(c, L(vec3(0.95, 0.95, 0.92)), paint);
+}
 vec3 riverBankCol(float s, float u){
   vec2 p = vec2(s, u);
   vec3 g = mix(L(vec3(0.36, 0.56, 0.24)), L(vec3(0.56, 0.70, 0.30)), fbm2(p * 0.12)) * (0.88 + 0.16 * vnoise(p * 2.1));
@@ -164,6 +170,7 @@ vec3 groundAlbedo(){
   if (kind > 2.5 && kind < 3.5) return L(vec3(0.80, 0.80, 0.78)) * (0.9 + 0.12*fbm2(vec2(s, u)*2.0));
   if (kind > 4.5 && kind < 5.5) return trackBed(s, u);
   if (kind > 5.5 && kind < 6.5) return crossingPanel(s, u);
+  if (kind > 9.5) return sideStreet(s, u);
   if (kind > 8.5) return L(vec3(0.78, 0.72, 0.6)) * (0.86 + 0.18 * vnoise(vec2(s, u) * 3.0));   // levee-top path
   if (kind > 6.5) return L(vec3(0.95, 0.95, 0.92)) * (0.82 + 0.18 * vnoise(vec2(s, u) * 6.0));
   vec3 c = vec3(0.0);
@@ -197,7 +204,7 @@ if (gWater > 0.01) {
 const WET = /* glsl */`
 if (uWet > 0.01) {
   float kind = vRK.y;
-  float hard = (kind > 0.5 && kind < 7.5) ? 1.0 : 0.0;
+  float hard = ((kind > 0.5 && kind < 7.5) || kind > 9.5) ? 1.0 : 0.0;
   float fr = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 4.0);
   float isRoad = step(0.5, kind) * step(kind, 1.5);
   float puddle = smoothstep(0.6, 0.72, fbm2(vSU * vec2(0.22, 0.35) + 3.7)) * isRoad;
@@ -227,7 +234,7 @@ ${GROUND}`, WET + MIRROR);
     sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
 diffuseColor.rgb *= groundAlbedo();`);
   };
-  m.customProgramCacheKey = () => 'ground-v5';
+  m.customProgramCacheKey = () => 'ground-v6';
   return m;
 }
 
@@ -257,6 +264,11 @@ export function makeMaterials(atlasTex, folTex) {
   M.atlas.customProgramCacheKey = () => 'atlas-v2';
   M.foliage = painterly(new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: GRAD_SOFT }), 2.6, 0.24, 'foliage-v2');
   M.lamp = new THREE.MeshBasicMaterial({ color: 0xf0eee6 });
+  M.sig = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.15, 1.7, 1.1) }); // a lit 青 signal lamp
+  // painted road markings: alpha-BLENDED (alpha-test would erase thin strokes once the texture is minified at grazing angles)
+  M.decal = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: GRAD, map: atlasTex.map, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
+  M.decal.onBeforeCompile = sh => worldShade(sh);
+  M.decal.customProgramCacheKey = () => 'decal-v1';
   if (folTex) {
     M.leaf = new THREE.MeshToonMaterial({ map: folTex, vertexColors: true, gradientMap: GRAD_SOFT, alphaTest: 0.42, side: THREE.DoubleSide });
     M.leaf.onBeforeCompile = sh => { // keep the spherical canopy normals on back faces too

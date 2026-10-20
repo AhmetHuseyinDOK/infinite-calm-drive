@@ -391,6 +391,22 @@ export function buildAtlas() {
     rect(a, 0, 0, w, h, '#b9b5ab'); grain(a, A, w, h, 0.2);
     rect(a, 6, 6, w - 12, h - 12, '#a7a398'); vText(a, name, w / 2, 14, h - 14, 34, '#3f3c37', 800);
   }));
+  A.add('signal', 240, 84, (a, e, w, h) => { // horizontal Japanese traffic signal: 青 · 黄 · 赤
+    rect(a, 0, 0, w, h, '#4a4d52'); rect(a, 0, 0, w, 5, '#5c6066'); grain(a, A, w, h, 0.12);
+    [['#0d4f44', 40], ['#5c4a12', 120], ['#5a1814', 200]].forEach(([c, x]) => { a.fillStyle = '#26282c'; a.beginPath(); a.arc(x, h / 2, 33, 0, 7); a.fill(); a.fillStyle = c; a.beginPath(); a.arc(x, h / 2, 27, 0, 7); a.fill(); });
+  });
+  A.add('ped_sig', 64, 128, (a, e, w, h) => {
+    rect(a, 0, 0, w, h, '#3d4045');
+    a.fillStyle = '#5a1814'; a.fillRect(8, 8, w - 16, h / 2 - 12); a.fillStyle = '#0d4f44'; a.fillRect(8, h / 2 + 4, w - 16, h / 2 - 12);
+    a.fillStyle = 'rgba(255,255,255,0.18)'; a.beginPath(); a.arc(w / 2, h * 0.18, 6, 0, 7); a.fill(); a.fillRect(w / 2 - 5, h * 0.24, 10, 18);
+  });
+  A.add('tomare', 256, 96, (a, e, w, h) => { // painted 止まれ: white on transparent (alpha-tested)
+    a.clearRect(0, 0, w, h); a.fillStyle = 'rgba(244,244,238,0.012)'; a.fillRect(0, 0, w, h); // near-transparent white: no dark fringes when blended
+    textFit(a, '止まれ', w / 2, h / 2 + 4, w * 0.92, 84, '#f4f4ee', 900);
+  });
+  ['本町歩道橋', '桜町歩道橋', '駅前歩道橋'].forEach((t, i) => A.add('hodokyo' + i, 256, 44, (a, e, w, h) => {
+    rect(a, 0, 0, w, h, '#1f4f96'); a.strokeStyle = '#fff'; a.lineWidth = 3; a.strokeRect(4, 4, w - 8, h - 8); textFit(a, t, w / 2, h / 2 + 1, w * 0.85, 28, '#fff', 800);
+  }));
   A.add('xing_plate', 128, 48, (a, e, w, h) => { rect(a, 0, 0, w, h, '#f6f6f2'); a.strokeStyle = '#d8231c'; a.lineWidth = 4; a.strokeRect(3, 3, w - 6, h - 6); textFit(a, '踏切注意', w / 2, h / 2, w * 0.8, 26, '#d8231c', 900); });
   A.add('rail', 240, 80, (a, e, w, h) => { // see-through balcony railing (alpha-tested)
     a.clearRect(0, 0, w, h);

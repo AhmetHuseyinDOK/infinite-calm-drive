@@ -75,7 +75,7 @@ async function main() {
   let wet = weather.W.rain;
 
   // ------------------------------------------------------------ state
-  const st = { s: Math.max(100, parseFloat(QS.get('s')) || 140), u: -1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, cam: { low: 1, eye: 2 }[QS.get('cam')] || 0 };
+  const st = { s: Math.max(100, parseFloat(QS.get('s')) || 140), u: -1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, cam: { low: 1, eye: 2, top: 3 }[QS.get('cam')] || 0 };
   let started = false;
   status('building the road…');
   await new Promise(r => setTimeout(r, 10));
@@ -214,6 +214,7 @@ async function main() {
       const d = xDist - 11.2, cap = d > 0 ? Math.sqrt(2 * 1.25 * d) : 0;
       target = Math.min(target, cap); st.speed = Math.min(st.speed, cap);
     }
+    if (QS.has('park')) { target = 0; st.speed = 0; } // test hook: hold the car still
     st.speed += (target - st.speed) * Math.min(1, dt * 0.5);
     st.s += st.speed * dt; st.dist += st.speed * dt;
     const rw = zparam(st.s, 'rw');
@@ -249,8 +250,10 @@ async function main() {
 
     // camera
     // camera rigs: 0 chase, 1 low "anime layout" angle, 2 eye level with no car (pure background art)
-    const R = [{ back: 8.2, up: 3.1, ahead: 22, lookY: 1.45, cu: 0.85, lu: 0.5 }, { back: 7.0, up: 1.3, ahead: 26, lookY: 2.9, cu: 0.85, lu: 0.5, side: 1.15 }, { back: -0.6, up: 1.55, ahead: 30, lookY: 2.3, cu: 1, lu: 0.6 }][st.cam];
+    const R = [{ back: 8.2, up: 3.1, ahead: 22, lookY: 1.45, cu: 0.85, lu: 0.5 }, { back: 7.0, up: 1.3, ahead: 26, lookY: 2.9, cu: 0.85, lu: 0.5, side: 1.15 }, { back: -0.6, up: 1.55, ahead: 30, lookY: 2.3, cu: 1, lu: 0.6 },
+      { back: 0.01, up: parseFloat(QS.get('top')) || 45, ahead: 0, lookY: 0, cu: 0, lu: 0 }][st.cam]; // [3] = test-only top-down view
     car.group.visible = st.cam !== 2;
+    if (st.cam === 3) camera.up.set(f.fx, 0, f.fz); else camera.up.set(0, 1, 0);
     path.at(st.s - R.back, fc); path.at(st.s + R.ahead, fl);
     const cu = st.u * R.cu;
     const cside = cu + (R.side || 0);
@@ -259,6 +262,7 @@ async function main() {
     if (!camInit) { camPos.copy(tmp); look.copy(lt); camInit = true; }
     camPos.lerp(tmp, 1 - Math.exp(-dt * 6)); look.lerp(lt, 1 - Math.exp(-dt * 5));
     camera.position.copy(camPos); camera.lookAt(look);
+    if (QS.has('yaw')) camera.rotateY((parseFloat(QS.get('yaw')) * Math.PI) / 180); // test hook: look sideways
     fwd.set(f.fx, 0, f.fz); right.set(f.rx, 0, f.rz);
 
     // lighting & atmosphere

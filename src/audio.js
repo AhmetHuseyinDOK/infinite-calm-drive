@@ -131,7 +131,8 @@ export function makeAudio() {
       const wv = x.water || 0, gurgle = 0.6 + 0.4 * Math.sin(t * 1.3) * Math.sin(t * 0.37);
       stream.g.gain.setTargetAtTime(wv * 0.035 * gurgle, t, 0.25); stream.f.frequency.setTargetAtTime(600 + 400 * gurgle, t, 0.25);
       const gust = 0.35 + 0.65 * Math.pow(0.5 + 0.5 * Math.sin(t * 0.23) * Math.sin(t * 0.071 + 2), 2);
-      wind.g.gain.setTargetAtTime(((w.mountain || 0) + (w.snow || 0) * 0.7) * 0.06 * gust, t, 0.8); wind.f.frequency.setTargetAtTime(260 + 420 * gust, t, 0.8);
+      const rush = x.rush || 0; // driving very fast: a steady rush of wind
+      wind.g.gain.setTargetAtTime(((w.mountain || 0) + (w.snow || 0) * 0.7) * 0.06 * gust + rush * 0.055, t, 0.8); wind.f.frequency.setTargetAtTime(260 + 420 * gust + rush * 500, t, 0.8);
       const tv = x.train || 0;
       rumble.g.gain.setTargetAtTime(tv * 0.16, t, 0.2);
       if (tv > 0.04) { if (nextClick < t) nextClick = t + 0.02; while (nextClick < t + 0.12) { thump(nextClick, tv); thump(nextClick + 0.15, tv * 0.8); nextClick += 1.2; } }

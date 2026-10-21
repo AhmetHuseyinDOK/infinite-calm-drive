@@ -127,7 +127,10 @@ async function main() {
   let wet = weather.W.rain;
 
   // ------------------------------------------------------------ state
-  const st = { s: Math.max(100, parseFloat(QS.get('s')) || 140), u: -1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
+  // speed: the zone's cruising speed × mult (0.4 … 5.5, so up to ~190–265 km/h); uHome: the lane the car settles back
+  // into when nobody steers — wherever the player last steered it (it used to always drift back to the left lane)
+  const MULT_MIN = 0.4, MULT_MAX = 5.5;
+  const st = { s: Math.max(100, parseFloat(QS.get('s')) || 140), u: -1.65, uHome: -1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
   let started = false;
   status('building the road…');
   await new Promise(r => setTimeout(r, 10));
@@ -200,12 +203,13 @@ async function main() {
   addEventListener('keyup', e => { keys[e.key] = false; });
   let ptr = null;
   canvas.addEventListener('pointerdown', e => { ptr = { id: e.pointerId, x: e.clientX, y: e.clientY, sy: e.clientY, sc: st.mult }; });
-  addEventListener('pointermove', e => { if (ptr && e.pointerId === ptr.id) { ptr.x = e.clientX; ptr.y = e.clientY; st.mult = clamp(ptr.sc - ((ptr.y - ptr.sy) / innerHeight) * 1.6, 0.4, 1.8); } });
+  const dragMult = p => clamp(p.sc * Math.exp(-((p.y - p.sy) / innerHeight) * 3.4), MULT_MIN, MULT_MAX); // half a screen up ≈ ×5.5
+  addEventListener('pointermove', e => { if (ptr && e.pointerId === ptr.id) { ptr.x = e.clientX; ptr.y = e.clientY; st.mult = dragMult(ptr); } });
   addEventListener('pointerup', () => { ptr = null; });
   addEventListener('pointercancel', () => { ptr = null; });
   // some in-app webviews (X, Instagram…) never send pointer events — mirror the same steering on touch
   canvas.addEventListener('touchstart', e => { const t = e.changedTouches[0]; ptr = { id: 'touch', x: t.clientX, y: t.clientY, sy: t.clientY, sc: st.mult }; e.preventDefault(); }, { passive: false });
-  canvas.addEventListener('touchmove', e => { if (!ptr) return; const t = e.changedTouches[0]; ptr.x = t.clientX; ptr.y = t.clientY; st.mult = clamp(ptr.sc - ((ptr.y - ptr.sy) / innerHeight) * 1.6, 0.4, 1.8); e.preventDefault(); }, { passive: false });
+  canvas.addEventListener('touchmove', e => { if (!ptr) return; const t = e.changedTouches[0]; ptr.x = t.clientX; ptr.y = t.clientY; st.mult = dragMult(ptr); e.preventDefault(); }, { passive: false });
   canvas.addEventListener('touchend', () => { ptr = null; });
   canvas.addEventListener('touchcancel', () => { ptr = null; });
   function toggleSound() { if (audio) { audio.toggle(); $('snd').style.opacity = audio.muted ? 0.4 : 1; } }
@@ -246,7 +250,7 @@ async function main() {
 
   // Resizing clears the canvas, so it only ever happens at the start of a frame, right before we draw —
   // never between frames (that showed a blank flash on phones when the toolbar or orientation changed).
-  let needResize = false, lastSize = '';
+  let needResize = false, lastSize = '', baseFov = 52, fovKick = 0;
   function resize() {
     const w = innerWidth, h = innerHeight, asp = w / h, key = w + 'x' + h + '@' + DPR;
     if (key === lastSize) return;
@@ -254,7 +258,8 @@ async function main() {
     renderer.setPixelRatio(DPR); renderer.setSize(w, h, false);
     post.composer.setPixelRatio(DPR); post.composer.setSize(w, h);
     camera.aspect = asp;
-    camera.fov = asp >= 1 ? 52 : clamp((2 * Math.atan(Math.tan((34 * Math.PI) / 180) / asp) * 180) / Math.PI, 52, 80);
+    baseFov = asp >= 1 ? 52 : clamp((2 * Math.atan(Math.tan((34 * Math.PI) / 180) / asp) * 180) / Math.PI, 52, 80);
+    camera.fov = baseFov + fovKick;
     camera.updateProjectionMatrix();
     post.grade.uniforms.uAspect.value = asp;
     post.grade.uniforms.uTexel.value.set(1 / post.composer.readBuffer.width, 1 / post.composer.readBuffer.height);
@@ -295,10 +300,10 @@ async function main() {
     st.steer = 0;
     if (keys.ArrowLeft || keys.a || keys.A) st.steer = -1;
     if (keys.ArrowRight || keys.d || keys.D) st.steer = 1;
-    if (keys.ArrowUp || keys.w || keys.W) st.mult = clamp(st.mult + dt * 0.4, 0.4, 1.8);
-    if (keys.ArrowDown || keys.s || keys.S) st.mult = clamp(st.mult - dt * 0.4, 0.4, 1.8);
+    if (keys.ArrowUp || keys.w || keys.W) st.mult = clamp(st.mult * Math.exp(dt * 0.9), MULT_MIN, MULT_MAX); // ~2 s from cruise to flat out
+    if (keys.ArrowDown || keys.s || keys.S) st.mult = clamp(st.mult * Math.exp(-dt * 0.9), MULT_MIN, MULT_MAX);
     if (ptr && Math.abs(ptr.y - ptr.sy) < 30) st.steer = ptr.x < innerWidth / 2 ? -1 : 1;
-    if (st.steer) st.lastInput = now;
+    if (st.steer) { st.lastInput = now; st.uHome = st.u; }
 
     // drive (left-hand traffic: we keep to the left lane)
     // ---- level crossing: bells, barriers, a passing train — and we wait patiently at the stop line
@@ -307,7 +312,8 @@ async function main() {
     const xValid = crossingValid(sx), xDist = sx - st.s;
     if (xValid && !X.decided && xDist < 150) {
       X.decided = true;
-      if (xDist > 75 && started && (QS.has('xing') || hash2(X.k, 99) < 0.8)) { X.phase = 'warn'; train.start(sx, hash2(X.k, 7) < 0.5 ? 1 : -1, 16); }
+      // (a train only when the car can brake gently to the line from its current speed — flat out, the barriers stay up)
+      if (xDist > 75 && started && st.speed * st.speed / 2.5 < xDist - 14 && (QS.has('xing') || hash2(X.k, 99) < 0.8)) { X.phase = 'warn'; train.start(sx, hash2(X.k, 7) < 0.5 ? 1 : -1, 16); }
     }
     if (X.phase === 'warn') { X.raise = Math.max(0, X.raise - dt / 6); if (train.st.cleared) { X.phase = 'clear'; X.t2 = 0; } }
     else if (X.phase === 'clear') { X.raise = Math.max(0, X.raise - dt / 6); if ((X.t2 += dt) > 2.2) X.phase = 'raise'; }
@@ -323,7 +329,7 @@ async function main() {
     st.s += st.speed * dt; st.dist += st.speed * dt;
     const rw = zparam(st.s, 'rw');
     if (st.steer) st.u = clamp(st.u + st.steer * dt * 2.4, -rw + 0.85, rw - 0.85);
-    else if (now - st.lastInput > 3000) st.u += (-1.65 + Math.sin(t / 11) * 0.1 - st.u) * Math.min(1, dt * 0.9);
+    else if (now - st.lastInput > 3000) st.u += (clamp(st.uHome, -rw + 0.85, rw - 0.85) + Math.sin(t / 11) * 0.1 - st.u) * Math.min(1, dt * 0.9);
 
     // time of day (nights pass a little quicker)
     if (!st.todPaused && started) st.tod = (st.tod + (dt / 480) * (TOD.night > 0.5 ? 1.7 : 1)) % 1;
@@ -405,7 +411,11 @@ async function main() {
     car.group.visible = !hideCar;
     if (st.cam === 3) camera.up.set(f.fx, 0, f.fz); else camera.up.set(0, 1, 0);
     if (!camInit) { camPos.copy(tmp); look.copy(lt); camInit = true; }
-    camPos.lerp(tmp, 1 - Math.exp(-dt * follow)); look.lerp(lt, 1 - Math.exp(-dt * Math.min(follow, 8)));
+    // at speed the camera keeps up (it used to trail ~v/6 m further back) and the view widens a little
+    const fast = 1 + Math.max(0, st.speed - 12) / 12;
+    camPos.lerp(tmp, 1 - Math.exp(-dt * follow * fast)); look.lerp(lt, 1 - Math.exp(-dt * Math.min(follow, 8) * fast));
+    { const k = st.cam === 3 ? 0 : Math.min(clamp((st.speed - 16) * 0.22, 0, 11), Math.max(0, 84 - baseFov)); fovKick += (k - fovKick) * Math.min(1, dt * 1.5); // (portrait views are wide already: at most 84°)
+      if (Math.abs(camera.fov - (baseFov + fovKick)) > 0.02) { camera.fov = baseFov + fovKick; camera.updateProjectionMatrix(); } }
     camera.position.copy(camPos); camera.lookAt(look);
     if (QS.has('yaw')) camera.rotateY((parseFloat(QS.get('yaw')) * Math.PI) / 180); // test hook: look sideways
     if (QS.has('pitch')) camera.rotateX((parseFloat(QS.get('pitch')) * Math.PI) / 180); // test hook: look up / down
@@ -501,7 +511,8 @@ async function main() {
     if (audio) {
       path.at(sx, fl); const dxc = Math.hypot(fl.x - world.origin.x - camera.position.x, fl.z - world.origin.z - camera.position.z);
       const trainD = train.st.active ? train.group.position.distanceTo(camera.position) : 1e9;
-      audio.update(st.speed / 15, w, day(), { bell: bell ? Math.pow(clamp(1 - dxc / 260, 0, 1), 1.5) : 0, train: Math.pow(clamp(1 - trainD / 230, 0, 1), 2), rain: rn * (1 - tunS) * (1 - w.snow), roof: st.cam !== 2, tunnel: tunS, water: (() => { const rv = riverNear(st.s); return Math.max(rv ? 1 - sstep(12, 150, Math.abs(st.s - rv.s)) : 0, w.mountain * 0.45); })(), dusk: TOD.warm * (st.tod > 0.5 ? 1 : 0.3) });
+      const spA = st.speed / 15; // road roar: louder with speed, but compressed above cruising (and a rush of wind instead)
+      audio.update(spA < 1.5 ? spA : 1.5 + (spA - 1.5) * 0.4, w, day(), { rush: clamp((st.speed - 25) / 40, 0, 1), bell: bell ? Math.pow(clamp(1 - dxc / 260, 0, 1), 1.5) : 0, train: Math.pow(clamp(1 - trainD / 230, 0, 1), 2), rain: rn * (1 - tunS) * (1 - w.snow), roof: st.cam !== 2, tunnel: tunS, water: (() => { const rv = riverNear(st.s); return Math.max(rv ? 1 - sstep(12, 150, Math.abs(st.s - rv.s)) : 0, w.mountain * 0.45); })(), dusk: TOD.warm * (st.tod > 0.5 ? 1 : 0.3) });
     }
     zoneCard(zoneAt(st.s + 40));
 

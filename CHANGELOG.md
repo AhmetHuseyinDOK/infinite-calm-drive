@@ -2,6 +2,18 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-21 · 15:xx — Go really fast, and the car stays in the lane you pick (player feedback)
+- **Much higher top speed**: the speed control now goes up to 5.5× each zone's cruising speed (was 1.8×) — about
+  **190–265 km/h** flat out (was 60–90). Swiping up half the screen (or ~2 s on ↑) takes you there: the swipe and the keys
+  are now proportional, so the whole range is one gesture. Measured flat out: 267 km/h on the coast, 227 in the city,
+  the world streams in fast enough (no missing road ahead over 2.6 km), the camera keeps up (9–10 m behind the car
+  instead of trailing further and further back) and the view widens a little with speed (up to +11°, at most 84° on
+  portrait phones). The road roar grows more gently above cruising speed and a rush of wind comes in instead. Level
+  crossings only bring a train down when the car can brake gently to the line — flat out, the barriers stay up.
+- **Steering is no longer undone**: after 3 s without input the car used to glide back to the left lane — players felt
+  it "pushing back". It now settles where you last steered it (still a gentle weave, still kept inside the road).
+  Phone test, touch the right side: lane 0.65 → 0.71 six seconds later (was pulled back to −1.40).
+
 ## 2026-10-21 · 14:xx — Phones: FXAA instead of MSAA, 8–20 % faster frames
 - **Measured first** (phone portrait at phone quality, GPU time by part): 2× MSAA was the largest single cost after the
   scene itself — **2.1–4.9 ms a frame** (up to 30 % in the cherry-blossom zone, where overlapping leaf cards make the

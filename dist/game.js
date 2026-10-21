@@ -4439,15 +4439,25 @@ vec3 cityGround(float s, float u, float rw){
   vec2 p = vec2(s, u);
   return mix(L(vec3(0.64, 0.63, 0.60)), L(vec3(0.55, 0.53, 0.49)), fbm2(p*0.3)) * (0.9 + 0.12*vnoise(p*4.0));
 }
+// grass that reads as a living field instead of a flat lawn: broad patches from lush to light green, the odd sun-dried
+// patch, darker clumps a metre or two across, and blade texture up close (mip-filtered away in the distance) \u2014 five
+// noise reads, as many as the old two-tone mix
+vec3 grassCol(vec2 p, vec3 lush, vec3 light){
+  float broad = 0.6 * vnoise(p * 0.045) + 0.4 * vnoise(p * 0.11 + 3.1);
+  vec3 g = mix(lush, light, smoothstep(0.3, 0.75, broad));
+  g = mix(g, L(vec3(0.68, 0.66, 0.40)), 0.4 * smoothstep(0.6, 0.85, vnoise(p * 0.02 + 7.3)));
+  g *= 0.8 + 0.28 * vnoise(p * vec2(0.5, 0.7) + 1.7);
+  return g * (0.9 + 0.18 * vnoise(p * vec2(2.4, 9.0) + 5.9));
+}
 vec3 sakuraGround(float s, float u, float rw){
   vec2 p = vec2(s, u);
-  vec3 g = mix(L(vec3(0.42, 0.64, 0.28)), L(vec3(0.62, 0.77, 0.36)), fbm2(p*0.08)) * (0.9 + 0.15*vnoise(p*1.7));
+  vec3 g = grassCol(p, L(vec3(0.38, 0.58, 0.27)), L(vec3(0.60, 0.74, 0.37)));
   float pet = smoothstep(0.7, 0.8, vnoise(p*3.3)) * (1.0 - 0.6*smoothstep(rw + 6.0, rw + 20.0, abs(u)));
   return mix(g, L(vec3(1.0, 0.83, 0.89)), pet*0.85);
 }
 vec3 coastGround(float s, float u, float rw){
   vec2 p = vec2(s, u); float a = abs(u);
-  if (u > 0.0) return mix(L(vec3(0.38, 0.58, 0.25)), L(vec3(0.60, 0.72, 0.34)), fbm2(p*0.05)) * (0.9 + 0.15*vnoise(p*1.3));
+  if (u > 0.0) return grassCol(p, L(vec3(0.36, 0.55, 0.26)), L(vec3(0.58, 0.70, 0.36)));
   if (a < rw + 1.45) return L(vec3(0.73, 0.72, 0.69)) * (0.9 + 0.1*fbm2(p));
   if (a < rw + 2.08) return L(vec3(0.70, 0.70, 0.68)) * (0.82 + 0.12*vnoise(p*vec2(0.4, 5.0)));
   vec3 sand = mix(L(vec3(0.94, 0.87, 0.71)), L(vec3(0.85, 0.77, 0.62)), fbm2(p*0.2));

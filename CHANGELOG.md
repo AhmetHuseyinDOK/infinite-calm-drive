@@ -2,6 +2,16 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-21 · 15:xx — Realism pass 1: grass that looks like a field, not a lawn (new focus: realism, no slowdowns)
+- **Grass** on the cherry-blossom avenue and the coast hillsides was a blend of two very similar, very saturated greens
+  — with the colour grade's extra saturation it read as a plastic lawn over a large share of the screen. Now it has
+  broad patches from lush to lighter green, the odd sun-dried yellow-green patch, darker clumps a metre or two across,
+  and painterly blade strokes up close that fade out with distance; base greens slightly less saturated.
+- Cost: none — five noise reads, the same as the old mix. Median GPU time over five interleaved rounds (1280×720, the
+  machine heavily loaded): cherry blossom 25.9 → 25.8 ms, coast 23.7 → 24.0, countryside 21.0 → 21.2 — within noise.
+  (The countryside verge strip keeps its simple colour: giving it the new grass made the whole countryside ground shader
+  measurably heavier for a 1.4 m strip.) Other zones render identically; no new shader compiles.
+
 ## 2026-10-21 · 15:xx — Go really fast, and the car stays in the lane you pick (player feedback)
 - **Much higher top speed**: the speed control now goes up to 5.5× each zone's cruising speed (was 1.8×) — about
   **190–265 km/h** flat out (was 60–90). Swiping up half the screen (or ~2 s on ↑) takes you there: the swipe and the keys

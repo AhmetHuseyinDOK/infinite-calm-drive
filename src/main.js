@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Path, zoneW, zoneAt, zparam, ZINFO, setStartZone, crossingS, crossingValid, XING, XOFF, riverNear, groundOffsetMix } from './path.js';
+import { Path, zoneW, zoneAt, zparam, ZINFO, setStartZone, crossingS, crossingValid, XING, XOFF, riverNear, groundOffsetMix, tunnelNear, T_HALF, T_RIDGE } from './path.js';
 import { makeCrossingRig, makeTrain, xingPosts } from './crossing.js';
 import { buildAtlas, buildFoliage } from './textures.js';
 import { makeMaterials, U } from './materials.js';
@@ -137,6 +137,7 @@ async function main() {
   const cine = { type: 'chase', t: 0, dur: 16, last: '', anchor: null, sideSign: 1 };
   function nextShot() {
     let type; do { type = CINE[Math.floor(Math.random() * CINE.length)]; } while (type === cine.last);
+    { const tn = tunnelNear(st.s + 60); if (tn && Math.abs(st.s + 60 - tn.s) < T_RIDGE + 120) type = Math.random() < 0.6 ? 'chase' : 'eye'; }
     Object.assign(cine, { type, last: type, t: 0, dur: 13 + Math.random() * 8, sideSign: Math.random() < 0.5 ? 1 : -1 });
     if (type === 'road') {
       const sA = st.s + 40 + Math.random() * 18, rwA = zparam(sA, 'rw'), sd = Math.random() < 0.6 ? -1 : 1, uA = sd * (rwA + (sd < 0 ? 0.9 : 1.3));
@@ -196,7 +197,7 @@ async function main() {
   // ------------------------------------------------------------ loop
   let last = performance.now(), t = 0, frames = 0, slowT = 0;
   const day = () => 1 - TOD.night;
-  let ftAvg = 0;
+  let ftAvg = 0, tunS = 0;
   const meteor = { p: -1, a: new THREE.Vector3(), b: new THREE.Vector3(), next: 5 };
   function frame(now) {
     requestAnimationFrame(frame);
@@ -261,7 +262,18 @@ async function main() {
     car.group.position.set(f.x + f.rx * st.u - ox, f.y + 0.01, f.z + f.rz * st.u - oz);
     const steerYaw = (st.steer ? -st.steer * 0.05 : 0);
     car.group.rotation.set(-Math.atan(slope), f.h + steerYaw, 0);
-    car.update(dt, st.speed, TOD.night, rn);
+    // tunnels: hand the nearest one to the shaders; eyes adapt (exposure) and the headlights come on inside
+    const tn = tunnelNear(st.s);
+    if (tn && Math.abs(st.s - tn.s) < 700) {
+      path.at(tn.s - T_HALF, fl); U.uTunA.value.set(fl.x - ox, fl.y, fl.z - oz);
+      path.at(tn.s + T_HALF, fl); U.uTunB.value.set(fl.x - ox, fl.y, fl.z - oz);
+      U.uTunR.value = zparam(tn.s, 'rw') + 1.7;
+    } else { U.uTunA.value.set(0, -1e4, 0); U.uTunB.value.set(0, -1e4, 0); }
+    const inTun = tn && Math.abs(st.s + 1 - tn.s) < T_HALF - 1.5 ? 1 : 0;
+    tunS += (inTun - tunS) * Math.min(1, dt * (inTun ? 1.6 : 0.7));
+    U.uCarPos.value.set(car.group.position.x + f.fx * 1.7, car.group.position.y + 0.8, car.group.position.z + f.fz * 1.7);
+    U.uCarFwd.value.set(f.fx, -0.05, f.fz).normalize(); U.uHead.value = inTun;
+    car.update(dt, st.speed, Math.max(TOD.night, tunS), rn);
     rig.update(xValid && xDist > -24 && xDist < 700 ? xingPosts(path, sx) : null, world.origin, X.raise, bell, t);
     train.update(dt, path, world.origin, sstep(0.15, 0.8, TOD.night), zparam(sx, 'rw') + 3.2);
 
@@ -273,6 +285,7 @@ async function main() {
     let follow = 6, hideCar = st.cam === 2;
     if (st.cam === 4) {
       cine.t += dt;
+      { const tn = tunnelNear(st.s + 30); if (tn && Math.abs(st.s + 30 - tn.s) < T_RIDGE + 70 && cine.type !== 'chase' && cine.type !== 'eye') { cine.type = 'chase'; cine.t = 0; cine.dur = 20; camInit = false; } }
       if (cine.t > cine.dur + (cine.type === 'road' ? 8 : 0) || (cine.type === 'road' && cine.anchor && st.s > cine.anchor.s + 24)) nextShot();
       const cp = car.group.position, ty = cine.type;
       if (ty === 'chase' || ty === 'eye') {
@@ -354,24 +367,24 @@ async function main() {
     M.pool.opacity = nightK * 0.42 * (1 + 0.8 * wet);
     U.uNight.value = nightK;
     post.bloom.strength = lerp(0.32, 0.55, nightK); post.bloom.threshold = lerp(1.35, 0.95, nightK); post.bloom.radius = lerp(0.55, 0.35, nightK);
-    renderer.toneMappingExposure = lerp(1.0, 1.15, nightK);
+    renderer.toneMappingExposure = lerp(1.0, 1.15, nightK) * (1 + 0.35 * tunS);
 
     // sun streaks in the grade pass
     tmp.copy(camera.position).addScaledVector(TOD.sunDir, 1000).project(camera);
     const g = post.grade.uniforms;
     const inFront = tmp.z < 1 ? 1 : 0, edge = Math.max(Math.abs(tmp.x), Math.abs(tmp.y));
     g.uSun.value.set(tmp.x * 0.5 + 0.5, tmp.y * 0.5 + 0.5);
-    g.uSunVis.value = inFront * (1 - sstep(1.0, 1.9, edge)) * sstep(-0.02, 0.15, TOD.sunEl) * (1 - TOD.night) * (1 - ov);
+    g.uSunVis.value = inFront * (1 - sstep(1.0, 1.9, edge)) * sstep(-0.02, 0.15, TOD.sunEl) * (1 - TOD.night) * (1 - ov) * (1 - tunS);
     g.uSat.value = 1.1 - 0.12 * ov;
     g.uDay.value = day(); g.uWarm.value = TOD.warm; g.uTime.value = t;
 
-    rain.update(camera.position, t, rn, day());
+    rain.update(camera.position, t, rn * (1 - tunS), day());
     birds.setFog(scene.fog.near); birds.update(dt, t, camera.position, fwd, right, w, day(), rn, car.group.position);
-    const tp0 = performance.now(); parts.update(dt, t, camera.position, fwd, right, w.sakura, f.y, nightK, (w.country + w.sakura * 0.4) * (1 - rn), w.mountain); const tp1 = performance.now();
+    const tp0 = performance.now(); parts.update(dt, t, camera.position, fwd, right, w.sakura * (1 - tunS), f.y, nightK, (w.country + w.sakura * 0.4) * (1 - rn) * (1 - tunS), w.mountain * (1 - tunS)); const tp1 = performance.now();
     if (audio) {
       path.at(sx, fl); const dxc = Math.hypot(fl.x - world.origin.x - camera.position.x, fl.z - world.origin.z - camera.position.z);
       const trainD = train.st.active ? train.group.position.distanceTo(camera.position) : 1e9;
-      audio.update(st.speed / 15, w, day(), { bell: bell ? Math.pow(clamp(1 - dxc / 260, 0, 1), 1.5) : 0, train: Math.pow(clamp(1 - trainD / 230, 0, 1), 2), rain: rn, roof: st.cam !== 2, water: (() => { const rv = riverNear(st.s); return Math.max(rv ? 1 - sstep(12, 150, Math.abs(st.s - rv.s)) : 0, w.mountain * 0.45); })(), dusk: TOD.warm * (st.tod > 0.5 ? 1 : 0.3) });
+      audio.update(st.speed / 15, w, day(), { bell: bell ? Math.pow(clamp(1 - dxc / 260, 0, 1), 1.5) : 0, train: Math.pow(clamp(1 - trainD / 230, 0, 1), 2), rain: rn * (1 - tunS), roof: st.cam !== 2, tunnel: tunS, water: (() => { const rv = riverNear(st.s); return Math.max(rv ? 1 - sstep(12, 150, Math.abs(st.s - rv.s)) : 0, w.mountain * 0.45); })(), dusk: TOD.warm * (st.tod > 0.5 ? 1 : 0.3) });
     }
     zoneCard(zoneAt(st.s + 40));
 
@@ -392,7 +405,7 @@ async function main() {
     if (started && frames > 150 && dt > 0.03) slowT += dt; else slowT = Math.max(0, slowT - dt * 0.5);
     if (slowT > 3 && !QS.has('q')) { slowT = 0; stepDown(); }
   }
-  window.__dbg = { renderer, st, scene, camera, world, TOD, X, train, weather, U, birds, cine };
+  window.__dbg = { renderer, st, scene, camera, world, TOD, X, train, weather, U, birds, cine, post, car };
   status('');
   $start.classList.add('ready');
   if (QS.has('auto')) begin();

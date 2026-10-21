@@ -28,6 +28,7 @@ export function makeAudio() {
   const rainLow = loop(noiseBuf(2, true), 'lowpass', 520);
   const stream = loop(noiseBuf(3, false), 'bandpass', 750); stream.f.Q.value = 0.6;
   const wind = loop(noiseBuf(3, true), 'lowpass', 420); // wind through the trees in the mountains
+  const hum = loop(noiseBuf(2, true), 'lowpass', 140);   // a tunnel's jet fans and rolling echo
   const dropBuf = noiseBuf(0.03, false);
   let nextDrop = 0;
   function drop(t, v) { // a raindrop on the roof
@@ -128,7 +129,9 @@ export function makeAudio() {
       if (tv > 0.04) { if (nextClick < t) nextClick = t + 0.02; while (nextClick < t + 0.12) { thump(nextClick, tv); thump(nextClick + 0.15, tv * 0.8); nextClick += 1.2; } }
       while (nextChord < t + 1) { chord(nextChord); nextChord += 8; }
       if (nextBell < t + 0.5) { bell(nextBell); nextBell += 1.5 + Math.random() * 4.5; }
-      road.g.gain.setTargetAtTime(0.03 + sp * 0.06, t, 0.5); road.f.frequency.setTargetAtTime(250 + sp * 500, t, 0.5);
+      const tun = x.tunnel || 0;
+      road.g.gain.setTargetAtTime((0.03 + sp * 0.06) * (1 + 1.6 * tun), t, 0.35); road.f.frequency.setTargetAtTime((250 + sp * 500) * (1 + 0.5 * tun), t, 0.35);
+      hum.g.gain.setTargetAtTime(tun * 0.07, t, 0.4); wet.gain.setTargetAtTime(0.55 + 0.6 * tun, t, 0.4);
       const swell = 0.5 + 0.5 * Math.sin(t * 0.55) * Math.sin(t * 0.21 + 1);
       waves.g.gain.setTargetAtTime(w.coast * (0.012 + swell * 0.05), t, 0.3); waves.f.frequency.setTargetAtTime(400 + swell * 900, t, 0.3);
       // creatures — how often each calls depends on zone, time of day and rain

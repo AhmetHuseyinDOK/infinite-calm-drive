@@ -11,6 +11,7 @@ An endless, calm drive through anime Japan. No destination, no traffic, no way t
 - **Five places that blend into each other and loop forever**: narrow city streets (街の灯), a cherry-blossom avenue (桜並木), a coastal road by the sea (海沿いの道), rice-field countryside (田舎道) and an autumn mountain pass (紅葉の峠).
 - **Painted-background look**: cel-shaded buildings with blue-tinted shadows, towering cumulus painted on the GPU, bloom and sun streaks, kanji shop signs, power lines, vending machines, bicycles, crosswalks.
 - **Level crossings (踏切)**: bells, flashing lamps and barrier arms; the car waits while a little commuter train rolls by.
+- **Tunnels (トンネル)** through mountain ridges and coastal headlands: sodium lamps sweeping over the car, the echo of the road, and the bright world opening up again at the exit.
 - **Day, night and weather**: golden hours, lit windows at night, overcast skies and gentle rain with wet roads, drifting cloud shadows on sunny days.
 - **Generative ambience**: a slow pad, soft bells, road hum, waves by the sea, cicadas in the fields, rain on the roof.
 

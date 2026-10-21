@@ -2,6 +2,12 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-21 · 04:xx — Tunnels (トンネル)
+- **Tunnels** on the mountain pass and the coastal road: the road straightens and levels, runs into a cutting between concrete-lattice faces, and enters a concrete portal with a darker ring and a name plate (紅葉トンネル, 岬トンネル, 星見トンネル). Above it a ridge (on the coast, a pine-covered headland running down to the sea) carries the forest over the road.
+- **Inside**: no sun or sky — warm sodium lamps on both arch shoulders every 6 m sweep over the car as you pass, cream tiled walls and walkways, green evacuation lights, jet fans under the crown; the headlights come on and the taillights glow. Your eyes adapt: the exposure rises inside, so the exit glows bright and the world blooms open again as you leave.
+- **Sound**: the road roars louder with a reverberant echo and the low hum of the fans; rain and drifting leaves stop at the portal.
+- The cinematic camera sticks to chase / eye-level shots around tunnels.
+
 ## 2026-10-21 · 03:xx — A fifth place: the autumn mountain pass (紅葉の峠)
 - **紅葉の峠 — Autumn Mountain Pass**, after the countryside and before the city: a winding road with real climbs and bends. On the uphill side a concrete gutter and a cut slope faced with the classic concrete lattice (法面), crowned by forest; on the other side a guardrail with white reflector posts (視線誘導標), utility poles, and a steep drop into a valley with a stream and pale river stones, rising again to the far mountainside.
 - **Autumn colours**: new red/orange momiji and golden ginkgo trees (their leaf clumps painted as tiny maple stars and ginkgo fans) mixed with dark cedars; distant slopes are painted as a mass of individual crowns whose colours cluster into red, orange, gold and green patches.

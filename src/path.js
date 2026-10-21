@@ -63,13 +63,31 @@ export function riverProfile(d) {
   return 0.35;                                                 // levee-top path
 }
 
+// ---- tunnels (トンネル) through a ridge on the mountain pass and through headlands on the coast
+export const TUN = 1050, TOFF = 525, T_HALF = 85, T_RIDGE = 125, T_CREST = 24;
+export const tunnelS = k => k * TUN + TOFF;
+export function tunnelValid(st) {
+  if (st < 300) return false;
+  for (const d of [-170, 0, 170]) { const w = zoneW(st + d); if (Math.max(w.mountain, w.coast) < 0.95) return false; }
+  return true;
+}
+export function tunnelNear(s) { const k = Math.round((s - TOFF) / TUN), st = tunnelS(k); return tunnelValid(st) ? { k, s: st } : null; }
+/** 1 through the tunnel and its approaches — the road runs straight and level there */
+export function tunnelW(s) { const t = tunnelNear(s); return t ? 1 - sstep(T_HALF + 20, T_RIDGE + 25, Math.abs(s - t.s)) : 0; }
+/** how much the tunnel's ridge raised the ground at the last groundOffsetMix() call (for the ground shader) */
+export let RAISE = 0;
+/** the tunnel ridge's height above the road at (ds, u) — also the height of the cap over the tube */
+export const ridgeHr = (ds, u) => { const q = ds / T_RIDGE; return T_CREST * (1 - q * q) - Math.abs(u) * (u > 0 ? 0.12 : 0.32); };
+/** half-width of the tunnel tube (to its walls), from the road's half-width */
+export const tubeHalf = rw => rw + 1.4;
+
 const STEP = 2;
 export class Path {
   constructor() { this.X = [0]; this.Z = [0]; this.H = [0.3]; this.Y = [this.elev(0)]; }
   curv(s) {
     const v = (noise1(s / 300, 11) - 0.5) * 2 + (noise1(s / 95, 17) - 0.5) * 0.35;
     const a = Math.abs(v), c = a < 0.22 ? 0 : Math.sign(v) * (a - 0.22) / 0.78;
-    return c * zparam(s, 'curv') * (1 - Math.max(crossingW(s), riverW(s)));
+    return c * zparam(s, 'curv') * (1 - Math.max(crossingW(s), riverW(s), tunnelW(s)));
   }
   elevRaw(s) { return zparam(s, 'base') + zparam(s, 'hill') * (fbm1(s / 380, 29) - 0.5) * 2; }
   elev(s) {
@@ -78,6 +96,8 @@ export class Path {
     if (c) { const w = 1 - sstep(8, 45, Math.abs(s - c.s)); if (w > 0) y = lerp(y, this.elevRaw(c.s), w); }
     const r = riverNear(s);
     if (r) { const w = 1 - sstep(30, 70, Math.abs(s - r.s)); if (w > 0) y = lerp(y, this.elevRaw(r.s), w); }
+    const tn = tunnelNear(s);
+    if (tn) { const w = 1 - sstep(T_HALF + 10, T_RIDGE + 45, Math.abs(s - tn.s)); if (w > 0) y = lerp(y, this.elevRaw(tn.s), w); }
     return y;
   }
   ensure(s) {
@@ -148,13 +168,26 @@ export function groundOffsetMix(s, u, e, rw) {
   const m = zoneMix(s);
   const a = groundOffset(m.a, s, u, e, rw);
   const base = m.t > 0 ? lerp(a, groundOffset(m.b, s, u, e, rw), m.t) : a;
+  RAISE = 0;
   const r = riverNear(s);
-  if (!r) return base;
-  const d = Math.abs(s - r.s);
-  if (d >= 36) return base;
-  let p = d < 29 ? riverProfile(d) : lerp(0.35, base, sstep(29, 36, d));
-  if (Math.abs(u) < rw + 3.2) p = Math.min(p, -0.08); // never poke up through the road or its sidewalks
-  return p;
+  if (r) {
+    const d = Math.abs(s - r.s);
+    if (d >= 36) return base;
+    let p = d < 29 ? riverProfile(d) : lerp(0.35, base, sstep(29, 36, d));
+    if (Math.abs(u) < rw + 3.2) p = Math.min(p, -0.08); // never poke up through the road or its sidewalks
+    return p;
+  }
+  const t = tunnelNear(s);
+  if (!t) return base;
+  const ds = s - t.s, ad = Math.abs(ds);
+  if (ad >= 2 * T_RIDGE) return base;
+  // a ridge across the road: highest over the middle of the tunnel, a spur falling away to the valley / the sea
+  const au = Math.abs(u), hr = ridgeHr(ds, u);
+  let y;
+  if (ad < T_HALF) y = au <= rw + 1.46 ? -0.25 : Math.max(base, hr);  // over the tube (the strip under the walkways stays low; a cap covers it)
+  else y = Math.max(base, Math.min(hr, au < rw + 1.0 ? -0.06 : au - (rw + 1.0))); // the approach cutting, 45° faces
+  RAISE = Math.max(0, y - base);
+  return y;
 }
 /** 0…1 weight of the riverbank look at s (used by the ground shader) */
 export function riverBank(s) { const r = riverNear(s); return r ? 1 - sstep(27, 34, Math.abs(s - r.s)) : 0; }

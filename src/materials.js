@@ -27,6 +27,10 @@ export const U = {
   uSunDir: { value: new THREE.Vector3(0, 1, 0) },
   uSunCol: { value: new THREE.Color(1, 1, 1) },
   uTuftV: { value: new THREE.Vector2(0, 0.333) }, // v-range of the grass-tuft row in the foliage atlas
+  uTunA: { value: new THREE.Vector3(0, -1e4, 0) },  // the current tunnel's axis (portal to portal, at road level)
+  uTunB: { value: new THREE.Vector3(0, -1e4, 0) },
+  uTunR: { value: 4.6 },
+  uCarPos: { value: new THREE.Vector3() }, uCarFwd: { value: new THREE.Vector3(0, 0, 1) }, uHead: { value: 0 },
   uWind: { value: 1 },
 };
 
@@ -56,15 +60,37 @@ float cloudShadow(vec2 xz){
 }`;
 const SHADE_APPLY = /* glsl */`
 outgoingLight *= mix(vec3(1.0), vec3(0.66, 0.71, 0.84), cloudShadow(vWP.xz));`;
+// inside a tunnel: no sun or sky, just sodium lamps every 6 m (and the car's own headlights)
+const TUNNEL_PARS = /* glsl */`
+uniform vec3 uTunA, uTunB, uCarPos, uCarFwd; uniform float uTunR, uHead;
+float tunnelMask(vec3 wp, out float along){
+  vec3 ab = uTunB - uTunA; float L2 = dot(ab, ab); along = 0.0;
+  if (L2 < 1.0) return 0.0;
+  float t = dot(wp - uTunA, ab) / L2, L = sqrt(L2); along = t * L;
+  vec3 c = uTunA + ab * clamp(t, 0.0, 1.0);
+  float r = length(wp.xz - c.xz);
+  float inside = (1.0 - smoothstep(uTunR - 0.5, uTunR + 0.3, r)) * step(c.y - 1.5, wp.y) * step(wp.y, c.y + 7.2);
+  return inside * smoothstep(0.0, 3.5 / L, t) * smoothstep(0.0, 3.5 / L, 1.0 - t);
+}`;
+const TUNNEL_APPLY = /* glsl */`
+{ float tAlong; float tm = tunnelMask(vWP, tAlong);
+  if (tm > 0.001) {
+    float band = 0.55 + 0.45 * cos(6.2832 * (tAlong - 3.0) / 6.0);
+    vec3 hv = vWP - uCarPos; float hd = length(hv);
+    float head = uHead * smoothstep(0.88, 0.97, dot(hv / max(hd, 0.001), uCarFwd)) / (1.0 + hd * hd * 0.014) * step(2.6, hd);
+    vec3 lit = diffuseColor.rgb * (vec3(1.0, 0.54, 0.18) * (0.15 + 0.3 * band) + vec3(1.0, 0.95, 0.86) * head * 0.45) + reflectedLight.indirectDiffuse * 0.06 + totalEmissiveRadiance;
+    outgoingLight = mix(outgoingLight, lit, tm);
+  } }`;
 /** adds vWP (world position), shared uniforms and the cloud-shadow term to a built-in material */
 function worldShade(sh, extraPars = '', extraApply = '') {
   sh.uniforms.uOrigin = U.uOrigin; sh.uniforms.uCloudSh = U.uCloudSh; sh.uniforms.uTime = U.uTime;
+  for (const k of ['uTunA', 'uTunB', 'uTunR', 'uCarPos', 'uCarFwd', 'uHead']) sh.uniforms[k] = U[k];
   sh.vertexShader = sh.vertexShader
     .replace('#include <common>', '#include <common>\nvarying vec3 vWP;')
     .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWP = (modelMatrix * vec4(position, 1.0)).xyz;');
   sh.fragmentShader = sh.fragmentShader
-    .replace('#include <common>', `#include <common>\nuniform float uTime;\nvarying vec3 vWP;\n${GLSL_NOISE}${SHADE_PARS}${extraPars}`)
-    .replace('#include <opaque_fragment>', `${SHADE_APPLY}${extraApply}\n#include <opaque_fragment>`);
+    .replace('#include <common>', `#include <common>\nuniform float uTime;\nvarying vec3 vWP;\n${GLSL_NOISE}${SHADE_PARS}${TUNNEL_PARS}${extraPars}`)
+    .replace('#include <opaque_fragment>', `${SHADE_APPLY}${extraApply}${TUNNEL_APPLY}\n#include <opaque_fragment>`);
 }
 
 const GROUND = /* glsl */`
@@ -104,9 +130,9 @@ vec3 roadCol(float s, float u, float rw){
   }
   return c;
 }
-// seen from a distance an autumn forest is a mass of individual crowns (a Worley pattern: each crown a soft dome,
-// darker in the gaps) whose colours cluster into regions — cedar, still-green, orange, red, gold
-vec3 autumnCanopy(vec2 p){
+// seen from a distance a forest is a mass of individual crowns (a Worley pattern: each crown a soft dome, darker in
+// the gaps) whose colours cluster into regions — autumn: cedar, still-green, orange, red, gold; otherwise greens
+vec3 forestCanopy(vec2 p, float autumn){
   vec2 q = p / 3.2, iq = floor(q), fq = fract(q);
   float best = 9.0; vec2 bid = vec2(0.0);
   for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
@@ -117,8 +143,9 @@ vec3 autumnCanopy(vec2 p){
   }
   float region = fbm2(p * 0.025 + 13.0);
   float pick = clamp(region * 1.25 - 0.12 + (hash12(bid + 3.1) - 0.5) * 0.55, 0.0, 0.999);
-  vec3 c = pick < 0.22 ? L(vec3(0.17, 0.28, 0.19)) : pick < 0.36 ? L(vec3(0.3, 0.42, 0.22)) : pick < 0.58 ? L(vec3(0.82, 0.44, 0.16))
-         : pick < 0.8 ? L(vec3(0.72, 0.22, 0.12)) : L(vec3(0.84, 0.64, 0.22));
+  vec3 c = autumn > 0.5
+    ? (pick < 0.22 ? L(vec3(0.17, 0.28, 0.19)) : pick < 0.36 ? L(vec3(0.3, 0.42, 0.22)) : pick < 0.58 ? L(vec3(0.82, 0.44, 0.16)) : pick < 0.8 ? L(vec3(0.72, 0.22, 0.12)) : L(vec3(0.84, 0.64, 0.22)))
+    : (pick < 0.3 ? L(vec3(0.14, 0.27, 0.17)) : pick < 0.55 ? L(vec3(0.24, 0.4, 0.2)) : pick < 0.8 ? L(vec3(0.36, 0.5, 0.24)) : L(vec3(0.44, 0.52, 0.26)));
   float dome = 1.0 - smoothstep(0.0, 0.62, best);
   vec2 cpt = bid + vec2(hash12(bid), hash12(bid + 7.7)) * 0.8 + 0.1 - q;                 // a soft lit side on every crown
   float lit = 1.0 - smoothstep(0.0, 0.32, dot(cpt - vec2(0.16, 0.18), cpt - vec2(0.16, 0.18)));
@@ -136,7 +163,7 @@ vec3 mountainGround(float s, float u, float rw){
     float beam = max(step(g.x, 0.11), step(g.y, 0.11));
     vec3 cell = mix(L(vec3(0.56, 0.58, 0.3)), L(vec3(0.74, 0.6, 0.3)), vnoise(p * 0.8)) * (0.84 + 0.22 * vnoise(p * 4.0));
     vec3 face = mix(cell, L(vec3(0.76, 0.75, 0.71)) * (0.88 + 0.12 * vnoise(p * 2.0)), beam);
-    return mix(face, autumnCanopy(p), smoothstep(0.76, 0.88, vWN.y));
+    return mix(face, forestCanopy(p, 1.0), smoothstep(0.76, 0.88, vWN.y));
   }
   if (a < rw + 1.2) return L(vec3(0.5, 0.48, 0.42)) * (0.85 + 0.2 * vnoise(p * 2.0));       // shoulder
   float dw = abs(a - (rw + 75.0 + 14.0 * sin(s / 90.0)));                                    // a stream on the valley floor
@@ -144,7 +171,15 @@ vec3 mountainGround(float s, float u, float rw){
   if (dw < 9.0) return L(vec3(0.62, 0.6, 0.56)) * (0.78 + 0.26 * hash12(floor(p * 3.0)));   // pale river stones
   if (a < rw + 3.7) return floorC;                                                           // brush right below the rail
   float meadow = smoothstep(rw + 31.0, rw + 36.0, a) * (1.0 - smoothstep(100.0, 112.0, a));  // the valley floor
-  return mix(autumnCanopy(p), mix(floorC, L(vec3(0.42, 0.52, 0.25)) * (0.85 + 0.2 * vnoise(p * 0.9)), 0.55), meadow);
+  return mix(forestCanopy(p, 1.0), mix(floorC, L(vec3(0.42, 0.52, 0.25)) * (0.85 + 0.2 * vnoise(p * 0.9)), 0.55), meadow);
+}
+// a tunnel's ridge: concrete lattice where it was cut steeply, forest crowns elsewhere
+vec3 ridgeCol(float s, float u, float autumn){
+  vec2 p = vec2(s, u), g = fract(vec2(s / 2.6, abs(u) * 1.414 / 2.6));
+  float beam = max(step(g.x, 0.11), step(g.y, 0.11));
+  vec3 cell = mix(L(vec3(0.5, 0.56, 0.3)), L(vec3(0.66, 0.6, 0.32)), vnoise(p * 0.8)) * (0.84 + 0.22 * vnoise(p * 4.0));
+  vec3 face = mix(cell, L(vec3(0.76, 0.75, 0.71)) * (0.88 + 0.12 * vnoise(p * 2.0)), beam);
+  return mix(face, forestCanopy(p, autumn), smoothstep(0.76, 0.88, vWN.y));
 }
 vec3 sidewalkCol(float s, float u, float rw){
   float d = abs(u) - rw;
@@ -236,8 +271,10 @@ vec3 groundAlbedo(){
   if (vZW.w > 0.004) c += vZW.w * countryGround(s, u, rw);
   float wMtn = clamp(1.0 - dot(vZW, vec4(1.0)), 0.0, 1.0);
   if (wMtn > 0.004) c += wMtn * mountainGround(s, u, rw);
-  gWater *= vZW.w * (1.0 - vRV);
-  c = mix(c, riverBankCol(s, u), vRV);
+  float rbw = max(vRV, 0.0), rdg = max(-vRV, 0.0);               // + river bank, − a tunnel's ridge
+  gWater *= vZW.w * (1.0 - rbw) * (1.0 - rdg);
+  c = mix(c, riverBankCol(s, u), rbw);
+  c = mix(c, ridgeCol(s, u, wMtn), rdg);
   return c * (0.92 + 0.16*fbm2(vec2(s, u)*0.015));
 }
 `;
@@ -292,7 +329,7 @@ ${GROUND}`, WET + MIRROR);
     sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
 diffuseColor.rgb *= groundAlbedo();`);
   };
-  m.customProgramCacheKey = () => 'ground-v11';
+  m.customProgramCacheKey = () => 'ground-v12';
   return m;
 }
 
@@ -323,6 +360,7 @@ export function makeMaterials(atlasTex, folTex) {
   M.foliage = painterly(new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: GRAD_SOFT }), 2.6, 0.24, 'foliage-v2');
   M.lamp = new THREE.MeshBasicMaterial({ color: 0xf0eee6 });
   M.sig = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.15, 1.7, 1.1) }); // a lit 青 signal lamp
+  M.sodium = new THREE.MeshBasicMaterial({ color: new THREE.Color(5.0, 2.3, 0.65) }); // tunnel lamps
   // painted road markings: alpha-BLENDED (alpha-test would erase thin strokes once the texture is minified at grazing angles)
   M.decal = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: GRAD, map: atlasTex.map, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
   M.decal.onBeforeCompile = sh => worldShade(sh);

@@ -2,6 +2,32 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-22 · 00:xx — Realism pass 7: twilight cools, and the haze glows towards a low sun
+- **The haze glows towards a low sun.** Real air scatters sunlight forwards. Looking into a low sun, the distant haze is
+  bright and warm and far hills melt into it; looking away it stays cool. The haze used to be one flat colour in every
+  direction, so at sunrise and sunset far hills stood out as flat grey-violet cut-outs against a glowing sky.
+  - Now the haze picks up the sky dome's own sun glow (its broad lobe at the horizon, averaged across the view).
+  - Drive towards the sunset and the far landscape, the mountains and the sea fade into warm light. Drive away and
+    nothing changes. The glow follows the road as it bends.
+  - It is worked out once per frame on the CPU and folded into the fog colour that the scenery, mountains, sea, river
+    and birds already share. No shader changed.
+- **Twilight cools after sunset.** After sunset the scene used to stay lit by a strong pink "sun" that cast hard shadows
+  well into dusk, so the road, fields and paddies all turned the same pink.
+  - A new end-of-civil-twilight key (sun ~6° down) hands the ground over to skylight: soft blue-violet light and faint
+    shadows.
+  - The sky towards the sunset and the high clouds keep their warm afterglow.
+  - The dusk and pre-dawn haze and ambient light are bluer, and mornings are a little paler and hazier than noon.
+- Cost: none. No shader or draw-call change; 52 programs and none compiled mid-drive.
+  - GPU, alternating-order rounds against the live build at machine load ~20: country sunset −0.15 ms, night city
+    −0.49, phone country sunset −0.15. The live build compared with itself read +0.31, so all of it is noise.
+  - Flat out at 247 km/h with no new world-build spikes; embed mode still starts on tap.
+- Tried first, not shipped: the glow worked out in the shaders, so it could peak under the sun and fade sideways. It was
+  measured inside one page against the plain fog shader, with both programs compiled and flipped every 3 s:
+  - per pixel: +1.7 ms at a country sunset;
+  - per vertex: +0.25 ms on desktop and +0.55 ms on the phone profile, even at night.
+  The per-frame version gives most of the look for nothing. That same-page flip also explains last pass's "+0.3–0.55 ms
+  mystery": comparing two separate builds on a loaded machine is too noisy to trust.
+
 ## 2026-10-21 · 21:xx — Realism pass 6: lit shops and rooms at night
 - **Shops lit from inside.** At night every lit shopfront used to be one flat glowing peach panel; the goods, shelves and
   posters you see by day vanished into it. Now the night glow is the shop's interior itself: the goods on the shelves,

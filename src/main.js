@@ -122,6 +122,7 @@ async function main() {
   const post = makePost(renderer, scene, camera, { msaa: AA === 'msaa' ? (quality === 'high' ? 4 : 2) : 0, fxaa: AA === 'fxaa' });
   U.uReflTex.value = post.refl.rt.texture;
   const hz = new THREE.Vector3(), camFlat = new THREE.Vector3(), REFL = QS.get('refl') || 'auto';
+  const glowV = new THREE.Vector3(), HAZE_GLOW = QS.has('haze') ? parseFloat(QS.get('haze')) : 1; // (test hook: ?haze=0 off)
   const rig = makeCrossingRig(); scene.add(rig.group);
   const train = makeTrain(); scene.add(train.group);
   const weather = makeWeather(QS), rain = makeRain(), snowfall = makeSnow(); scene.add(rain.mesh, snowfall.mesh);
@@ -472,6 +473,21 @@ async function main() {
     carSun.target.position.set(car.group.position.x, car.group.position.y + 0.9, car.group.position.z);
     carSun.position.copy(carSun.target.position).addScaledVector(TOD.lightDir, 12);
     hemi.color.copy(TOD.hemiSky); hemi.groundColor.copy(TOD.hemiGround); hemi.intensity = TOD.hemiI;
+    { // aerial perspective has a direction: looking towards a low sun the haze glows with it (the sky dome's broad sun glow
+      // at the horizon, averaged across the view), looking away it stays cool. Worked out once per frame on the CPU and
+      // folded into the shared fog colour — shading it per vertex or per pixel measured +0.3–1.7 ms, this costs nothing
+      const day = (1 - TOD.night) * (1 - ov);
+      if (day > 0.001) {
+        camera.getWorldDirection(glowV); const fx = glowV.x, fz = glowV.z, fl = Math.hypot(fx, fz) || 1, sd = TOD.sunDir;
+        let g = 0;
+        for (let i = -2; i <= 2; i++) { // five directions across the view (±~35°)
+          const a = i * 0.3, c = Math.cos(a), sn = Math.sin(a), dx = (fx * c - fz * sn) / fl, dz = (fx * sn + fz * c) / fl;
+          const v = Math.max(0, dx * sd.x + dz * sd.z), v2 = v * v; g += v2 * v2 * v2;
+        }
+        const k = (g / 5) * (0.10 + 0.35 * TOD.warm) * 1.4 * day * HAZE_GLOW;
+        TOD.fog.r += TOD.sunCol.r * k; TOD.fog.g += TOD.sunCol.g * k; TOD.fog.b += TOD.sunCol.b * k;
+      }
+    }
     scene.fog.color.copy(TOD.fog);
     const fogD = (w.city * 0.0022 + w.sakura * 0.0019 + w.coast * 0.0011 + w.country * 0.0014 + w.mountain * 0.0017 + w.snow * 0.0021) * (1 + TOD.night * 0.25);
     scene.fog.near = fogD * (1 + 0.55 * ov + 0.45 * rn); scene.fog.far = world.ahead * 0.92;

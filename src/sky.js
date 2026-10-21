@@ -7,14 +7,17 @@ import { GLSL_NOISE, U as MU } from './materials.js';
 //  t, zenith, horizon, sun colour, sun I, hemi sky, hemi ground, hemi I, fog, cloud lit, cloud shade, cloud rim, night, warm
 const KEYS = [
   [0.00, '#070b26', '#1c2752', '#8ea4ff', 0.55, '#2a3c74', '#16141f', 1.0, '#19223f', '#3d4a78', '#1b2244', '#2a3050', 1.0, 0],
-  [0.20, '#1c2560', '#5a4c84', '#9fb0ff', 0.45, '#4a4a88', '#2a2030', 1.0, '#4a4478', '#6a6a9a', '#3a3a6a', '#7a6aa0', 0.85, 0],
+  [0.20, '#1c2560', '#56568a', '#9fb0ff', 0.45, '#42508a', '#262432', 1.0, '#41497a', '#6a6a9a', '#3a3a6a', '#7a6aa0', 0.85, 0],
   [0.245, '#3a56aa', '#f2aa8a', '#ffb48a', 1.7, '#8a92cc', '#6a5060', 1.25, '#dcaca2', '#ffd2b2', '#9a88b2', '#ffd8a8', 0.3, 0.9],
-  [0.30, '#2468d8', '#c2e0ff', '#fff0d8', 3.1, '#9cc0ff', '#b8a890', 1.5, '#c6ddf2', '#ffffff', '#a2b6d8', '#fff4e0', 0.0, 0.2],
+  [0.30, '#3473d4', '#cde3f8', '#fff0d8', 3.1, '#9cc0ff', '#b8a890', 1.5, '#cfe0ef', '#ffffff', '#a2b6d8', '#fff4e0', 0.0, 0.2],
   [0.45, '#1656d6', '#b6daff', '#fffaf0', 3.5, '#a4c8ff', '#c8b8a0', 1.6, '#bfdaf4', '#ffffff', '#9ab0d6', '#ffffff', 0.0, 0],
   [0.62, '#1a5cd4', '#bcdfff', '#fff4e4', 3.4, '#a8c8f8', '#c8b49a', 1.55, '#c4ddf3', '#ffffff', '#9eb2d6', '#fffaf0', 0.0, 0.1],
   [0.70, '#2e5ec2', '#ffd8a6', '#ffcf8a', 2.9, '#a8b4e0', '#c0a080', 1.4, '#eed0ae', '#fff2d8', '#a2a0c8', '#ffd890', 0.0, 0.6],
   [0.75, '#3a3a9a', '#ff946c', '#ff8a52', 1.9, '#9a88c8', '#8a6070', 1.2, '#e0968a', '#ffb894', '#8a6aa0', '#ffcf8a', 0.15, 1.0],
-  [0.80, '#1f2466', '#9a6a9a', '#c06a8a', 0.6, '#5a5a9a', '#3a3048', 1.0, '#5e4c84', '#c08ab8', '#4a3a70', '#ff9a8a', 0.7, 0.5],
+  // end of civil twilight (sun ~6° down): no more sunlight on the ground — the light softens and cools into skylight
+  // (faint shadows), while the sky towards the sunset and the high clouds keep the afterglow
+  [0.765, '#2f3488', '#c8788a', '#e8806e', 0.9, '#7076b8', '#5a4a5e', 1.15, '#a07890', '#ffa890', '#6a5a92', '#ffb48a', 0.4, 0.85],
+  [0.80, '#1f2466', '#86709e', '#a08ac8', 0.35, '#4f5a98', '#2f3040', 1.0, '#4f5285', '#c08ab8', '#4a3a70', '#ff9a8a', 0.7, 0.5],
   [0.86, '#0a0f30', '#24305e', '#8ea4ff', 0.55, '#2c3e78', '#16141f', 1.0, '#1c2548', '#404c7c', '#1c2346', '#2a3050', 1.0, 0],
   [1.00, '#070b26', '#1c2752', '#8ea4ff', 0.55, '#2a3c74', '#16141f', 1.0, '#19223f', '#3d4a78', '#1b2244', '#2a3050', 1.0, 0],
 ].map(k => k.map(v => (typeof v === 'string' ? new THREE.Color(v) : v)));

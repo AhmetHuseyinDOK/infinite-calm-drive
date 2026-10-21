@@ -2,6 +2,17 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-21 · 14:xx — Phones: FXAA instead of MSAA, 8–20 % faster frames
+- **Measured first** (phone portrait at phone quality, GPU time by part): 2× MSAA was the largest single cost after the
+  scene itself — **2.1–4.9 ms a frame** (up to 30 % in the cherry-blossom zone, where overlapping leaf cards make the
+  multisample buffer and its resolve expensive).
+- **Phones and the X embed now smooth edges with FXAA**, folded into the existing final colour-grade pass (5 reads on
+  most pixels, 9 on edges; no extra pass, no multisample buffer). Desktop keeps 4× MSAA; low quality stays without AA.
+  `?aa=msaa|fxaa|none` overrides. Close-ups: building diagonals, wires and the car's outline look like they did with
+  MSAA (and far better than without AA); full scenes (cherry blossom, coast) match.
+- GPU time per frame at phone quality, interleaved A/B: city **13.9 → 12.8 ms**, cherry blossom **16.5 → 15.3**,
+  countryside 13.5 → 10.3 (noisier). Desktop unchanged.
+
 ## 2026-10-21 · 13:xx — Cloud shadows from a small map: ~6 % faster frames
 - **Measured first**: the drifting cloud shadows cost **1.9 ms a frame** on the ground alone (A/B against a build without
   them, 1280×720) — every ground pixel evaluated four octaves of noise (with screen-space derivatives) for a pattern whose

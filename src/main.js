@@ -116,7 +116,10 @@ async function main() {
   const car = makeCar(); car.group.rotation.order = 'YXZ'; scene.add(car.group);
   car.group.traverse(o => { o.userData.car = true; }); // casts into its own shadow map only
   const parts = makeParticles(M.glowTex); parts.group.forEach(o => scene.add(o));
-  const post = makePost(renderer, scene, camera, { msaa: quality === 'high' ? 4 : quality === 'mid' ? 2 : 0 });
+  // anti-aliasing: MSAA on desktop; FXAA in the grade pass on phones and in the X embed (MSAA's 2× buffer and resolve cost
+  // 2–5 ms a frame at phone resolution on a mobile-class GPU — most in foliage); none at low quality. ?aa=msaa|fxaa|none
+  const AA = QS.get('aa') || (quality === 'high' ? 'msaa' : quality === 'mid' ? 'fxaa' : 'none');
+  const post = makePost(renderer, scene, camera, { msaa: AA === 'msaa' ? (quality === 'high' ? 4 : 2) : 0, fxaa: AA === 'fxaa' });
   const rig = makeCrossingRig(); scene.add(rig.group);
   const train = makeTrain(); scene.add(train.group);
   const weather = makeWeather(QS), rain = makeRain(), snowfall = makeSnow(); scene.add(rain.mesh, snowfall.mesh);
@@ -254,6 +257,7 @@ async function main() {
     camera.fov = asp >= 1 ? 52 : clamp((2 * Math.atan(Math.tan((34 * Math.PI) / 180) / asp) * 180) / Math.PI, 52, 80);
     camera.updateProjectionMatrix();
     post.grade.uniforms.uAspect.value = asp;
+    post.grade.uniforms.uTexel.value.set(1 / post.composer.readBuffer.width, 1 / post.composer.readBuffer.height);
   }
   addEventListener('resize', () => { needResize = true; });
   if (window.visualViewport) visualViewport.addEventListener('resize', () => { needResize = true; });

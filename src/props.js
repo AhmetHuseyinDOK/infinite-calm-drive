@@ -307,10 +307,13 @@ export function tree(G, M, kind, r, s = 1) {
 }
 
 // ------------------------------------------------------------------ buildings
+// a lit window's cell: about a third of the lit homes have cool-white ceiling lights (one random number, as before)
+const COOLWIN = new Set(['win0', 'win2', 'win5', 'win6']);
+const litCell = (cell, v, litP) => (v < litP ? cell + (v < litP * 0.35 && COOLWIN.has(cell) ? 'C' : 'L') : cell);
 function addSides(g, w, d, floorsY, tint, r, litP) {
   const segs = Math.max(1, Math.round(d / 3)), sd = d / segs;
   for (const sx of [-1, 1]) for (let f = 0; f < floorsY.length - 1; f++) for (let j = 0; j < segs; j++) {
-    const cell = f > 0 && r() < 0.3 ? 'win6' + (r() < litP ? 'L' : '') : r() < 0.2 ? 'win5' : 'plain';
+    const cell = f > 0 && r() < 0.3 ? litCell('win6', r(), litP) : r() < 0.2 ? 'win5' : 'plain';
     (sx > 0 ? pxq : nxq)(g, (sx * w) / 2, j * sd, (j + 1) * sd, floorsY[f], floorsY[f + 1], cell, tint);
   }
 }
@@ -354,7 +357,7 @@ function shopHouse(G, M, r, s) {
   const fy = [0, fh0]; for (let f = 1; f < floors; f++) fy.push(fh0 + f * fh);
   for (let f = 1; f < floors; f++) for (let i = 0; i < bays; i++) {
     const k = i % 2 === 1 && r() < 0.3 ? 5 : wk;
-    fq(a, x0 + i * bw, x0 + (i + 1) * bw, fy[f], fy[f + 1], 0, 'win' + k + (r() < litP ? 'L' : ''), tint);
+    fq(a, x0 + i * bw, x0 + (i + 1) * bw, fy[f], fy[f + 1], 0, litCell('win' + k, r(), litP), tint);
   }
   addSides(a, w, d, fy, tint, r, litP);
   c.quad([-w / 2, 0, d], [w / 2, 0, d], [w / 2, H, d], [-w / 2, H, d], mulC(tint, 0.8));
@@ -399,7 +402,7 @@ function apartment(G, M, r, s) {
   const bal = 'bal' + Math.floor(r() * 3), slab = mulC(tint, 0.97);
   for (let f = 1; f < floors; f++) {
     const y = fy[f];
-    for (let i = 0; i < bays; i++) fq(a, x0 + i * bw, x0 + (i + 1) * bw, y, fy[f + 1], 0, 'win2' + (r() < litP ? 'L' : ''), tint);
+    for (let i = 0; i < bays; i++) fq(a, x0 + i * bw, x0 + (i + 1) * bw, y, fy[f + 1], 0, litCell('win2', r(), litP), tint);
     c.box(x0, y - 0.15, -1.3, -x0, y, 0, slab);
     c.box(x0, y, -1.3, -x0, y + 1.1, -1.18, slab, null, { noBottom: true });
     for (let i = 0; i < bays; i++) fq(a, x0 + i * bw, x0 + (i + 1) * bw, y, y + 1.1, -1.305, bal, tint);
@@ -422,7 +425,7 @@ function office(G, M, r, s) {
   const bays = Math.max(2, Math.round(w / 3)), bw = w / bays, x0 = -w / 2;
   const fy = [0, fh0]; for (let f = 1; f < floors; f++) fy.push(fh0 + f * fh);
   for (let i = 0; i < bays; i++) fq(a, x0 + i * bw, x0 + (i + 1) * bw, 0, fh0, 0, i === 1 ? 'shop_door' : 'shop_glass');
-  for (let f = 1; f < floors; f++) for (let i = 0; i < bays; i++) fq(a, x0 + i * bw, x0 + (i + 1) * bw, fy[f], fy[f + 1], 0, 'win3' + (r() < litP ? 'L' : ''), tint);
+  for (let f = 1; f < floors; f++) for (let i = 0; i < bays; i++) fq(a, x0 + i * bw, x0 + (i + 1) * bw, fy[f], fy[f + 1], 0, litCell('win3', r(), litP), tint);
   addSides(a, w, d, fy, tint, r, litP);
   c.quad([-w / 2, 0, d], [w / 2, 0, d], [w / 2, H, d], [-w / 2, H, d], mulC(tint, 0.8));
   flatRoof(c, w, d, H, r, true);
@@ -444,7 +447,7 @@ function woodHouse(G, M, r, s) {
   const tw = wood ? W1 : tint;
   for (let f = 0; f < floors; f++) for (let i = 0; i < bays; i++) {
     let cell = wood ? 'win4' : 'win0';
-    if (f === 0 && i === 0) cell = 'shop_house'; else if (r() < litP) cell += 'L';
+    if (f === 0 && i === 0) cell = 'shop_house'; else cell = litCell(cell, r(), litP);
     fq(a, x0 + i * bw, x0 + (i + 1) * bw, fy[f], fy[f + 1], 0, cell, cell === 'shop_house' ? W1 : tw);
   }
   addSides(a, w, d, fy, wood ? C('#9a7a62') : tint, r, litP);
@@ -476,10 +479,10 @@ function tower(G, M, r, s) {
   const { w, d, floors, tint, litP } = s, a = G.atlas, c = G.color, fh = 3.4, H = floors * fh;
   const bays = Math.max(2, Math.round(w / 6)), bw = w / bays, x0 = -w / 2, cell = r() < 0.5 ? 'win3' : 'win2';
   const fy = []; for (let f = 0; f <= floors; f++) fy.push(f * fh);
-  for (let f = 0; f < floors; f++) for (let i = 0; i < bays; i++) fq(a, x0 + i * bw, x0 + (i + 1) * bw, fy[f], fy[f + 1], 0, cell + (r() < litP ? 'L' : ''), tint);
+  for (let f = 0; f < floors; f++) for (let i = 0; i < bays; i++) fq(a, x0 + i * bw, x0 + (i + 1) * bw, fy[f], fy[f + 1], 0, litCell(cell, r(), litP), tint);
   const segs = Math.max(1, Math.round(d / 6)), sd = d / segs;
   for (const sx of [-1, 1]) for (let f = 0; f < floors; f++) for (let j = 0; j < segs; j++)
-    (sx > 0 ? pxq : nxq)(a, (sx * w) / 2, j * sd, (j + 1) * sd, fy[f], fy[f + 1], cell + (r() < litP ? 'L' : ''), tint);
+    (sx > 0 ? pxq : nxq)(a, (sx * w) / 2, j * sd, (j + 1) * sd, fy[f], fy[f + 1], litCell(cell, r(), litP), tint);
   flatRoof(c, w, d, H, r, true);
 }
 

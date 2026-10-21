@@ -114,6 +114,29 @@ function vText(ctx, str, cx, y0, y1, size, col, weight = 800, stroke = null) {
   });
 }
 function glowRect(ctx, x, y, w, h, col, blur) { ctx.save(); ctx.shadowColor = col; ctx.shadowBlur = blur; rect(ctx, x, y, w, h, col); ctx.restore(); }
+// night glow, painted into the emissive atlas. A lit room seen from the street: the ceiling light's glow fading down the
+// walls, and low down the dark shapes of furniture against it (it used to be a flat glowing rectangle)
+function litRoom(e, x, y, w, h, col, r, furn = true) {
+  rect(e, x, y, w, h, col);
+  e.save(); e.globalCompositeOperation = 'multiply';
+  vgrad(e, x, y, w, h, [[0, '#ffffff'], [0.4, '#e8e8e8'], [1, '#9a9a9a']]);
+  if (furn) {
+    e.fillStyle = '#6a6a6a';
+    for (let fx = x + w * 0.2 * r(); fx < x + w - 4; fx += w * (0.18 + r() * 0.3)) { const fw = Math.min(w * (0.1 + r() * 0.2), x + w - fx), fh = h * (0.12 + r() * 0.25); e.fillRect(fx, y + h - fh, fw, fh); }
+  }
+  e.restore();
+}
+// a shop lit from inside: the interior's own colours — goods, shelves, posters — in the shop's light (plus the light
+// bouncing around), brightest under the ceiling lights (it used to be one flat glowing panel with the goods lost)
+function litInterior(a, e, x, y, w, h, col) {
+  const T = a.getTransform(); // the albedo context is translated to this atlas cell
+  e.save();
+  e.drawImage(a.canvas, T.e + x, T.f + y, w, h, x, y, w, h);
+  e.globalCompositeOperation = 'multiply'; rect(e, x, y, w, h, col);
+  e.globalCompositeOperation = 'lighter'; e.globalAlpha = 0.22; rect(e, x, y, w, h, col);
+  e.globalCompositeOperation = 'multiply'; e.globalAlpha = 1; vgrad(e, x, y, w, h, [[0, '#ebebeb'], [0.5, '#d1d1d1'], [1, '#949494']]); // (white goods stay under the bloom)
+  e.restore();
+}
 
 // --- data ---------------------------------------------------------------------------------------
 const SHOPS = ['ラーメン', '喫茶', '薬局', '書店', '花屋', 'パン', 'クリーニング', '不動産', '歯科', '理容', '酒店', 'うどん', '寿司', 'カフェ',
@@ -128,40 +151,46 @@ export function buildAtlas() {
 
   // ---------------- upper-floor bays (3 m × 3 m → 240 px) ----------------
   const B = 240;
-  const resWindow = (a, e, w, h, lit, kind) => {
+  const resWindow = (a, e, w, h, lit, kind, cool = false) => { // cool: a cool-white ceiling light instead of a warm one
     wall(a, A, w, h, '#ece8e0', 0);
     const r = rng(kind * 31 + (lit ? 7 : 0) + 5);
     if (kind === 0) { // sliding window with curtains
       const x = w * 0.14, y = h * 0.22, ww = w * 0.72, wh = h * 0.5;
       frame(a, x, y, ww, wh, 5);
       glass(a, x, y, ww / 2, wh, r); glass(a, x + ww / 2, y, ww / 2, wh, r);
-      if (r() < 0.8) curtain(a, x + 2, y + 2, ww * (0.18 + r() * 0.25), wh - 4, r() < 0.5 ? '#efe6d2' : '#d9e4ea');
+      const cw = r() < 0.8 ? ww * (0.18 + r() * 0.25) : 0;
+      if (cw) curtain(a, x + 2, y + 2, cw, wh - 4, r() < 0.5 ? '#efe6d2' : '#d9e4ea');
       rect(a, x + ww / 2 - 2, y, 4, wh, '#cfd4da');
       rect(a, x - 8, y + wh + 5, ww + 16, 6, '#d8d8d4'); streak(a, x - 4, y + wh + 11, 8, 60); streak(a, x + ww - 4, y + wh + 11, 8, 60);
-      if (lit) { glowRect(e, x, y, ww, wh, '#ffcf8f', 0); e.fillStyle = 'rgba(255,240,210,0.85)'; e.fillRect(x + 2, y + 2, ww * 0.3, wh - 4); }
+      if (lit) { // the drawn curtain glows brightest (backlit fabric); the window's middle frame stays dark
+        litRoom(e, x, y, ww, wh, cool ? '#e6eeff' : '#ffcf8f', r);
+        if (cw) rect(e, x + 2, y + 2, cw, wh - 4, cool ? 'rgba(242,246,255,0.88)' : 'rgba(255,240,210,0.85)');
+        rect(e, x + ww / 2 - 2, y, 4, wh, '#000');
+      }
     } else if (kind === 1) { // two small windows + vent cap
       for (const fx of [0.12, 0.56]) {
         const x = w * fx, y = h * 0.28, ww = w * 0.3, wh = h * 0.36;
         frame(a, x, y, ww, wh, 4); glass(a, x, y, ww, wh, r, 1);
         a.fillStyle = 'rgba(255,255,255,0.35)'; a.fillRect(x, y, ww, wh * 0.45);
         streak(a, x, y + wh + 6, ww, 40, 0.1);
-        if (lit && r() < 0.8) glowRect(e, x, y, ww, wh, r() < 0.5 ? '#ffd9a0' : '#e8f0ff', 0);
+        if (lit && r() < 0.8) litRoom(e, x, y, ww, wh, r() < 0.5 ? '#ffd9a0' : '#e8f0ff', r);
       }
       a.fillStyle = '#c9c9c4'; a.beginPath(); a.arc(w * 0.88, h * 0.2, 9, 0, 7); a.fill();
     } else if (kind === 2) { // apartment: tall sliding door (sits behind a balcony)
       const x = w * 0.1, y = h * 0.12, ww = w * 0.8, wh = h * 0.84;
       frame(a, x, y, ww, wh, 4);
       glass(a, x, y, ww / 2, wh, r); glass(a, x + ww / 2, y, ww / 2, wh, r);
-      curtain(a, x + 2, y + 2, ww * (0.2 + r() * 0.3), wh - 4, R.pick(['#efe6d2', '#f2dede', '#dde8ef', '#e9efdc']));
+      const cw = ww * (0.2 + r() * 0.3);
+      curtain(a, x + 2, y + 2, cw, wh - 4, R.pick(['#efe6d2', '#f2dede', '#dde8ef', '#e9efdc']));
       rect(a, x + ww / 2 - 2, y, 4, wh, '#cfd4da');
-      if (lit) { glowRect(e, x, y, ww, wh, '#ffcb85', 0); e.fillStyle = 'rgba(255,236,200,0.9)'; e.fillRect(x + 2, y + 2, ww * 0.35, wh - 4); }
+      if (lit) { litRoom(e, x, y, ww, wh, cool ? '#e6eeff' : '#ffcb85', r); rect(e, x + 2, y + 2, cw, wh - 4, cool ? 'rgba(242,246,255,0.9)' : 'rgba(255,236,200,0.9)'); rect(e, x + ww / 2 - 2, y, 4, wh, '#000'); }
     } else if (kind === 3) { // office ribbon glazing
       wall(a, A, w, h, '#dfe3e6', 0);
       const y = h * 0.25, wh = h * 0.55;
       glass(a, 0, y, w, wh, r, 1);
       for (let x = 0; x <= w; x += w / 4) rect(a, x - 2, y, 4, wh, '#8d98a6');
       rect(a, 0, y - 4, w, 4, '#8d98a6'); rect(a, 0, y + wh, w, 5, '#7d8796');
-      if (lit) for (let i = 0; i < 4; i++) if (r() < 0.7) { e.fillStyle = r() < 0.6 ? '#f2f6ff' : '#ffe2b0'; e.fillRect(i * w / 4 + 2, y, w / 4 - 4, wh); }
+      if (lit) for (let i = 0; i < 4; i++) if (r() < 0.7) litRoom(e, i * w / 4 + 2, y, w / 4 - 4, wh, r() < 0.6 ? '#f2f6ff' : '#ffe2b0', r); // desks and partitions low down
     } else if (kind === 4) { // old wooden house window with lattice
       a.fillStyle = '#6b4a35'; a.fillRect(0, 0, w, h);
       for (let y = 0; y < h; y += 12) { rect(a, 0, y, w, 2, 'rgba(30,18,10,0.35)'); rect(a, 0, y + 2, w, 1, 'rgba(255,220,180,0.06)'); }
@@ -170,7 +199,7 @@ export function buildAtlas() {
       rect(a, x - 6, y - 6, ww + 12, wh + 12, '#4a3020');
       rect(a, x, y, ww, wh, '#efe4c8');
       a.fillStyle = '#5a3a26'; for (let i = 1; i < 6; i++) a.fillRect(x + i * ww / 6 - 1.5, y, 3, wh); for (let j = 1; j < 3; j++) a.fillRect(x, y + j * wh / 3 - 1.5, ww, 3);
-      if (lit) { e.fillStyle = '#ffc070'; e.fillRect(x, y, ww, wh); e.fillStyle = '#000'; for (let i = 1; i < 6; i++) e.fillRect(x + i * ww / 6 - 1.5, y, 3, wh); }
+      if (lit) { litRoom(e, x, y, ww, wh, '#ffc070', r, false); e.fillStyle = '#000'; for (let i = 1; i < 6; i++) e.fillRect(x + i * ww / 6 - 1.5, y, 3, wh); for (let j = 1; j < 3; j++) e.fillRect(x, y + j * wh / 3 - 1.5, ww, 3); }
     } else if (kind === 5) { // plain wall: drain pipe, meter, small frosted window
       rect(a, w * 0.08, 0, 7, h, '#bdbdb6'); rect(a, w * 0.08 + 5, 0, 2, h, 'rgba(0,0,0,0.2)');
       const x = w * 0.55, y = h * 0.3, ww = w * 0.22, wh = h * 0.24;
@@ -178,14 +207,16 @@ export function buildAtlas() {
       a.fillStyle = 'rgba(255,255,255,0.4)'; a.fillRect(x, y, ww, wh / 2);
       streak(a, x, y + wh + 4, ww, 50, 0.12);
       rect(a, w * 0.22, h * 0.55, 26, 34, '#cfcfca'); rect(a, w * 0.22 + 4, h * 0.55 + 6, 18, 12, '#9aa2a8');
-      if (lit) glowRect(e, x, y, ww, wh, '#fff0d8', 0);
+      if (lit) litRoom(e, x, y, ww, wh, cool ? '#eef2ff' : '#fff0d8', r, false); // frosted: no room to see
     } else if (kind === 6) { // side wall, one small window
       const x = w * 0.4, y = h * 0.35, ww = w * 0.2, wh = h * 0.28;
       frame(a, x, y, ww, wh, 3); glass(a, x, y, ww, wh, r, 1); streak(a, x, y + wh + 4, ww, 70, 0.14);
-      if (lit) glowRect(e, x, y, ww, wh, '#ffd9a0', 0);
+      if (lit) litRoom(e, x, y, ww, wh, cool ? '#e8efff' : '#ffd9a0', r);
     }
   };
   for (let k = 0; k < 7; k++) { A.add('win' + k, B, B, (a, e, w, h) => resWindow(a, e, w, h, false, k)); A.add('win' + k + 'L', B, B, (a, e, w, h) => resWindow(a, e, w, h, true, k)); }
+  // about a third of homes light their rooms with cool-white ceiling lights (props.js picks these for some lit windows)
+  for (const k of [0, 2, 5, 6]) A.add('win' + k + 'C', B, B, (a, e, w, h) => resWindow(a, e, w, h, true, k, true));
   A.add('plain', B, B, (a, e, w, h) => { wall(a, A, w, h, '#ece8e0'); streak(a, w * 0.3, 0, 12, h * 0.6, 0.06); });
   A.add('concrete', B, B, (a, e, w, h) => { wall(a, A, w, h, '#d9d7d0', 60); for (let i = 0; i < 6; i++) streak(a, (i * 41) % w, 0, 10, h * 0.5, 0.07); });
 
@@ -204,16 +235,16 @@ export function buildAtlas() {
         for (let gx = x + 3; gx < x + ww - 6; gx += 6 + r() * 8) { a.fillStyle = R.pick(['#e44', '#4a8', '#fc4', '#48c', '#f8a', '#fff', '#a6d', '#f93']); a.fillRect(gx, sy - 6 - r() * 10, 4 + r() * 5, 6 + r() * 10); }
       }
       if (kind === 'konbini') rect(a, x, y + 4, ww, 5, '#ffffff');
-      // glass reflection over the interior
-      a.save(); a.globalAlpha = 0.35; glass(a, x, y, ww, wh, r); a.restore();
-      rect(a, x, y, ww, 4, '#4a4e57');
-      if (kind === 'door') { rect(a, w / 2 - 2, y, 4, wh, '#4a4e57'); rect(a, w / 2 - 14, y + wh * 0.45, 3, 40, '#c0c4c8'); rect(a, w / 2 + 11, y + wh * 0.45, 3, 40, '#c0c4c8');
-        rect(a, w / 2 - 30, y + 18, 60, 24, '#fff'); textFit(a, '営業中', w / 2, y + 30, 54, 18, '#c82828'); }
+      // posters and the open sign hang inside the glass
+      if (kind === 'door') { rect(a, w / 2 - 30, y + 18, 60, 24, '#fff'); textFit(a, '営業中', w / 2, y + 30, 54, 18, '#c82828'); }
       if (kind === 'glass' && r() < 0.7) { rect(a, x + 10, y + 14, 44, 60, R.pick(['#f6d34a', '#fff', '#ff8aa0'])); textFit(a, R.pick(['特売', '新商品', 'SALE', '本日']), x + 32, y + 44, 40, 16, '#c02020'); }
-      if (kind === 'cafe') { rect(a, w * 0.62, h - 70, 46, 62, '#2c3a30'); textFit(a, 'ランチ', w * 0.62 + 23, h - 50, 40, 13, '#fff', 700); }
-      // emissive interior
-      const ec = kind === 'konbini' ? '#c9d6e2' : kind === 'cafe' ? '#e8a060' : '#e6c296';
-      e.fillStyle = ec; e.fillRect(x, y, ww, wh); e.fillStyle = 'rgba(0,0,0,0.35)'; for (let sy = y + wh * 0.25; sy < y + wh; sy += wh * 0.22) e.fillRect(x, sy, ww, 3);
+      // at night: the shop seen lit from inside (cool white in a konbini, amber in a cafe, warm white elsewhere)
+      litInterior(a, e, x, y, ww, wh, kind === 'konbini' ? '#e4eef8' : kind === 'cafe' ? '#f0a868' : '#f2d2a6');
+      // the glass's reflection over it all, then the frames and the cafe's board out front, dark at night
+      a.save(); a.globalAlpha = 0.35; glass(a, x, y, ww, wh, r); a.restore();
+      rect(a, x, y, ww, 4, '#4a4e57'); rect(e, x, y, ww, 4, '#000');
+      if (kind === 'door') { rect(a, w / 2 - 2, y, 4, wh, '#4a4e57'); rect(e, w / 2 - 2, y, 4, wh, '#000'); rect(a, w / 2 - 14, y + wh * 0.45, 3, 40, '#c0c4c8'); rect(a, w / 2 + 11, y + wh * 0.45, 3, 40, '#c0c4c8'); }
+      if (kind === 'cafe') { rect(a, w * 0.62, h - 70, 46, 62, '#2c3a30'); rect(e, w * 0.62, h - 70, 46, 62, '#000'); textFit(a, 'ランチ', w * 0.62 + 23, h - 50, 40, 13, '#fff', 700); }
     } else if (kind === 'shutter') {
       const x = 6, y = h * 0.2, ww = w - 12, wh = h * 0.8;
       rect(a, x, y, ww, wh, '#b8bcc0');

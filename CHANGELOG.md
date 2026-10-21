@@ -2,6 +2,33 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-21 · 21:xx — Realism pass 6: lit shops and rooms at night
+- **Shops lit from inside.** At night every lit shopfront used to be one flat glowing peach panel; the goods, shelves and
+  posters you see by day vanished into it. Now the night glow is the shop's interior itself: the goods on the shelves,
+  the 特売 posters, the 営業中 sign. It is lit in the shop's own light (cool white in a konbini, amber in a café, warm
+  white elsewhere), brightest under the ceiling lights and dimmer towards the floor. The window frames and the café's
+  board out front stay dark. White goods are kept below the bloom threshold, so they don't sparkle like fairy lights.
+- **Lit rooms look like rooms.** Lit windows upstairs used to be flat glowing rectangles. Their middle frame glowed too,
+  and the glowing "curtain" strip didn't match the painted curtain. Now:
+  - the ceiling light's glow fades down the wall, with furniture silhouettes low against it;
+  - the curtain that is actually drawn glows (backlit fabric);
+  - the window's middle frame stays dark;
+  - office floors get the same treatment, with desks and partitions.
+- **Not every home is warm.** About a third of lit homes now have cool-white ceiling lights, as many Japanese homes do.
+  The night city gets the real mix of warm and cool windows instead of uniform amber.
+- Cost: none. It all lives in the night-glow texture painted at load: same texture size, same shaders, same draw calls
+  (52 programs, none compiled mid-drive).
+  - Startup (ready) 2.6 s before and after.
+  - A flat-out night drive through the city streamed with no new world-build spikes.
+  - GPU, alternating-order rounds with the machine at load 9–20: night city +0.15 ms median, against +0.13 for the live
+    build compared with itself (the noise floor); noon city +0.08; phone, night city −0.09.
+- **The live site now survives reboots.** This hour the machine rebooted and took the game's web server with it, and
+  calm-drive.ustalabs.com returned 502 for about 20 minutes. It now runs as a systemd user service (`calm-drive.service`)
+  that comes back on its own.
+- Tried and held back: haze that glows towards the sun, so distant hills and the sea fade into the warm glow under a low
+  sun, matching the sky dome. It looks right, but its fog-shader change measured +0.3–0.55 ms in every run, even with
+  the glow skipped at night. It stays out until that cost is understood.
+
 ## 2026-10-21 · 19:xx — Realism pass 5: the car rides on springs
 - **The car body moves like a real car's.** It used to be a rigid block that followed the road's slope and turned with it.
   Now the body hangs on springs over the wheels (~1.2–1.5 Hz, a little under-damped, like a soft family car):

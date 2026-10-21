@@ -2,6 +2,19 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-21 · 16:xx — Realism pass 2: the car sits on the road and its paint reflects the sky
+- **Contact shadow under the car.** Sky light can't reach the road beneath a car, so a real one always sits on a soft
+  dark patch. Ours had none, so under overcast, in rain and at night — when there is no sun shadow — it looked like it
+  was floating. Now a soft patch (one small quad that moves with the car) grounds it in every weather and light; in sun
+  it deepens the area around the tyres. Most visible on the white snow road, in rain and in tunnels.
+- **Glossy paint and glass.** The car's paint, hubs and windows now reflect the sky (and, below the reflected horizon,
+  the darker ground) with a Fresnel falloff — strongest at grazing angles, so the roof picks up the blue-white of the sky
+  and the rear window more of it — plus a sun glint where it's lit. Gloss per part via the vertex colour's alpha: paint 1,
+  hubs 0.8, roof 0.55, trim 0.35, tyres ~0.
+- Cost: none measurable. Median GPU time over five interleaved rounds (1280×720): countryside 20.6 → 20.4 ms, city 19.4 →
+  19.7; phone portrait at phone quality: city 12.9 → 12.9. One more draw call and +4 % WebGL calls (681 → 709 a frame);
+  2 more shader programs (50), all compiled at load — none mid-drive at sunset, night or rain.
+
 ## 2026-10-21 · 15:xx — Realism pass 1: grass that looks like a field, not a lawn (new focus: realism, no slowdowns)
 - **Grass** on the cherry-blossom avenue and the coast hillsides was a blend of two very similar, very saturated greens
   — with the colour grade's extra saturation it read as a plastic lawn over a large share of the screen. Now it has

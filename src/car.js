@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { GRAD, withCloudShadow } from './materials.js';
+import { GRAD, withGloss } from './materials.js';
 
 function plateTexture() {
   const c = document.createElement('canvas'); c.width = 256; c.height = 128;
@@ -26,12 +26,13 @@ function glassTexture() {
 
 export function makeCar() {
   const car = new THREE.Group();
-  const toon = (color, extra = {}) => withCloudShadow(new THREE.MeshToonMaterial({ color, gradientMap: GRAD, ...extra }));
   // the flat-coloured parts share one vertex-coloured material: one draw call (and one shadow draw) instead of five
-  const mPaint = toon('#ffffff', { vertexColors: true });
-  const mBody = new THREE.Color('#9fd8c8'), mRoof = new THREE.Color('#e9e7e0'), mTrim = new THREE.Color('#2a2c33'), mTyre = new THREE.Color('#1b1c20'), mHub = new THREE.Color('#c8ccd2');
-  const paint = (g, c) => { const n = g.attributes.position.count, a = new Float32Array(n * 3); for (let i = 0; i < n; i++) a.set([c.r, c.g, c.b], i * 3); g.setAttribute('color', new THREE.Float32BufferAttribute(a, 3)); return g; };
-  const mGlass = withCloudShadow(new THREE.MeshToonMaterial({ color: '#ffffff', map: glassTexture(), gradientMap: GRAD }));
+  // glossy paint (withGloss): each part's gloss rides in its vertex colour's alpha
+  const mPaint = withGloss(new THREE.MeshToonMaterial({ color: '#ffffff', vertexColors: true, gradientMap: GRAD }), 0.85, 0.06, 'paint');
+  const part = (hex, gloss) => Object.assign(new THREE.Color(hex), { gloss });
+  const mBody = part('#9fd8c8', 1), mRoof = part('#e9e7e0', 0.55), mTrim = part('#2a2c33', 0.35), mTyre = part('#1b1c20', 0.04), mHub = part('#c8ccd2', 0.8);
+  const paint = (g, c) => { const n = g.attributes.position.count, a = new Float32Array(n * 4); for (let i = 0; i < n; i++) a.set([c.r, c.g, c.b, c.gloss], i * 4); g.setAttribute('color', new THREE.Float32BufferAttribute(a, 4)); return g; };
+  const mGlass = withGloss(new THREE.MeshToonMaterial({ color: '#ffffff', map: glassTexture(), gradientMap: GRAD }), 1.2, 0.08, 'glass');
   const mTail = new THREE.MeshToonMaterial({ color: '#c8303a', emissive: '#ff2a2a', emissiveIntensity: 0.4, gradientMap: GRAD });
   const mAmber = new THREE.MeshToonMaterial({ color: '#f0a040', emissive: '#ff9a30', emissiveIntensity: 0.2, gradientMap: GRAD });
   const mPlate = new THREE.MeshBasicMaterial({ map: plateTexture() });
@@ -67,6 +68,20 @@ export function makeCar() {
     const mesh = new THREE.Mesh(mergeGeometries(list), mat);
     mesh.castShadow = mat !== mGlass && mat !== mPlate; mesh.receiveShadow = true;
     car.add(mesh);
+  }
+  // contact shadow: sky light can't reach the road under a car, so it always sits on a soft dark patch — without it the
+  // car floats in overcast, rain and at night, when there is no sun shadow (one small quad, part of the car)
+  {
+    const W = 48, H = 96, c = document.createElement('canvas'); c.width = W; c.height = H;
+    const g = c.getContext('2d'), img = g.createImageData(W, H);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const qx = Math.max(0, Math.abs((x + 0.5) / W - 0.5) * 2.1 - 0.62), qy = Math.max(0, Math.abs((y + 0.5) / H - 0.5) * 2.05 - 0.78); // outside the footprint
+      const d = Math.hypot(qx / 0.42, qy / 0.24), a = Math.max(0, 1 - d), i4 = (y * W + x) * 4;
+      img.data[i4] = img.data[i4 + 1] = img.data[i4 + 2] = Math.round(255 * a * a * (3 - 2 * a)); img.data[i4 + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+    const ao = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 4.1), new THREE.MeshBasicMaterial({ color: 0x000000, alphaMap: new THREE.CanvasTexture(c), transparent: true, opacity: 0.55, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }));
+    ao.rotation.x = -Math.PI / 2; ao.position.y = 0.03; ao.renderOrder = 3; car.add(ao);
   }
   // rear wiper (its own mesh so it can sweep when it rains)
   const wiperPivot = new THREE.Group(); wiperPivot.position.set(0.02, 1.3, -1.57); car.add(wiperPivot);

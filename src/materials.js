@@ -566,6 +566,30 @@ function contactAO(sh) {
 // (one cache key for all of them: the patch is identical, so materials with the same settings share a program)
 export function withCloudShadow(m) { m.onBeforeCompile = sh => worldShade(sh); m.customProgramCacheKey = () => 'cs'; return m; }
 
+/** A glossy clear-coat for the car: the sky reflects in the roof and upper panels, the darker ground below the reflected
+ *  horizon in the lower ones — that sharp line is what makes paint read as paint — plus a sun glint where it's lit.
+ *  Per-vertex gloss in the colour's alpha when the mesh has one (paint 1, hubs .8, trim .35, tyres ~0). */
+const GLOSS_PARS = /* glsl */`uniform vec3 uSkyHor, uSkyZen, uSunDir, uSunCol; uniform float uNight;`;
+const glossApply = (amt, f0) => /* glsl */`
+{ float gm = ${amt.toFixed(3)};
+  #ifdef USE_COLOR_ALPHA
+  gm *= vColor.a;
+  #endif
+  vec3 nV = normalize(normal), vV = normalize(vViewPosition);
+  vec3 Rw = reflect(-vV, nV) * mat3(viewMatrix); // the reflected ray in world space
+  vec3 env = mix(uSkyHor * vec3(0.30, 0.32, 0.30), mix(uSkyHor, uSkyZen, smoothstep(0.0, 0.7, Rw.y)), smoothstep(-0.03, 0.03, Rw.y)) * (1.0 - 0.75 * uNight);
+  float fr = ${f0.toFixed(3)} + ${(1 - f0).toFixed(3)} * pow(1.0 - clamp(dot(nV, vV), 0.0, 1.0), 5.0);
+  outgoingLight = mix(outgoingLight, env, clamp(fr * gm, 0.0, 1.0));
+  float lit = clamp(dot(reflectedLight.directDiffuse, vec3(0.3, 0.59, 0.11)) * 3.0, 0.0, 1.0);
+  vec3 H = normalize(normalize((viewMatrix * vec4(uSunDir, 0.0)).xyz) + vV);
+  outgoingLight += uSunCol * pow(max(dot(nV, H), 0.0), 90.0) * 1.6 * gm * lit;
+}`;
+export function withGloss(m, amt, f0 = 0.06, key = 'gloss') {
+  m.onBeforeCompile = sh => { for (const k of ['uSkyHor', 'uSkyZen', 'uSunDir', 'uSunCol', 'uNight']) sh.uniforms[k] = U[k]; worldShade(sh, GLOSS_PARS, glossApply(amt, f0)); };
+  m.customProgramCacheKey = () => key + amt;
+  return m;
+}
+
 export function makeMaterials(atlasTex, folTex) {
   const M = {};
   M.ground = groundMaterial();

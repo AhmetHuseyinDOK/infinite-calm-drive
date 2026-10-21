@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Path, ZONES, zoneW, zoneAt, zparam, ZINFO, setStartZone, crossingS, crossingValid, XING, XOFF, riverNear, groundOffsetMix, tunnelNear, T_HALF, T_RIDGE } from './path.js';
 import { makeCrossingRig, makeTrain, xingPosts } from './crossing.js';
 import { buildAtlas, buildFoliage } from './textures.js';
-import { makeMaterials, U, groundMaterialFor, setShadowTaps } from './materials.js';
+import { makeMaterials, U, groundMaterialFor, setShadowTaps, setGrazeFade } from './materials.js';
 import { setAtlas, setFoliage, warmTrees, setLeafDensity } from './props.js';
 import { World } from './chunks.js';
 import { makeSky, paintClouds, makeClouds, makeMountains, updateTOD, applyWeather, TOD } from './sky.js';
@@ -66,7 +66,13 @@ async function main() {
     this._updateMatrix(shCam, this.matrix, this._frustum);
   };
   let bloomAllowed = true;
-  sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.05;
+  // Anti-acne: the normal offset is 1.5 shadow texels (it was 0.05 m — under a texel at phone quality, so walls lit at a
+  // grazing angle shaded themselves in stripes that crawled as the sun moved), and walls the sun only grazes keep their
+  // toon ramp instead of an unresolvable shadow (materials.js).
+  sun.shadow.bias = -0.0004;
+  const fitShadowBias = () => { sun.shadow.normalBias = QS.has('nb') ? parseFloat(QS.get('nb')) : (1.5 * 2 * SH_HALF) / sun.shadow.mapSize.x; };
+  fitShadowBias();
+  { const [lo, hi] = (QS.get('graze') || '0,0.12').split(',').map(Number); setGrazeFade(lo, hi); }
   scene.add(sun, sun.target);
   // The car's own shadow map: a 4.8 m square around the car (~1 cm texels), so its shadow has crisp, stable edges
   // instead of stair-steps crawling over the big map's 6 cm texels as it drives. Only the car is drawn into it, and
@@ -257,7 +263,7 @@ async function main() {
   function stepDown(persist = true) {
     if (DPR > 1.05) { DPR = Math.max(1, DPR - 0.25); needResize = true; }
     else if (bloomAllowed) { bloomAllowed = false; post.bloom.enabled = false; }
-    else if (sun.shadow.mapSize.x > 1024) { sun.shadow.mapSize.set(1024, 1024); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } }
+    else if (sun.shadow.mapSize.x > 1024) { sun.shadow.mapSize.set(1024, 1024); fitShadowBias(); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } }
     else if (world.ahead > 430) world.ahead = 430;
     else return;
     qLevel++;

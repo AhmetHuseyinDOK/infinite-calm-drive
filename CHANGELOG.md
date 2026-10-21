@@ -2,6 +2,17 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-21 · 10:xx — No more striped, crawling shadows on building walls (reported from a phone)
+- **Shadow acne on facades fixed.** Walls the midday sun hits at a grazing angle were shading themselves in stripes and
+  saw-teeth — the shadow map can't resolve a surface's own depth at that angle, and the offset meant to prevent it
+  (0.05 m) was smaller than one shadow texel (8 cm at phone quality). Since the sun now moves every frame, the stripes
+  also crawled constantly. Now the offset is 1.5 texels (9 cm on desktop, 12 cm on phones, 18 cm at low quality), and
+  surfaces the sun only grazes (N·L < 0.12) keep their toon shading instead of an unresolvable shadow. Big shadows across
+  the street and long dusk shadows are untouched.
+- Measured on the reported view (phone portrait, city at 12:38, car parked, clock running), frame-to-frame change on the
+  facades: median **0.566 → 0.020** (28× calmer), 95th percentile 1.00 → 0.06. GPU time unchanged (city 20.3 → 20.3 ms,
+  cherry blossom 26.8 → 26.9). Tree canopies also lose their noisy self-shadow speckles.
+
 ## 2026-10-21 · 10:xx — Contact shading: things sit on the ground
 - **Realism: soft contact shading where things meet the ground.** Building walls, shop fronts, poles, tree trunks,
   benches, the bus shelter, the crossing posts and the tunnel walls now darken softly over their bottom metre, the way

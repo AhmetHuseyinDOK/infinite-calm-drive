@@ -27,6 +27,12 @@ export function setShadowTaps(n) {
     /float phi = interleavedGradientNoise\( gl_FragCoord\.xy \) \* PI2;\s*shadow = \([\s\S]*?\) \* 0\.2;/, body);
 }
 setShadowTaps(1);
+/** Fade the sun's shadow on surfaces it only grazes (N·L from lo to hi): there the map can't resolve the surface's own
+ *  depth, which showed as stripes and saw-teeth on walls that crawled as the sun moved. Call before the first compile. */
+export function setGrazeFade(lo, hi) {
+  const head = lo < hi ? `#define GRAZE_FADE\n#define GRAZE_LO ${lo.toFixed(3)}\n#define GRAZE_HI ${hi.toFixed(3)}\n` : '';
+  THREE.ShaderChunk.shadowmap_pars_fragment = head + THREE.ShaderChunk.shadowmap_pars_fragment.replace(/^(#define GRAZE_[^\n]*\n)*/, '');
+}
 // Directional lights: light 0 is the sun. Light 1, when present, adds no light: it only carries the car's own small,
 // sharp shadow map (main.js routes the car into that map and out of the sun's), so the car's shadow has crisp edges
 // instead of stair-steps crawling over the big map's 6 cm texels as it drives. The two shadows combine with min().
@@ -38,6 +44,10 @@ THREE.ShaderChunk.lights_fragment_begin = THREE.ShaderChunk.lights_fragment_begi
 	if ( directLight.visible && receiveShadow ) {
 		directionalLightShadow = directionalLightShadows[ 0 ];
 		float sh = getShadow( directionalShadowMap[ 0 ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ 0 ] );
+		#ifdef GRAZE_FADE
+		// walls the sun only grazes keep the toon ramp: there the map can't resolve their own depth (acne stripes that crawl as the sun moves)
+		sh = mix( 1.0, sh, smoothstep( GRAZE_LO, GRAZE_HI, dot( geometryNormal, directLight.direction ) ) );
+		#endif
 		#if NUM_DIR_LIGHT_SHADOWS > 1
 		// surfaces turning away from the sun keep just the toon ramp: the sharp map would cut their wrapped light
 		// into jagged bands (the car shadowing its own back)

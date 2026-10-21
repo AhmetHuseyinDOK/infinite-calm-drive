@@ -5,7 +5,7 @@ import { buildAtlas, buildFoliage } from './textures.js';
 import { makeMaterials, U, groundMaterialFor, setShadowTaps, setGrazeFade } from './materials.js';
 import { setAtlas, setFoliage, warmTrees, setLeafDensity } from './props.js';
 import { World } from './chunks.js';
-import { makeSky, paintClouds, makeClouds, makeMountains, updateTOD, applyWeather, TOD } from './sky.js';
+import { makeSky, paintClouds, makeClouds, makeMountains, updateTOD, applyWeather, TOD, lightDirAt } from './sky.js';
 import { makeWeather, makeRain, makeSnow } from './weather.js';
 import { makeBirds } from './birds.js';
 import { makeSea, foamMaterial, riverMaterial } from './sea.js';
@@ -56,8 +56,8 @@ async function main() {
   const shCam = sun.shadow.camera, shSkew = new THREE.Matrix4(), shTmp = new THREE.Matrix4();
   Object.assign(shCam, { left: -SH_HALF, right: SH_HALF, top: SH_HALF, bottom: -SH_HALF, near: 1, far: 420 });
   const shadowDir = new THREE.Vector3(0, 1, 0), shX = new THREE.Vector3(), shY = new THREE.Vector3(), shT = new THREE.Vector3(), UPV = new THREE.Vector3(0, 1, 0);
-  const shC = new THREE.Vector3(0, 150, 60), shLook = new THREE.Vector3(); // (start: the warm-up meshes at the origin are in view)
-  let shY0 = null; // pivot plane height: follows the road in 3 m steps
+  const shC = new THREE.Vector3(0, 150, 60), shLook = new THREE.Vector3(), shAim = new THREE.Vector3(); // (start: the warm-up meshes at the origin are in view)
+  let shY0 = null, shPhX = 0, shPhY = 0, shTex = 0; // pivot plane height (follows the road in 3 m steps); texel-grid phase
   sun.shadow.updateMatrices = function () { // three's version aims the camera at the light itself
     shCam.position.copy(shC); shCam.lookAt(shLook); shCam.updateMatrixWorld();
     shCam.updateProjectionMatrix(); // projection · (view · skew · view⁻¹), so three's projection · view applies the skew first
@@ -413,15 +413,25 @@ async function main() {
     // camera is re-aimed only every ~6°, centred 26 m ahead of the car and snapped to whole texels; the skew
     // P' = P + (P.y − y0)·(D/D.y − L/L.y) slides each point along the true light L onto the camera's direction D.
     { const L = TOD.lightDir; // L.y ≥ 0.12 (sky.js)
-      if (shadowDir.angleTo(L) > 0.1) shadowDir.copy(L);
+      if (shadowDir.angleTo(L) > 0.1) { // re-aim (re-rasterises every shadow): at where the sun will be once it has moved
+        let k = 0; // ~0.09 rad, so the skew swings −0.1 … +0.1 rad and re-aims come half as often (every ~20 s by day)
+        if (started && !st.todPaused) for (let j = 1; j <= 60; j++) { if (lightDirAt(st.tod + j * 0.001, shAim).angleTo(L) > 0.09) break; k = j; }
+        lightDirAt(st.tod + k * 0.001, shadowDir); shPhX = shPhY = 0;
+      }
       shX.crossVectors(UPV, shadowDir).normalize(); shY.crossVectors(shadowDir, shX);
       shT.set(car.group.position.x + f.fx * 26, car.group.position.y, car.group.position.z + f.fz * 26);
       sun.target.position.copy(shT); sun.position.copy(shT).addScaledVector(L, 200);
-      const tex = (2 * SH_HALF) / sun.shadow.mapSize.x, a = shT.dot(shX), b = shT.dot(shY);
+      const tex = (2 * SH_HALF) / sun.shadow.mapSize.x, vx = shadowDir.x / shadowDir.y - L.x / L.y, vz = shadowDir.z / shadowDir.y - L.z / L.y;
+      if (tex !== shTex) { shTex = tex; shPhX = shPhY = 0; }
+      { const y0 = Math.round(car.group.position.y); // the pivot follows the road in 3 m steps; moving it slides the whole
+        if (shY0 === null) shY0 = y0;              // map by d·v, so the texel grid's phase moves with it: no re-rasterising
+        else if (Math.abs(car.group.position.y - shY0) > 3) { const d = y0 - shY0; shPhX -= d * (vx * shX.x + vz * shX.z); shPhY -= d * (vx * shY.x + vz * shY.z); shY0 = y0; } }
+      // snap to whole texels (plus that phase) in absolute world coordinates, so the world re-centring (every 900 m)
+      // doesn't re-rasterise either
+      const ox0 = world.origin.x, oz0 = world.origin.z;
+      const a = shT.dot(shX) + ox0 * shX.x + oz0 * shX.z - shPhX, b = shT.dot(shY) + ox0 * shY.x + oz0 * shY.z - shPhY;
       shT.addScaledVector(shX, Math.round(a / tex) * tex - a).addScaledVector(shY, Math.round(b / tex) * tex - b);
       shLook.copy(shT); shC.copy(shT).addScaledVector(shadowDir, 200);
-      if (shY0 === null || Math.abs(car.group.position.y - shY0) > 3) shY0 = Math.round(car.group.position.y);
-      const vx = shadowDir.x / shadowDir.y - L.x / L.y, vz = shadowDir.z / shadowDir.y - L.z / L.y;
       shSkew.set(1, vx, 0, -shY0 * vx, 0, 1, 0, 0, 0, vz, 1, -shY0 * vz, 0, 0, 0, 1); }
     // the car's shadow map moves with the car (its texels are far below a pixel) and follows the sun continuously
     carSun.target.position.set(car.group.position.x, car.group.position.y + 0.9, car.group.position.z);
@@ -526,7 +536,7 @@ async function main() {
     if (started && frames > 150 && dt > 0.03) slowT += dt; else slowT = Math.max(0, slowT - dt * 0.5);
     if (slowT > 3 && !QS.has('q')) { slowT = 0; stepDown(); }
   }
-  window.__dbg = { renderer, st, scene, camera, world, TOD, X, train, weather, U, birds, cine, post, car, sun, M, clouds, sky, mountains };
+  window.__dbg = { renderer, st, scene, camera, world, TOD, X, train, weather, U, birds, cine, post, car, sun, M, clouds, sky, mountains, shadowDir };
   status('');
   $start.classList.add('ready');
   if (QS.has('auto')) begin();

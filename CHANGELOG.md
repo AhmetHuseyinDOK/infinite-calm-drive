@@ -2,6 +2,20 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-21 · 11:xx — Calmer shadows: fewer re-rasterisations
+Every time the sun's shadow map is re-laid-out, every shadow edge in view changes its stair-step pattern at once (a
+"pop"). Three things did that; all three are now rarer or gone:
+- **Re-aims every ~20 s instead of ~10 s by day.** The shadow camera used to be re-aimed at the sun whenever the sun had
+  drifted 0.1 rad from it; now it's aimed at where the sun *will be* once it has moved ~0.09 rad, so the drift swings
+  −0.1 … +0.1 rad between re-aims. Replaying a game day: daytime re-aims **22 → 11** (every 10.3 s → 20.2 s on average);
+  in-game at 15:00, every ~7 s → every 13–14 s. Measured with the car parked at 09:30 (frame-to-frame change on a shadowed
+  street): the one shadow pop in 11 s is gone (largest change between two frames 0.53 → 0.16).
+- **No pop when the world re-centres** (every 900 m). The shadow grid is now snapped in absolute world coordinates;
+  driving 1 km with the sun frozen: **1 → 0** re-rasterisations.
+- **No pop when the shadow pivot follows the road uphill** (3 m steps): moving the pivot slides the whole map, so the
+  grid's phase now moves with it. Mountain road with the shadow camera 4° off the sun: **1 → 0** per 575 m.
+Renders are otherwise identical (mean pixel difference ≤ 1.3/255 against the previous build); no extra cost.
+
 ## 2026-10-21 · 10:xx — No more striped, crawling shadows on building walls (reported from a phone)
 - **Shadow acne on facades fixed.** Walls the midday sun hits at a grazing angle were shading themselves in stripes and
   saw-teeth — the shadow map can't resolve a surface's own depth at that angle, and the offset meant to prevent it

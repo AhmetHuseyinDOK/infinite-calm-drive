@@ -31,16 +31,22 @@ export function updateTOD(t) {
   lc(1, TOD.zenith); lc(2, TOD.horizon); lc(3, TOD.sunCol); TOD.sunI = lerp(a[4], b[4], f);
   lc(5, TOD.hemiSky); lc(6, TOD.hemiGround); TOD.hemiI = lerp(a[7], b[7], f); lc(8, TOD.fog);
   lc(9, TOD.cLit); lc(10, TOD.cShade); lc(11, TOD.cRim); TOD.night = lerp(a[12], b[12], f); TOD.warm = lerp(a[13], b[13], f);
-  // the sun climbs to ~62° at noon and sweeps east → west; the moon mirrors it
-  const el = Math.sin((t - 0.25) * Math.PI * 2) * 1.08, az = (t - 0.25) * Math.PI + 0.9;
-  TOD.sunEl = el;
-  TOD.sunDir.set(Math.cos(el) * Math.sin(az), Math.sin(el), Math.cos(el) * Math.cos(az)).normalize();
-  TOD.moonDir.set(-TOD.sunDir.x, Math.abs(Math.sin(el)) * 0.8 + 0.25, -TOD.sunDir.z).normalize();
-  // light used for shading: sun while it's up, moon otherwise (with a soft hand-over)
-  TOD.lightDir.copy(TOD.sunDir);
-  if (el < 0.08) TOD.lightDir.lerpVectors(TOD.moonDir, TOD.sunDir, clamp((el + 0.12) / 0.2, 0, 1)).normalize();
-  if (TOD.lightDir.y < 0.12) { TOD.lightDir.y = 0.12; TOD.lightDir.normalize(); }
+  TOD.sunEl = skyDirs(t, TOD.sunDir, TOD.moonDir, TOD.lightDir);
 }
+// the sun climbs to ~62° at noon and sweeps east → west; the moon mirrors it. The light used for shading is the sun
+// while it's up and the moon otherwise (with a soft hand-over). Returns the sun's elevation.
+function skyDirs(t, sun, moon, light) {
+  const el = Math.sin((t - 0.25) * Math.PI * 2) * 1.08, az = (t - 0.25) * Math.PI + 0.9;
+  sun.set(Math.cos(el) * Math.sin(az), Math.sin(el), Math.cos(el) * Math.cos(az)).normalize();
+  moon.set(-sun.x, Math.abs(Math.sin(el)) * 0.8 + 0.25, -sun.z).normalize();
+  light.copy(sun);
+  if (el < 0.08) light.lerpVectors(moon, sun, clamp((el + 0.12) / 0.2, 0, 1)).normalize();
+  if (light.y < 0.12) { light.y = 0.12; light.normalize(); }
+  return el;
+}
+const _sd = new THREE.Vector3(), _md = new THREE.Vector3();
+/** the shading light direction at time of day t (no side effects) */
+export function lightDirAt(t, out) { skyDirs(((t % 1) + 1) % 1, _sd, _md, out); return out; }
 
 // overcast palette (day / night), blended over the clear-sky palette by the weather
 const OV = {

@@ -158,8 +158,12 @@ export function curveMirror(G, M, dir) {
 // canopy centre, so the whole crown shades like one soft volume — the usual trick for painterly stylised trees.
 let FOL = null;
 export function setFoliage(f) { FOL = f; }
+// foliage density: fewer, slightly larger cards per clump (overdraw of alpha-tested cards was the top GPU cost)
+let LEAF_D = 1;
+export function setLeafDensity(d) { LEAF_D = d; }
 function cards(G, cen, cx, cy, cz, R, cell, n, r, col, dark, yr, flat = 0) {
-  const uvr = FOL[cell];
+  const uvr = FOL[cell], grow = 1 + (1 - LEAF_D) * 0.35;
+  n = Math.max(2, Math.round(n * LEAF_D));
   for (let i = 0; i < n; i++) {
     let nx = r() * 2 - 1, ny = r() * 2 - 1, nz = r() * 2 - 1;
     if (flat) { ny = 1.2 + r(); }
@@ -168,7 +172,7 @@ function cards(G, cen, cx, cy, cz, R, cell, n, r, col, dark, yr, flat = 0) {
     let bx = ny * az - nz * ay, by = nz * ax - nx * az, bz = nx * ay - ny * ax;
     const rot = Math.PI + (r() - 0.5) * 0.9, cr = Math.cos(rot), sr = Math.sin(rot); // keep each clump's sunlit top facing up
     const Ax = ax * cr + bx * sr, Ay = ay * cr + by * sr, Az = az * cr + bz * sr, Bx = bx * cr - ax * sr, By = by * cr - ay * sr, Bz = bz * cr - az * sr;
-    const h = (R * (1.3 + r() * 0.45)) / 2;
+    const h = (R * (1.3 + r() * 0.45) * grow) / 2;
     const ox = cx + (r() - 0.5) * R * 0.6, oy = cy + (r() - 0.5) * R * (flat ? 0.15 : 0.5), oz = cz + (r() - 0.5) * R * 0.6;
     const P = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([u, v]) => [ox + (Ax * u + Bx * v) * h, oy + (Ay * u + By * v) * h * (flat ? 0.6 : 1), oz + (Az * u + Bz * v) * h]);
     const N = P.map(p => {

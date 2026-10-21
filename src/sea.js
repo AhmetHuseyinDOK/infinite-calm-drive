@@ -43,7 +43,7 @@ export function makeSea() {
       }`,
   });
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(14000, 14000), mat);
-  mesh.rotation.x = -Math.PI / 2; mesh.position.y = SEA; mesh.renderOrder = -6; mesh.frustumCulled = false;
+  mesh.rotation.x = -Math.PI / 2; mesh.position.y = SEA; mesh.renderOrder = 998; mesh.frustumCulled = false;
   return {
     mesh,
     update(cam, time, fogD, vis = 1) {

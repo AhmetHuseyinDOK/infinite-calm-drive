@@ -3,7 +3,7 @@ import { Path, ZONES, zoneW, zoneAt, zparam, ZINFO, setStartZone, crossingS, cro
 import { makeCrossingRig, makeTrain, xingPosts } from './crossing.js';
 import { buildAtlas, buildFoliage } from './textures.js';
 import { makeMaterials, U, groundMaterialFor } from './materials.js';
-import { setAtlas, setFoliage, warmTrees } from './props.js';
+import { setAtlas, setFoliage, warmTrees, setLeafDensity } from './props.js';
 import { World } from './chunks.js';
 import { makeSky, paintClouds, makeClouds, makeMountains, updateTOD, applyWeather, TOD } from './sky.js';
 import { makeWeather, makeRain, makeSnow } from './weather.js';
@@ -61,6 +61,7 @@ async function main() {
   const M = makeMaterials(atlas.textures(renderer), fol.tex);
   status('painting the clouds…');
   await new Promise(r => setTimeout(r, 10));
+  setLeafDensity(QS.has('leafd') ? parseFloat(QS.get('leafd')) : quality === 'high' ? 0.72 : 0.62); // fewer, larger foliage cards
   warmTrees();
   const path = new Path();
   const foamMat = foamMaterial();

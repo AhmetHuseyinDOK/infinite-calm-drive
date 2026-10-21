@@ -2,6 +2,14 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-21 · 06:xx — Performance pass 2: draw order, one less full-screen pass, lighter foliage
+GPU time per frame (1280×720, integrated Radeon Vega, `?prof`), before → after this pass:
+city day 26.6 → **21.5 ms**, cherry blossom 34.8 → **27.6**, countryside 30.4 → **22.6**, autumn mountains 36.4 → **29.3**,
+snow 25.8 → **19.7**, coast 29.0 → **23.4**, city at night 39.7 → **28.4**. (At the start of this work, cherry blossom was 73.7 ms.)
+- **Sky, distant mountains and the sea are drawn after the scene** instead of first, so the depth test skips every pixel hidden behind buildings and hills (the night sky alone cost 7 ms in the city).
+- **Tone mapping, sRGB output and the anime colour grade are one full-screen pass** (was two); the sun-streak / lens-ghost maths is skipped entirely while the sun is off screen. Output is pixel-identical (mean difference < 1/255).
+- **Lighter foliage**: tree canopies use ~28 % fewer (slightly larger) cards on desktop and ~38 % fewer on phones and in the X embed — the overdraw of alpha-tested cards was the largest single GPU cost (10.9 → 6.7 ms in the cherry-blossom zone); canopies still read as full, a little lacier.
+
 ## 2026-10-21 · 05:xx — Performance & stutter pass (focus requested: performance, stutters, realism)
 Measured with GPU timer queries (`?prof`) on an integrated Radeon Vega (≈ a mid-range phone GPU), 1280×720:
 **GPU time per frame 73.7 ms → 34.8 ms in the cherry-blossom zone**; now 26–36 ms across all zones by day, ~40 ms at night.

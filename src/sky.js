@@ -135,7 +135,7 @@ export function makeSky() {
       }`,
   });
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(5000, 48, 24), mat);
-  mesh.renderOrder = -10; mesh.frustumCulled = false;
+  mesh.renderOrder = 1000; mesh.frustumCulled = false; // drawn last among opaques: the depth test skips every hidden sky pixel
   return mesh;
 }
 
@@ -318,7 +318,7 @@ export function makeMountains() {
           gl_FragColor = vec4(mix(c, uHaze, haze), 1.0);
         }`,
     });
-    const m = new THREE.Mesh(g, mat); m.frustumCulled = false; m.renderOrder = -8;
+    const m = new THREE.Mesh(g, mat); m.frustumCulled = false; m.renderOrder = 999;
     group.add(m);
   });
   return {

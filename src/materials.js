@@ -479,8 +479,8 @@ diffuseColor.rgb *= ${(1 - amt / 2).toFixed(3)} + ${amt.toFixed(3)} * vnoise(vWP
 }
 
 /** give any built-in material the drifting cloud shadows (car, train …) so everything darkens together */
-let _csk = 0;
-export function withCloudShadow(m) { const key = 'cs' + (++_csk); m.onBeforeCompile = sh => worldShade(sh); m.customProgramCacheKey = () => key; return m; }
+// (one cache key for all of them: the patch is identical, so materials with the same settings share a program)
+export function withCloudShadow(m) { m.onBeforeCompile = sh => worldShade(sh); m.customProgramCacheKey = () => 'cs'; return m; }
 
 export function makeMaterials(atlasTex, folTex) {
   const M = {};

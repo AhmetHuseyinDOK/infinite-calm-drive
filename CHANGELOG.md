@@ -2,6 +2,22 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-21 · 09:xx — Phone pass: a quarter fewer draw calls
+Measured on a phone-like setup (iPhone-sized viewport, main thread slowed 4×): the biggest main-thread cost is three.js's
+own render call — **~58 % of all main-thread time**, almost all of it per-draw overhead (shader/uniform setup, buffer
+binding) — not world building (p95 8 ms) or garbage collection (0.2 %). So this pass cuts draw calls:
+- **Night light pools were drawn all day at zero opacity** (~11 draw calls a frame, plus their blending): now hidden
+  while invisible.
+- **Small details far ahead are skipped**: signal lamps, road paint and (by day) lamp heads more than 380 m ahead, and
+  tree leaf cards beyond 540 m (inside the horizon fade), where they'd be a pixel or less and mostly fogged anyway.
+  At night lamp heads and light pools stay, so rows of street lights still run into the distance.
+- **The car's five flat-coloured parts are one vertex-coloured mesh** (one draw instead of five, in the scene and in its
+  shadow map), and identical cloud-shadowed materials now share one shader program (52 → **47** programs).
+Per frame (1280×720, deterministic counts): WebGL calls city **870 → 668 (−23 %)**, cherry blossom **782 → 595 (−24 %)**,
+city at night **999 → 870 (−13 %)**; draw calls city 131 → 98, cherry blossom 118 → 86, city at night 148 → 130.
+GPU time unchanged or slightly lower (interleaved A/B: city 21.1 → 21.2 ms, cherry blossom 26.8 → 26.2, coast 24.9 → 24.2,
+city at night 30.4 → 29.3). Screenshots of all six zones by day and two at night match the previous build.
+
 ## 2026-10-21 · 08:xx — Stutter pass 4: shadows move smoothly with the sun
 - **Shadows no longer jump.** To keep shadow edges from shimmering, the sun's direction was held and stepped every
   0.23°, so every shadow in view jumped **2.5–3.7 times a second**: the tip of a 15 m building's shadow by 7–21 cm

@@ -123,6 +123,7 @@ async function main() {
   await new Promise(r => setTimeout(r, 10));
   // build only the first stretch up-front; the rest streams in while the title screen is up
   const AHEAD = EMBED ? 620 : world.ahead; world.ahead = 260;
+  const DETAIL_FAR = QS.has('detail') ? parseFloat(QS.get('detail')) : 380, FAR_LEAF = QS.has('farleaf') ? parseFloat(QS.get('farleaf')) : 540; // see World.lod
   while (world.update(st.s, 1e9)) {}
   world.flush();
   world.ahead = AHEAD;
@@ -454,6 +455,8 @@ async function main() {
     M.atlas.emissiveIntensity = 0.1 + nightK * 1.05;
     M.lamp.color.setRGB(0.85, 0.85, 0.8).lerp(new THREE.Color(3.6, 2.8, 1.8), nightK);
     M.pool.opacity = nightK * 0.42 * (1 + 0.8 * wet);
+    M.pool.visible = M.pool.opacity > 0.003; // the night light pools were drawn all day at zero opacity (~11 draw calls)
+    world.lod(st.s, DETAIL_FAR, nightK > 0.15, FAR_LEAF);
     U.uNight.value = nightK;
     post.bloom.strength = lerp(0.32, 0.55, nightK); post.bloom.threshold = lerp(1.35, 0.95, nightK); post.bloom.radius = lerp(0.55, 0.35, nightK);
     // bloom only where it shows (night lamps, sunsets, tunnels): by day at threshold 1.35 it cost ~7 ms for almost nothing

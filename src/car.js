@@ -27,7 +27,10 @@ function glassTexture() {
 export function makeCar() {
   const car = new THREE.Group();
   const toon = (color, extra = {}) => withCloudShadow(new THREE.MeshToonMaterial({ color, gradientMap: GRAD, ...extra }));
-  const mBody = toon('#9fd8c8'), mRoof = toon('#e9e7e0'), mTrim = toon('#2a2c33'), mTyre = toon('#1b1c20'), mHub = toon('#c8ccd2');
+  // the flat-coloured parts share one vertex-coloured material: one draw call (and one shadow draw) instead of five
+  const mPaint = toon('#ffffff', { vertexColors: true });
+  const mBody = new THREE.Color('#9fd8c8'), mRoof = new THREE.Color('#e9e7e0'), mTrim = new THREE.Color('#2a2c33'), mTyre = new THREE.Color('#1b1c20'), mHub = new THREE.Color('#c8ccd2');
+  const paint = (g, c) => { const n = g.attributes.position.count, a = new Float32Array(n * 3); for (let i = 0; i < n; i++) a.set([c.r, c.g, c.b], i * 3); g.setAttribute('color', new THREE.Float32BufferAttribute(a, 3)); return g; };
   const mGlass = withCloudShadow(new THREE.MeshToonMaterial({ color: '#ffffff', map: glassTexture(), gradientMap: GRAD }));
   const mTail = new THREE.MeshToonMaterial({ color: '#c8303a', emissive: '#ff2a2a', emissiveIntensity: 0.4, gradientMap: GRAD });
   const mAmber = new THREE.MeshToonMaterial({ color: '#f0a040', emissive: '#ff9a30', emissiveIntensity: 0.2, gradientMap: GRAD });
@@ -37,6 +40,7 @@ export function makeCar() {
   const m4 = new THREE.Matrix4(), e = new THREE.Euler(), q = new THREE.Quaternion(), one = new THREE.Vector3(1, 1, 1);
   const add = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => {
     const g = geo.index ? geo.toNonIndexed() : geo;
+    if (mat.isColor) { paint(g, mat); mat = mPaint; }
     e.set(rx, ry, rz); q.setFromEuler(e); m4.compose(new THREE.Vector3(x, y, z), q, one); g.applyMatrix4(m4);
     if (!parts.has(mat)) parts.set(mat, []);
     parts.get(mat).push(g);
@@ -67,14 +71,14 @@ export function makeCar() {
   // rear wiper (its own mesh so it can sweep when it rains)
   const wiperPivot = new THREE.Group(); wiperPivot.position.set(0.02, 1.3, -1.57); car.add(wiperPivot);
   const wg = new THREE.BoxGeometry(0.52, 0.026, 0.02); wg.translate(0.27, 0, 0);
-  const wiper = new THREE.Mesh(wg, mTrim); wiper.rotation.z = 0.18; wiperPivot.add(wiper);
+  const wiper = new THREE.Mesh(paint(wg, mTrim), mPaint); wiper.rotation.z = 0.18; wiperPivot.add(wiper);
   let wiperT = 0;
   // headlights at night
   const head = new THREE.SpotLight(0xfff0d0, 0, 70, 0.55, 0.65, 1.2);
   head.position.set(0, 0.8, 1.6); head.target.position.set(0, 0, 18); car.add(head, head.target);
 
   return {
-    group: car, mBody,
+    group: car,
     update(dt, speed, night, rain = 0) {
       mTail.emissiveIntensity = 0.35 + night * 3.2;
       if (rain > 0.15 || wiperT % 2.6 > 0.01) {

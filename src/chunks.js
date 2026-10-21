@@ -104,6 +104,18 @@ export class World {
     if (ch.pending) { for (const m of ch.pending) m.geometry && m.geometry.dispose(); ch.pending.length = 0; }
     const i = this.reveal.indexOf(ch); if (i >= 0) this.reveal.splice(i, 1);
   }
+  /** Small details — signal lamps, road paint, lamp heads, light pools — are hidden in chunks more than `far` metres
+   *  ahead (tree leaf cards beyond `farLeaf`), where they'd be a pixel or less and mostly fogged anyway. Each is a draw
+   *  call, and draw calls are most of the main thread's work on phones. Lamp heads and light pools stay at night. */
+  lod(s, far, night, farLeaf = Infinity) {
+    for (const [c, ch] of this.chunks) {
+      const d = c * CH - s;
+      for (const m of ch.group.children) {
+        const k = m.userData.detail;
+        if (k) m.visible = k === 'leaf' ? d < farLeaf : d < far || (night && k === 'light');
+      }
+    }
+  }
   /** reveal everything staged right away (used while the title screen is up) */
   flush() { for (const ch of this.reveal) { for (const m of ch.pending) ch.group.add(m); ch.pending.length = 0; } this.reveal.length = 0; }
 
@@ -217,19 +229,19 @@ export class World {
 
     // ---------- assemble ----------
     const grp = new THREE.Group();
-    const add = (geo, mat, cast, recv, order = 0) => { if (!geo) return; const m = new THREE.Mesh(geo, mat); m.castShadow = cast; m.receiveShadow = recv; m.renderOrder = order; grp.add(m); };
+    const add = (geo, mat, cast, recv, order = 0, detail) => { if (!geo) return; const m = new THREE.Mesh(geo, mat); m.castShadow = cast; m.receiveShadow = recv; m.renderOrder = order; if (detail) m.userData.detail = detail; grp.add(m); };
     const zset = new Set();
     for (const sq of [s0, s0 + 20, s0 + 40, s1]) { const m = zoneMix(sq); zset.add(m.a); if (m.t > 0) zset.add(m.b); }
     add(ground.build(), groundMaterialFor([...zset]), false, true); yield;
     add(G.atlas.build(), this.M.atlas, true, true); yield;
     add(G.color.build(), this.M.color, true, true); yield;
     add(G.foliage.build(), this.M.foliage, true, true);
-    add(G.leaf.build(), this.M.leaf, true, true); yield;
-    add(G.lamp.build(), this.M.lamp, false, false);
-    add(G.sig.build(), this.M.sig, false, false);
+    add(G.leaf.build(), this.M.leaf, true, true, 0, 'leaf'); yield;
+    add(G.lamp.build(), this.M.lamp, false, false, 0, 'light');
+    add(G.sig.build(), this.M.sig, false, false, 0, 'small');
     add(G.sodium.build(), this.M.sodium, false, false);
-    add(G.decal.build(), this.M.decal, false, true, 1);
-    add(G.pool.build(), this.M.pool, false, false, 2);
+    add(G.decal.build(), this.M.decal, false, true, 1, 'small');
+    add(G.pool.build(), this.M.pool, false, false, 2, 'light');
     if (foam.length) {
       const g = new THREE.BufferGeometry(), pos = [], su = [], idx = [];
       foam.forEach((row, i) => { for (const v of row) { pos.push(v[0], v[1], v[2]); su.push(v[3], v[4]); } if (i > 0) { const a = (i - 1) * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); } });

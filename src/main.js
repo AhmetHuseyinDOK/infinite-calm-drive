@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Path, ZONES, zoneW, zoneAt, zparam, ZINFO, setStartZone, crossingS, crossingValid, XING, XOFF, riverNear, groundOffsetMix, tunnelNear, T_HALF, T_RIDGE } from './path.js';
 import { makeCrossingRig, makeTrain, xingPosts } from './crossing.js';
 import { buildAtlas, buildFoliage } from './textures.js';
-import { makeMaterials, U, groundMaterialFor } from './materials.js';
+import { makeMaterials, U, groundMaterialFor, setShadowTaps } from './materials.js';
 import { setAtlas, setFoliage, warmTrees, setLeafDensity } from './props.js';
 import { World } from './chunks.js';
 import { makeSky, paintClouds, makeClouds, makeMountains, updateTOD, applyWeather, TOD } from './sky.js';
@@ -46,12 +46,32 @@ async function main() {
   const sun = new THREE.DirectionalLight(0xffffff, 3);
   sun.castShadow = true;
   const SM = quality === 'low' ? 1024 : quality === 'mid' ? 1536 : 2048; sun.shadow.mapSize.set(SM, SM);
+  setShadowTaps(QS.has('pcf') ? parseInt(QS.get('pcf')) : 1);
   const SH_HALF = 62; // shadow frustum half-size (m): ~6 cm texels at 2048²
   Object.assign(sun.shadow.camera, { left: -SH_HALF, right: SH_HALF, top: SH_HALF, bottom: -SH_HALF, near: 1, far: 420 });
   const shadowDir = new THREE.Vector3(0, 1, 0), shX = new THREE.Vector3(), shY = new THREE.Vector3(), shT = new THREE.Vector3(), UPV = new THREE.Vector3(0, 1, 0);
   let bloomAllowed = true;
   sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.05;
   scene.add(sun, sun.target);
+  // The car's own shadow map: a 4.8 m square around the car (~1 cm texels), so its shadow has crisp, stable edges
+  // instead of stair-steps crawling over the big map's 6 cm texels as it drives. Only the car is drawn into it, and
+  // the car stays out of the sun's map (frustum routing below). The light itself adds nothing (materials.js).
+  const carSun = new THREE.DirectionalLight(0xffffff, 0);
+  carSun.castShadow = quality !== 'low' && !QS.has('nocarsh');
+  { const n = QS.has('carsm') ? parseInt(QS.get('carsm')) : quality === 'high' ? 512 : 384; carSun.shadow.mapSize.set(n, n); }
+  Object.assign(carSun.shadow.camera, { left: -2.4, right: 2.4, top: 2.4, bottom: -2.4, near: 1, far: 30 });
+  carSun.shadow.bias = -0.0002; carSun.shadow.normalBias = 0.025;
+  scene.add(carSun, carSun.target); // after the sun: the shaders take directional light 0 as the sun
+  if (carSun.castShadow) {
+    const sunFr = sun.shadow.getFrustum(), carFr = carSun.shadow.getFrustum();
+    for (const C of [THREE.Mesh, THREE.Line]) {
+      const base = C.prototype.intersectsFrustum;
+      C.prototype.intersectsFrustum = function (fr) {
+        if (fr === carFr) return this.userData.car === true;
+        return (fr !== sunFr || this.userData.car !== true) && base.call(this, fr);
+      };
+    }
+  }
   const hemi = new THREE.HemisphereLight(0xa4c8ff, 0xc8b8a0, 1.6); scene.add(hemi);
 
   status('painting the town…');
@@ -72,6 +92,7 @@ async function main() {
   const mountains = makeMountains(); scene.add(mountains.group);
   const sea = makeSea(); scene.add(sea.mesh);
   const car = makeCar(); car.group.rotation.order = 'YXZ'; scene.add(car.group);
+  car.group.traverse(o => { o.userData.car = true; }); // casts into its own shadow map only
   const parts = makeParticles(M.glowTex); parts.group.forEach(o => scene.add(o));
   const post = makePost(renderer, scene, camera, { msaa: quality === 'high' ? 4 : quality === 'mid' ? 2 : 0 });
   const rig = makeCrossingRig(); scene.add(rig.group);
@@ -113,6 +134,9 @@ async function main() {
     renderer.setRenderTarget(null);
     for (const o of hidden) o.visible = false;
     scene.remove(warm); tri.dispose();
+    // and the post passes: bloom is off by day, so its 8 programs used to compile all at once at the first sunset,
+    // night or tunnel — a 160 ms freeze here, far longer on a phone
+    post.bloom.enabled = true; post.composer.render(0); post.bloom.enabled = false;
   }
   // level crossing state
   const X = { k: Math.ceil((st.s - XOFF) / XING), phase: 'idle', raise: 1, decided: false, t2: 0 };
@@ -236,7 +260,9 @@ async function main() {
     requestAnimationFrame(frame);
     const ft0 = performance.now();
     if (needResize) { needResize = false; resize(); }
-    const dt = Math.min(0.05, (now - last) / 1000); last = now; t += dt;
+    // never negative: the first frame's timestamp can predate `last` when start-up kept the main thread busy, and a
+    // negative step ran the weather backwards (a phantom rain shower and grey sky for the first seconds on slow phones)
+    const dt = Math.min(0.05, Math.max(0, (now - last) / 1000)); last = now; t += dt;
 
     // input
     st.steer = 0;
@@ -370,6 +396,9 @@ async function main() {
       shT.addScaledVector(shX, Math.round(a / tex) * tex - a).addScaledVector(shY, Math.round(b / tex) * tex - b); }
     sun.target.position.copy(shT);
     sun.position.copy(shT).addScaledVector(shadowDir, 200);
+    // the car's shadow map moves with the car (its texels are far below a pixel) and follows the sun continuously
+    carSun.target.position.set(car.group.position.x, car.group.position.y + 0.9, car.group.position.z);
+    carSun.position.copy(carSun.target.position).addScaledVector(TOD.lightDir, 12);
     hemi.color.copy(TOD.hemiSky); hemi.groundColor.copy(TOD.hemiGround); hemi.intensity = TOD.hemiI;
     scene.fog.color.copy(TOD.fog);
     const fogD = (w.city * 0.0022 + w.sakura * 0.0019 + w.coast * 0.0011 + w.country * 0.0014 + w.mountain * 0.0017 + w.snow * 0.0021) * (1 + TOD.night * 0.25);

@@ -13,11 +13,42 @@ THREE.ShaderChunk.fog_fragment = /* glsl */`
   gl_FragColor.rgb = mix( gl_FragColor.rgb, fogColor, fogFactor );
 #endif`;
 
-// Shadows: one hardware-filtered tap (bilinear depth compare) instead of three.js's 5 Vogel-disk taps rotated by
-// per-pixel noise — ~5× cheaper on every lit pixel, and stable: the rotated noise made shadow edges shimmer as we moved.
-THREE.ShaderChunk.shadowmap_pars_fragment = THREE.ShaderChunk.shadowmap_pars_fragment.replace(
-  /float phi = interleavedGradientNoise\( gl_FragCoord\.xy \) \* PI2;\s*shadow = \([\s\S]*?\) \* 0\.2;/,
-  'shadow = texture( shadowMap, vec3( shadowCoord.xy, shadowCoord.z ) );');
+// Shadows: hardware-filtered taps (bilinear depth compare) at fixed offsets instead of three.js's 5 Vogel-disk taps
+// rotated by per-pixel noise — much cheaper, and stable: the rotated noise made shadow edges shimmer as we moved.
+// One tap by default; 4 taps at ±½ texel (?pcf=4) soften the static stair-steps into a ~3-texel edge for ~1 ms more.
+// (The moving car has its own fine map, below.) Call before the first compile.
+const SHADOW_SRC = THREE.ShaderChunk.shadowmap_pars_fragment;
+export function setShadowTaps(n) {
+  const tap = o => `texture( shadowMap, vec3( shadowCoord.xy${o}, shadowCoord.z ) )`;
+  const body = n >= 4
+    ? `vec2 so = texelSize * 0.5;\nshadow = 0.25 * ( ${tap(' - so')} + ${tap(' + so')} + ${tap(' + vec2( so.x, -so.y )')} + ${tap(' + vec2( -so.x, so.y )')} );`
+    : `shadow = ${tap('')};`;
+  THREE.ShaderChunk.shadowmap_pars_fragment = SHADOW_SRC.replace(
+    /float phi = interleavedGradientNoise\( gl_FragCoord\.xy \) \* PI2;\s*shadow = \([\s\S]*?\) \* 0\.2;/, body);
+}
+setShadowTaps(1);
+// Directional lights: light 0 is the sun. Light 1, when present, adds no light: it only carries the car's own small,
+// sharp shadow map (main.js routes the car into that map and out of the sun's), so the car's shadow has crisp edges
+// instead of stair-steps crawling over the big map's 6 cm texels as it drives. The two shadows combine with min().
+THREE.ShaderChunk.lights_fragment_begin = THREE.ShaderChunk.lights_fragment_begin.replace(
+  /#pragma unroll_loop_start\s*for \( int i = 0; i < NUM_DIR_LIGHTS; i \+\+ \) \{[\s\S]*?#pragma unroll_loop_end/, /* glsl */`
+	directionalLight = directionalLights[ 0 ];
+	getDirectionalLightInfo( directionalLight, directLight );
+	#if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
+	if ( directLight.visible && receiveShadow ) {
+		directionalLightShadow = directionalLightShadows[ 0 ];
+		float sh = getShadow( directionalShadowMap[ 0 ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ 0 ] );
+		#if NUM_DIR_LIGHT_SHADOWS > 1
+		// surfaces turning away from the sun keep just the toon ramp: the sharp map would cut their wrapped light
+		// into jagged bands (the car shadowing its own back)
+		float nl = smoothstep( 0.0, 0.2, dot( geometryNormal, directLight.direction ) );
+		if ( nl > 0.0 ) { directionalLightShadow = directionalLightShadows[ 1 ];
+			sh = min( sh, mix( 1.0, getShadow( directionalShadowMap[ 1 ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ 1 ] ), nl ) ); }
+		#endif
+		directLight.color *= sh;
+	}
+	#endif
+	RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );`);
 
 export const S_WRAP = 4200; // s is wrapped for shaders; divisible by every pattern period used below
 

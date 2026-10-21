@@ -2,6 +2,24 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-21 · 07:xx — Stutter pass 3: no freeze at the first sunset, a crisp car shadow, no phantom rain at start
+- **The first sunset, night or tunnel no longer freezes the drive.** Bloom is switched off by day, so its 8 shader programs
+  used to compile all at once the first time it turned on — a **163 ms** main-thread freeze on the test PC (several
+  times longer on a phone), a couple of minutes into every drive. They are now compiled behind the title screen with
+  everything else: **0** programs compile mid-drive (checked at sunset, night and rain); time to "tap to begin" unchanged.
+- **The car's shadow is crisp and no longer crawls.** The car now has its own small shadow map (a 4.8 m square that moves
+  with it: ~0.9 cm texels on desktop, ~1.25 cm on phones, vs 6 cm in the big map) and stays out of the sun's map. The
+  stair-stepped edges that shimmered along its shadow as it drove are gone; the tyres and rounded body now read in the
+  shadow. Surfaces turning away from the sun keep the toon ramp, so the car doesn't shade its own back in jagged bands.
+  Cost: ~0.3 ms for the extra pass; frame GPU time (interleaved A/B against the previous build, 1280×720) cherry blossom
+  26.4 → 26.5 ms, city 20.5 → 20.8, countryside 22.0 → 22.9.
+- **Bug fix — phantom rain at start-up.** When loading kept the main thread busy, the first frame's time step came out
+  negative (down to −2.4 s here), which ran the weather backwards: rain intensity jumped to 0.17 and the sky greyed for the
+  first seconds even in clear weather (most likely on slow phones, where start-up is long). The step is now clamped at zero.
+- Measured and left alone: draw calls 100–150 per frame; the sun's shadow pass 0.1–4 ms; the world builder's steps
+  average 15 ms per 60 m chunk spread over ~26 slices; JS allocation ~3.3 MB/s with only minor GCs (no major GC during a
+  25 s drive), so garbage collection isn't the stutter source.
+
 ## 2026-10-21 · 06:xx — Performance pass 2: draw order, one less full-screen pass, lighter foliage
 GPU time per frame (1280×720, integrated Radeon Vega, `?prof`), before → after this pass:
 city day 26.6 → **21.5 ms**, cherry blossom 34.8 → **27.6**, countryside 30.4 → **22.6**, autumn mountains 36.4 → **29.3**,

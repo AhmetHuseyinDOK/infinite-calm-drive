@@ -32,11 +32,20 @@ export function makeCar() {
   const body = new THREE.Group(), inner = new THREE.Group(); body.position.y = 0.35; inner.position.y = -0.35; body.add(inner); car.add(body);
   // the flat-coloured parts share one vertex-coloured material: one draw call (and one shadow draw) instead of five
   // glossy paint (withGloss): each part's gloss rides in its vertex colour's alpha
-  const mPaint = withGloss(new THREE.MeshToonMaterial({ color: '#ffffff', vertexColors: true, gradientMap: GRAD }), 0.85, 0.06, 'paint');
+  // street lamps overhead light the car as it passes under them: a warm wash on the roof and bonnet, a highlight sliding
+  // along the paint and the glass (the two nearest lamps, set each frame in view space; w = strength, 0 = none)
+  const lamps = [new THREE.Vector4(), new THREE.Vector4()];
+  const LAMPS = { uniforms: { uCarLamp: { value: lamps }, uCarLampCol: { value: new THREE.Color(1.0, 0.8, 0.52) } }, pars: '\nuniform vec4 uCarLamp[2]; uniform vec3 uCarLampCol;', apply: /* glsl */`
+  for (int i = 0; i < 2; i++) {
+    vec3 L = uCarLamp[i].xyz + vViewPosition; float d2 = max(dot(L, L), 1e-4); L *= inversesqrt(d2);
+    float att = uCarLamp[i].w / (1.0 + 0.045 * d2);
+    outgoingLight += uCarLampCol * att * (diffuseColor.rgb * max(dot(nV, L), 0.0) + pow(max(dot(nV, normalize(L + vV)), 0.0), 60.0) * 1.5 * gm);
+  }` };
+  const mPaint = withGloss(new THREE.MeshToonMaterial({ color: '#ffffff', vertexColors: true, gradientMap: GRAD }), 0.85, 0.06, 'paint-l', LAMPS);
   const part = (hex, gloss) => Object.assign(new THREE.Color(hex), { gloss });
   const mBody = part('#9fd8c8', 1), mRoof = part('#e9e7e0', 0.55), mTrim = part('#2a2c33', 0.35), mTyre = part('#1b1c20', 0.04), mHub = part('#c8ccd2', 0.8);
   const paint = (g, c) => { const n = g.attributes.position.count, a = new Float32Array(n * 4); for (let i = 0; i < n; i++) a.set([c.r, c.g, c.b, c.gloss], i * 4); g.setAttribute('color', new THREE.Float32BufferAttribute(a, 4)); return g; };
-  const mGlass = withGloss(new THREE.MeshToonMaterial({ color: '#ffffff', map: glassTexture(), gradientMap: GRAD }), 1.2, 0.08, 'glass');
+  const mGlass = withGloss(new THREE.MeshToonMaterial({ color: '#ffffff', map: glassTexture(), gradientMap: GRAD }), 1.2, 0.08, 'glass-l', LAMPS);
   const mTail = new THREE.MeshToonMaterial({ color: '#c8303a', emissive: '#ff2a2a', emissiveIntensity: 0.4, gradientMap: GRAD });
   const mAmber = new THREE.MeshToonMaterial({ color: '#f0a040', emissive: '#ff9a30', emissiveIntensity: 0.2, gradientMap: GRAD });
   const mPlate = new THREE.MeshBasicMaterial({ map: plateTexture() });
@@ -102,7 +111,7 @@ export function makeCar() {
   const S = { roll: 0, rv: 0, pitch: 0, pv: 0, y: 0, yv: 0 }, soft = (x, cap) => cap * Math.tanh(x / cap); // body springs
 
   return {
-    group: car,
+    group: car, lamps,
     /** m (optional): lat = sideways acceleration (m/s², + = towards the right), lon = speeding up (+) / braking (−),
      *  road = the surface's height under the car (m), jolt = vertical kick this frame (m/s), kick = pitch kick (rad/s, + = nose down) */
     update(dt, speed, night, rain = 0, m = null) {

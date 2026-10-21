@@ -62,8 +62,11 @@ export function utilityPole(G, M, r, opt = {}) {
   return anchors.map(p => new THREE.Vector3(p[0], p[1], p[2]).applyMatrix4(M));
 }
 
+// where a lamp's light comes from (chunk-local), so the car can be lit as it passes (main.js → car.update)
+const _lp = new THREE.Vector3();
+function lampAt(G, M, x, y, z) { if (G.lamps) { _lp.set(x, y, z).applyMatrix4(M); G.lamps.push(_lp.x, _lp.y, _lp.z); } }
 export function streetLamp(G, M, r, opt = {}) {
-  const c = G.color; c.setM(M);
+  const c = G.color; c.setM(M); lampAt(G, M, 0, 6.28, -1.42);
   c.cyl(0, 0, 0, 0.08, 0.06, 6.0, 8, PAL.lampPole);
   c.rod([0, 5.95, 0], [0, 6.35, -0.45], 0.05, 0.045, 6, PAL.lampPole);
   c.rod([0, 6.35, -0.45], [0, 6.45, -1.35], 0.045, 0.04, 6, PAL.lampPole);
@@ -73,14 +76,14 @@ export function streetLamp(G, M, r, opt = {}) {
   G.pool.setM(M); G.pool.quad([-3.6, py, 2.2], [3.6, py, 2.2], [3.6, py, -5.2], [-3.6, py, -5.2], W1, { u0: 0, u1: 1, v0: 0, v1: 1 });
 }
 export function poleLamp(G, M, poolY = 0.04) { // lamp arm bolted onto a utility pole
-  const c = G.color; c.setM(M);
+  const c = G.color; c.setM(M); lampAt(G, M, 0, 6.6, -1.5);
   c.rod([0, 6.2, -0.12], [0, 6.75, -0.7], 0.045, 0.04, 6, PAL.lampPole); c.rod([0, 6.75, -0.7], [0, 6.8, -1.45], 0.04, 0.035, 6, PAL.lampPole);
   c.box(-0.16, 6.68, -1.78, 0.16, 6.86, -1.22, PAL.lampHead);
   G.lamp.setM(M); G.lamp.box(-0.13, 6.63, -1.74, 0.13, 6.68, -1.26, W1);
   G.pool.setM(M); G.pool.quad([-3.6, poolY, 2.2], [3.6, poolY, 2.2], [3.6, poolY, -5.2], [-3.6, poolY, -5.2], W1, { u0: 0, u1: 1, v0: 0, v1: 1 });
 }
 export function oldLamp(G, M) { // short park/shrine lamp
-  const c = G.color; c.setM(M);
+  const c = G.color; c.setM(M); lampAt(G, M, 0, 3.5, 0);
   c.cyl(0, 0, 0, 0.07, 0.06, 3.2, 8, C('#3a3a3e'));
   c.box(-0.2, 3.2, -0.2, 0.2, 3.25, 0.2, C('#3a3a3e')); c.cyl(0, 3.75, 0, 0.26, 0.04, 0.3, 8, C('#3a3a3e'));
   G.lamp.setM(M); G.lamp.box(-0.16, 3.25, -0.16, 0.16, 3.75, 0.16, W1);

@@ -125,6 +125,7 @@ export class World {
     const r = rng(Math.floor(hash2(c, 777) * 4294967295));
     const G = { atlas: new GB({ uv: true, ao: true }), color: new GB({ ao: true }), foliage: new GB(), leaf: new GB({ uv: true }), lamp: new GB({ color: false }), sig: new GB({ color: false }), sodium: new GB({ color: false }), decal: new GB({ uv: true }), pool: new GB({ uv: true, color: false }) };
     const ground = new GroundB(), foam = [], river = [];
+    G.lamps = []; // lamp light positions (chunk-local xyz…), see props.js lampAt
     const f = {}, f2 = {};
 
     // ---------- helpers ----------
@@ -251,7 +252,7 @@ export class World {
     }
     for (const g of river) add(g, this.riverMat, false, true);
     grp.position.set(ox - this.origin.x, 0, oz - this.origin.z);
-    return { group: grp, ox, oz, s0 };
+    return { group: grp, ox, oz, s0, lamps: new Float32Array(G.lamps) };
   }
 
   // poles + overhead wires (country / coast / city share the rule so wires connect across zones)

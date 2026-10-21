@@ -2,6 +2,23 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-22 · 02:xx — Realism pass 9: street lamps light the car at night
+- **The car catches the lamps it drives under.** At night the car was a flat dark-navy silhouette, even when it passed
+  right under a street lamp. Now the lamps light it:
+  - a warm wash on the roof and bonnet as you drive under each one, fading as it falls behind;
+  - a highlight that slides along the paint and the glass;
+  - its mint paint is visible again on the cherry-blossom avenue and the coast road at night.
+  - In the city it shows as you pass a lamp (they're spaced 60 m apart there).
+- How: each street lamp, pole lamp and park lantern records where its light comes from as its chunk is built. Each
+  night frame the two lamps nearest the car are found (it checks only the car's chunk and its two neighbours, without
+  allocating) and passed to the car's own paint and glass shaders. They fade out before 30 m, so the nearest-lamp swap
+  never pops. Nothing else in the scene changed.
+- Cost: none measurable. Only the car's few pixels run the extra lighting.
+  - 52 programs, none compiled mid-drive; every quality level compiles.
+  - GPU, alternating-order rounds against the live build at machine load ~30: night cherry-blossom avenue +0.03 ms,
+    night city +0.39, phone night avenue +0.23. The live build compared with itself read +0.31 (the noise floor).
+  - Flat out at night streamed with no missing chunks; embed mode still starts on tap.
+
 ## 2026-10-22 · 01:xx — Realism pass 8: rain skies, and wet tyres you can hear
 - **Rain clouds look like rain clouds.** When it rained, the big crisp fair-weather cumulus towers stayed in the sky
   (half-transparent, still white-edged) above the grey storm deck, so rainy scenes had a summer sky painted on top. Now

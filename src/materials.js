@@ -594,7 +594,7 @@ export function withCloudShadow(m) { m.onBeforeCompile = sh => worldShade(sh); m
  *  horizon in the lower ones — that sharp line is what makes paint read as paint — plus a sun glint where it's lit.
  *  Per-vertex gloss in the colour's alpha when the mesh has one (paint 1, hubs .8, trim .35, tyres ~0). */
 const GLOSS_PARS = /* glsl */`uniform vec3 uSkyHor, uSkyZen, uSunDir, uSunCol; uniform float uNight;`;
-const glossApply = (amt, f0) => /* glsl */`
+const glossApply = (amt, f0, more = '') => /* glsl */`
 { float gm = ${amt.toFixed(3)};
   #ifdef USE_COLOR_ALPHA
   gm *= vColor.a;
@@ -607,9 +607,15 @@ const glossApply = (amt, f0) => /* glsl */`
   float lit = clamp(dot(reflectedLight.directDiffuse, vec3(0.3, 0.59, 0.11)) * 3.0, 0.0, 1.0);
   vec3 H = normalize(normalize((viewMatrix * vec4(uSunDir, 0.0)).xyz) + vV);
   outgoingLight += uSunCol * pow(max(dot(nV, H), 0.0), 90.0) * 1.6 * gm * lit;
+  ${more}
 }`;
-export function withGloss(m, amt, f0 = 0.06, key = 'gloss') {
-  m.onBeforeCompile = sh => { for (const k of ['uSkyHor', 'uSkyZen', 'uSunDir', 'uSunCol', 'uNight']) sh.uniforms[k] = U[k]; worldShade(sh, GLOSS_PARS, glossApply(amt, f0)); };
+/** extra (optional): { pars, apply, uniforms } — more lighting inside the gloss block (it can use nV, vV, gm) */
+export function withGloss(m, amt, f0 = 0.06, key = 'gloss', extra = null) {
+  m.onBeforeCompile = sh => {
+    for (const k of ['uSkyHor', 'uSkyZen', 'uSunDir', 'uSunCol', 'uNight']) sh.uniforms[k] = U[k];
+    if (extra) Object.assign(sh.uniforms, extra.uniforms);
+    worldShade(sh, GLOSS_PARS + (extra ? extra.pars : ''), glossApply(amt, f0, extra ? extra.apply : ''));
+  };
   m.customProgramCacheKey = () => key + amt;
   return m;
 }

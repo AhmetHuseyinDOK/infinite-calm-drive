@@ -4257,6 +4257,8 @@ float hash12(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx
 float vnoise(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 w = f*f*(3.0-2.0*f);
   return textureGrad(uNoiseTex, (i + w + 0.5) / 256.0, dFdx(p) / 256.0, dFdy(p) / 256.0).r; }
 float fbm2(vec2 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 4; i++){ s += a*vnoise(p); p = p*2.03 + 17.1; a *= 0.5; } return s; }
+// the same noise from the top mip only: needs no screen-space derivatives (safe inside branches; for slow wobbles)
+float vnoiseL(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 w = f*f*(3.0-2.0*f); return textureLod(uNoiseTex, (i + w + 0.5) / 256.0, 0.0).r; }
 vec3 L(vec3 c){ return pow(c, vec3(2.2)); }
 `,y_=`
 uniform vec2 uOrigin; uniform float uCloudSh;
@@ -4300,6 +4302,9 @@ varying vec3 vWP;${n?`
 varying float vCloud;`:""}
 ${ki}${y_}${T_}${t}`).replace("#include <opaque_fragment>",`${n?S_:M_}${e}${E_}
 #include <opaque_fragment>`)}var w_=`
+// an anti-aliased line of half-width hw (world units) at d = 0, given d's screen-space footprint fw; fades out once it is
+// thinner than a pixel
+float crackLine(float d, float hw, float fw){ fw = max(fw, 1e-4); return clamp((hw - abs(d)) / fw + 0.5, 0.0, 1.0) * min(1.0, 2.0 * hw / fw); }
 vec3 roadCol(float s, float u, float rw){
   float a = abs(u); vec2 p = vec2(s, u);
   vec3 c = L(vec3(0.63, 0.62, 0.61));
@@ -4309,8 +4314,22 @@ vec3 roadCol(float s, float u, float rw){
   c *= 1.0 - 0.08*tr;
   vec2 pc = vec2(s/9.0, (u + rw)/2.3); vec2 pf = fract(pc);
   if (hash12(floor(pc) + 3.7) > 0.88 && pf.x > 0.12 && pf.x < 0.82 && pf.y > 0.1 && pf.y < 0.9) c *= 0.85;
-  float cr = abs(vnoise(p*vec2(0.7, 1.3)) - 0.5);
-  c *= 1.0 - 0.2*(1.0 - smoothstep(0.0, 0.025, cr))*step(0.62, vnoise(p*0.11 + 4.0));
+  // sealed cracks (\u30AF\u30E9\u30C3\u30AF\u30B7\u30FC\u30EB): thin tar lines \u2014 short ones across a lane every few metres, the odd long one along a
+  // wheel track \u2014 ~3.6 cm wide in world space and anti-aliased, so they thin out with distance (they used to be the 0.5
+  // contour of a noise field: round loops, thickest right in front of the camera). Only in some stretches of road; the
+  // rest skips the maths (derivatives are taken first, outside the branch).
+  float crk = 0.0, fS = fwidth(s), fU = fwidth(u);
+  if (vnoise(p * 0.05 + 4.0) > 0.4) {
+    float ci = floor(s / 6.0), s0 = (ci + 0.15 + 0.7 * hash12(vec2(ci, 3.1))) * 6.0;
+    float uc = (hash12(vec2(ci, 5.3)) * 2.0 - 1.0) * rw * 0.6, hw = rw * (0.25 + 0.55 * hash12(vec2(ci, 7.9)));
+    float dT = s - s0 - 0.35 * (vnoiseL(vec2(u * 0.9, ci * 1.3)) - 0.5) - 0.03 * sin(u * 11.0 + ci * 1.7);
+    crk += step(0.5, hash12(vec2(ci, 1.7))) * step(abs(u - uc), hw) * crackLine(dT, 0.018, fS + 0.35 * fU);
+    float cj = floor(s / 27.0), u0 = (hash12(vec2(cj, 13.1)) * 2.0 - 1.0) * rw * 0.75;
+    float sa = (cj + 0.1 + 0.4 * hash12(vec2(cj, 17.7))) * 27.0, sb = sa + 6.0 + 14.0 * hash12(vec2(cj, 19.3));
+    float dL = u - u0 - 0.25 * (vnoiseL(vec2(s * 0.15, cj * 1.7)) - 0.5) - 0.025 * sin(s * 1.9 + cj * 2.3);
+    crk += step(0.65, hash12(vec2(cj, 11.3))) * step(sa, s) * step(s, sb) * crackLine(dL, 0.018, fU + 0.1 * fS);
+  }
+  c *= 1.0 - 0.32 * clamp(crk, 0.0, 1.0);
   float city = vZW.x, paint = 0.0, mtn = clamp(1.0 - dot(vZW, vec4(1.0)) - vZS, 0.0, 1.0);
   paint += step(abs(a - (rw - 0.28)), 0.07);
   paint += (1.0 - step(0.5, city)) * (1.0 - step(0.5, mtn)) * step(a, 0.07) * step(fract(s/10.0), 0.55);

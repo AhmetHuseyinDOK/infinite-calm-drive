@@ -2,6 +2,20 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-21 · 12:xx — Realistic sealed road cracks (no more doodle loops)
+- **The dark lines on the asphalt are now real-looking sealed cracks.** They used to be the 0.5 contour of a smooth noise
+  field: big round loops ~3–5 m across, drawn with a width in noise units, so they were thickest right in front of the
+  camera — on a phone in portrait the road fills the bottom half of the screen and they read as scribbles. Now they are
+  thin tar lines (~3.6 cm wide in world space) where real roads have them: short cracks across part of a lane every few
+  metres and the odd long one along a wheel track, slightly jagged, only on some stretches of road. Anti-aliased by their
+  screen-space width, so they thin out and fade with distance instead of shimmering.
+- Cost: none — stretches without cracks skip the maths (screen-space derivatives are taken outside the branch, and the
+  wobble uses the noise texture's top mip, which needs none). Interleaved A/B (1280×720): city 20.5 → 20.7 ms,
+  countryside 22.1 → 21.7, coast 24.4 → 24.8 — within noise. (A first version without the early-out cost ~1 ms.)
+- Measured first (phone portrait, mid quality, GPU ms by part in the city): ground 4.2, props 4.3, the off-screen
+  render + colour grade 4.0, MSAA 3.9, buildings 2.3 — the post chain and MSAA behave very differently on phone GPUs
+  (tile-based) than on this desktop, so they're left for when there's on-device data.
+
 ## 2026-10-21 · 11:xx — Calmer shadows: fewer re-rasterisations
 Every time the sun's shadow map is re-laid-out, every shadow edge in view changes its stair-step pattern at once (a
 "pop"). Three things did that; all three are now rarer or gone:

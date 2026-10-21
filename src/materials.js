@@ -80,6 +80,8 @@ export const U = {
   uCarPos: { value: new THREE.Vector3() }, uCarFwd: { value: new THREE.Vector3(0, 0, 1) }, uHead: { value: 0 },
   uWind: { value: 1 },
   uNoiseTex: { value: makeNoiseTex() },
+  uCloudTex: { value: null },                  // the drifting cloud shadows, painted each frame (makeCloudMap)
+  uCloudOrg: { value: new THREE.Vector2() },   // world xz at the centre of that map (rebased coordinates)
 };
 
 function gradTex(vals) {
@@ -114,25 +116,20 @@ float vnoiseL(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 w = f*f*(3.0-2.0*f)
 vec3 L(vec3 c){ return pow(c, vec3(2.2)); }
 `;
 
-// drifting cloud shadows (big soft patches sliding over the land on sunny days)
+// drifting cloud shadows (big soft patches sliding over the land on sunny days): one read of a small map painted each
+// frame (makeCloudMap) — four noise octaves in every ground pixel used to cost ~1.9 ms a frame
+export const CLOUD_SPAN = 1600, CLOUD_N = 256; // metres covered around the camera; map resolution (6.25 m texels)
 const SHADE_PARS = /* glsl */`
-uniform vec2 uOrigin; uniform float uCloudSh;
-float cloudShadow(vec2 xz){
-  vec2 p = (xz + uOrigin) * 0.0028 + vec2(uTime * 0.011, uTime * 0.0045);
-  return smoothstep(0.47, 0.58, fbm2(p)) * uCloudSh;
-}`;
+uniform vec2 uOrigin; uniform float uCloudSh; uniform sampler2D uCloudTex; uniform vec2 uCloudOrg;
+float cloudShadow(vec2 xz){ return texture(uCloudTex, (xz - uCloudOrg) * ${(1 / CLOUD_SPAN).toFixed(8)} + 0.5).r * uCloudSh; }`;
 const SHADE_APPLY = /* glsl */`
 outgoingLight *= mix(vec3(1.0), vec3(0.66, 0.71, 0.84), cloudShadow(vWP.xz));`;
 // the same cloud shadows evaluated per vertex (props, foliage, buildings, the car: dense meshes, 300 m-scale patterns)
 const CLOUD_V = /* glsl */`
-uniform sampler2D uNoiseTex; uniform vec2 uOrigin; uniform float uCloudSh, uTime;
+uniform sampler2D uNoiseTex, uCloudTex; uniform vec2 uOrigin, uCloudOrg; uniform float uCloudSh, uTime;
 varying float vCloud;
 float vnoiseV(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 w = f*f*(3.0-2.0*f); return textureLod(uNoiseTex, (i + w + 0.5) / 256.0, 0.0).r; }
-float cloudShadowV(vec2 xz){
-  vec2 p = (xz + uOrigin) * 0.0028 + vec2(uTime * 0.011, uTime * 0.0045);
-  float a = 0.5, s = 0.0; for (int i = 0; i < 4; i++){ s += a * vnoiseV(p); p = p * 2.03 + 17.1; a *= 0.5; }
-  return smoothstep(0.47, 0.58, s) * uCloudSh;
-}`;
+float cloudShadowV(vec2 xz){ return textureLod(uCloudTex, (xz - uCloudOrg) * ${(1 / CLOUD_SPAN).toFixed(8)} + 0.5, 0.0).r * uCloudSh; }`;
 const SHADE_APPLY_V = /* glsl */`
 outgoingLight *= mix(vec3(1.0), vec3(0.66, 0.71, 0.84), vCloud);`;
 // inside a tunnel: no sun or sky, just sodium lamps every 6 m (and the car's own headlights)
@@ -156,9 +153,41 @@ const TUNNEL_APPLY = /* glsl */`
     vec3 lit = diffuseColor.rgb * (vec3(1.0, 0.54, 0.18) * (0.15 + 0.3 * band) + vec3(1.0, 0.95, 0.86) * head * 0.45) + reflectedLight.indirectDiffuse * 0.06 + totalEmissiveRadiance;
     outgoingLight = mix(outgoingLight, lit, tm);
   } }`;
+/** The cloud-shadow map: CLOUD_SPAN metres around the camera at CLOUD_N², repainted each frame (the clouds drift) with
+ *  the four-octave pattern every shader used to evaluate itself. Centred on whole texels in absolute coordinates, so it
+ *  doesn't swim as the camera moves or when the world re-centres. */
+export function makeCloudMap() {
+  const rt = new THREE.WebGLRenderTarget(CLOUD_N, CLOUD_N, { format: THREE.RedFormat, type: THREE.UnsignedByteType, depthBuffer: false,
+    minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: false });
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { uCenter: { value: new THREE.Vector2() }, uOrigin: U.uOrigin, uTime: U.uTime, uNoiseTex: U.uNoiseTex },
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+    fragmentShader: /* glsl */`
+      uniform vec2 uCenter, uOrigin; uniform float uTime; uniform sampler2D uNoiseTex; varying vec2 vUv;
+      float vn(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 w = f*f*(3.0-2.0*f); return textureLod(uNoiseTex, (i + w + 0.5) / 256.0, 0.0).r; }
+      void main(){
+        vec2 p = (uCenter + (vUv - 0.5) * ${CLOUD_SPAN.toFixed(1)} + uOrigin) * 0.0028 + vec2(uTime * 0.011, uTime * 0.0045);
+        float a = 0.5, s = 0.0; for (int i = 0; i < 4; i++){ s += a * vn(p); p = p * 2.03 + 17.1; a *= 0.5; }
+        gl_FragColor = vec4(smoothstep(0.47, 0.58, s));
+      }`,
+    depthTest: false, depthWrite: false,
+  });
+  const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat), cam = new THREE.Camera(); quad.frustumCulled = false;
+  U.uCloudTex.value = rt.texture; U.uCloudTex.rt = rt; // (rt kept for debugging)
+  const tex = CLOUD_SPAN / CLOUD_N;
+  return {
+    update(renderer, x, z, ox, oz) {
+      const cx = Math.round((x + ox) / tex) * tex - ox, cz = Math.round((z + oz) / tex) * tex - oz;
+      mat.uniforms.uCenter.value.set(cx, cz); U.uCloudOrg.value.set(cx, cz);
+      const prev = renderer.getRenderTarget(); renderer.setRenderTarget(rt); renderer.render(quad, cam); renderer.setRenderTarget(prev);
+    },
+  };
+}
+
 /** adds vWP (world position), shared uniforms and the cloud-shadow term to a built-in material */
 function worldShade(sh, extraPars = '', extraApply = '', vertexCloud = true) {
   sh.uniforms.uOrigin = U.uOrigin; sh.uniforms.uCloudSh = U.uCloudSh; sh.uniforms.uTime = U.uTime; sh.uniforms.uNoiseTex = U.uNoiseTex;
+  sh.uniforms.uCloudTex = U.uCloudTex; sh.uniforms.uCloudOrg = U.uCloudOrg;
   for (const k of ['uTunA', 'uTunB', 'uTunR', 'uCarPos', 'uCarFwd', 'uHead']) sh.uniforms[k] = U[k];
   sh.vertexShader = sh.vertexShader
     .replace('#include <common>', '#include <common>\nvarying vec3 vWP;' + (vertexCloud ? CLOUD_V : ''))

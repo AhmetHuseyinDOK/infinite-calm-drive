@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Path, ZONES, zoneW, zoneAt, zparam, ZINFO, setStartZone, crossingS, crossingValid, XING, XOFF, riverNear, groundOffsetMix, tunnelNear, T_HALF, T_RIDGE } from './path.js';
 import { makeCrossingRig, makeTrain, xingPosts } from './crossing.js';
 import { buildAtlas, buildFoliage } from './textures.js';
-import { makeMaterials, U, groundMaterialFor, setShadowTaps, setGrazeFade } from './materials.js';
+import { makeMaterials, U, groundMaterialFor, setShadowTaps, setGrazeFade, makeCloudMap } from './materials.js';
 import { setAtlas, setFoliage, warmTrees, setLeafDensity } from './props.js';
 import { World } from './chunks.js';
 import { makeSky, paintClouds, makeClouds, makeMountains, updateTOD, applyWeather, TOD, lightDirAt } from './sky.js';
@@ -100,6 +100,7 @@ async function main() {
   const atlas = buildAtlas(); setAtlas(atlas);
   const fol = buildFoliage(renderer); setFoliage(fol.cells); U.uTuftV.value.set(fol.tuftV[0], fol.tuftV[1]);
   const M = makeMaterials(atlas.textures(renderer), fol.tex);
+  const cloudMap = makeCloudMap(); cloudMap.update(renderer, 0, 0, 0, 0);
   status('painting the clouds…');
   await new Promise(r => setTimeout(r, 10));
   setLeafDensity(QS.has('leafd') ? parseFloat(QS.get('leafd')) : quality === 'high' ? 0.72 : 0.62); // fewer, larger foliage cards
@@ -443,6 +444,7 @@ async function main() {
     U.uSkyHor.value.copy(TOD.horizon); U.uSkyZen.value.copy(TOD.zenith); U.uTime.value = t;
     U.uWet.value = wet * (1 - w.snow); U.uOrigin.value.set(world.origin.x, world.origin.z); U.uWind.value = 1 + 0.8 * rn;
     U.uCloudSh.value = (1 - ov) * sstep(0.04, 0.3, TOD.sunEl) * (1 - TOD.night);
+    if (U.uCloudSh.value > 0.001) cloudMap.update(renderer, camera.position.x, camera.position.z, world.origin.x, world.origin.z);
     const su = sky.material.uniforms;
     su.uNight.value = TOD.night; su.uWarm.value = TOD.warm; su.uTime.value = t; su.uCirrusCol.value.copy(TOD.cLit).lerp(TOD.horizon, 0.25);
     su.uCirrus.value = 0.6 * (1 - ov) * (1 - 0.65 * sstep(0.4, 0.9, TOD.night)); su.uOvercast.value = ov;

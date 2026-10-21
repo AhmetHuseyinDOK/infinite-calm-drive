@@ -2,6 +2,18 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-21 · 13:xx — Cloud shadows from a small map: ~6 % faster frames
+- **Measured first**: the drifting cloud shadows cost **1.9 ms a frame** on the ground alone (A/B against a build without
+  them, 1280×720) — every ground pixel evaluated four octaves of noise (with screen-space derivatives) for a pattern whose
+  finest detail is ~45 m across, and every vertex of every prop, tree and building did the same four lookups.
+- **Now the pattern is painted once per frame into a 256² map** covering 1.6 km around the camera (6.25 m texels, snapped
+  to whole texels in world space so it doesn't swim), and everything reads it with one texture lookup. Skipped entirely at
+  night, under overcast and at low sun, when the cloud shadows are off anyway. Same pattern, same drift (screenshots match;
+  a cloud-shadow band on the autumn hillside lands in the same place).
+- GPU time per frame, interleaved A/B: desktop 1280×720 — countryside **22.5 → 21.0 ms**, city **21.2 → 19.8**, coast
+  **24.8 → 23.3**, cherry blossom 27.1 → 26.4; phone portrait at phone quality — city **15.5 → 14.5 ms**, countryside
+  15.3 → 14.5.
+
 ## 2026-10-21 · 12:xx — Realistic sealed road cracks (no more doodle loops)
 - **The dark lines on the asphalt are now real-looking sealed cracks.** They used to be the 0.5 contour of a smooth noise
   field: big round loops ~3–5 m across, drawn with a width in noise units, so they were thickest right in front of the

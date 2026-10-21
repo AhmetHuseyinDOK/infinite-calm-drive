@@ -25,7 +25,7 @@ const pickV = (r, base) => (A.has(base + '2') && r() < 0.5 ? base + '2' : base);
 
 export function sub(M, x, y, z, yaw = 0) {
   const m = new THREE.Matrix4().makeRotationY(yaw); m.setPosition(x, y, z);
-  return new THREE.Matrix4().multiplyMatrices(M, m);
+  const r = new THREE.Matrix4().multiplyMatrices(M, m); r.groundY = M.groundY; return r; // (keeps the prop's ground: contact AO)
 }
 // atlas quads: front (faces −Z), +X side, −X side
 const fq = (g, x0, x1, y0, y1, z, cell, c = W1) => g.quad([x1, y0, z], [x0, y0, z], [x0, y1, z], [x1, y1, z], c, uv(cell));
@@ -302,7 +302,7 @@ function treeTemplate(kind, v) {
 export function warmTrees() { for (const kind in TREE_BUILDERS) for (let v = 0; v < 4; v++) treeTemplate(kind, v); }
 export function tree(G, M, kind, r, s = 1) {
   const t = treeTemplate(kind, Math.floor(r() * 4));
-  const m = M.clone().scale(new THREE.Vector3(s, s, s));
+  const m = M.clone().scale(new THREE.Vector3(s, s, s)); m.groundY = M.groundY;
   G.color.stamp(t.c, m); G.foliage.stamp(t.f, m); G.leaf.stamp(t.l, m);
 }
 

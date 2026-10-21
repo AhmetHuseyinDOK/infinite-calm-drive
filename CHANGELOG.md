@@ -2,6 +2,20 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-21 · 10:xx — Contact shading: things sit on the ground
+- **Realism: soft contact shading where things meet the ground.** Building walls, shop fronts, poles, tree trunks,
+  benches, the bus shelter, the crossing posts and the tunnel walls now darken softly over their bottom metre, the way
+  ambient light really falls off where a wall meets the ground (and the way anime backgrounds paint it). Ambient light
+  fades to 42 % at the ground and direct sun to 71 %, only on surfaces facing sideways, so steps and plinths don't
+  turn into dark slabs. The geometry builder stores one byte per vertex — its height above the ground under the prop
+  (from the placement matrix) — and the shader does the rest. GPU time unchanged within noise (interleaved A/B, 1280×720):
+  city 21.4 → 21.7 ms, mountains 30.3 → 30.3, cherry blossom 27.1 → 26.9, countryside 22.4 → 22.9.
+- Measured at phone speed (main thread slowed 4×): world-building slices are fine — taking the faster of two builds of
+  every chunk in a zone cycle, only 19 of 3,837 slices exceed one frame (16 ms) and 3 exceed two, worst 53 ms (a city
+  intersection block); the 120–170 ms spikes seen in single runs were garbage collection and machine load. GC: 1.6 MB/s
+  allocated, minor collections only (6 in 25 s). Fixed one source: last pass's far-detail culling walked the chunk map
+  with an iterator every frame (1.5 MB of garbage per 25 s at phone speed) — now none.
+
 ## 2026-10-21 · 09:xx — Phone pass: a quarter fewer draw calls
 Measured on a phone-like setup (iPhone-sized viewport, main thread slowed 4×): the biggest main-thread cost is three.js's
 own render call — **~58 % of all main-thread time**, almost all of it per-draw overhead (shader/uniform setup, buffer

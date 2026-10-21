@@ -8,9 +8,11 @@ const WHITE = [1, 1, 1];
 export class GB {
   // Vertices go straight into growable typed arrays (no big JS-array → typed-array copy when a chunk finishes) in
   // compact formats: float positions, 1-byte normals and colours (normalized), float UVs — half the memory and upload.
-  constructor({ uv = false, color = true } = {}) {
-    this.hasUV = uv; this.hasColor = color;
-    this.n = 0; this.cap = 0; this.P = null; this.N = null; this.U = null; this.Cl = null;
+  // ao: also store, per vertex, how close it is to the ground under the prop being built (one byte, `aoD`: 255 at the
+  // ground … 0 at 2.55 m or more) — from the matrix's `groundY` (set where props are placed; no groundY → no AO)
+  constructor({ uv = false, color = true, ao = false } = {}) {
+    this.hasUV = uv; this.hasColor = color; this.hasAO = ao; this.aoY0 = NaN;
+    this.n = 0; this.cap = 0; this.P = null; this.N = null; this.U = null; this.Cl = null; this.A = null;
     this.bb = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
     this.m = new THREE.Matrix4(); this.nm = new THREE.Matrix3();
     this.e = this.m.elements; this.ne = this.nm.elements;
@@ -21,10 +23,12 @@ export class GB {
     const N = new Int8Array(cap * 3); if (this.N) N.set(this.N.subarray(0, n * 3)); this.N = N;
     if (this.hasUV) { const U = new Float32Array(cap * 2); if (this.U) U.set(this.U.subarray(0, n * 2)); this.U = U; }
     if (this.hasColor) { const C = new Uint8Array(cap * 3); if (this.Cl) C.set(this.Cl.subarray(0, n * 3)); this.Cl = C; }
+    if (this.hasAO) { const A = new Uint8Array(cap); if (this.A) A.set(this.A.subarray(0, n)); this.A = A; }
     this.cap = cap;
   }
   get count() { return this.n; }
-  setM(m) { this.m.copy(m); this.nm.getNormalMatrix(m); return this; }
+  setM(m) { this.m.copy(m); this.nm.getNormalMatrix(m); this.aoY0 = m.groundY ?? NaN; return this; }
+  aoByte(py) { const h = py - this.aoY0; return h === h ? 255 - (h <= 0 ? 0 : h >= 2.55 ? 255 : Math.round(h * 100)) : 0; }
   vtx(x, y, z, nx, ny, nz, u, v, c) {
     if (this.n >= this.cap) this.grow(this.n + 1);
     const e = this.e, nm = this.ne, i3 = this.n * 3, P = this.P, bb = this.bb;
@@ -36,6 +40,7 @@ export class GB {
     const l = 127 / (Math.sqrt(X * X + Y * Y + Z * Z) || 1);
     this.N[i3] = Math.round(X * l); this.N[i3 + 1] = Math.round(Y * l); this.N[i3 + 2] = Math.round(Z * l);
     if (this.hasUV) { this.U[this.n * 2] = u; this.U[this.n * 2 + 1] = v; }
+    if (this.hasAO) this.A[this.n] = this.aoByte(py);
     if (this.hasColor) {
       const k = c || WHITE, C = this.Cl;
       C[i3] = k[0] >= 1 ? 255 : k[0] <= 0 ? 0 : k[0] * 255 + 0.5; C[i3 + 1] = k[1] >= 1 ? 255 : k[1] <= 0 ? 0 : k[1] * 255 + 0.5; C[i3 + 2] = k[2] >= 1 ? 255 : k[2] <= 0 ? 0 : k[2] * 255 + 0.5;
@@ -131,6 +136,7 @@ export class GB {
       const x = P[i], y = P[i + 1], z = P[i + 2], j = o * 3 + i;
       const px = e[0] * x + e[4] * y + e[8] * z + e[12], py = e[1] * x + e[5] * y + e[9] * z + e[13], pz = e[2] * x + e[6] * y + e[10] * z + e[14];
       this.P[j] = px; this.P[j + 1] = py; this.P[j + 2] = pz;
+      if (this.hasAO) this.A[o + i / 3] = this.aoByte(py);
       if (px < bb[0]) bb[0] = px; if (py < bb[1]) bb[1] = py; if (pz < bb[2]) bb[2] = pz;
       if (px > bb[3]) bb[3] = px; if (py > bb[4]) bb[4] = py; if (pz > bb[5]) bb[5] = pz;
       const nx = N[i], ny = N[i + 1], nz = N[i + 2];
@@ -148,6 +154,7 @@ export class GB {
     g.setAttribute('position', new THREE.BufferAttribute(this.P.slice(0, n * 3), 3));
     g.setAttribute('normal', new THREE.BufferAttribute(this.N.slice(0, n * 3), 3, true));
     if (this.hasUV) g.setAttribute('uv', new THREE.BufferAttribute(this.U.slice(0, n * 2), 2));
+    if (this.hasAO) g.setAttribute('aoD', new THREE.BufferAttribute(this.A.slice(0, n), 1, true));
     if (this.hasColor) g.setAttribute('color', new THREE.BufferAttribute(this.Cl.slice(0, n * 3), 3, true));
     g.boundingBox = new THREE.Box3(new THREE.Vector3(bb[0], bb[1], bb[2]), new THREE.Vector3(bb[3], bb[4], bb[5]));
     g.boundingSphere = g.boundingBox.getBoundingSphere(new THREE.Sphere());

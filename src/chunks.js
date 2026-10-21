@@ -108,13 +108,13 @@ export class World {
    *  ahead (tree leaf cards beyond `farLeaf`), where they'd be a pixel or less and mostly fogged anyway. Each is a draw
    *  call, and draw calls are most of the main thread's work on phones. Lamp heads and light pools stay at night. */
   lod(s, far, night, farLeaf = Infinity) {
-    for (const [c, ch] of this.chunks) {
-      const d = c * CH - s;
-      for (const m of ch.group.children) {
-        const k = m.userData.detail;
+    this.chunks.forEach((ch, c) => { // (forEach + index loop: no per-frame garbage)
+      const d = c * CH - s, kids = ch.group.children;
+      for (let i = 0; i < kids.length; i++) {
+        const m = kids[i], k = m.userData.detail;
         if (k) m.visible = k === 'leaf' ? d < farLeaf : d < far || (night && k === 'light');
       }
-    }
+    });
   }
   /** reveal everything staged right away (used while the title screen is up) */
   flush() { for (const ch of this.reveal) { for (const m of ch.pending) ch.group.add(m); ch.pending.length = 0; } this.reveal.length = 0; }
@@ -123,7 +123,7 @@ export class World {
     const path = this.path, s0 = c * CH, s1 = s0 + CH;
     const O = path.at(s0), ox = O.x, oz = O.z;
     const r = rng(Math.floor(hash2(c, 777) * 4294967295));
-    const G = { atlas: new GB({ uv: true }), color: new GB(), foliage: new GB(), leaf: new GB({ uv: true }), lamp: new GB({ color: false }), sig: new GB({ color: false }), sodium: new GB({ color: false }), decal: new GB({ uv: true }), pool: new GB({ uv: true, color: false }) };
+    const G = { atlas: new GB({ uv: true, ao: true }), color: new GB({ ao: true }), foliage: new GB(), leaf: new GB({ uv: true }), lamp: new GB({ color: false }), sig: new GB({ color: false }), sodium: new GB({ color: false }), decal: new GB({ uv: true }), pool: new GB({ uv: true, color: false }) };
     const ground = new GroundB(), foam = [], river = [];
     const f = {}, f2 = {};
 
@@ -134,9 +134,10 @@ export class World {
     const matAt = (s, u, y, extraYaw = 0, faceRoad = true) => {
       path.at(s, f);
       const yaw = f.h - Math.PI / 2 + (faceRoad && u < 0 ? Math.PI : 0) + extraYaw;
-      const m = new THREE.Matrix4().makeRotationY(yaw); m.setPosition(f.x + f.rx * u - ox, y, f.z + f.rz * u - oz); return m;
+      const m = new THREE.Matrix4().makeRotationY(yaw); m.setPosition(f.x + f.rx * u - ox, y, f.z + f.rz * u - oz);
+      m.groundY = y; return m; // a prop's base is on the ground (contact AO in geom.js); onGround / snow poles say otherwise
     };
-    const onGround = (s, u, dy = 0, extraYaw = 0, faceRoad = true) => matAt(s, u, H(s, u) + dy, extraYaw, faceRoad);
+    const onGround = (s, u, dy = 0, extraYaw = 0, faceRoad = true) => { const h = H(s, u), m = matAt(s, u, h + dy, extraYaw, faceRoad); m.groundY = h; return m; };
     const road = s => path.at(s, f2).y;
     const rwAt = s => zparam(s, 'rw');
     const walkW = s => { const w = zoneW(s); return w.city + w.sakura > 0.5 ? (w.city >= w.sakura ? 3.0 : 2.6) : 0; };
@@ -569,8 +570,8 @@ export class World {
     for (let s = Math.ceil(s0 / 36) * 36; s < s1; s += 36) {
       if (sw(s) < 0.55) continue;
       const rw = rwAt(s);
-      P.snowPole(G, matAt(s, -(rw + 0.95), road(s) + 1.3), 1);
-      P.snowPole(G, matAt(s + 18, rw + 0.95, road(s + 18) + 1.3), -1);
+      { const a = matAt(s, -(rw + 0.95), road(s) + 1.3), b = matAt(s + 18, rw + 0.95, road(s + 18) + 1.3); a.groundY = road(s); b.groundY = road(s + 18);
+        P.snowPole(G, a, 1); P.snowPole(G, b, -1); }
     }
   }
 

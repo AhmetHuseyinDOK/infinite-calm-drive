@@ -478,6 +478,22 @@ diffuseColor.rgb *= ${(1 - amt / 2).toFixed(3)} + ${amt.toFixed(3)} * vnoise(vWP
   return m;
 }
 
+/** Contact shading: toward the ground, at the base of walls, poles, trunks and fences, ambient light fades (and a little of
+ *  the sun) — from the per-vertex `aoD` byte the geometry builder writes (255 at the ground … 0 from 2.55 m up; absent →
+ *  0 → none). Only on surfaces that face sideways, so plinths and steps don't turn into dark slabs. */
+function contactAO(sh) {
+  sh.vertexShader = sh.vertexShader
+    .replace('#include <common>', '#include <common>\nattribute float aoD; varying float vAoD;')
+    .replace('#include <begin_vertex>', '#include <begin_vertex>\nvAoD = aoD;');
+  sh.fragmentShader = sh.fragmentShader
+    .replace('#include <common>', '#include <common>\nvarying float vAoD;')
+    .replace('#include <aomap_fragment>', `#include <aomap_fragment>
+{ float aoH = (1.0 - vAoD) * 2.55, ao = mix(0.42, 1.0, smoothstep(0.0, 1.0, aoH));
+  float up = dot(normal, normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz));
+  ao = mix(1.0, ao, 1.0 - smoothstep(0.5, 0.85, abs(up)));
+  reflectedLight.indirectDiffuse *= ao; reflectedLight.directDiffuse *= mix(1.0, ao, 0.5); }`);
+}
+
 /** give any built-in material the drifting cloud shadows (car, train …) so everything darkens together */
 // (one cache key for all of them: the patch is identical, so materials with the same settings share a program)
 export function withCloudShadow(m) { m.onBeforeCompile = sh => worldShade(sh); m.customProgramCacheKey = () => 'cs'; return m; }
@@ -485,10 +501,10 @@ export function withCloudShadow(m) { m.onBeforeCompile = sh => worldShade(sh); m
 export function makeMaterials(atlasTex, folTex) {
   const M = {};
   M.ground = groundMaterial();
-  M.color = painterly(new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: GRAD }), 1.6, 0.1, 'color-v2');
+  M.color = painterly(new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: GRAD }), 1.6, 0.1, 'color-v3', contactAO);
   M.atlas = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: GRAD, map: atlasTex.map, emissiveMap: atlasTex.emissive, emissive: 0xffffff, emissiveIntensity: 0.1, alphaTest: 0.5 });
-  M.atlas.onBeforeCompile = sh => worldShade(sh);
-  M.atlas.customProgramCacheKey = () => 'atlas-v2';
+  M.atlas.onBeforeCompile = sh => { contactAO(sh); worldShade(sh); };
+  M.atlas.customProgramCacheKey = () => 'atlas-v3';
   M.foliage = painterly(new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: GRAD_SOFT }), 2.6, 0.24, 'foliage-v2');
   M.lamp = new THREE.MeshBasicMaterial({ color: 0xf0eee6 });
   M.sig = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.15, 1.7, 1.1) }); // a lit 青 signal lamp

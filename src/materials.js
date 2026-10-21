@@ -85,6 +85,8 @@ export const U = {
   uNoiseTex: { value: makeNoiseTex() },
   uCloudTex: { value: null },                  // the drifting cloud shadows, painted each frame (makeCloudMap)
   uCloudOrg: { value: new THREE.Vector2() },   // world xz at the centre of that map (rebased coordinates)
+  // wet-road reflections (post.js ReflCopyPass → the WET chunk): the frame's light at ⅛ size, on while the road is wet
+  uReflTex: { value: null }, uReflOn: { value: 0 }, uReflRes: { value: new THREE.Vector2(1280, 720) }, uHorizon: { value: 0.6 }, uReflK: { value: 0.3 },
 };
 
 function gradTex(vals) {
@@ -500,6 +502,13 @@ if (uWet > 0.01) {
   float ring = (1.0 - smoothstep(0.0, 0.045, abs(length(fp) - ph * 0.48))) * (1.0 - ph) * puddle;
   vec3 refl = mix(uSkyHor, uSkyZen, 0.35) * (0.75 - 0.4 * uNight);
   float k = uWet * hard * clamp(0.05 + fr * 0.55 + puddle * 0.6, 0.0, 0.9);
+  if (uReflOn > 0.5 && k > 0.12) { // the lights and the street mirror in the wet road (skipped where it reflects little):
+    vec2 suv = gl_FragCoord.xy / uReflRes;   // sample last frame's light above the horizon, where the reflected ray's scenery
+    float my = uHorizon + (uHorizon - suv.y) * uReflK, st = mix(0.03, 0.012, puddle); // sits (uReflK corrects for the camera
+    vec3 r = textureLod(uReflTex, vec2(suv.x, my), 0.0).rgb * 0.45 + textureLod(uReflTex, vec2(suv.x, my + st), 0.0).rgb * 0.33 // height), stretched
+      + textureLod(uReflTex, vec2(suv.x, my + 2.2 * st), 0.0).rgb * 0.22;                       // into vertical streaks like rough wet asphalt
+    refl = mix(refl, r, smoothstep(1.0, 0.9, my)); // (off the top of the screen: the sky colour as before)
+  }
   outgoingLight = mix(outgoingLight * (1.0 - 0.38 * uWet * hard), refl, k) + ring * 0.1 * uWet * (refl + 0.05);
   outgoingLight *= 1.0 - 0.12 * uWet * (1.0 - hard);
 }`;
@@ -528,6 +537,7 @@ export function groundMaterial(defines = groundDefines(Object.keys(ZDEF)), key =
   m.defines = defines;
   m.onBeforeCompile = sh => {
     sh.uniforms.uSkyHor = U.uSkyHor; sh.uniforms.uSkyZen = U.uSkyZen; sh.uniforms.uWet = U.uWet; sh.uniforms.uNight = U.uNight; sh.uniforms.uSunDir = U.uSunDir; sh.uniforms.uSunCol = U.uSunCol;
+    for (const k of ['uReflTex', 'uReflOn', 'uReflRes', 'uHorizon', 'uReflK']) sh.uniforms[k] = U[k];
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
 attribute vec2 su; attribute vec4 zw; attribute vec2 rk; attribute float rv; attribute float zs;
@@ -536,13 +546,14 @@ varying vec2 vSU; varying vec4 vZW; varying vec2 vRK; varying float vWY; varying
 vSU = su; vZW = zw; vRK = rk; vRV = rv; vZS = zs; vWY = (modelMatrix * vec4(position, 1.0)).y; vWN = normalize(mat3(modelMatrix) * objectNormal);`);
     worldShade(sh, `
 uniform vec3 uSkyHor, uSkyZen, uSunDir, uSunCol; uniform float uWet, uNight;
+uniform sampler2D uReflTex; uniform vec2 uReflRes; uniform float uReflOn, uHorizon, uReflK;
 varying vec2 vSU; varying vec4 vZW; varying vec2 vRK; varying float vWY; varying float vRV; varying vec3 vWN; varying float vZS;
 float gWater = 0.0;
 ${GROUND}`, WET + MIRROR, false);
     sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
 diffuseColor.rgb *= groundAlbedo();`);
   };
-  m.customProgramCacheKey = () => 'ground-v15-' + key;
+  m.customProgramCacheKey = () => 'ground-v16-' + key;
   return m;
 }
 

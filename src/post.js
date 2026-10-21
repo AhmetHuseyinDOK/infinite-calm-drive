@@ -4,6 +4,29 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { Pass, FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
+
+/** Copies the frame's light (HDR, right after the scene is drawn) into a ⅛-size map for the wet-road reflections in the
+ *  ground shader, which read it the next frame. Enabled only while the road is wet. */
+class ReflCopyPass extends Pass {
+  constructor() {
+    super(); this.needsSwap = false; this.enabled = false;
+    this.rt = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: false });
+    this.mat = new THREE.ShaderMaterial({
+      uniforms: { tDiffuse: { value: null }, uTexel: { value: new THREE.Vector2(1, 1) } },
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+      fragmentShader: `uniform sampler2D tDiffuse; uniform vec2 uTexel; varying vec2 vUv;
+        void main(){ vec2 o = uTexel; gl_FragColor = 0.25 * (texture2D(tDiffuse, vUv - o) + texture2D(tDiffuse, vUv + o) + texture2D(tDiffuse, vUv + vec2(o.x, -o.y)) + texture2D(tDiffuse, vUv + vec2(-o.x, o.y))); }`,
+      depthTest: false, depthWrite: false,
+    });
+    this.quad = new FullScreenQuad(this.mat);
+  }
+  setSize(w, h) { this.rt.setSize(Math.max(1, Math.floor(w / 8)), Math.max(1, Math.floor(h / 8))); this.mat.uniforms.uTexel.value.set(2 / w, 2 / h); } // ⅛ size: the streaks are soft anyway
+  render(renderer, writeBuffer, readBuffer) { // every other frame: soft wet reflections don't need 60 updates a second
+    if ((this.frame = (this.frame | 0) + 1) % 2 === 0) return; // (the first call renders: the load-time warm-up compiles it)
+    this.mat.uniforms.tDiffuse.value = readBuffer.texture; renderer.setRenderTarget(this.rt); this.quad.render(renderer);
+  }
+}
 
 const GradeShader = {
   uniforms: {
@@ -72,6 +95,7 @@ export function makePost(renderer, scene, camera, { msaa = 4, fxaa = false, scal
   const rt = new THREE.WebGLRenderTarget(size.x * renderer.getPixelRatio(), size.y * renderer.getPixelRatio(), { type: THREE.HalfFloatType, samples: msaa });
   const composer = new EffectComposer(renderer, rt);
   composer.addPass(new RenderPass(scene, camera));
+  const refl = new ReflCopyPass(); composer.addPass(refl);
   const bloom = new UnrealBloomPass(new THREE.Vector2(size.x * scale * 0.5, size.y * scale * 0.5), 0.42, 0.55, 0.86);
   composer.addPass(bloom);
   const grade = new ShaderPass(GradeShader);
@@ -80,5 +104,5 @@ export function makePost(renderer, scene, camera, { msaa = 4, fxaa = false, scal
   composer.addPass(grade);
   const render = composer.render.bind(composer);
   composer.render = dt => { grade.uniforms.toneMappingExposure.value = renderer.toneMappingExposure; render(dt); };
-  return { composer, bloom, grade };
+  return { composer, bloom, grade, refl };
 }

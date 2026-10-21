@@ -2,6 +2,20 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-21 · 18:xx — Realism pass 4: wet roads mirror the lights
+- **Wet streets reflect.** In the rain the road and pavements used to get only a flat sky-coloured sheen; now they mirror
+  the scene — at night the shop fronts, signs, street lamps and the cherry-blossom lanterns stretch into long glowing
+  streaks across the asphalt (the classic rainy-night look), and by day the wet street mirrors the grey sky and the
+  buildings. How it works: while the road is wet, the frame's light is copied into a ⅛-size map (every other frame), and
+  wet ground samples it mirrored about the horizon (corrected for the camera's height above the road), stretched into
+  vertical streaks the way rough wet asphalt smears reflections; puddles reflect sharper. Off the top of the screen it
+  falls back to the old sky colour. Nothing runs while the road is dry.
+- Cost: none in dry weather (city 19.7 → 19.6 ms, cherry blossom 25.1 → 25.2). In rain, measured with the effect off /
+  copy only / lookups only / both in one build (medians of 5): city at night 31.3 / 31.1 / 30.6 / 31.5 ms, cherry blossom
+  at night 37.3 / 37.9 / 37.3 / 37.9 — about +0.2–0.6 ms while it rains, almost all of it the copy pass (now done every
+  other frame); phone quality, rainy city night +0.3 ms. The copy shader is compiled at load (a first version missed
+  that and compiled it when the rain started — caught by the compile check, fixed).
+
 ## 2026-10-21 · 17:xx — Realism pass 3: no more dotted wire shadows on walls and roads
 - **Overhead wires no longer cast shadows.** Wires are 2–4 cm thick, thinner than a shadow texel (6–8 cm), so their
   shadows came out as dotted, dashed lines running across building fronts, shop shutters and the road — one of the most

@@ -120,6 +120,8 @@ async function main() {
   // 2–5 ms a frame at phone resolution on a mobile-class GPU — most in foliage); none at low quality. ?aa=msaa|fxaa|none
   const AA = QS.get('aa') || (quality === 'high' ? 'msaa' : quality === 'mid' ? 'fxaa' : 'none');
   const post = makePost(renderer, scene, camera, { msaa: AA === 'msaa' ? (quality === 'high' ? 4 : 2) : 0, fxaa: AA === 'fxaa' });
+  U.uReflTex.value = post.refl.rt.texture;
+  const hz = new THREE.Vector3(), camFlat = new THREE.Vector3(), REFL = QS.get('refl') || 'auto';
   const rig = makeCrossingRig(); scene.add(rig.group);
   const train = makeTrain(); scene.add(train.group);
   const weather = makeWeather(QS), rain = makeRain(), snowfall = makeSnow(); scene.add(rain.mesh, snowfall.mesh);
@@ -165,7 +167,7 @@ async function main() {
     scene.remove(warm); tri.dispose();
     // and the post passes: bloom is off by day, so its 8 programs used to compile all at once at the first sunset,
     // night or tunnel — a 160 ms freeze here, far longer on a phone
-    post.bloom.enabled = true; post.composer.render(0); post.bloom.enabled = false;
+    post.bloom.enabled = post.refl.enabled = true; post.composer.render(0); post.bloom.enabled = post.refl.enabled = false; // (+ the wet-road copy pass)
   }
   // level crossing state
   const X = { k: Math.ceil((st.s - XOFF) / XING), phase: 'idle', raise: 1, decided: false, t2: 0 };
@@ -263,6 +265,7 @@ async function main() {
     camera.updateProjectionMatrix();
     post.grade.uniforms.uAspect.value = asp;
     post.grade.uniforms.uTexel.value.set(1 / post.composer.readBuffer.width, 1 / post.composer.readBuffer.height);
+    U.uReflRes.value.set(post.composer.readBuffer.width, post.composer.readBuffer.height);
   }
   addEventListener('resize', () => { needResize = true; });
   if (window.visualViewport) visualViewport.addEventListener('resize', () => { needResize = true; });
@@ -456,7 +459,17 @@ async function main() {
     const fogD = (w.city * 0.0022 + w.sakura * 0.0019 + w.coast * 0.0011 + w.country * 0.0014 + w.mountain * 0.0017 + w.snow * 0.0021) * (1 + TOD.night * 0.25);
     scene.fog.near = fogD * (1 + 0.55 * ov + 0.45 * rn); scene.fog.far = world.ahead * 0.92;
     U.uSkyHor.value.copy(TOD.horizon); U.uSkyZen.value.copy(TOD.zenith); U.uTime.value = t;
-    U.uWet.value = wet * (1 - w.snow); U.uOrigin.value.set(world.origin.x, world.origin.z); U.uWind.value = 1 + 0.8 * rn;
+    U.uWet.value = wet * (1 - w.snow);
+    { // wet roads mirror the lights (WET chunk in materials.js): the copy pass only runs while the road is wet
+      const on = U.uWet.value > 0.04 && quality !== 'low' && tunS < 0.5 && REFL !== '0';
+      post.refl.enabled = on && REFL !== 'taps'; U.uReflOn.value = on && REFL !== 'copy' ? 1 : 0; // (?refl=0|copy|taps: test hooks)
+      if (on) { // the road plane's vanishing line on screen, and the mirror scale for the camera's height above the road
+        camera.getWorldDirection(camFlat); camFlat.y = 0; camFlat.normalize();
+        hz.copy(camera.position).addScaledVector(camFlat, 1e4).project(camera); U.uHorizon.value = hz.y * 0.5 + 0.5;
+        const hc = Math.max(0.5, camera.position.y - car.group.position.y); U.uReflK.value = clamp(1 - (2 * hc) / (5 + hc), 0.05, 1);
+      }
+    }
+    U.uOrigin.value.set(world.origin.x, world.origin.z); U.uWind.value = 1 + 0.8 * rn;
     U.uCloudSh.value = (1 - ov) * sstep(0.04, 0.3, TOD.sunEl) * (1 - TOD.night);
     if (U.uCloudSh.value > 0.001) cloudMap.update(renderer, camera.position.x, camera.position.z, world.origin.x, world.origin.z);
     const su = sky.material.uniforms;

@@ -26,6 +26,10 @@ function glassTexture() {
 
 export function makeCar() {
   const car = new THREE.Group();
+  // the body hangs on springs over the wheels: it leans out of curves and lane changes, dives when braking, squats when
+  // pulling away, rides the road's gentle undulation and jolts over rails. `body` pivots near the roll centre (0.35 m);
+  // the wheels and the contact shadow stay on the road with `car`
+  const body = new THREE.Group(), inner = new THREE.Group(); body.position.y = 0.35; inner.position.y = -0.35; body.add(inner); car.add(body);
   // the flat-coloured parts share one vertex-coloured material: one draw call (and one shadow draw) instead of five
   // glossy paint (withGloss): each part's gloss rides in its vertex colour's alpha
   const mPaint = withGloss(new THREE.MeshToonMaterial({ color: '#ffffff', vertexColors: true, gradientMap: GRAD }), 0.85, 0.06, 'paint');
@@ -37,12 +41,13 @@ export function makeCar() {
   const mAmber = new THREE.MeshToonMaterial({ color: '#f0a040', emissive: '#ff9a30', emissiveIntensity: 0.2, gradientMap: GRAD });
   const mPlate = new THREE.MeshBasicMaterial({ map: plateTexture() });
   // collect parts per material, then merge → ~9 draw calls for the whole car
-  const parts = new Map();
+  const parts = new Map(), wheels = []; let unsprung = false;
   const m4 = new THREE.Matrix4(), e = new THREE.Euler(), q = new THREE.Quaternion(), one = new THREE.Vector3(1, 1, 1);
   const add = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => {
     const g = geo.index ? geo.toNonIndexed() : geo;
     if (mat.isColor) { paint(g, mat); mat = mPaint; }
     e.set(rx, ry, rz); q.setFromEuler(e); m4.compose(new THREE.Vector3(x, y, z), q, one); g.applyMatrix4(m4);
+    if (unsprung) { wheels.push(g); return; }
     if (!parts.has(mat)) parts.set(mat, []);
     parts.get(mat).push(g);
   };
@@ -60,15 +65,18 @@ export function makeCar() {
   add(new RoundedBoxGeometry(1.52, 0.22, 0.22, 2, 0.07), mTrim, 0, 0.42, -1.62);
   add(new THREE.BoxGeometry(0.24, 0.04, 0.05), mTrim, 0, 0.84, -1.69);
   add(new THREE.PlaneGeometry(0.34, 0.17), mPlate, 0, 0.72, -1.7, 0, Math.PI, 0);
+  unsprung = true;
   for (const [x, z] of [[-0.67, 1.12], [0.67, 1.12], [-0.67, -1.12], [0.67, -1.12]]) {
     add(new THREE.CylinderGeometry(0.29, 0.29, 0.2, 20), mTyre, x, 0.29, z, 0, 0, Math.PI / 2);
     add(new THREE.CylinderGeometry(0.16, 0.16, 0.205, 12), mHub, x, 0.29, z, 0, 0, Math.PI / 2);
   }
+  unsprung = false;
   for (const [mat, list] of parts) {
     const mesh = new THREE.Mesh(mergeGeometries(list), mat);
     mesh.castShadow = mat !== mGlass && mat !== mPlate; mesh.receiveShadow = true;
-    car.add(mesh);
+    inner.add(mesh);
   }
+  { const mesh = new THREE.Mesh(mergeGeometries(wheels), mPaint); mesh.castShadow = mesh.receiveShadow = true; car.add(mesh); }
   // contact shadow: sky light can't reach the road under a car, so it always sits on a soft dark patch — without it the
   // car floats in overcast, rain and at night, when there is no sun shadow (one small quad, part of the car)
   {
@@ -84,17 +92,27 @@ export function makeCar() {
     ao.rotation.x = -Math.PI / 2; ao.position.y = 0.03; ao.renderOrder = 3; car.add(ao);
   }
   // rear wiper (its own mesh so it can sweep when it rains)
-  const wiperPivot = new THREE.Group(); wiperPivot.position.set(0.02, 1.3, -1.57); car.add(wiperPivot);
+  const wiperPivot = new THREE.Group(); wiperPivot.position.set(0.02, 1.3, -1.57); inner.add(wiperPivot);
   const wg = new THREE.BoxGeometry(0.52, 0.026, 0.02); wg.translate(0.27, 0, 0);
   const wiper = new THREE.Mesh(paint(wg, mTrim), mPaint); wiper.rotation.z = 0.18; wiperPivot.add(wiper);
   let wiperT = 0;
   // headlights at night
   const head = new THREE.SpotLight(0xfff0d0, 0, 70, 0.55, 0.65, 1.2);
-  head.position.set(0, 0.8, 1.6); head.target.position.set(0, 0, 18); car.add(head, head.target);
+  head.position.set(0, 0.8, 1.6); head.target.position.set(0, 0, 18); inner.add(head, head.target);
+  const S = { roll: 0, rv: 0, pitch: 0, pv: 0, y: 0, yv: 0 }, soft = (x, cap) => cap * Math.tanh(x / cap); // body springs
 
   return {
     group: car,
-    update(dt, speed, night, rain = 0) {
+    /** m (optional): lat = sideways acceleration (m/s², + = towards the right), lon = speeding up (+) / braking (−),
+     *  road = the surface's height under the car (m), jolt = vertical kick this frame (m/s), kick = pitch kick (rad/s, + = nose down) */
+    update(dt, speed, night, rain = 0, m = null) {
+      if (m) { // springs at ~1.2–1.5 Hz, a little under-damped like a soft family car; roll ≈ 9°/g, pitch ≈ 4.5°/g, both easing off at the limits
+        const rollT = soft(-m.lat * 0.016, 0.045), pitchT = soft(-m.lon * 0.008, 0.03);
+        S.rv += ((rollT - S.roll) * 55 - S.rv * 8) * dt; S.roll += S.rv * dt;
+        S.pv += ((pitchT - S.pitch) * 60 - S.pv * 9) * dt + m.kick; S.pitch += S.pv * dt;
+        S.yv += ((m.road - S.y) * 85 - S.yv * 8) * dt + m.jolt; S.y += S.yv * dt;
+        body.rotation.set(S.pitch, 0, S.roll); body.position.y = 0.35 + S.y;
+      }
       mTail.emissiveIntensity = 0.35 + night * 3.2;
       if (rain > 0.15 || wiperT % 2.6 > 0.01) {
         wiperT += dt;

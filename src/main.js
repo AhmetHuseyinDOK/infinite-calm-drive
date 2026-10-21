@@ -291,6 +291,9 @@ async function main() {
   const PROF = QS.has('prof') ? (window.__prof = { spikes: [], frames: 0, sum: 0, max: 0, progs: 0, geos: 0, tex: 0, last: null, gpu: 0, gpuN: 0, gpuSum: 0, gpuMax: 0, pend: [] }) : null;
   if (PROF) { PROF.gl = renderer.getContext(); PROF.tq = PROF.gl.getExtension('EXT_disjoint_timer_query_webgl2'); }
   const meteor = { p: -1, a: new THREE.Vector3(), b: new THREE.Vector3(), next: 5 };
+  // the car's motion as its suspension feels it (see car.update): sideways / fore-aft acceleration, the road surface, rail jolts
+  const CM = { lat: 0, lon: 0, road: 0, jolt: 0, kick: 0, u: st.u, vu: 0, v: 0, s: st.s, yaw: 0 };
+  const RAILS = [-2.5335, -1.4665, 1.4665, 2.5335], AXLES = [1.12, -1.12]; // rails of a crossing's two tracks (from sx); axles (from the car's centre)
   function frame(now) {
     requestAnimationFrame(frame);
     const ft0 = performance.now();
@@ -353,10 +356,24 @@ async function main() {
     const ox = world.origin.x, oz = world.origin.z;
 
     // car
-    const slope = (path.at(st.s + 1.5, fl).y - path.at(st.s - 1.5, fc).y) / 3;
+    const slope = (path.at(st.s + 1.5, fl).y - path.at(st.s - 1.5, fc).y) / 3, kap = (fl.h - fc.h) / 3; // kap: curvature, + = bending left
     car.group.position.set(f.x + f.rx * st.u - ox, f.y + 0.01, f.z + f.rz * st.u - oz);
-    const steerYaw = (st.steer ? -st.steer * 0.05 : 0);
-    car.group.rotation.set(-Math.atan(slope), f.h + steerYaw, 0);
+    if (dt > 0) {
+      // lane changes ease in and out, the nose pointing where the car is going (it used to snap 3° while a key was held);
+      // the body feels the sideways acceleration of curves (v²·κ) and of lane changes, and the fore-aft one of speed changes
+      const vu = CM.vu + ((st.u - CM.u) / dt - CM.vu) * Math.min(1, dt * 6), au = (vu - CM.vu) / dt; CM.u = st.u; CM.vu = vu;
+      CM.lat = au - st.speed * st.speed * kap;
+      CM.lon += ((st.speed - CM.v) / dt - CM.lon) * Math.min(1, dt * 8); CM.v = st.speed;
+      CM.yaw = -clamp(Math.atan(vu / Math.max(st.speed, 6)) * 0.8, -0.1, 0.1);
+      // the asphalt's gentle undulation (at speed the springs smooth it out), and a jolt per axle per rail at a crossing
+      CM.road = 0.004 * Math.sin(st.s * 0.48) + 0.003 * Math.sin(st.s * 0.86 + 1.3); CM.jolt = CM.kick = 0;
+      if (xValid) for (let i = 0; i < 4; i++) for (let j = 0; j < 2; j++) {
+        const p = sx + RAILS[i] - AXLES[j];
+        if (CM.s < p && st.s >= p) { const v = 0.05 + Math.min(st.speed, 25) * 0.004; CM.jolt += v; CM.kick += j ? v * 0.9 : -v * 0.9; if (audio) audio.bump(0.25 + Math.min(st.speed, 25) / 50); }
+      }
+      CM.s = st.s;
+    }
+    car.group.rotation.set(-Math.atan(slope), f.h + CM.yaw, 0);
     // tunnels: hand the nearest one to the shaders; eyes adapt (exposure) and the headlights come on inside
     const tn = tunnelNear(st.s);
     if (tn && Math.abs(st.s - tn.s) < 700) {
@@ -368,7 +385,7 @@ async function main() {
     tunS += (inTun - tunS) * Math.min(1, dt * (inTun ? 1.6 : 0.7));
     U.uCarPos.value.set(car.group.position.x + f.fx * 1.7, car.group.position.y + 0.8, car.group.position.z + f.fz * 1.7);
     U.uCarFwd.value.set(f.fx, -0.05, f.fz).normalize(); U.uHead.value = inTun;
-    car.update(dt, st.speed, Math.max(TOD.night, tunS), rn);
+    car.update(dt, st.speed, Math.max(TOD.night, tunS), rn, CM);
     rig.update(xValid && xDist > -24 && xDist < 700 ? xingPosts(path, sx) : null, world.origin, X.raise, bell, t);
     train.update(dt, path, world.origin, sstep(0.15, 0.8, TOD.night), zparam(sx, 'rw') + 3.2);
 
@@ -566,7 +583,7 @@ async function main() {
     if (started && frames > 150 && dt > 0.03) slowT += dt; else slowT = Math.max(0, slowT - dt * 0.5);
     if (slowT > 3 && !QS.has('q')) { slowT = 0; stepDown(); }
   }
-  window.__dbg = { renderer, st, scene, camera, world, TOD, X, train, weather, U, birds, cine, post, car, sun, M, clouds, sky, mountains, shadowDir };
+  window.__dbg = { renderer, st, scene, camera, world, TOD, X, train, weather, U, birds, cine, post, car, sun, M, clouds, sky, mountains, shadowDir, CM };
   status('');
   $start.classList.add('ready');
   if (QS.has('auto')) begin();

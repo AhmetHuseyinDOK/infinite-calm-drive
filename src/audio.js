@@ -122,6 +122,7 @@ export function makeAudio() {
   }
   return {
     ac, muted: false,
+    bump(v) { thump(ac.currentTime + 0.01, v); }, // the car's wheels over rails
     update(sp, w, day, x = {}) {
       const t = ac.currentTime;
       if ((x.bell || 0) > 0.01) { if (nextKan < t) nextKan = t + 0.02; while (nextKan < t + 0.12) { kan(nextKan, x.bell); nextKan += 0.41; } }

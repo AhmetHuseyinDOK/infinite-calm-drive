@@ -2,6 +2,28 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-21 · 19:xx — Realism pass 5: the car rides on springs
+- **The car body moves like a real car's.** It used to be a rigid block that followed the road's slope and turned with it.
+  Now the body hangs on springs over the wheels (~1.2–1.5 Hz, a little under-damped, like a soft family car):
+  - it **leans out of bends** (≈9°/g, easing off at about 2.5°), so at speed on the mountain pass it visibly rolls ~1.5°;
+  - it **dives when braking** for a crossing and **squats when pulling away** (≈4.5°/g, up to ~1.7°);
+  - it **rocks on lane changes**: it leans out, then back as the car settles into the new lane;
+  - it **rides the asphalt's gentle undulation** by a few millimetres at town speeds, which the springs smooth out at speed;
+  - it **jolts over the rails at level crossings**: one small kick per axle per rail (8 for the two tracks), each with a soft
+    thump in the audio.
+  The wheels are now a separate unsprung part, so they stay planted on the road while the body moves above them.
+- **Lane changes ease in and out.** The car used to snap 3° sideways the instant a key was held. Now its nose points where
+  it is actually going, from its sideways speed versus forward speed: up to ~6° at town speed, less the faster you go.
+- Measured (1280×720 headless GPU): mountain at 130 km/h, roll 1.5° in both directions, always outward. Crossing stop:
+  0.6° dive while braking, a 1.6° squat when pulling away after the train, 8 rail jolts lifting the body ≤1.8 cm.
+  Flat out to 267 km/h, streaming kept up, no frame spikes, lane memory intact.
+- Cost: none. CPU only (a few multiply-adds per frame, no allocations); the wheel split adds one draw call.
+  - GPU medians over 5 interleaved rounds vs the live build, desktop: mountain 28.6 → 28.4 ms, country 20.6 → 20.7,
+    city 20.0 → 19.8.
+  - Phone profile: mountain 15.2 → 15.2 ms, country 11.3 → 11.4.
+  - No new shader programs (52, all compiled at load).
+  - The frame loop's allocation sites are unchanged under ×4 CPU throttling.
+
 ## 2026-10-21 · 18:xx — Realism pass 4: wet roads mirror the lights
 - **Wet streets reflect.** In the rain the road and pavements used to get only a flat sky-coloured sheen; now they mirror
   the scene — at night the shop fronts, signs, street lamps and the cherry-blossom lanterns stretch into long glowing

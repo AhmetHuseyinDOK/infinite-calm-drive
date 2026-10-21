@@ -47,9 +47,24 @@ async function main() {
   sun.castShadow = true;
   const SM = quality === 'low' ? 1024 : quality === 'mid' ? 1536 : 2048; sun.shadow.mapSize.set(SM, SM);
   setShadowTaps(QS.has('pcf') ? parseInt(QS.get('pcf')) : 1);
+  // Shadows follow the sun continuously. The shadow camera is aimed along `shadowDir`, re-aimed only when the sun has
+  // moved ~6° (its texel grid stays fixed in the world between re-aims, snapped to whole texels as the car drives),
+  // and a skew slides every point along the TRUE light direction onto the pivot plane under the car before the
+  // camera sees it. The direction used to be held and stepped every 0.23°, which made all shadows jump ~3× a second
+  // (6–21 cm by day, metres near sunset). Ground at the pivot height keeps its texels while the sun moves.
   const SH_HALF = 62; // shadow frustum half-size (m): ~6 cm texels at 2048²
-  Object.assign(sun.shadow.camera, { left: -SH_HALF, right: SH_HALF, top: SH_HALF, bottom: -SH_HALF, near: 1, far: 420 });
+  const shCam = sun.shadow.camera, shSkew = new THREE.Matrix4(), shTmp = new THREE.Matrix4();
+  Object.assign(shCam, { left: -SH_HALF, right: SH_HALF, top: SH_HALF, bottom: -SH_HALF, near: 1, far: 420 });
   const shadowDir = new THREE.Vector3(0, 1, 0), shX = new THREE.Vector3(), shY = new THREE.Vector3(), shT = new THREE.Vector3(), UPV = new THREE.Vector3(0, 1, 0);
+  const shC = new THREE.Vector3(0, 150, 60), shLook = new THREE.Vector3(); // (start: the warm-up meshes at the origin are in view)
+  let shY0 = null; // pivot plane height: follows the road in 3 m steps
+  sun.shadow.updateMatrices = function () { // three's version aims the camera at the light itself
+    shCam.position.copy(shC); shCam.lookAt(shLook); shCam.updateMatrixWorld();
+    shCam.updateProjectionMatrix(); // projection · (view · skew · view⁻¹), so three's projection · view applies the skew first
+    shTmp.multiplyMatrices(shCam.matrixWorldInverse, shSkew).multiply(shCam.matrixWorld);
+    shCam.projectionMatrix.multiply(shTmp); shCam.projectionMatrixInverse.copy(shCam.projectionMatrix).invert();
+    this._updateMatrix(shCam, this.matrix, this._frustum);
+  };
   let bloomAllowed = true;
   sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.05;
   scene.add(sun, sun.target);
@@ -387,15 +402,20 @@ async function main() {
     // lighting & atmosphere
     const w = zoneW(st.s);
     sun.color.copy(TOD.sunCol); sun.intensity = TOD.sunI;
-    // Stable shadows: the light direction only updates in small steps, and the shadow camera snaps to whole texels,
-    // so shadow edges don't crawl or shimmer as the car moves (the map content stays fixed in world space).
-    if (shadowDir.angleTo(TOD.lightDir) > 0.004) shadowDir.copy(TOD.lightDir);
-    shX.crossVectors(UPV, shadowDir).normalize(); shY.crossVectors(shadowDir, shX);
-    shT.set(car.group.position.x + f.fx * 26, car.group.position.y, car.group.position.z + f.fz * 26);
-    { const tex = (2 * SH_HALF) / sun.shadow.mapSize.x, a = shT.dot(shX), b = shT.dot(shY);
-      shT.addScaledVector(shX, Math.round(a / tex) * tex - a).addScaledVector(shY, Math.round(b / tex) * tex - b); }
-    sun.target.position.copy(shT);
-    sun.position.copy(shT).addScaledVector(shadowDir, 200);
+    // Shadows (see the notes where the sun is created): the light itself follows the sun every frame; the shadow
+    // camera is re-aimed only every ~6°, centred 26 m ahead of the car and snapped to whole texels; the skew
+    // P' = P + (P.y − y0)·(D/D.y − L/L.y) slides each point along the true light L onto the camera's direction D.
+    { const L = TOD.lightDir; // L.y ≥ 0.12 (sky.js)
+      if (shadowDir.angleTo(L) > 0.1) shadowDir.copy(L);
+      shX.crossVectors(UPV, shadowDir).normalize(); shY.crossVectors(shadowDir, shX);
+      shT.set(car.group.position.x + f.fx * 26, car.group.position.y, car.group.position.z + f.fz * 26);
+      sun.target.position.copy(shT); sun.position.copy(shT).addScaledVector(L, 200);
+      const tex = (2 * SH_HALF) / sun.shadow.mapSize.x, a = shT.dot(shX), b = shT.dot(shY);
+      shT.addScaledVector(shX, Math.round(a / tex) * tex - a).addScaledVector(shY, Math.round(b / tex) * tex - b);
+      shLook.copy(shT); shC.copy(shT).addScaledVector(shadowDir, 200);
+      if (shY0 === null || Math.abs(car.group.position.y - shY0) > 3) shY0 = Math.round(car.group.position.y);
+      const vx = shadowDir.x / shadowDir.y - L.x / L.y, vz = shadowDir.z / shadowDir.y - L.z / L.y;
+      shSkew.set(1, vx, 0, -shY0 * vx, 0, 1, 0, 0, 0, vz, 1, -shY0 * vz, 0, 0, 0, 1); }
     // the car's shadow map moves with the car (its texels are far below a pixel) and follows the sun continuously
     carSun.target.position.set(car.group.position.x, car.group.position.y + 0.9, car.group.position.z);
     carSun.position.copy(carSun.target.position).addScaledVector(TOD.lightDir, 12);

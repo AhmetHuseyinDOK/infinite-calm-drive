@@ -2,6 +2,22 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-21 · 08:xx — Stutter pass 4: shadows move smoothly with the sun
+- **Shadows no longer jump.** To keep shadow edges from shimmering, the sun's direction was held and stepped every
+  0.23°, so every shadow in view jumped **2.5–3.7 times a second**: the tip of a 15 m building's shadow by 7–21 cm
+  during the day and by **0.8–2.6 m** near sunset (an 8 m pole's by 4–11 cm / 1.4 m). Now the light follows the sun
+  every frame, and the shadow camera is only re-aimed after the sun has moved ~6° (every 7–30 s), with a skew that
+  slides each point along the true light direction onto the plane under the car. So shadows glide continuously, and
+  the texel grid on the ground stays put between re-aims, so edges don't shimmer.
+  Measured with the car parked and the clock running (frame-to-frame change on a shadowed city street):
+  15:30 — **2.7 jumps/s → 0**, largest change between two frames 0.73 → 0.29; 09:30 — 1.8/s → 0.1/s (one re-aim in 11 s).
+  Toon shading follows the true sun too (it stepped with the shadows before).
+- Correctness check: with the shadow camera 4.3° off the light (the most skew it ever gets), shadows land where a fresh
+  render puts them (mean pixel difference 0.8/255). GPU cost unchanged within noise (interleaved A/B, 1280×720):
+  city 21.0 → 20.5 ms, cherry blossom 27.2 → 26.3, mountains at 16:00 37.7 → 37.4, city at 17:00 27.2 → 28.4.
+- Tried first and rejected: a horizontal, world-aligned shadow grid (no re-aims at all) — near sunset it stretches every
+  wall and roof in the shadow pass by 1/sin(sun elevation): **45 ms vs 28 ms** a frame in the city at 17:00.
+
 ## 2026-10-21 · 07:xx — Stutter pass 3: no freeze at the first sunset, a crisp car shadow, no phantom rain at start
 - **The first sunset, night or tunnel no longer freezes the drive.** Bloom is switched off by day, so its 8 shader programs
   used to compile all at once the first time it turned on — a **163 ms** main-thread freeze on the test PC (several

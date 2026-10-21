@@ -2,6 +2,18 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-21 · 17:xx — Realism pass 3: no more dotted wire shadows on walls and roads
+- **Overhead wires no longer cast shadows.** Wires are 2–4 cm thick, thinner than a shadow texel (6–8 cm), so their
+  shadows came out as dotted, dashed lines running across building fronts, shop shutters and the road — one of the most
+  artificial-looking details in the city. Real thin wires barely cast a visible shadow a few metres away (the sun's disc
+  blurs it out), so leaving them out is both cleaner and more realistic. Wire vertices carry a flag in the contact-shading
+  byte the geometry builder already writes; the props' shadow-pass material skips them — no extra draw calls.
+- Cost: none. Median GPU time over five interleaved rounds (quiet machine, 1280×720): city 19.8 → 19.8 ms, cherry
+  blossom 25.1 → 25.2. One more shader program (the props' shadow pass, 51), compiled at load.
+- Tried and left off by default: an edge-adaptive shadow filter (4 taps only on shadow-edge texels) that smooths the
+  stair-steps of shadow edges on walls — it looked good but cost +0.5–0.9 ms (cherry-blossom dappled shade is almost all
+  edges); available as `?pcf=2`.
+
 ## 2026-10-21 · 16:xx — Realism pass 2: the car sits on the road and its paint reflects the sky
 - **Contact shadow under the car.** Sky light can't reach the road beneath a car, so a real one always sits on a soft
   dark patch. Ours had none, so under overcast, in rain and at night — when there is no sun shadow — it looked like it

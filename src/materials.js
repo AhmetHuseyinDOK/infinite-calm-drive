@@ -20,8 +20,11 @@ THREE.ShaderChunk.fog_fragment = /* glsl */`
 const SHADOW_SRC = THREE.ShaderChunk.shadowmap_pars_fragment;
 export function setShadowTaps(n) {
   const tap = o => `texture( shadowMap, vec3( shadowCoord.xy${o}, shadowCoord.z ) )`;
-  const body = n >= 4
-    ? `vec2 so = texelSize * 0.5;\nshadow = 0.25 * ( ${tap(' - so')} + ${tap(' + so')} + ${tap(' + vec2( so.x, -so.y )')} + ${tap(' + vec2( -so.x, so.y )')} );`
+  const four = `0.25 * ( ${tap(' - so')} + ${tap(' + so')} + ${tap(' + vec2( so.x, -so.y )')} + ${tap(' + vec2( -so.x, so.y )')} )`;
+  const body = n >= 4 ? `vec2 so = texelSize * 0.5;\nshadow = ${four};`
+    // adaptive: one tap, and only where it lands on an edge texel (a fractional result) widen to the 4-tap tent — the
+    // stair-steps of shadow edges on walls smooth out, while fully lit / shadowed pixels (most of them) pay one tap
+    : n === 2 ? `shadow = ${tap('')};\nif ( shadow > 0.001 && shadow < 0.999 ) { vec2 so = texelSize * 0.5; shadow = ${four}; }`
     : `shadow = ${tap('')};`;
   THREE.ShaderChunk.shadowmap_pars_fragment = SHADOW_SRC.replace(
     /float phi = interleavedGradientNoise\( gl_FragCoord\.xy \) \* PI2;\s*shadow = \([\s\S]*?\) \* 0\.2;/, body);
@@ -153,6 +156,16 @@ const TUNNEL_APPLY = /* glsl */`
     vec3 lit = diffuseColor.rgb * (vec3(1.0, 0.54, 0.18) * (0.15 + 0.3 * band) + vec3(1.0, 0.95, 0.86) * head * 0.45) + reflectedLight.indirectDiffuse * 0.06 + totalEmissiveRadiance;
     outgoingLight = mix(outgoingLight, lit, tm);
   } }`;
+/** Shadow casting for the props: overhead wires (flagged aoD = 1/255 by GB.wire) are left out. Real thin wires barely
+ *  cast a visible shadow a few metres away (the sun's disc blurs it out), while a 6–8 cm shadow texel turned theirs into
+ *  dotted lines across walls and the road. */
+export const PROP_DEPTH = new THREE.MeshDepthMaterial();
+PROP_DEPTH.onBeforeCompile = sh => {
+  sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aoD;')
+    .replace('#include <project_vertex>', '#include <project_vertex>\nif (abs(aoD * 255.0 - 1.0) < 0.5) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);');
+};
+PROP_DEPTH.customProgramCacheKey = () => 'propdepth';
+
 /** The cloud-shadow map: CLOUD_SPAN metres around the camera at CLOUD_N², repainted each frame (the clouds drift) with
  *  the four-octave pattern every shader used to evaluate itself. Centred on whole texels in absolute coordinates, so it
  *  doesn't swim as the camera moves or when the world re-centres. */

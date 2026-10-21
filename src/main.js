@@ -46,7 +46,7 @@ async function main() {
   const sun = new THREE.DirectionalLight(0xffffff, 3);
   sun.castShadow = true;
   const SM = quality === 'low' ? 1024 : quality === 'mid' ? 1536 : 2048; sun.shadow.mapSize.set(SM, SM);
-  setShadowTaps(QS.has('pcf') ? parseInt(QS.get('pcf')) : 1);
+  setShadowTaps(QS.has('pcf') ? parseInt(QS.get('pcf')) : 1); // ?pcf=2: adaptive (4 taps on edge texels; +0.5–0.9 ms), 4: always 4
   // Shadows follow the sun continuously. The shadow camera is aimed along `shadowDir`, re-aimed only when the sun has
   // moved ~6° (its texel grid stays fixed in the world between re-aims, snapped to whole texels as the car drives),
   // and a skew slides every point along the TRUE light direction onto the pivot plane under the car before the

@@ -5,7 +5,7 @@ import { xingPosts } from './crossing.js';
 import { GB } from './geom.js';
 import * as P from './props.js';
 import { rng, hash2, clamp, sstep } from './util.js';
-import { S_WRAP, groundMaterialFor } from './materials.js';
+import { S_WRAP, groundMaterialFor, PROP_DEPTH } from './materials.js';
 
 export const CH = 60;
 const NEAR = [0.7, 0.9, 1.45, 1.5, 1.9, 2.0, 2.1, 2.65, 3.05, 3.4]; // 1.45: just outside a tunnel tube's wall
@@ -230,12 +230,12 @@ export class World {
 
     // ---------- assemble ----------
     const grp = new THREE.Group();
-    const add = (geo, mat, cast, recv, order = 0, detail) => { if (!geo) return; const m = new THREE.Mesh(geo, mat); m.castShadow = cast; m.receiveShadow = recv; m.renderOrder = order; if (detail) m.userData.detail = detail; grp.add(m); };
+    const add = (geo, mat, cast, recv, order = 0, detail) => { if (!geo) return null; const m = new THREE.Mesh(geo, mat); m.castShadow = cast; m.receiveShadow = recv; m.renderOrder = order; if (detail) m.userData.detail = detail; grp.add(m); return m; };
     const zset = new Set();
     for (const sq of [s0, s0 + 20, s0 + 40, s1]) { const m = zoneMix(sq); zset.add(m.a); if (m.t > 0) zset.add(m.b); }
     add(ground.build(), groundMaterialFor([...zset]), false, true); yield;
     add(G.atlas.build(), this.M.atlas, true, true); yield;
-    add(G.color.build(), this.M.color, true, true); yield;
+    { const m = add(G.color.build(), this.M.color, true, true); if (m) m.customDepthMaterial = PROP_DEPTH; } yield; // (wires cast no shadow)
     add(G.foliage.build(), this.M.foliage, true, true);
     add(G.leaf.build(), this.M.leaf, true, true, 0, 'leaf'); yield;
     add(G.lamp.build(), this.M.lamp, false, false, 0, 'light');

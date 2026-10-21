@@ -11,7 +11,7 @@ export class GB {
   // ao: also store, per vertex, how close it is to the ground under the prop being built (one byte, `aoD`: 255 at the
   // ground … 0 at 2.55 m or more) — from the matrix's `groundY` (set where props are placed; no groundY → no AO)
   constructor({ uv = false, color = true, ao = false } = {}) {
-    this.hasUV = uv; this.hasColor = color; this.hasAO = ao; this.aoY0 = NaN;
+    this.hasUV = uv; this.hasColor = color; this.hasAO = ao; this.aoY0 = NaN; this.noShadow = false;
     this.n = 0; this.cap = 0; this.P = null; this.N = null; this.U = null; this.Cl = null; this.A = null;
     this.bb = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
     this.m = new THREE.Matrix4(); this.nm = new THREE.Matrix3();
@@ -40,7 +40,7 @@ export class GB {
     const l = 127 / (Math.sqrt(X * X + Y * Y + Z * Z) || 1);
     this.N[i3] = Math.round(X * l); this.N[i3 + 1] = Math.round(Y * l); this.N[i3 + 2] = Math.round(Z * l);
     if (this.hasUV) { this.U[this.n * 2] = u; this.U[this.n * 2 + 1] = v; }
-    if (this.hasAO) this.A[this.n] = this.aoByte(py);
+    if (this.hasAO) this.A[this.n] = this.noShadow ? 1 : this.aoByte(py); // (1 = "casts no shadow": see PROP_DEPTH)
     if (this.hasColor) {
       const k = c || WHITE, C = this.Cl;
       C[i3] = k[0] >= 1 ? 255 : k[0] <= 0 ? 0 : k[0] * 255 + 0.5; C[i3 + 1] = k[1] >= 1 ? 255 : k[1] <= 0 ? 0 : k[1] * 255 + 0.5; C[i3 + 2] = k[2] >= 1 ? 255 : k[2] <= 0 ? 0 : k[2] * 255 + 0.5;
@@ -109,11 +109,12 @@ export class GB {
   }
   /** catenary-ish wire between two points as a thin 3-sided tube */
   wire(p, q, sag, r, c, seg = 10) {
-    let prev = p;
+    let prev = p; this.noShadow = true; // thin wires cast no shadow (see PROP_DEPTH)
     for (let i = 1; i <= seg; i++) {
       const t = i / seg, cur = [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t - sag * 4 * t * (1 - t), p[2] + (q[2] - p[2]) * t];
       this.rod(prev, cur, r, r, 3, c); prev = cur;
     }
+    this.noShadow = false;
   }
   /** a quad with explicit per-vertex normals and colours (foliage cards) */
   card(P, N, uv, Cc) {

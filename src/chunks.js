@@ -5,7 +5,7 @@ import { xingPosts } from './crossing.js';
 import { GB } from './geom.js';
 import * as P from './props.js';
 import { rng, hash2, clamp, sstep } from './util.js';
-import { S_WRAP } from './materials.js';
+import { S_WRAP, groundMaterialFor } from './materials.js';
 
 export const CH = 60;
 const NEAR = [0.7, 0.9, 1.45, 1.5, 1.9, 2.0, 2.1, 2.65, 3.05, 3.4]; // 1.45: just outside a tunnel tube's wall
@@ -36,20 +36,20 @@ class GroundB {
       this.I.push(a, b, c, b, d, c);
     }
   }
-  /** like grid(), but normals come from the grid's own neighbours (one height sample per vertex instead of five) */
-  gridN(nr, nc, fn) {
-    const base = this.P.length / 3;
-    this.grid(nr, nc, fn);
-    const P = this.P, N = this.N, at = (i, j) => (base + Math.min(nr - 1, Math.max(0, i)) * nc + Math.min(nc - 1, Math.max(0, j))) * 3;
-    for (let i = 0; i < nr; i++) for (let j = 0; j < nc; j++) {
-      const a = at(i, j - 1), b = at(i, j + 1), c = at(i - 1, j), d = at(i + 1, j);
-      const ux = P[b] - P[a], uy = P[b + 1] - P[a + 1], uz = P[b + 2] - P[a + 2];
-      const vx = P[d] - P[c], vy = P[d + 1] - P[c + 1], vz = P[d + 2] - P[c + 2];
+  /** like grid(), but normals come from the grid's own neighbours (one height sample per vertex instead of five).
+   *  gl / gr extra "ghost" columns on either side are evaluated only for the normals, so pieces join without creases. */
+  gridN(nr, nc, fn, gl = 0, gr = 0) {
+    const NC = nc + gl + gr, V = new Array(nr * NC);
+    for (let i = 0; i < nr; i++) for (let j = 0; j < NC; j++) V[i * NC + j] = fn(i, j - gl);
+    const at = (i, j) => V[Math.min(nr - 1, Math.max(0, i)) * NC + Math.min(NC - 1, Math.max(0, j))];
+    for (let i = 0; i < nr; i++) for (let j = gl; j < gl + nc; j++) {
+      const a = at(i, j - 1), b = at(i, j + 1), c = at(i - 1, j), d = at(i + 1, j), v = V[i * NC + j];
+      const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2], vx = d[0] - c[0], vy = d[1] - c[1], vz = d[2] - c[2];
       let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
       if (ny < 0) { nx = -nx; ny = -ny; nz = -nz; }
-      const l = Math.hypot(nx, ny, nz) || 1, k = at(i, j);
-      N[k] = nx / l; N[k + 1] = ny / l; N[k + 2] = nz / l;
+      const l = Math.hypot(nx, ny, nz) || 1; v[3] = nx / l; v[4] = ny / l; v[5] = nz / l;
     }
+    this.grid(nr, nc, (i, j) => V[i * NC + j + gl]);
   }
   build() {
     const g = new THREE.BufferGeometry();
@@ -69,7 +69,7 @@ export class World {
   constructor(scene, path, M, foamMat, riverMat) {
     this.path = path; this.M = M; this.foamMat = foamMat; this.riverMat = riverMat;
     this.group = new THREE.Group(); scene.add(this.group);
-    this.chunks = new Map(); this.origin = { x: 0, z: 0 };
+    this.chunks = new Map(); this.origin = { x: 0, z: 0 }; this.reveal = [];
     this.ahead = 760; this.behind = 40;
   }
   setOrigin(x, z) {
@@ -81,20 +81,31 @@ export class World {
     const c0 = Math.floor((s - this.behind) / CH), c1 = Math.floor((s + this.ahead) / CH);
     for (const [k, ch] of this.chunks) if (k < c0 - 1 || k > c1 + 1) { this.dispose(ch); this.chunks.delete(k); }
     if (this.job && (this.job.c < c0 - 1 || this.job.c > c1 + 1)) this.job = null;
+    { const ch = this.reveal[0]; if (ch) { const m = ch.pending.shift(); if (m) ch.group.add(m); if (!ch.pending.length) this.reveal.shift(); } }
     const t0 = performance.now();
     for (;;) {
       if (!this.job) {
         let next = -1;
         for (let c = Math.max(0, c0); c <= c1; c++) if (!this.chunks.has(c)) { next = c; break; }
         if (next < 0) return 0;
+        if (next * CH - s < 320) budgetMs = Math.max(budgetMs, 12); // falling behind: catch up
         this.job = { c: next, it: this.gen(next) };
       }
       const res = this.job.it.next();
-      if (res.done) { this.chunks.set(this.job.c, res.value); this.group.add(res.value.group); this.job = null; }
+      if (res.done) { // stage the meshes: they are revealed one per frame so their GPU uploads don't all land at once
+        const ch = res.value; ch.pending = ch.group.children.slice(); ch.group.clear();
+        this.chunks.set(this.job.c, ch); this.group.add(ch.group); this.reveal.push(ch); this.job = null;
+      }
       if (performance.now() - t0 > budgetMs) return 1;
     }
   }
-  dispose(ch) { this.group.remove(ch.group); ch.group.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
+  dispose(ch) {
+    this.group.remove(ch.group); ch.group.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+    if (ch.pending) { for (const m of ch.pending) m.geometry && m.geometry.dispose(); ch.pending.length = 0; }
+    const i = this.reveal.indexOf(ch); if (i >= 0) this.reveal.splice(i, 1);
+  }
+  /** reveal everything staged right away (used while the title screen is up) */
+  flush() { for (const ch of this.reveal) { for (const m of ch.pending) ch.group.add(m); ch.pending.length = 0; } this.reveal.length = 0; }
 
   *gen(c) {
     const path = this.path, s0 = c * CH, s1 = s0 + CH;
@@ -132,12 +143,14 @@ export class World {
       { const tq = tunnelNear(s0 + CH / 2); if (tq) for (const sp of [tq.s - T_HALF, tq.s + T_HALF]) if (sp > s0 + 0.1 && sp < s1 - 0.1) sl.push(sp - 0.03, sp + 0.03); }
       sl.sort((p, q) => p - q);
       const half = nc / 2, rowS = sl.map(s => { path.at(s, f); return { s, f: { ...f }, rw: rwAt(s), w: zw4(s), rb: fine ? riverBank(s) : 0 }; });
-      for (const [j0, j1] of [[0, half], [half, nc]]) {
+      const qtr = Math.round(half / 2);
+      // quarters, so no single build step is long; they share a column and use ghost columns for seamless normals
+      for (const [j0, j1, gl, gr] of [[0, qtr, 0, 1], [qtr - 1, half, 1, 0], [half, half + qtr + 1, 0, 1], [half + qtr, nc, 1, 0]]) {
         ground.gridN(rowS.length, j1 - j0, (i, jj) => {
           const R = rowS[i], F = R.f, j = j0 + jj, o = offs[j], u = o < 0 || (o === 0 && j < half) ? o - R.rw : o + R.rw;
           const y = F.y + groundOffsetMix(R.s, u, F.y, R.rw), rg = Math.min(1, RAISE / 1.5);
           return [F.x + F.rx * u - ox, y, F.z + F.rz * u - oz, 0, 1, 0, mod(R.s, S_WRAP), u, R.w[0], R.w[1], R.w[2], R.w[3], R.rw, 0, R.rb > 0 ? R.rb : -rg, R.w[4]];
-        });
+        }, gl, gr);
         yield;
       }
     }
@@ -178,10 +191,10 @@ export class World {
 
     yield;
     // ---------- scenery ----------
-    this.placePoles(c, s0, s1, r, G, matAt, H, world, road, rwAt);
+    yield* this.placePoles(c, s0, s1, r, G, matAt, H, world, road, rwAt);
     {
       const kx = Math.ceil((s0 - XOFF) / XING), sx = crossingS(kx);
-      if (sx < s1 && crossingValid(sx)) this.placeCrossing(G, ground, sx, matAt, road, rwAt, H, walkW, ox, oz);
+      if (sx < s1 && crossingValid(sx)) yield* this.placeCrossing(G, ground, sx, matAt, road, rwAt, H, walkW, ox, oz);
       const kr = Math.ceil((s0 - ROFF) / RIV), sr = riverS(kr);
       if (sr < s1 && riverValid(sr)) yield* this.placeRiver(G, ground, sr, matAt, road, rwAt, H, walkW, ox, oz, r, river);
       const tt = tunnelNear(s0 + CH / 2);
@@ -205,7 +218,9 @@ export class World {
     // ---------- assemble ----------
     const grp = new THREE.Group();
     const add = (geo, mat, cast, recv, order = 0) => { if (!geo) return; const m = new THREE.Mesh(geo, mat); m.castShadow = cast; m.receiveShadow = recv; m.renderOrder = order; grp.add(m); };
-    add(ground.build(), this.M.ground, false, true); yield;
+    const zset = new Set();
+    for (const sq of [s0, s0 + 20, s0 + 40, s1]) { const m = zoneMix(sq); zset.add(m.a); if (m.t > 0) zset.add(m.b); }
+    add(ground.build(), groundMaterialFor([...zset]), false, true); yield;
     add(G.atlas.build(), this.M.atlas, true, true); yield;
     add(G.color.build(), this.M.color, true, true); yield;
     add(G.foliage.build(), this.M.foliage, true, true);
@@ -234,7 +249,7 @@ export class World {
     const u = z === 'city' ? rw + 0.45 : z === 'coast' ? rw + 1.35 : z === 'mountain' ? -(rw + 1.45) : z === 'snow' ? rw + 2.9 : rw + 2.35;
     return { s, u, z };
   }
-  placePoles(c, s0, s1, r, G, matAt, H, world, road, rwAt) {
+  *placePoles(c, s0, s1, r, G, matAt, H, world, road, rwAt) {
     const k0 = Math.ceil((s0 - 6) / POLE_SP), k1 = Math.floor((s1 - 6 - 0.001) / POLE_SP);
     for (let k = k0; k <= k1; k++) {
       const p = this.poleSpec(k); if (!p) continue;
@@ -243,11 +258,11 @@ export class World {
       const pr = rng(Math.floor(hash2(k, 31) * 4294967295));
       const anchors = P.utilityPole(G, M, pr, { trans: pr() < 0.45 });
       if (p.z === 'city' && (k % 2 === 0)) P.poleLamp(G, M, -0.11);
+      if (k % 2) yield;
       const q = this.poleSpec(k + 1);
       if (q) {
         const qy = q.z === 'city' ? road(q.s) + 0.15 : H(q.s, q.u);
-        const QM = matAt(q.s, q.u, qy);
-        const B = P.utilityPole({ color: new GB(), atlas: new GB({ uv: true }) }, QM, rng(Math.floor(hash2(k + 1, 31) * 4294967295)), {});
+        const B = P.poleAnchors(matAt(q.s, q.u, qy));
         G.color.setM(new THREE.Matrix4());
         const sags = [];
         for (let i = 0; i < anchors.length; i++) {
@@ -303,6 +318,7 @@ export class World {
           const M = matAt(cs + bank * 3.3, uc, e + 0.14, bank > 0 ? Math.PI / 2 : -Math.PI / 2, false);
           P.building(G, M, r, { type: t < 0.5 ? 'house' : 'shop', w: wd, d: r.range(7, 10), floors: t < 0.5 ? 2 : r.int(2, 3), tint: r.pick(P.TINTS), litP: 0.45, fence: 0 });
           u += wd + r.range(0.2, 1.2);
+          yield;
         }
         yield;
       }
@@ -320,7 +336,7 @@ export class World {
   }
 
   /** level crossing: gravel bed + sleepers (shader), rails, rubber crossing panels, catenary, alarm posts, signs */
-  placeCrossing(G, ground, sx, matAt, road, rwAt, H, walkW, ox, oz) {
+  *placeCrossing(G, ground, sx, matAt, road, rwAt, H, walkW, ox, oz) {
     const f0 = this.path.at(sx, {}), e = f0.y, rw = rwAt(sx), sw = walkW(sx), edge = rw + sw + 0.2, L = 150, bedY = e + 0.18;
     const w = zoneW(sx), w4 = [w.city, w.sakura, w.coast, w.country];
     const xw = (ds, u, y) => [f0.x + f0.fx * ds + f0.rx * u - ox, y, f0.z + f0.fz * ds + f0.rz * u - oz];
@@ -339,6 +355,7 @@ export class World {
     if (sw > 0) { panel(-edge, -rw, e + 0.165); panel(rw, edge, e + 0.165); }
     const stop = (dsa, dsb, ua, ub) => ground.grid(2, 2, (i, j) => { const u = i ? ub : ua, ds = j ? dsb : dsa, p = xw(ds, u, e + 0.025); return [p[0], p[1], p[2], 0, 1, 0, ds, u, w4[0], w4[1], w4[2], w4[3], rw, 7]; });
     stop(-7.15, -7.6, -rw + 0.3, -0.12); stop(7.6, 7.15, 0.12, rw - 0.3);
+    yield;
     // rails + catenary in a frame whose local x runs along the track (u) and local z = −(s − sx)
     const M = matAt(sx, 0, e, -Math.PI / 2, false), c = G.color;
     c.setM(M);
@@ -358,6 +375,7 @@ export class World {
       c.wire([PU[i], 5.35, -td], [PU[i + 1], 5.35, -td], 0.05, 0.011, WIRE, 6);
       c.wire([PU[i], 6.4, -td], [PU[i + 1], 6.4, -td], 0.45, 0.011, WIRE, 8);
     }
+    yield;
     // a little unstaffed station beside the near track at most countryside crossings
     const kx = Math.round((sx - XOFF) / XING);
     if (w.country > 0.9 && hash2(kx, 17) < 0.7) {
@@ -365,6 +383,7 @@ export class World {
       P.station(G, M, xa, xb, sd * (rw + 9), Math.abs(kx) % 4, rng(Math.floor(hash2(kx, 23) * 4294967295)));
       c.setM(M);
     }
+    yield;
     // alarm posts (barrier arms + lamps are animated by the crossing rig)
     for (const p of xingPosts(this.path, sx)) {
       const m = new THREE.Matrix4().makeRotationY(p.yaw); m.setPosition(p.x - ox, p.y, p.z - oz);

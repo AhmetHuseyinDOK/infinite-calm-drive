@@ -38,7 +38,10 @@ export function crossingValid(sx) {
   return true;
 }
 /** the crossing nearest to s, if that one exists */
-export function crossingNear(s) { const k = Math.round((s - XOFF) / XING), sx = crossingS(k); return crossingValid(sx) ? { k, s: sx } : null; }
+// the *Near() lookups run for every ground vertex — memoise them per candidate index (each validity test samples zones)
+const MEMO = { x: new Map(), r: new Map(), t: new Map() };
+function memo(m, k, fn) { let v = m.get(k); if (v === undefined) { v = fn(); m.set(k, v); if (m.size > 2000) m.clear(); } return v; }
+export function crossingNear(s) { const k = Math.round((s - XOFF) / XING); return memo(MEMO.x, k, () => { const sx = crossingS(k); return crossingValid(sx) ? { k, s: sx } : null; }); }
 /** 1 within ±8 m of a crossing, easing to 0 by ±45 m — the road is levelled and straightened there */
 export function crossingW(s) { const c = crossingNear(s); return c ? 1 - sstep(8, 45, Math.abs(s - c.s)) : 0; }
 
@@ -51,7 +54,7 @@ export function riverValid(sr) {
   const c = crossingNear(sr);
   return !(c && Math.abs(c.s - sr) < 170);
 }
-export function riverNear(s) { const k = Math.round((s - ROFF) / RIV), sr = riverS(k); return riverValid(sr) ? { k, s: sr } : null; }
+export function riverNear(s) { const k = Math.round((s - ROFF) / RIV); return memo(MEMO.r, k, () => { const sr = riverS(k); return riverValid(sr) ? { k, s: sr } : null; }); }
 /** 1 on the bridge, easing to 0 by ±70 m — the road is level and straight across a river */
 export function riverW(s) { const r = riverNear(s); return r ? 1 - sstep(30, 70, Math.abs(s - r.s)) : 0; }
 /** height (relative to the level road) of the river channel at distance d from the river's centre line */
@@ -72,7 +75,7 @@ export function tunnelValid(st) {
   for (const d of [-170, 0, 170]) { const w = zoneW(st + d); if (Math.max(w.mountain, w.coast) < 0.95) return false; }
   return true;
 }
-export function tunnelNear(s) { const k = Math.round((s - TOFF) / TUN), st = tunnelS(k); return tunnelValid(st) ? { k, s: st } : null; }
+export function tunnelNear(s) { const k = Math.round((s - TOFF) / TUN); return memo(MEMO.t, k, () => { const st = tunnelS(k); return tunnelValid(st) ? { k, s: st } : null; }); }
 /** 1 through the tunnel and its approaches — the road runs straight and level there */
 export function tunnelW(s) { const t = tunnelNear(s); return t ? 1 - sstep(T_HALF + 20, T_RIDGE + 25, Math.abs(s - t.s)) : 0; }
 /** how much the tunnel's ridge raised the ground at the last groundOffsetMix() call (for the ground shader) */

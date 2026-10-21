@@ -13,6 +13,12 @@ THREE.ShaderChunk.fog_fragment = /* glsl */`
   gl_FragColor.rgb = mix( gl_FragColor.rgb, fogColor, fogFactor );
 #endif`;
 
+// Shadows: one hardware-filtered tap (bilinear depth compare) instead of three.js's 5 Vogel-disk taps rotated by
+// per-pixel noise — ~5× cheaper on every lit pixel, and stable: the rotated noise made shadow edges shimmer as we moved.
+THREE.ShaderChunk.shadowmap_pars_fragment = THREE.ShaderChunk.shadowmap_pars_fragment.replace(
+  /float phi = interleavedGradientNoise\( gl_FragCoord\.xy \) \* PI2;\s*shadow = \([\s\S]*?\) \* 0\.2;/,
+  'shadow = texture( shadowMap, vec3( shadowCoord.xy, shadowCoord.z ) );');
+
 export const S_WRAP = 4200; // s is wrapped for shaders; divisible by every pattern period used below
 
 // shared uniforms (one object each, referenced by every material that needs it)
@@ -32,6 +38,7 @@ export const U = {
   uTunR: { value: 4.6 },
   uCarPos: { value: new THREE.Vector3() }, uCarFwd: { value: new THREE.Vector3(0, 0, 1) }, uHead: { value: 0 },
   uWind: { value: 1 },
+  uNoiseTex: { value: makeNoiseTex() },
 };
 
 function gradTex(vals) {
@@ -43,10 +50,23 @@ function gradTex(vals) {
 export const GRAD = gradTex([16, 16, 16, 70, 200, 255, 255, 255]);
 export const GRAD_SOFT = gradTex([28, 40, 70, 130, 200, 240, 255, 255]);
 
+// value noise from a 256² random texture: one (mip-mapped, so distant patterns don't sparkle) texture read instead of
+// four procedural hashes — the per-pixel noise was the single biggest GPU cost on the ground and the foliage
+function makeNoiseTex() {
+  const N = 256, d = new Uint8Array(N * N * 4);
+  let a = 0x9e3779b9;
+  const rnd = () => { a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  for (let i = 0; i < d.length; i++) d[i] = Math.floor(rnd() * 256);
+  const t = new THREE.DataTexture(d, N, N, THREE.RGBAFormat);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.generateMipmaps = true; t.colorSpace = THREE.NoColorSpace; t.needsUpdate = true;
+  return t;
+}
 export const GLSL_NOISE = /* glsl */`
+uniform sampler2D uNoiseTex;
 float hash12(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
-float vnoise(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f*f*(3.0-2.0*f);
-  return mix(mix(hash12(i), hash12(i+vec2(1.,0.)), u.x), mix(hash12(i+vec2(0.,1.)), hash12(i+vec2(1.,1.)), u.x), u.y); }
+float vnoise(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 w = f*f*(3.0-2.0*f);
+  return textureGrad(uNoiseTex, (i + w + 0.5) / 256.0, dFdx(p) / 256.0, dFdy(p) / 256.0).r; }
 float fbm2(vec2 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 4; i++){ s += a*vnoise(p); p = p*2.03 + 17.1; a *= 0.5; } return s; }
 vec3 L(vec3 c){ return pow(c, vec3(2.2)); }
 `;
@@ -60,6 +80,18 @@ float cloudShadow(vec2 xz){
 }`;
 const SHADE_APPLY = /* glsl */`
 outgoingLight *= mix(vec3(1.0), vec3(0.66, 0.71, 0.84), cloudShadow(vWP.xz));`;
+// the same cloud shadows evaluated per vertex (props, foliage, buildings, the car: dense meshes, 300 m-scale patterns)
+const CLOUD_V = /* glsl */`
+uniform sampler2D uNoiseTex; uniform vec2 uOrigin; uniform float uCloudSh, uTime;
+varying float vCloud;
+float vnoiseV(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 w = f*f*(3.0-2.0*f); return textureLod(uNoiseTex, (i + w + 0.5) / 256.0, 0.0).r; }
+float cloudShadowV(vec2 xz){
+  vec2 p = (xz + uOrigin) * 0.0028 + vec2(uTime * 0.011, uTime * 0.0045);
+  float a = 0.5, s = 0.0; for (int i = 0; i < 4; i++){ s += a * vnoiseV(p); p = p * 2.03 + 17.1; a *= 0.5; }
+  return smoothstep(0.47, 0.58, s) * uCloudSh;
+}`;
+const SHADE_APPLY_V = /* glsl */`
+outgoingLight *= mix(vec3(1.0), vec3(0.66, 0.71, 0.84), vCloud);`;
 // inside a tunnel: no sun or sky, just sodium lamps every 6 m (and the car's own headlights)
 const TUNNEL_PARS = /* glsl */`
 uniform vec3 uTunA, uTunB, uCarPos, uCarFwd; uniform float uTunR, uHead;
@@ -82,15 +114,15 @@ const TUNNEL_APPLY = /* glsl */`
     outgoingLight = mix(outgoingLight, lit, tm);
   } }`;
 /** adds vWP (world position), shared uniforms and the cloud-shadow term to a built-in material */
-function worldShade(sh, extraPars = '', extraApply = '') {
-  sh.uniforms.uOrigin = U.uOrigin; sh.uniforms.uCloudSh = U.uCloudSh; sh.uniforms.uTime = U.uTime;
+function worldShade(sh, extraPars = '', extraApply = '', vertexCloud = true) {
+  sh.uniforms.uOrigin = U.uOrigin; sh.uniforms.uCloudSh = U.uCloudSh; sh.uniforms.uTime = U.uTime; sh.uniforms.uNoiseTex = U.uNoiseTex;
   for (const k of ['uTunA', 'uTunB', 'uTunR', 'uCarPos', 'uCarFwd', 'uHead']) sh.uniforms[k] = U[k];
   sh.vertexShader = sh.vertexShader
-    .replace('#include <common>', '#include <common>\nvarying vec3 vWP;')
-    .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWP = (modelMatrix * vec4(position, 1.0)).xyz;');
+    .replace('#include <common>', '#include <common>\nvarying vec3 vWP;' + (vertexCloud ? CLOUD_V : ''))
+    .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWP = (modelMatrix * vec4(position, 1.0)).xyz;' + (vertexCloud ? '\nvCloud = cloudShadowV(vWP.xz);' : ''));
   sh.fragmentShader = sh.fragmentShader
-    .replace('#include <common>', `#include <common>\nuniform float uTime;\nvarying vec3 vWP;\n${GLSL_NOISE}${SHADE_PARS}${TUNNEL_PARS}${extraPars}`)
-    .replace('#include <opaque_fragment>', `${SHADE_APPLY}${extraApply}${TUNNEL_APPLY}\n#include <opaque_fragment>`);
+    .replace('#include <common>', `#include <common>\nuniform float uTime;\nvarying vec3 vWP;${vertexCloud ? '\nvarying float vCloud;' : ''}\n${GLSL_NOISE}${SHADE_PARS}${TUNNEL_PARS}${extraPars}`)
+    .replace('#include <opaque_fragment>', `${vertexCloud ? SHADE_APPLY_V : SHADE_APPLY}${extraApply}${TUNNEL_APPLY}\n#include <opaque_fragment>`);
 }
 
 const GROUND = /* glsl */`
@@ -109,19 +141,24 @@ vec3 roadCol(float s, float u, float rw){
   paint += step(abs(a - (rw - 0.28)), 0.07);
   paint += (1.0 - step(0.5, city)) * (1.0 - step(0.5, mtn)) * step(a, 0.07) * step(fract(s/10.0), 0.55);
   float cs = mod(s, 150.0);
+#ifdef Z_CITY
   if (city > 0.5) {
     if (cs < 4.0 && a < rw - 0.45) paint += step(0.5, fract(u/0.9 + 0.25));
     if (cs > 147.2 && cs < 147.65 && u < -0.1 && u > -rw + 0.4) paint += 1.0;
     vec2 dm = vec2((cs - 118.0)/3.2, (u + 1.55)/0.62); float dd = abs(dm.x) + abs(dm.y);
     if (dd < 1.0 && dd > 0.82) paint += 1.0;
   }
+#endif
   paint = clamp(paint, 0.0, 1.0) * (0.8 + 0.2*vnoise(p*6.0));
   c = mix(c, L(vec3(0.96, 0.96, 0.93)), paint);
+#ifdef Z_SNOW
   if (vZS > 0.01) {
     vec3 packed = L(vec3(0.84, 0.86, 0.91)) * (0.92 + 0.1 * fbm2(p * 0.6));
     float trk = clamp(exp(-d1 * d1 * 1.4) + exp(-d2 * d2 * 1.4), 0.0, 1.0) * (0.75 + 0.25 * vnoise(p * vec2(0.3, 4.0)));
     c = mix(c, mix(packed, L(vec3(0.42, 0.43, 0.47)) * (0.9 + 0.15 * vnoise(p * 3.0)), trk * 0.85), vZS);
   }
+#endif
+#ifdef Z_MTN
   if (mtn > 0.01) {
     float yl = step(0.5, mtn) * step(a, 0.075) * (0.85 + 0.15*vnoise(p*6.0));           // はみ出し禁止: solid yellow centre line
     c = mix(c, L(vec3(0.95, 0.68, 0.12)), yl);
@@ -133,6 +170,7 @@ vec3 roadCol(float s, float u, float rw){
     vec3 leaf = mix(L(vec3(0.78, 0.2, 0.1)), L(vec3(0.95, 0.62, 0.15)), hh);
     c = mix(c, leaf, lf * 0.92);
   }
+#endif
   return c;
 }
 // seen from a distance a forest is a mass of individual crowns (a Worley pattern: each crown a soft dome, darker in
@@ -274,32 +312,55 @@ vec3 groundAlbedo(){
   if (kind > 0.5 && kind < 1.5) return roadCol(s, u, rw);
   if (kind > 1.5 && kind < 2.5) return sidewalkCol(s, u, rw);
   if (kind > 2.5 && kind < 3.5) return L(vec3(0.80, 0.80, 0.78)) * (0.9 + 0.12*fbm2(vec2(s, u)*2.0));
+#ifdef K_XING
   if (kind > 4.5 && kind < 5.5) return trackBed(s, u);
   if (kind > 5.5 && kind < 6.5) return crossingPanel(s, u);
+#endif
+#ifdef Z_CITY
   if (kind > 9.5) return sideStreet(s, u);
+#endif
+#ifdef K_RIVER
   if (kind > 8.5) return L(vec3(0.78, 0.72, 0.6)) * (0.86 + 0.18 * vnoise(vec2(s, u) * 3.0));   // levee-top path
+#endif
   if (kind > 6.5) return L(vec3(0.95, 0.95, 0.92)) * (0.82 + 0.18 * vnoise(vec2(s, u) * 6.0));
   vec3 c = vec3(0.0);
+#ifdef Z_CITY
   if (vZW.x > 0.004) c += vZW.x * cityGround(s, u, rw);
+#endif
+#ifdef Z_SAKURA
   if (vZW.y > 0.004) c += vZW.y * sakuraGround(s, u, rw);
+#endif
+#ifdef Z_COAST
   if (vZW.z > 0.004) c += vZW.z * coastGround(s, u, rw);
+#endif
+#ifdef Z_COUNTRY
   if (vZW.w > 0.004) c += vZW.w * countryGround(s, u, rw);
+#endif
   float wMtn = clamp(1.0 - dot(vZW, vec4(1.0)) - vZS, 0.0, 1.0);
+#ifdef Z_MTN
   if (wMtn > 0.004) c += wMtn * mountainGround(s, u, rw);
+#endif
+#ifdef Z_SNOW
   if (vZS > 0.004) { // snow arrives in patches (a linear blend would turn red leaves pink)
     float n = fbm2(vec2(s, u) * 0.09 + 31.0), cover = smoothstep(n - 0.07, n + 0.07, vZS * 1.25 - 0.12);
     c = mix(c / max(1.0 - vZS, 0.001), snowGround(s, u, rw), vZS > 0.996 ? 1.0 : cover);
   }
+#endif
   float rbw = max(vRV, 0.0), rdg = max(-vRV, 0.0);               // + river bank, − a tunnel's ridge
   gWater *= vZW.w * (1.0 - rbw) * (1.0 - rdg);
+#ifdef K_RIVER
   c = mix(c, riverBankCol(s, u), rbw);
+#endif
+#ifdef K_RIDGE
   c = mix(c, ridgeCol(s, u, wMtn), rdg);
+#endif
   return c * (0.92 + 0.16*fbm2(vec2(s, u)*0.015));
 }
 `;
 
 // flooded paddies mirror the sky: gradient + soft cloud patches + sun glint, rippled by the wind
 const MIRROR = /* glsl */`
+#ifdef Z_COUNTRY
 if (gWater > 0.01) {
   vec3 V = normalize(vWP - cameraPosition);
   vec3 R = reflect(V, vec3(0.0, 1.0, 0.0));
@@ -312,7 +373,8 @@ if (gWater > 0.01) {
   sky += uSunCol * pow(max(dot(R, uSunDir), 0.0), 260.0) * 3.0 * (1.0 - uNight);
   float fr = 0.4 + 0.6 * pow(1.0 - clamp(-V.y, 0.0, 1.0), 3.0);
   outgoingLight = mix(outgoingLight, sky, clamp(gWater * fr, 0.0, 0.9));
-}`;
+}
+#endif`;
 
 // wet ground: darker asphalt, a sky-coloured sheen (stronger at grazing angles), puddles with rain rings
 const WET = /* glsl */`
@@ -330,8 +392,28 @@ if (uWet > 0.01) {
   outgoingLight *= 1.0 - 0.12 * uWet * (1.0 - hard);
 }`;
 
-export function groundMaterial() {
+// zones → shader defines. Each chunk's ground uses a variant compiled with only the zones (and features) it contains:
+// one uber-shader with every zone's code ran ~4× slower even when the branches were skipped.
+const ZDEF = { city: 'Z_CITY', sakura: 'Z_SAKURA', coast: 'Z_COAST', country: 'Z_COUNTRY', mountain: 'Z_MTN', snow: 'Z_SNOW' };
+export function groundDefines(zones) {
+  const d = {};
+  for (const z of zones) d[ZDEF[z]] = '';
+  if (zones.includes('city') || zones.includes('country')) d.K_XING = '';
+  if (zones.includes('country') || zones.includes('sakura')) d.K_RIVER = '';
+  if (zones.includes('mountain') || zones.includes('coast')) d.K_RIDGE = '';
+  return d;
+}
+const GROUND_VARIANTS = new Map();
+export function groundMaterialFor(zones) {
+  const key = [...new Set(zones)].sort().join('+');
+  let m = GROUND_VARIANTS.get(key);
+  if (!m) { m = groundMaterial(groundDefines(key.split('+')), key); GROUND_VARIANTS.set(key, m); }
+  return m;
+}
+export const groundVariants = () => [...GROUND_VARIANTS.values()];
+export function groundMaterial(defines = groundDefines(Object.keys(ZDEF)), key = 'all') {
   const m = new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: GRAD });
+  m.defines = defines;
   m.onBeforeCompile = sh => {
     sh.uniforms.uSkyHor = U.uSkyHor; sh.uniforms.uSkyZen = U.uSkyZen; sh.uniforms.uWet = U.uWet; sh.uniforms.uNight = U.uNight; sh.uniforms.uSunDir = U.uSunDir; sh.uniforms.uSunCol = U.uSunCol;
     sh.vertexShader = sh.vertexShader
@@ -344,11 +426,11 @@ vSU = su; vZW = zw; vRK = rk; vRV = rv; vZS = zs; vWY = (modelMatrix * vec4(posi
 uniform vec3 uSkyHor, uSkyZen, uSunDir, uSunCol; uniform float uWet, uNight;
 varying vec2 vSU; varying vec4 vZW; varying vec2 vRK; varying float vWY; varying float vRV; varying vec3 vWN; varying float vZS;
 float gWater = 0.0;
-${GROUND}`, WET + MIRROR);
+${GROUND}`, WET + MIRROR, false);
     sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
 diffuseColor.rgb *= groundAlbedo();`);
   };
-  m.customProgramCacheKey = () => 'ground-v14';
+  m.customProgramCacheKey = () => 'ground-v15-' + key;
   return m;
 }
 
@@ -392,7 +474,7 @@ export function makeMaterials(atlasTex, folTex) {
       sh.uniforms.uTuftV = U.uTuftV; sh.uniforms.uWind = U.uWind;
       // a gentle breeze: whole crowns drift a few centimetres, grass tufts bend from the root
       sh.vertexShader = sh.vertexShader
-        .replace('#include <common>', '#include <common>\nuniform float uTime, uWind; uniform vec2 uTuftV;')
+        .replace('#include <common>', '#include <common>\nuniform float uWind; uniform vec2 uTuftV;') // (uTime comes with the vertex cloud shadows)
         .replace('#include <begin_vertex>', `#include <begin_vertex>
 { vec4 wq = modelMatrix * vec4(transformed, 1.0);
   float sw = sin(uTime * 1.2 + wq.x * 0.31 + wq.z * 0.23) * 0.65 + sin(uTime * 2.3 + wq.x * 0.83 - wq.z * 0.47) * 0.35;

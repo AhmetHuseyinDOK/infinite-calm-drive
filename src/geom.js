@@ -6,22 +6,41 @@ const _a = new THREE.Vector3(), _b = new THREE.Vector3();
 const WHITE = [1, 1, 1];
 
 export class GB {
+  // Vertices go straight into growable typed arrays (no big JS-array → typed-array copy when a chunk finishes) in
+  // compact formats: float positions, 1-byte normals and colours (normalized), float UVs — half the memory and upload.
   constructor({ uv = false, color = true } = {}) {
     this.hasUV = uv; this.hasColor = color;
-    this.P = []; this.N = []; this.U = []; this.Cl = [];
+    this.n = 0; this.cap = 0; this.P = null; this.N = null; this.U = null; this.Cl = null;
+    this.bb = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
     this.m = new THREE.Matrix4(); this.nm = new THREE.Matrix3();
     this.e = this.m.elements; this.ne = this.nm.elements;
   }
-  get count() { return this.P.length / 3; }
+  grow(need) {
+    const cap = Math.max(this.cap * 2, need, 512), n = this.n;
+    const P = new Float32Array(cap * 3); if (this.P) P.set(this.P.subarray(0, n * 3)); this.P = P;
+    const N = new Int8Array(cap * 3); if (this.N) N.set(this.N.subarray(0, n * 3)); this.N = N;
+    if (this.hasUV) { const U = new Float32Array(cap * 2); if (this.U) U.set(this.U.subarray(0, n * 2)); this.U = U; }
+    if (this.hasColor) { const C = new Uint8Array(cap * 3); if (this.Cl) C.set(this.Cl.subarray(0, n * 3)); this.Cl = C; }
+    this.cap = cap;
+  }
+  get count() { return this.n; }
   setM(m) { this.m.copy(m); this.nm.getNormalMatrix(m); return this; }
   vtx(x, y, z, nx, ny, nz, u, v, c) {
-    const e = this.e, n = this.ne;
-    this.P.push(e[0] * x + e[4] * y + e[8] * z + e[12], e[1] * x + e[5] * y + e[9] * z + e[13], e[2] * x + e[6] * y + e[10] * z + e[14]);
-    const X = n[0] * nx + n[3] * ny + n[6] * nz, Y = n[1] * nx + n[4] * ny + n[7] * nz, Z = n[2] * nx + n[5] * ny + n[8] * nz;
-    const l = 1 / (Math.sqrt(X * X + Y * Y + Z * Z) || 1);
-    this.N.push(X * l, Y * l, Z * l);
-    if (this.hasUV) this.U.push(u, v);
-    if (this.hasColor) { const k = c || WHITE; this.Cl.push(k[0], k[1], k[2]); }
+    if (this.n >= this.cap) this.grow(this.n + 1);
+    const e = this.e, nm = this.ne, i3 = this.n * 3, P = this.P, bb = this.bb;
+    const px = e[0] * x + e[4] * y + e[8] * z + e[12], py = e[1] * x + e[5] * y + e[9] * z + e[13], pz = e[2] * x + e[6] * y + e[10] * z + e[14];
+    P[i3] = px; P[i3 + 1] = py; P[i3 + 2] = pz;
+    if (px < bb[0]) bb[0] = px; if (py < bb[1]) bb[1] = py; if (pz < bb[2]) bb[2] = pz;
+    if (px > bb[3]) bb[3] = px; if (py > bb[4]) bb[4] = py; if (pz > bb[5]) bb[5] = pz;
+    const X = nm[0] * nx + nm[3] * ny + nm[6] * nz, Y = nm[1] * nx + nm[4] * ny + nm[7] * nz, Z = nm[2] * nx + nm[5] * ny + nm[8] * nz;
+    const l = 127 / (Math.sqrt(X * X + Y * Y + Z * Z) || 1);
+    this.N[i3] = Math.round(X * l); this.N[i3 + 1] = Math.round(Y * l); this.N[i3 + 2] = Math.round(Z * l);
+    if (this.hasUV) { this.U[this.n * 2] = u; this.U[this.n * 2 + 1] = v; }
+    if (this.hasColor) {
+      const k = c || WHITE, C = this.Cl;
+      C[i3] = k[0] >= 1 ? 255 : k[0] <= 0 ? 0 : k[0] * 255 + 0.5; C[i3 + 1] = k[1] >= 1 ? 255 : k[1] <= 0 ? 0 : k[1] * 255 + 0.5; C[i3 + 2] = k[2] >= 1 ? 255 : k[2] <= 0 ? 0 : k[2] * 255 + 0.5;
+    }
+    this.n++;
   }
   /** quad p0..p3 counter-clockwise seen from the front (p0 bottom-left, p1 bottom-right, p2 top-right, p3 top-left) */
   quad(p0, p1, p2, p3, c, uv) {
@@ -97,32 +116,41 @@ export class GB {
     for (const [k, u, v] of T) this.vtx(P[k][0], P[k][1], P[k][2], N[k][0], N[k][1], N[k][2], u, v, Cc[k]);
   }
   /** freeze into typed arrays (used for prop templates) */
-  toArrays() { return { P: new Float32Array(this.P), N: new Float32Array(this.N), C: this.hasColor ? new Float32Array(this.Cl) : null, U: this.hasUV ? new Float32Array(this.U) : null }; }
+  toArrays() {
+    const n = this.n;
+    return { n, P: this.P ? this.P.slice(0, n * 3) : new Float32Array(0), N: this.N ? this.N.slice(0, n * 3) : new Int8Array(0),
+      C: this.hasColor && this.Cl ? this.Cl.slice(0, n * 3) : null, U: this.hasUV && this.U ? this.U.slice(0, n * 2) : null };
+  }
   /** append a pre-built template under matrix m (fast path for trees etc.) */
   stamp(T, m) {
-    if (!T || !T.P.length) return;
+    if (!T || !T.n) return;
     this.setM(m);
-    const e = this.e, n = this.ne, P = T.P, N = T.N, Cc = T.C, U = T.U;
-    const out = this.P, on = this.N;
-    for (let i = 0; i < P.length; i += 3) {
-      const x = P[i], y = P[i + 1], z = P[i + 2];
-      out.push(e[0] * x + e[4] * y + e[8] * z + e[12], e[1] * x + e[5] * y + e[9] * z + e[13], e[2] * x + e[6] * y + e[10] * z + e[14]);
+    if (this.n + T.n > this.cap) this.grow(this.n + T.n);
+    const e = this.e, nm = this.ne, P = T.P, N = T.N, Cc = T.C, U = T.U, o = this.n, bb = this.bb;
+    for (let i = 0; i < T.n * 3; i += 3) {
+      const x = P[i], y = P[i + 1], z = P[i + 2], j = o * 3 + i;
+      const px = e[0] * x + e[4] * y + e[8] * z + e[12], py = e[1] * x + e[5] * y + e[9] * z + e[13], pz = e[2] * x + e[6] * y + e[10] * z + e[14];
+      this.P[j] = px; this.P[j + 1] = py; this.P[j + 2] = pz;
+      if (px < bb[0]) bb[0] = px; if (py < bb[1]) bb[1] = py; if (pz < bb[2]) bb[2] = pz;
+      if (px > bb[3]) bb[3] = px; if (py > bb[4]) bb[4] = py; if (pz > bb[5]) bb[5] = pz;
       const nx = N[i], ny = N[i + 1], nz = N[i + 2];
-      const X = n[0] * nx + n[3] * ny + n[6] * nz, Y = n[1] * nx + n[4] * ny + n[7] * nz, Z = n[2] * nx + n[5] * ny + n[8] * nz;
-      const l = 1 / (Math.sqrt(X * X + Y * Y + Z * Z) || 1);
-      on.push(X * l, Y * l, Z * l);
+      const X = nm[0] * nx + nm[3] * ny + nm[6] * nz, Y = nm[1] * nx + nm[4] * ny + nm[7] * nz, Z = nm[2] * nx + nm[5] * ny + nm[8] * nz;
+      const l = 127 / (Math.sqrt(X * X + Y * Y + Z * Z) || 1);
+      this.N[j] = Math.round(X * l); this.N[j + 1] = Math.round(Y * l); this.N[j + 2] = Math.round(Z * l);
     }
-    if (this.hasColor) { if (Cc) for (let i = 0; i < Cc.length; i++) this.Cl.push(Cc[i]); else for (let i = 0; i < P.length; i++) this.Cl.push(1); }
-    if (this.hasUV) { if (U) for (let i = 0; i < U.length; i++) this.U.push(U[i]); else for (let i = 0; i < (P.length / 3) * 2; i++) this.U.push(0); }
+    if (this.hasColor) { if (Cc) this.Cl.set(Cc, o * 3); else this.Cl.fill(255, o * 3, (o + T.n) * 3); }
+    if (this.hasUV) { if (U) this.U.set(U, o * 2); else this.U.fill(0, o * 2, (o + T.n) * 2); }
+    this.n += T.n;
   }
   build() {
-    if (!this.P.length) return null;
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(this.P, 3));
-    g.setAttribute('normal', new THREE.Float32BufferAttribute(this.N, 3));
-    if (this.hasUV) g.setAttribute('uv', new THREE.Float32BufferAttribute(this.U, 2));
-    if (this.hasColor) g.setAttribute('color', new THREE.Float32BufferAttribute(this.Cl, 3));
-    g.computeBoundingSphere();
+    if (!this.n) return null;
+    const g = new THREE.BufferGeometry(), n = this.n, bb = this.bb;
+    g.setAttribute('position', new THREE.BufferAttribute(this.P.slice(0, n * 3), 3));
+    g.setAttribute('normal', new THREE.BufferAttribute(this.N.slice(0, n * 3), 3, true));
+    if (this.hasUV) g.setAttribute('uv', new THREE.BufferAttribute(this.U.slice(0, n * 2), 2));
+    if (this.hasColor) g.setAttribute('color', new THREE.BufferAttribute(this.Cl.slice(0, n * 3), 3, true));
+    g.boundingBox = new THREE.Box3(new THREE.Vector3(bb[0], bb[1], bb[2]), new THREE.Vector3(bb[3], bb[4], bb[5]));
+    g.boundingSphere = g.boundingBox.getBoundingSphere(new THREE.Sphere());
     return g;
   }
 }

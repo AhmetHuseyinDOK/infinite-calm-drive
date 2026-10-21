@@ -34,6 +34,9 @@ const nxq = (g, x, z0, z1, y0, y1, cell, c = W1) => g.quad([x, y0, z0], [x, y0, 
 const tri = (g, a, b, c, col, cell) => g.quad(a, b, c, c, col, cell ? uv(cell) : undefined);
 
 // ------------------------------------------------------------------ street furniture
+/** where a pole's wires attach (world space) — without building the pole */
+const POLE_ANCH = [[0, 10.8, -0.85], [0, 10.8, -0.3], [0, 10.8, 0.3], [0, 10.8, 0.85], [0, 9.68, -0.7], [0, 9.68, 0], [0, 9.68, 0.7], [0, 5.72, -0.3], [0, 5.72, 0.3]];
+export function poleAnchors(M) { return POLE_ANCH.map(p => new THREE.Vector3(p[0], p[1], p[2]).applyMatrix4(M)); }
 export function utilityPole(G, M, r, opt = {}) {
   const c = G.color; c.setM(M);
   const H = 11.2;
@@ -281,14 +284,20 @@ export function treeCedar(G, M, r, s = 1) {
 // trees are built once per (kind, variant) and then stamped — much cheaper than rebuilding every tree
 const TREE_BUILDERS = { broad: treeBroad, sakura: treeSakura, pine: treePine, cedar: treeCedar, maple: treeMaple, ginkgo: treeGinkgo, birch: treeBirch, snowcedar: treeSnowCedar };
 const TCACHE = {};
-export function tree(G, M, kind, r, s = 1) {
-  const v = Math.floor(r() * 4), key = kind + v;
+function treeTemplate(kind, v) {
+  const key = kind + v;
   let t = TCACHE[key];
   if (!t) {
     const g = { color: new GB(), foliage: new GB(), leaf: new GB({ uv: true }) };
     TREE_BUILDERS[kind](g, new THREE.Matrix4(), rng(1000 + v * 77 + kind.length * 13), 1);
     t = TCACHE[key] = { c: g.color.toArrays(), f: g.foliage.toArrays(), l: g.leaf.toArrays() };
   }
+  return t;
+}
+/** build every tree template up front (during loading), so no chunk build ever pays for one mid-drive */
+export function warmTrees() { for (const kind in TREE_BUILDERS) for (let v = 0; v < 4; v++) treeTemplate(kind, v); }
+export function tree(G, M, kind, r, s = 1) {
+  const t = treeTemplate(kind, Math.floor(r() * 4));
   const m = M.clone().scale(new THREE.Vector3(s, s, s));
   G.color.stamp(t.c, m); G.foliage.stamp(t.f, m); G.leaf.stamp(t.l, m);
 }

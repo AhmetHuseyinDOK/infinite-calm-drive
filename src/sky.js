@@ -1,7 +1,7 @@
 // Sky dome, GPU-painted anime cumulus billboards, distant mountain silhouettes and the time-of-day palette.
 import * as THREE from 'three';
 import { clamp, lerp, smooth, rng, fbm1 } from './util.js';
-import { GLSL_NOISE } from './materials.js';
+import { GLSL_NOISE, U as MU } from './materials.js';
 
 // ---------------------------------------------------------------- palette
 //  t, zenith, horizon, sun colour, sun I, hemi sky, hemi ground, hemi I, fog, cloud lit, cloud shade, cloud rim, night, warm
@@ -68,7 +68,7 @@ export function makeSky() {
     side: THREE.BackSide, depthWrite: false, fog: false,
     uniforms: {
       uZenith: { value: TOD.zenith }, uHorizon: { value: TOD.horizon }, uSunDir: { value: TOD.sunDir }, uMoonDir: { value: TOD.moonDir },
-      uSunCol: { value: TOD.sunCol }, uNight: { value: 0 }, uWarm: { value: 0 }, uTime: { value: 0 }, uCirrus: { value: 0.6 }, uCirrusCol: { value: new THREE.Color() }, uOvercast: { value: 0 }, uDeckLit: { value: new THREE.Color() }, uDeckDark: { value: new THREE.Color() },
+      uNoiseTex: MU.uNoiseTex, uSunCol: { value: TOD.sunCol }, uNight: { value: 0 }, uWarm: { value: 0 }, uTime: { value: 0 }, uCirrus: { value: 0.6 }, uCirrusCol: { value: new THREE.Color() }, uOvercast: { value: 0 }, uDeckLit: { value: new THREE.Color() }, uDeckDark: { value: new THREE.Color() },
       uMilky: { value: 0 }, uMetA: { value: new THREE.Vector3(0, 1, 0) }, uMetB: { value: new THREE.Vector3(0, 1, 0) }, uMetP: { value: -1 },
     },
     vertexShader: /* glsl */`varying vec3 vDir; void main(){ vDir = position; vec4 p = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * p; }`,
@@ -176,7 +176,7 @@ function cumulusPuffs(r, tall) {
 export function paintClouds(renderer) {
   const SZ = 1024, puffU = { value: Array.from({ length: 96 }, () => new THREE.Vector4()) };
   const mat = new THREE.ShaderMaterial({
-    uniforms: { uP: puffU, uN: { value: 0 }, uSeed: { value: 0 }, uBase: { value: 0.1 } },
+    uniforms: { uP: puffU, uN: { value: 0 }, uSeed: { value: 0 }, uBase: { value: 0.1 }, uNoiseTex: MU.uNoiseTex },
     vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy * 2.0, 0.0, 1.0); }',
     fragmentShader: /* glsl */`
       uniform vec4 uP[96]; uniform int uN; uniform float uSeed, uBase; varying vec2 vUv;
@@ -304,7 +304,7 @@ export function makeMountains() {
     g.setIndex(idx);
     const mat = new THREE.ShaderMaterial({
       side: THREE.DoubleSide, fog: false,
-      uniforms: { uCol: { value: new THREE.Color(L.col) }, uHaze: { value: TOD.fog }, uHazeK: { value: L.haze }, uLight: { value: 1 }, uSeed: { value: li * 17.0 }, uSnow: { value: 0 } },
+      uniforms: { uCol: { value: new THREE.Color(L.col) }, uHaze: { value: TOD.fog }, uHazeK: { value: L.haze }, uLight: { value: 1 }, uSeed: { value: li * 17.0 }, uSnow: { value: 0 }, uNoiseTex: MU.uNoiseTex },
       vertexShader: 'attribute vec2 hf; varying vec2 vH; varying float vY; void main(){ vH = hf; vY = position.y; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
       fragmentShader: /* glsl */`
         uniform vec3 uCol, uHaze; uniform float uHazeK, uLight, uSeed, uSnow; varying vec2 vH; varying float vY;

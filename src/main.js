@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import { Path, zoneW, zoneAt, zparam, ZINFO, setStartZone, crossingS, crossingValid, XING, XOFF, riverNear, groundOffsetMix, tunnelNear, T_HALF, T_RIDGE } from './path.js';
+import { Path, ZONES, zoneW, zoneAt, zparam, ZINFO, setStartZone, crossingS, crossingValid, XING, XOFF, riverNear, groundOffsetMix, tunnelNear, T_HALF, T_RIDGE } from './path.js';
 import { makeCrossingRig, makeTrain, xingPosts } from './crossing.js';
 import { buildAtlas, buildFoliage } from './textures.js';
-import { makeMaterials, U } from './materials.js';
-import { setAtlas, setFoliage } from './props.js';
+import { makeMaterials, U, groundMaterialFor } from './materials.js';
+import { setAtlas, setFoliage, warmTrees } from './props.js';
 import { World } from './chunks.js';
 import { makeSky, paintClouds, makeClouds, makeMountains, updateTOD, applyWeather, TOD } from './sky.js';
 import { makeWeather, makeRain, makeSnow } from './weather.js';
@@ -37,6 +37,7 @@ async function main() {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.NeutralToneMapping; renderer.toneMappingExposure = 1.0;
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
+  renderer.debug.checkShaderErrors = QS.has('debug'); // checking forces each shader compile to finish synchronously
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0xc6ddf2, 0.0019, 700); // near = exp² density, far = draw distance (see materials.js)
@@ -44,8 +45,11 @@ async function main() {
 
   const sun = new THREE.DirectionalLight(0xffffff, 3);
   sun.castShadow = true;
-  const SM = quality === 'low' ? 1024 : 2048; sun.shadow.mapSize.set(SM, SM);
-  Object.assign(sun.shadow.camera, { left: -75, right: 75, top: 75, bottom: -75, near: 1, far: 420 });
+  const SM = quality === 'low' ? 1024 : quality === 'mid' ? 1536 : 2048; sun.shadow.mapSize.set(SM, SM);
+  const SH_HALF = 62; // shadow frustum half-size (m): ~6 cm texels at 2048²
+  Object.assign(sun.shadow.camera, { left: -SH_HALF, right: SH_HALF, top: SH_HALF, bottom: -SH_HALF, near: 1, far: 420 });
+  const shadowDir = new THREE.Vector3(0, 1, 0), shX = new THREE.Vector3(), shY = new THREE.Vector3(), shT = new THREE.Vector3(), UPV = new THREE.Vector3(0, 1, 0);
+  let bloomAllowed = true;
   sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.05;
   scene.add(sun, sun.target);
   const hemi = new THREE.HemisphereLight(0xa4c8ff, 0xc8b8a0, 1.6); scene.add(hemi);
@@ -57,6 +61,7 @@ async function main() {
   const M = makeMaterials(atlas.textures(renderer), fol.tex);
   status('painting the clouds…');
   await new Promise(r => setTimeout(r, 10));
+  warmTrees();
   const path = new Path();
   const foamMat = foamMaterial();
   const riverMat = riverMaterial();
@@ -82,7 +87,32 @@ async function main() {
   // build only the first stretch up-front; the rest streams in while the title screen is up
   const AHEAD = EMBED ? 620 : world.ahead; world.ahead = 260;
   while (world.update(st.s, 1e9)) {}
+  world.flush();
   world.ahead = AHEAD;
+  // ---- warm up every shader now (behind the title screen) instead of compiling mid-drive: all ground variants
+  //      (each zone and each adjacent pair), every material, the hidden effects, and the shadow-pass versions
+  {
+    status('preparing the light…');
+    await new Promise(r => setTimeout(r, 10));
+    const warm = new THREE.Group(), tri = new THREE.BufferGeometry();
+    tri.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 0.01, 0, 0, 0, 0.01, 0], 3));
+    tri.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
+    tri.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 0, 1], 2));
+    tri.setAttribute('color', new THREE.Float32BufferAttribute([1, 1, 1, 1, 1, 1, 1, 1, 1], 3));
+    const mats = [M.color, M.atlas, M.foliage, M.leaf, M.lamp, M.sig, M.sodium, M.decal, M.pool, foamMat, riverMat];
+    for (let i = 0; i < ZONES.length; i++) { mats.push(groundMaterialFor([ZONES[i]])); mats.push(groundMaterialFor([ZONES[i], ZONES[(i + 1) % ZONES.length]])); }
+    for (const m of mats) { const o = new THREE.Mesh(tri, m); o.castShadow = o.receiveShadow = true; o.frustumCulled = false; warm.add(o); }
+    warm.position.set(0, 0, 0); scene.add(warm);
+    sun.target.position.set(0, 0, 0); sun.position.set(0, 150, 60); // so the warm-up meshes sit inside the shadow camera
+    const hidden = [rain.mesh, snowfall.mesh, train.group, rig.group, sea.mesh].filter(o => !o.visible);
+    for (const o of hidden) o.visible = true;
+    renderer.setRenderTarget(post.composer.readBuffer); // the game draws into the post-processing buffer (linear output)
+    renderer.compile(scene, camera);
+    renderer.render(scene, camera);              // also compiles the shadow-pass (depth) programs
+    renderer.setRenderTarget(null);
+    for (const o of hidden) o.visible = false;
+    scene.remove(warm); tri.dispose();
+  }
   // level crossing state
   const X = { k: Math.ceil((st.s - XOFF) / XING), phase: 'idle', raise: 1, decided: false, t2: 0 };
 
@@ -185,7 +215,7 @@ async function main() {
   let qLevel = 0;
   function stepDown(persist = true) {
     if (DPR > 1.05) { DPR = Math.max(1, DPR - 0.25); needResize = true; }
-    else if (post.bloom.enabled) post.bloom.enabled = false;
+    else if (bloomAllowed) { bloomAllowed = false; post.bloom.enabled = false; }
     else if (sun.shadow.mapSize.x > 1024) { sun.shadow.mapSize.set(1024, 1024); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } }
     else if (world.ahead > 430) world.ahead = 430;
     else return;
@@ -198,6 +228,8 @@ async function main() {
   let last = performance.now(), t = 0, frames = 0, slowT = 0;
   const day = () => 1 - TOD.night;
   let ftAvg = 0, tunS = 0;
+  const PROF = QS.has('prof') ? (window.__prof = { spikes: [], frames: 0, sum: 0, max: 0, progs: 0, geos: 0, tex: 0, last: null, gpu: 0, gpuN: 0, gpuSum: 0, gpuMax: 0, pend: [] }) : null;
+  if (PROF) { PROF.gl = renderer.getContext(); PROF.tq = PROF.gl.getExtension('EXT_disjoint_timer_query_webgl2'); }
   const meteor = { p: -1, a: new THREE.Vector3(), b: new THREE.Vector3(), next: 5 };
   function frame(now) {
     requestAnimationFrame(frame);
@@ -248,7 +280,7 @@ async function main() {
     wet = clamp(wet + (rn > 0.25 ? dt / 18 : -dt / 120), 0, 1);
 
     // stream the world
-    const tw0 = performance.now(); world.update(st.s, started ? 6 : 14); const tw1 = performance.now();
+    const tw0 = performance.now(); world.update(st.s, started ? 3.5 : 14); const tw1 = performance.now();
     path.at(st.s, f);
     if (Math.abs(f.x - world.origin.x) > 900 || Math.abs(f.z - world.origin.z) > 900) {
       const dx = Math.round(f.x) - world.origin.x, dz = Math.round(f.z) - world.origin.z;
@@ -328,8 +360,15 @@ async function main() {
     // lighting & atmosphere
     const w = zoneW(st.s);
     sun.color.copy(TOD.sunCol); sun.intensity = TOD.sunI;
-    sun.target.position.set(car.group.position.x + f.fx * 30, car.group.position.y, car.group.position.z + f.fz * 30);
-    sun.position.copy(sun.target.position).addScaledVector(TOD.lightDir, 200);
+    // Stable shadows: the light direction only updates in small steps, and the shadow camera snaps to whole texels,
+    // so shadow edges don't crawl or shimmer as the car moves (the map content stays fixed in world space).
+    if (shadowDir.angleTo(TOD.lightDir) > 0.004) shadowDir.copy(TOD.lightDir);
+    shX.crossVectors(UPV, shadowDir).normalize(); shY.crossVectors(shadowDir, shX);
+    shT.set(car.group.position.x + f.fx * 26, car.group.position.y, car.group.position.z + f.fz * 26);
+    { const tex = (2 * SH_HALF) / sun.shadow.mapSize.x, a = shT.dot(shX), b = shT.dot(shY);
+      shT.addScaledVector(shX, Math.round(a / tex) * tex - a).addScaledVector(shY, Math.round(b / tex) * tex - b); }
+    sun.target.position.copy(shT);
+    sun.position.copy(shT).addScaledVector(shadowDir, 200);
     hemi.color.copy(TOD.hemiSky); hemi.groundColor.copy(TOD.hemiGround); hemi.intensity = TOD.hemiI;
     scene.fog.color.copy(TOD.fog);
     const fogD = (w.city * 0.0022 + w.sakura * 0.0019 + w.coast * 0.0011 + w.country * 0.0014 + w.mountain * 0.0017 + w.snow * 0.0021) * (1 + TOD.night * 0.25);
@@ -367,6 +406,8 @@ async function main() {
     M.pool.opacity = nightK * 0.42 * (1 + 0.8 * wet);
     U.uNight.value = nightK;
     post.bloom.strength = lerp(0.32, 0.55, nightK); post.bloom.threshold = lerp(1.35, 0.95, nightK); post.bloom.radius = lerp(0.55, 0.35, nightK);
+    // bloom only where it shows (night lamps, sunsets, tunnels): by day at threshold 1.35 it cost ~7 ms for almost nothing
+    { const need = Math.max(nightK, tunS, sstep(0.25, 0.6, TOD.warm) * (1 - ov)); post.bloom.enabled = bloomAllowed && need > 0.02; post.bloom.strength *= Math.min(1, need * 4); }
     renderer.toneMappingExposure = lerp(1.0, 1.15, nightK) * (1 + 0.35 * tunS);
 
     // sun streaks in the grade pass
@@ -389,10 +430,30 @@ async function main() {
     }
     zoneCard(zoneAt(st.s + 40));
 
+    if (PROF) { renderer.info.autoReset = false; renderer.info.reset(); }
+    let gq = null;
+    if (PROF && PROF.tq) { gq = PROF.gl.createQuery(); PROF.gl.beginQuery(PROF.tq.TIME_ELAPSED_EXT, gq); }
     const tr0 = performance.now(); post.composer.render(dt); const tr1 = performance.now();
+    if (gq) {
+      const gl = PROF.gl; gl.endQuery(PROF.tq.TIME_ELAPSED_EXT); PROF.pend.push(gq);
+      while (PROF.pend.length && gl.getQueryParameter(PROF.pend[0], gl.QUERY_RESULT_AVAILABLE)) {
+        const q0 = PROF.pend.shift(), ns = gl.getQueryParameter(q0, gl.QUERY_RESULT); gl.deleteQuery(q0);
+        if (!gl.getParameter(PROF.tq.GPU_DISJOINT_EXT)) { PROF.gpu = ns / 1e6; PROF.gpuN++; PROF.gpuSum += PROF.gpu; if (PROF.gpu > PROF.gpuMax) PROF.gpuMax = PROF.gpu; }
+      }
+    }
     const PB = window.__pb || (window.__pb = { world: 0, parts: 0, render: 0 }); PB.world = PB.world * 0.95 + (tw1 - tw0) * 0.05; PB.parts = PB.parts * 0.95 + (tp1 - tp0) * 0.05; PB.render = PB.render * 0.95 + (tr1 - tr0) * 0.05;
 
     ftAvg = ftAvg * 0.95 + (performance.now() - ft0) * 0.05; window.__ft = ftAvg;
+    if (PROF) { // ?prof: record every frame whose main-thread work exceeds 12 ms, with what happened in it
+      const ri = renderer.info, total = performance.now() - ft0;
+      const rec = { t: +t.toFixed(2), s: Math.round(st.s), total: +total.toFixed(1), world: +(tw1 - tw0).toFixed(1), render: +(tr1 - tr0).toFixed(1), gpu: +(PROF.gpu || 0).toFixed(1),
+        progs: ri.programs.length - PROF.progs, geos: ri.memory.geometries - PROF.geos, tex: ri.memory.textures - PROF.tex, calls: ri.render.calls, tris: ri.render.triangles };
+      if (rec.progs > 0 && started) rec.newProgs = ri.programs.slice(-rec.progs).map(pr => (pr.name || '') + ':' + String(pr.cacheKey).slice(0, 60));
+      PROF.progs = ri.programs.length; PROF.geos = ri.memory.geometries; PROF.tex = ri.memory.textures;
+      PROF.frames++; PROF.sum += total; if (total > PROF.max) PROF.max = total;
+      if (total > 12 && started) PROF.spikes.push(rec);
+      PROF.last = rec;
+    }
     // HUD + adaptive quality
     if ((hudT += dt) > 0.25) {
       hudT = 0;
@@ -406,7 +467,7 @@ async function main() {
     if (started && frames > 150 && dt > 0.03) slowT += dt; else slowT = Math.max(0, slowT - dt * 0.5);
     if (slowT > 3 && !QS.has('q')) { slowT = 0; stepDown(); }
   }
-  window.__dbg = { renderer, st, scene, camera, world, TOD, X, train, weather, U, birds, cine, post, car };
+  window.__dbg = { renderer, st, scene, camera, world, TOD, X, train, weather, U, birds, cine, post, car, sun, M, clouds, sky, mountains };
   status('');
   $start.classList.add('ready');
   if (QS.has('auto')) begin();

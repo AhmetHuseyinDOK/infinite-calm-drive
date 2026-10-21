@@ -2,6 +2,18 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-21 · 05:xx — Performance & stutter pass (focus requested: performance, stutters, realism)
+Measured with GPU timer queries (`?prof`) on an integrated Radeon Vega (≈ a mid-range phone GPU), 1280×720:
+**GPU time per frame 73.7 ms → 34.8 ms in the cherry-blossom zone**; now 26–36 ms across all zones by day, ~40 ms at night.
+- **Noise from a texture**: every shader's value noise now reads one mip-mapped 256² random texture instead of four procedural hashes (−12.6 ms). Distant procedural patterns also stop sparkling.
+- **Per-zone ground shaders**: the ground was one uber-shader with every zone's code (18 ms); each chunk now uses a variant compiled with only the zones/features it contains (→ 8.8 ms).
+- **Shadows: single hardware-filtered tap** instead of three.js's 5 noise-rotated taps (cheaper on every lit pixel, and the rotating noise made edges shimmer), **texel-snapped shadow camera** and a quantised light direction so shadow edges no longer crawl while driving, tighter frustum (±62 m, ~6 cm texels), 1536² on phones.
+- **Cloud shadows per vertex** for props, foliage, buildings and the car (still per pixel on the ground).
+- **Bloom only when it shows** (night, sunsets, tunnels) — by day it cost ~7 ms for almost nothing.
+- **No more mid-drive shader compiles**: every material, all 12 ground variants and the shadow-pass versions are compiled behind the title screen (into the post-processing target, so they're the exact variants used); synchronous shader-error checks are off unless `?debug`.
+- **Smaller chunk-building hitches**: tree templates pre-built at start; zone/river/tunnel/crossing lookups memoised; terrain built in quarters (ghost columns keep normals seamless); poles/crossings/side-street houses yield between parts; pole wire anchors computed without building throwaway poles; geometry written straight into typed arrays with 1-byte normals/colours (half the memory and upload); meshes of a new chunk are revealed one per frame so their GPU uploads spread out; build budget 3.5 ms/frame unless the road ahead runs short. City p99 build time per frame 33 → 19 ms on the (heavily loaded) test box.
+- Profiling hooks: `?prof` (per-frame CPU/GPU timings, long-frame log with new programs/geometries in `window.__prof`).
+
 ## 2026-10-21 · 05:xx — Snow country (雪国): the drive becomes four seasons
 - **A sixth place, 雪国 — Snow Country**, between the autumn mountain pass and the city, so the loop now runs city → spring sakura → summer coast and rice fields → autumn mountains → winter snow → city.
 - **The look**: soft blue-shadowed snowfields over buried paddies (their ridges faintly showing), plowed snow banks along the road, packed snow on the road with darker wheel tracks (the paint disappears under it), white hills, and snowcaps on the distant mountain ranges.

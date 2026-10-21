@@ -1,6 +1,6 @@
 // The sea: a big camera-following plane with an anime-style water shader (sky-tinted fresnel, sun glitter sparkles).
 import * as THREE from 'three';
-import { GLSL_NOISE } from './materials.js';
+import { GLSL_NOISE, U as MU } from './materials.js';
 import { TOD } from './sky.js';
 import { SEA } from './path.js';
 
@@ -8,6 +8,7 @@ export function makeSea() {
   const mat = new THREE.ShaderMaterial({
     fog: false,
     uniforms: {
+      uNoiseTex: MU.uNoiseTex,
       uTime: { value: 0 }, uCam: { value: new THREE.Vector3() }, uSunDir: { value: TOD.lightDir }, uSunCol: { value: TOD.sunCol },
       uHorizon: { value: TOD.horizon }, uZenith: { value: TOD.zenith }, uFog: { value: TOD.fog }, uNight: { value: 0 }, uFogD: { value: 0.0016 }, uVis: { value: 1 }, uSpecK: { value: 1 },
     },
@@ -56,7 +57,7 @@ export function makeSea() {
 export function foamMaterial() {
   return new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, fog: false,
-    uniforms: { uTime: { value: 0 }, uLight: { value: new THREE.Color(1, 1, 1) } },
+    uniforms: { uTime: { value: 0 }, uLight: { value: new THREE.Color(1, 1, 1) }, uNoiseTex: MU.uNoiseTex },
     vertexShader: 'attribute vec2 su; varying vec2 vSU; void main(){ vSU = su; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
     fragmentShader: /* glsl */`
       uniform float uTime; uniform vec3 uLight; varying vec2 vSU;
@@ -77,6 +78,7 @@ export function riverMaterial() {
   return new THREE.ShaderMaterial({
     fog: false,
     uniforms: {
+      uNoiseTex: MU.uNoiseTex,
       uTime: { value: 0 }, uSunDir: { value: TOD.lightDir }, uSunCol: { value: TOD.sunCol }, uHorizon: { value: TOD.horizon }, uZenith: { value: TOD.zenith },
       uFog: { value: TOD.fog }, uFogD: { value: 0.002 }, uNight: { value: 0 }, uSpecK: { value: 1 },
     },

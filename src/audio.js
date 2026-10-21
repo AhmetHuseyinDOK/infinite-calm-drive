@@ -26,6 +26,7 @@ export function makeAudio() {
   const rumble = loop(noiseBuf(2, true), 'lowpass', 240);
   const rainHiss = loop(noiseBuf(3, false), 'bandpass', 2600); rainHiss.f.Q.value = 0.35;
   const rainLow = loop(noiseBuf(2, true), 'lowpass', 520);
+  const tyres = loop(noiseBuf(2, false), 'bandpass', 1500); tyres.f.Q.value = 0.7; // tyres on a wet road: a hiss that grows with speed
   const stream = loop(noiseBuf(3, false), 'bandpass', 750); stream.f.Q.value = 0.6;
   const wind = loop(noiseBuf(3, true), 'lowpass', 420); // wind through the trees in the mountains
   const hum = loop(noiseBuf(2, true), 'lowpass', 140);   // a tunnel's jet fans and rolling echo
@@ -121,13 +122,17 @@ export function makeAudio() {
     o.connect(g); g.connect(verb); g.connect(master); o.start(t); o2.start(t); o.stop(t + 4.2); o2.stop(t + 4.2);
   }
   return {
-    ac, muted: false,
+    ac, muted: false, tyres, // (tyres: for tests)
     bump(v) { thump(ac.currentTime + 0.01, v); }, // the car's wheels over rails
     update(sp, w, day, x = {}) {
       const t = ac.currentTime;
       if ((x.bell || 0) > 0.01) { if (nextKan < t) nextKan = t + 0.02; while (nextKan < t + 0.12) { kan(nextKan, x.bell); nextKan += 0.41; } }
       const rv = x.rain || 0;
       rainHiss.g.gain.setTargetAtTime(rv * 0.05, t, 0.6); rainLow.g.gain.setTargetAtTime(rv * 0.05, t, 0.6);
+      // wet tyres: the swish of water under the tyres, through the rain and for as long as the road stays wet after it,
+      // louder and higher the faster we go (with a slow wobble as the water film thickens and thins)
+      const wr = (x.wetRoad || 0) * Math.min(1, sp) ** 1.5, film = 0.8 + 0.2 * Math.sin(t * 2.3) * Math.sin(t * 0.9 + 1);
+      tyres.g.gain.setTargetAtTime(wr * 0.045 * film, t, 0.4); tyres.f.frequency.setTargetAtTime(900 + 1500 * Math.min(sp, 2), t, 0.4);
       if (rv > 0.05 && x.roof) { if (nextDrop < t) nextDrop = t + 0.02; while (nextDrop < t + 0.12) { drop(nextDrop, rv); nextDrop += 0.04 + Math.random() * 0.12 / rv; } }
       const wv = x.water || 0, gurgle = 0.6 + 0.4 * Math.sin(t * 1.3) * Math.sin(t * 0.37);
       stream.g.gain.setTargetAtTime(wv * 0.035 * gurgle, t, 0.25); stream.f.frequency.setTargetAtTime(600 + 400 * gurgle, t, 0.25);

@@ -284,7 +284,9 @@ export function makeClouds(atlas) {
         aR.setX(i, 0.35 + 0.9 * Math.pow(Math.max(Math.cos(dAz), 0), 3) * (0.4 + TOD.warm));
       });
       mesh.instanceMatrix.needsUpdate = true; aD.needsUpdate = true; aR.needsUpdate = true;
-      mat.uniforms.uOpacity.value = (1 - TOD.night * 0.35) * (1 - TOD.overcast * 0.55);
+      // in rain the towering fair-weather cumulus melt into the low grey deck: under rain clouds you see one even grey
+      // ceiling, not crisp white towers (they used to stay out, half-transparent, all through the rain)
+      mat.uniforms.uOpacity.value = (1 - TOD.night * 0.35) * (1 - TOD.overcast * 0.55) * (1 - 0.85 * TOD.rain);
     },
   };
 }

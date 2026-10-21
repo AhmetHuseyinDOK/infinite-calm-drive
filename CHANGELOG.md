@@ -2,6 +2,22 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-22 · 01:xx — Realism pass 8: rain skies, and wet tyres you can hear
+- **Rain clouds look like rain clouds.** When it rained, the big crisp fair-weather cumulus towers stayed in the sky
+  (half-transparent, still white-edged) above the grey storm deck, so rainy scenes had a summer sky painted on top. Now
+  they melt into the low grey ceiling as the rain sets in, which is what you see under real rain clouds: one even grey
+  sky. Cloudy weather without rain keeps its cumulus. One factor on the clouds' opacity.
+- **Wet roads hiss under the tyres.** On a wet road there is now the swish of water under the tyres, through the rain
+  and for as long as the road stays wet after it. It gets louder and higher-pitched the faster you go (≈0.023 at
+  cruise, ≈2.1 kHz; ≈0.037 flat out, ≈3.9 kHz), with a slow wobble as the water film thickens and thins. It's silent on
+  a dry road and in tunnels. Audio only: one more filtered noise loop.
+- Cost: none.
+  - No shader or draw-call change; 52 programs and none compiled mid-drive; every quality level compiles in the rain.
+  - GPU, alternating-order rounds against the live build at machine load ~22–28: rainy city −0.26 ms, clear country
+    +0.45, phone rainy city +0.07. The live build compared with itself read +0.44 (the noise floor).
+  - Startup ready 3.0 / 5.3 s against 4.0 / 6.2 s live; flat out to 267 km/h with streaming keeping up; embed mode
+    still starts on tap.
+
 ## 2026-10-22 · 00:xx — Realism pass 7: twilight cools, and the haze glows towards a low sun
 - **The haze glows towards a low sun.** Real air scatters sunlight forwards. Looking into a low sun, the distant haze is
   bright and warm and far hills melt into it; looking away it stays cool. The haze used to be one flat colour in every

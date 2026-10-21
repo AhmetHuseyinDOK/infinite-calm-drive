@@ -34,6 +34,48 @@ export function makeWeather(QS) {
   };
 }
 
+export function makeSnow() { // soft flakes drifting down around the camera
+  const N = 2400, BOX = new THREE.Vector3(42, 22, 42);
+  const base = new THREE.PlaneGeometry(1, 1);
+  const geo = new THREE.InstancedBufferGeometry();
+  geo.index = base.index; geo.setAttribute('position', base.attributes.position); geo.setAttribute('uv', base.attributes.uv);
+  const off = new Float32Array(N * 4);
+  for (let i = 0; i < N * 4; i++) off[i] = Math.random();
+  geo.setAttribute('aOff', new THREE.InstancedBufferAttribute(off, 4));
+  geo.instanceCount = N;
+  const mat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, fog: false,
+    uniforms: { uTime: { value: 0 }, uCam: { value: new THREE.Vector3() }, uAmt: { value: 0 }, uBox: { value: BOX }, uCol: { value: new THREE.Color(1, 1, 1) } },
+    vertexShader: /* glsl */`
+      attribute vec4 aOff; uniform float uTime, uAmt; uniform vec3 uCam, uBox; varying float vA; varying vec2 vUv;
+      void main(){
+        vUv = uv;
+        if (aOff.w > uAmt) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); vA = 0.0; return; }
+        float ph = aOff.w * 40.0;
+        vec3 p = aOff.xyz * uBox + vec3(sin(uTime * 0.6 + ph) * 0.7 + uTime * 0.35, -uTime * (0.8 + aOff.w * 0.8), cos(uTime * 0.45 + ph * 1.3) * 0.6);
+        vec3 w = uCam + mod(p - uCam, uBox) - uBox * 0.5;
+        vec3 toCam = normalize(uCam - w), right = normalize(cross(vec3(0.0, 1.0, 0.0), toCam)), up = cross(toCam, right);
+        float size = 0.045 + fract(ph) * 0.05;
+        vec3 pos = w + (right * position.x + up * position.y) * size;
+        float d = length(uCam - w);
+        vA = (1.0 - smoothstep(9.0, 21.0, d)) * smoothstep(0.5, 1.6, d);
+        gl_Position = projectionMatrix * viewMatrix * vec4(pos, 1.0);
+      }`,
+    fragmentShader: /* glsl */`
+      uniform vec3 uCol; varying float vA; varying vec2 vUv;
+      void main(){ float r = length(vUv - 0.5); gl_FragColor = vec4(uCol, vA * 0.85 * (1.0 - smoothstep(0.25, 0.5, r))); }`,
+  });
+  const mesh = new THREE.Mesh(geo, mat); mesh.frustumCulled = false; mesh.renderOrder = 5;
+  return {
+    mesh,
+    update(cam, t, amt, light) {
+      mesh.visible = amt > 0.01;
+      mat.uniforms.uTime.value = t; mat.uniforms.uCam.value.copy(cam); mat.uniforms.uAmt.value = amt;
+      mat.uniforms.uCol.value.setRGB(0.62 + 0.38 * light, 0.66 + 0.34 * light, 0.78 + 0.22 * light);
+    },
+  };
+}
+
 export function makeRain() {
   const N = 2600, BOX = new THREE.Vector3(46, 24, 46);
   const base = new THREE.PlaneGeometry(1, 1); base.translate(0, 0.5, 0);

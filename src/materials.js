@@ -105,7 +105,7 @@ vec3 roadCol(float s, float u, float rw){
   if (hash12(floor(pc) + 3.7) > 0.88 && pf.x > 0.12 && pf.x < 0.82 && pf.y > 0.1 && pf.y < 0.9) c *= 0.85;
   float cr = abs(vnoise(p*vec2(0.7, 1.3)) - 0.5);
   c *= 1.0 - 0.2*(1.0 - smoothstep(0.0, 0.025, cr))*step(0.62, vnoise(p*0.11 + 4.0));
-  float city = vZW.x, paint = 0.0, mtn = clamp(1.0 - dot(vZW, vec4(1.0)), 0.0, 1.0);
+  float city = vZW.x, paint = 0.0, mtn = clamp(1.0 - dot(vZW, vec4(1.0)) - vZS, 0.0, 1.0);
   paint += step(abs(a - (rw - 0.28)), 0.07);
   paint += (1.0 - step(0.5, city)) * (1.0 - step(0.5, mtn)) * step(a, 0.07) * step(fract(s/10.0), 0.55);
   float cs = mod(s, 150.0);
@@ -117,6 +117,11 @@ vec3 roadCol(float s, float u, float rw){
   }
   paint = clamp(paint, 0.0, 1.0) * (0.8 + 0.2*vnoise(p*6.0));
   c = mix(c, L(vec3(0.96, 0.96, 0.93)), paint);
+  if (vZS > 0.01) {
+    vec3 packed = L(vec3(0.84, 0.86, 0.91)) * (0.92 + 0.1 * fbm2(p * 0.6));
+    float trk = clamp(exp(-d1 * d1 * 1.4) + exp(-d2 * d2 * 1.4), 0.0, 1.0) * (0.75 + 0.25 * vnoise(p * vec2(0.3, 4.0)));
+    c = mix(c, mix(packed, L(vec3(0.42, 0.43, 0.47)) * (0.9 + 0.15 * vnoise(p * 3.0)), trk * 0.85), vZS);
+  }
   if (mtn > 0.01) {
     float yl = step(0.5, mtn) * step(a, 0.075) * (0.85 + 0.15*vnoise(p*6.0));           // はみ出し禁止: solid yellow centre line
     c = mix(c, L(vec3(0.95, 0.68, 0.12)), yl);
@@ -180,6 +185,16 @@ vec3 ridgeCol(float s, float u, float autumn){
   vec3 cell = mix(L(vec3(0.5, 0.56, 0.3)), L(vec3(0.66, 0.6, 0.32)), vnoise(p * 0.8)) * (0.84 + 0.22 * vnoise(p * 4.0));
   vec3 face = mix(cell, L(vec3(0.76, 0.75, 0.71)) * (0.88 + 0.12 * vnoise(p * 2.0)), beam);
   return mix(face, forestCanopy(p, autumn), smoothstep(0.76, 0.88, vWN.y));
+}
+// 雪国: soft, slightly blue snow; plowed banks greyer near the road; faint sparkle; fence posts and field edges peeking out
+vec3 snowGround(float s, float u, float rw){
+  vec2 p = vec2(s, u); float a = abs(u);
+  vec3 c = mix(L(vec3(0.88, 0.91, 0.97)), L(vec3(0.97, 0.98, 1.0)), fbm2(p * 0.08)) * (0.96 + 0.06 * vnoise(p * 1.7));
+  c = mix(c, L(vec3(0.74, 0.76, 0.8)), 0.4 * (1.0 - smoothstep(rw + 0.2, rw + 1.8, a)));
+  c += step(0.986, hash12(floor(p * 9.0))) * 0.22;
+  vec2 q = vec2(s / 30.0, (a - rw - 2.6) / 17.0); vec2 fq = fract(q);
+  if (a > rw + 2.7 && a < 125.0) c *= 1.0 - 0.06 * max(step(fq.x, 0.02), step(fq.y, 0.03));   // buried paddy ridges
+  return c;
 }
 vec3 sidewalkCol(float s, float u, float rw){
   float d = abs(u) - rw;
@@ -269,8 +284,12 @@ vec3 groundAlbedo(){
   if (vZW.y > 0.004) c += vZW.y * sakuraGround(s, u, rw);
   if (vZW.z > 0.004) c += vZW.z * coastGround(s, u, rw);
   if (vZW.w > 0.004) c += vZW.w * countryGround(s, u, rw);
-  float wMtn = clamp(1.0 - dot(vZW, vec4(1.0)), 0.0, 1.0);
+  float wMtn = clamp(1.0 - dot(vZW, vec4(1.0)) - vZS, 0.0, 1.0);
   if (wMtn > 0.004) c += wMtn * mountainGround(s, u, rw);
+  if (vZS > 0.004) { // snow arrives in patches (a linear blend would turn red leaves pink)
+    float n = fbm2(vec2(s, u) * 0.09 + 31.0), cover = smoothstep(n - 0.07, n + 0.07, vZS * 1.25 - 0.12);
+    c = mix(c / max(1.0 - vZS, 0.001), snowGround(s, u, rw), vZS > 0.996 ? 1.0 : cover);
+  }
   float rbw = max(vRV, 0.0), rdg = max(-vRV, 0.0);               // + river bank, − a tunnel's ridge
   gWater *= vZW.w * (1.0 - rbw) * (1.0 - rdg);
   c = mix(c, riverBankCol(s, u), rbw);
@@ -317,19 +336,19 @@ export function groundMaterial() {
     sh.uniforms.uSkyHor = U.uSkyHor; sh.uniforms.uSkyZen = U.uSkyZen; sh.uniforms.uWet = U.uWet; sh.uniforms.uNight = U.uNight; sh.uniforms.uSunDir = U.uSunDir; sh.uniforms.uSunCol = U.uSunCol;
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
-attribute vec2 su; attribute vec4 zw; attribute vec2 rk; attribute float rv;
-varying vec2 vSU; varying vec4 vZW; varying vec2 vRK; varying float vWY; varying float vRV; varying vec3 vWN;`)
+attribute vec2 su; attribute vec4 zw; attribute vec2 rk; attribute float rv; attribute float zs;
+varying vec2 vSU; varying vec4 vZW; varying vec2 vRK; varying float vWY; varying float vRV; varying vec3 vWN; varying float vZS;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
-vSU = su; vZW = zw; vRK = rk; vRV = rv; vWY = (modelMatrix * vec4(position, 1.0)).y; vWN = normalize(mat3(modelMatrix) * objectNormal);`);
+vSU = su; vZW = zw; vRK = rk; vRV = rv; vZS = zs; vWY = (modelMatrix * vec4(position, 1.0)).y; vWN = normalize(mat3(modelMatrix) * objectNormal);`);
     worldShade(sh, `
 uniform vec3 uSkyHor, uSkyZen, uSunDir, uSunCol; uniform float uWet, uNight;
-varying vec2 vSU; varying vec4 vZW; varying vec2 vRK; varying float vWY; varying float vRV; varying vec3 vWN;
+varying vec2 vSU; varying vec4 vZW; varying vec2 vRK; varying float vWY; varying float vRV; varying vec3 vWN; varying float vZS;
 float gWater = 0.0;
 ${GROUND}`, WET + MIRROR);
     sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
 diffuseColor.rgb *= groundAlbedo();`);
   };
-  m.customProgramCacheKey = () => 'ground-v12';
+  m.customProgramCacheKey = () => 'ground-v14';
   return m;
 }
 

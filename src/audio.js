@@ -90,8 +90,16 @@ export function makeAudio() {
     o.connect(bp); bp.connect(g); g.connect(d); o.start(t); o.stop(t + n * 0.038 + 0.05);
   }
   function cricket(t, v) { const d = out(), f = 4300 + Math.random() * 700; for (let i = 0; i < 3; i++) note(t + i * 0.055, f, f * 1.01, 0.035, v * 0.009, d); }
+  function templeBell(t, v) { // a distant temple bell: a low hum with long, beating partials
+    const d = out(0);
+    for (const [f, k, dur] of [[98, 1, 9], [196.6, 0.5, 6], [263.4, 0.3, 4.5], [391, 0.16, 3]]) {
+      const o = ac.createOscillator(), g = ac.createGain(); o.type = 'sine'; o.frequency.value = f; o.detune.value = (Math.random() - 0.5) * 8;
+      g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(v * 0.05 * k, t + 0.03); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(d); o.start(t); o.stop(t + dur + 0.1);
+    }
+  }
   function bikeBell(t, v) { const d = out(); for (const s of [t, t + 0.22]) { note(s, 2650, 2600, 0.5, v * 0.018, d); note(s, 3950, 3900, 0.35, v * 0.008, d); } }
-  const nextLife = { sparrow: 2, uguisu: 6, crow: 8, gull: 3, frog: 1, cricket: 1, bike: 30 };
+  const nextLife = { sparrow: 2, uguisu: 6, crow: 8, gull: 3, frog: 1, cricket: 1, bike: 30, bell: 25 };
   const every = rate => (rate > 1e-4 ? -Math.log(1 - Math.random() * 0.98) / rate : 1e9);
   const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
   const CHORDS = [[48, 55, 64, 71, 74], [45, 52, 60, 67, 71], [41, 48, 57, 64, 67], [43, 50, 59, 62, 69], [40, 47, 55, 62, 67], [41, 48, 55, 64, 69]];
@@ -123,7 +131,7 @@ export function makeAudio() {
       const wv = x.water || 0, gurgle = 0.6 + 0.4 * Math.sin(t * 1.3) * Math.sin(t * 0.37);
       stream.g.gain.setTargetAtTime(wv * 0.035 * gurgle, t, 0.25); stream.f.frequency.setTargetAtTime(600 + 400 * gurgle, t, 0.25);
       const gust = 0.35 + 0.65 * Math.pow(0.5 + 0.5 * Math.sin(t * 0.23) * Math.sin(t * 0.071 + 2), 2);
-      wind.g.gain.setTargetAtTime((w.mountain || 0) * 0.06 * gust, t, 0.8); wind.f.frequency.setTargetAtTime(260 + 420 * gust, t, 0.8);
+      wind.g.gain.setTargetAtTime(((w.mountain || 0) + (w.snow || 0) * 0.7) * 0.06 * gust, t, 0.8); wind.f.frequency.setTargetAtTime(260 + 420 * gust, t, 0.8);
       const tv = x.train || 0;
       rumble.g.gain.setTargetAtTime(tv * 0.16, t, 0.2);
       if (tv > 0.04) { if (nextClick < t) nextClick = t + 0.02; while (nextClick < t + 0.12) { thump(nextClick, tv); thump(nextClick + 0.15, tv * 0.8); nextClick += 1.2; } }
@@ -135,24 +143,25 @@ export function makeAudio() {
       const swell = 0.5 + 0.5 * Math.sin(t * 0.55) * Math.sin(t * 0.21 + 1);
       waves.g.gain.setTargetAtTime(w.coast * (0.012 + swell * 0.05), t, 0.3); waves.f.frequency.setTargetAtTime(400 + swell * 900, t, 0.3);
       // creatures — how often each calls depends on zone, time of day and rain
-      const dry = 1 - Math.min(1, rv * 1.4), night = 1 - day, dusk = x.dusk || 0;
+      const dry = 1 - Math.min(1, rv * 1.4), night = 1 - day, dusk = x.dusk || 0, snow = w.snow || 0, warm = 1 - snow;
       const rates = {
-        sparrow: day * dry * 0.22 * (0.3 + w.city * 0.5 + w.sakura + w.country * 0.8 + w.coast * 0.2 + (w.mountain || 0) * 0.5),
+        sparrow: day * dry * 0.22 * (0.3 + w.city * 0.5 + w.sakura + w.country * 0.8 + w.coast * 0.2 + (w.mountain || 0) * 0.5) * (1 - snow * 0.8),
         uguisu: day * dry * w.sakura * 0.06,
-        crow: dry * (dusk * 0.14 + day * (w.city + w.country + (w.mountain || 0) * 1.5) * 0.012),
+        crow: dry * (dusk * 0.14 + day * (w.city + w.country + (w.mountain || 0) * 1.5 + snow * 2.5) * 0.012),
         gull: day * w.coast * dry * 0.16,
-        frog: night * (w.country * 5 + w.sakura * 0.6 + w.coast * 0.3) * (1 + rv * 0.6),
-        cricket: night * dry * (1.6 - w.city * 1.1 + (w.mountain || 0) * 0.8),
+        frog: night * (w.country * 5 + w.sakura * 0.6 + w.coast * 0.3) * (1 + rv * 0.6) * warm,
+        cricket: night * dry * (1.6 - w.city * 1.1 + (w.mountain || 0) * 0.8) * warm,
         bike: day * dry * w.city * 0.014,
+        bell: snow * 0.022 + (w.mountain || 0) * 0.006,
       };
-      const voices = { sparrow, uguisu, crow, gull, frog, cricket, bike: bikeBell };
+      const voices = { sparrow, uguisu, crow, gull, frog, cricket, bike: bikeBell, bell: templeBell };
       for (const k in rates) {
         if (t < nextLife[k]) continue;
         if (rates[k] > 1e-4) voices[k](t + 0.05, 0.6 + Math.random() * 0.4);
         nextLife[k] = t + Math.max(0.12, every(rates[k] || 1e-6));
       }
       const chirp = 0.5 + 0.5 * Math.sin(t * 7.0) * Math.sin(t * 0.4);
-      cicada.g.gain.setTargetAtTime((w.country + w.sakura * 0.3) * day * 0.006 * chirp, t, 0.08);
+      cicada.g.gain.setTargetAtTime((w.country + w.sakura * 0.3) * day * 0.006 * chirp * (1 - (w.snow || 0)), t, 0.08);
     },
     toggle() { this.muted = !this.muted; master.gain.setTargetAtTime(this.muted ? 0 : 0.5, ac.currentTime, 0.3); },
   };

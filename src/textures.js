@@ -435,6 +435,12 @@ export function buildAtlas() {
     rect(a, 0, 0, w, h, '#e9e7e0'); rect(a, 4, 4, w - 8, h - 8, '#24403b'); grain(a, A, w, h, 0.08);
     textFit(a, name, w / 2, h * 0.42, w * 0.8, 38, '#f4f2ea', 800); textFit(a, 'L = 170 m', w / 2, h * 0.8, w * 0.4, 13, '#c9d6cf', 600);
   }));
+  A.add('yabane', 64, 112, (a, e, w, h) => { // 矢羽根: a red and white arrow pointing down at the road edge
+    rect(a, 0, 0, w, h, '#f6f6f2');
+    a.fillStyle = '#d42a22';
+    for (let y = -20; y < h; y += 26) { a.beginPath(); a.moveTo(4, y); a.lineTo(w / 2, y + 20); a.lineTo(w - 4, y); a.lineTo(w - 4, y + 11); a.lineTo(w / 2, y + 31); a.lineTo(4, y + 11); a.closePath(); a.fill(); }
+    a.strokeStyle = '#222'; a.lineWidth = 3; a.strokeRect(1.5, 1.5, w - 3, h - 3);
+  });
   A.add('xing_plate', 128, 48, (a, e, w, h) => { rect(a, 0, 0, w, h, '#f6f6f2'); a.strokeStyle = '#d8231c'; a.lineWidth = 4; a.strokeRect(3, 3, w - 6, h - 6); textFit(a, '踏切注意', w / 2, h / 2, w * 0.8, 26, '#d8231c', 900); });
   A.add('rail', 240, 80, (a, e, w, h) => { // see-through balcony railing (alpha-tested)
     a.clearRect(0, 0, w, h);

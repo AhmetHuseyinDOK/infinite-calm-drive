@@ -23,13 +23,13 @@ const nearT = (s, m) => { const t = tunnelNear(s); return !!t && Math.abs(s - t.
 const nearR = (s, m) => { const r = riverNear(s); return !!r && Math.abs(s - r.s) < m; };
 
 class GroundB {
-  constructor() { this.P = []; this.N = []; this.SU = []; this.ZW = []; this.RK = []; this.RV = []; this.I = []; }
+  constructor() { this.P = []; this.N = []; this.SU = []; this.ZW = []; this.RK = []; this.RV = []; this.ZS = []; this.I = []; }
   grid(nr, nc, fn) {
     const base = this.P.length / 3;
     for (let i = 0; i < nr; i++) for (let j = 0; j < nc; j++) {
       const v = fn(i, j);
       this.P.push(v[0], v[1], v[2]); this.N.push(v[3], v[4], v[5]); this.SU.push(v[6], v[7]);
-      this.ZW.push(v[8], v[9], v[10], v[11]); this.RK.push(v[12], v[13]); this.RV.push(v[14] || 0);
+      this.ZW.push(v[8], v[9], v[10], v[11]); this.RK.push(v[12], v[13]); this.RV.push(v[14] || 0); this.ZS.push(v[15] || 0);
     }
     for (let i = 0; i < nr - 1; i++) for (let j = 0; j < nc - 1; j++) {
       const a = base + i * nc + j, b = a + 1, c = a + nc, d = c + 1;
@@ -59,6 +59,7 @@ class GroundB {
     g.setAttribute('zw', new THREE.Float32BufferAttribute(this.ZW, 4));
     g.setAttribute('rk', new THREE.Float32BufferAttribute(this.RK, 2));
     g.setAttribute('rv', new THREE.Float32BufferAttribute(this.RV, 1));
+    g.setAttribute('zs', new THREE.Float32BufferAttribute(this.ZS, 1)); // snow-country weight (the 6th zone)
     g.setIndex(this.I); g.computeBoundingSphere();
     return g;
   }
@@ -105,7 +106,7 @@ export class World {
 
     // ---------- helpers ----------
     const H = (s, u) => { path.at(s, f2); const rw = zparam(s, 'rw'); return f2.y + groundOffsetMix(s, u, f2.y, rw); };
-    const zw4 = s => { const w = zoneW(s); return [w.city, w.sakura, w.coast, w.country]; };
+    const zw4 = s => { const w = zoneW(s); return [w.city, w.sakura, w.coast, w.country, w.snow]; };
     const world = (s, u, y) => { path.at(s, f); return [f.x + f.rx * u - ox, y, f.z + f.rz * u - oz]; };
     const matAt = (s, u, y, extraYaw = 0, faceRoad = true) => {
       path.at(s, f);
@@ -135,7 +136,7 @@ export class World {
         ground.gridN(rowS.length, j1 - j0, (i, jj) => {
           const R = rowS[i], F = R.f, j = j0 + jj, o = offs[j], u = o < 0 || (o === 0 && j < half) ? o - R.rw : o + R.rw;
           const y = F.y + groundOffsetMix(R.s, u, F.y, R.rw), rg = Math.min(1, RAISE / 1.5);
-          return [F.x + F.rx * u - ox, y, F.z + F.rz * u - oz, 0, 1, 0, mod(R.s, S_WRAP), u, R.w[0], R.w[1], R.w[2], R.w[3], R.rw, 0, R.rb > 0 ? R.rb : -rg];
+          return [F.x + F.rx * u - ox, y, F.z + F.rz * u - oz, 0, 1, 0, mod(R.s, S_WRAP), u, R.w[0], R.w[1], R.w[2], R.w[3], R.rw, 0, R.rb > 0 ? R.rb : -rg, R.w[4]];
         });
         yield;
       }
@@ -149,7 +150,7 @@ export class World {
         path.at(s, f); const e = f.y, de = (road(s + 1) - road(s - 1)) / 2;
         let nx = -de * f.fx, ny = 1, nz = -de * f.fz; const nl = Math.hypot(nx, ny, nz);
         const w = zw4(s);
-        return [f.x + f.rx * u - ox, e, f.z + f.rz * u - oz, nx / nl, ny / nl, nz / nl, mod(s, S_WRAP), u, w[0], w[1], w[2], w[3], rw, 1];
+        return [f.x + f.rx * u - ox, e, f.z + f.rz * u - oz, nx / nl, ny / nl, nz / nl, mod(s, S_WRAP), u, w[0], w[1], w[2], w[3], rw, 1, 0, w[4]];
       });
     }
     // ---------- sidewalks + curbs (only where the zone has them) ----------
@@ -164,12 +165,12 @@ export class World {
           ground.grid(run.length, 2, (i, j) => {
             const { s, sw } = run[i], rw = rwAt(s), u = side * (j === (side > 0 ? 0 : 1) ? rw : rw + sw);
             path.at(s, f); const w = zw4(s);
-            return [f.x + f.rx * u - ox, f.y + 0.15, f.z + f.rz * u - oz, 0, 1, 0, mod(s, S_WRAP), u, w[0], w[1], w[2], w[3], rw, 2];
+            return [f.x + f.rx * u - ox, f.y + 0.15, f.z + f.rz * u - oz, 0, 1, 0, mod(s, S_WRAP), u, w[0], w[1], w[2], w[3], rw, 2, 0, w[4]];
           });
           ground.grid(run.length, 2, (i, j) => {
             const { s } = run[i], rw = rwAt(s), u = side * rw, top = side > 0 ? j : 1 - j;
             path.at(s, f); const w = zw4(s);
-            return [f.x + f.rx * u - ox, f.y + (top ? 0.15 : 0), f.z + f.rz * u - oz, -side * f.rx, 0, -side * f.rz, mod(s, S_WRAP), u, w[0], w[1], w[2], w[3], rw, 3];
+            return [f.x + f.rx * u - ox, f.y + (top ? 0.15 : 0), f.z + f.rz * u - oz, -side * f.rx, 0, -side * f.rz, mod(s, S_WRAP), u, w[0], w[1], w[2], w[3], rw, 3, 0, w[4]];
           });
         }
       }
@@ -197,6 +198,7 @@ export class World {
     yield;
     yield* this.placeCountry(G, r, s0, s1, matAt, onGround, road, rwAt, H);
     yield* this.placeMountain(G, r, s0, s1, matAt, onGround, road, rwAt, H);
+    yield* this.placeSnow(G, r, s0, s1, matAt, onGround, road, rwAt, H);
     yield* this.placeVerge(G, r, s0, s1, matAt, H, rwAt);
     yield;
 
@@ -229,7 +231,7 @@ export class World {
     const s = k * POLE_SP + 6, z = zoneAt(s);
     if (z === 'sakura' || nearX(s, 6) || nearR(s, 34) || nearT(s, T_RIDGE + 12)) return null;
     const rw = zparam(s, 'rw');
-    const u = z === 'city' ? rw + 0.45 : z === 'coast' ? rw + 1.35 : z === 'mountain' ? -(rw + 1.45) : rw + 2.35;
+    const u = z === 'city' ? rw + 0.45 : z === 'coast' ? rw + 1.35 : z === 'mountain' ? -(rw + 1.45) : z === 'snow' ? rw + 2.9 : rw + 2.35;
     return { s, u, z };
   }
   placePoles(c, s0, s1, r, G, matAt, H, world, road, rwAt) {
@@ -513,6 +515,34 @@ export class World {
     }
   }
 
+  /** 雪国: farmhouses under deep snow, white birch groves, snow-laden cedars, and the red-white arrow poles (矢羽根) */
+  *placeSnow(G, r, s0, s1, matAt, onGround, road, rwAt, H) {
+    const sw = s => zoneW(s).snow;
+    if (sw(s0) < 0.3 && sw(s1) < 0.3) return;
+    for (const side of [-1, 1]) {
+      for (let s = s0 + r() * 20; s < s1; s += r.range(22, 40)) { // farmhouses with steep, snow-laden roofs
+        if (sw(s) < 0.6 || r() < 0.5) continue;
+        const u = side * r.range(18, 90);
+        P.building(G, onGround(s, u, -0.3), r, { type: 'house', w: r.range(9, 12.5), d: r.range(8, 10), floors: r() < 0.5 ? 2 : 1, tint: r.pick(P.TINTS), litP: 0.62, fence: 0, snow: true });
+        for (let k = 0; k < 2 + r() * 3; k++) P.tree(G, onGround(s + r.range(-9, 9), u + side * r.range(7, 15), -0.3, r() * 6, false), r() < 0.6 ? 'snowcedar' : 'birch', r, r.range(0.9, 1.25));
+      }
+      yield;
+      for (let s = s0 + r() * 5; s < s1; s += r.range(3, 7)) { // birch groves near the road, cedars on the far hills
+        if (sw(s) < 0.5) continue;
+        if (r() < 0.32) P.tree(G, onGround(s, side * r.range(9, 40), -0.25, r() * 6, false), 'birch', r, r.range(0.85, 1.25));
+        if (r() < 0.55) P.tree(G, onGround(s, side * r.range(120, 205), -0.4, r() * 6, false), 'snowcedar', r, r.range(1.1, 1.6));
+      }
+      yield;
+    }
+    // 矢羽根: striped poles with a downward arrow over the road edge, so the plough knows where the road is
+    for (let s = Math.ceil(s0 / 36) * 36; s < s1; s += 36) {
+      if (sw(s) < 0.55) continue;
+      const rw = rwAt(s);
+      P.snowPole(G, matAt(s, -(rw + 0.95), road(s) + 1.3), 1);
+      P.snowPole(G, matAt(s + 18, rw + 0.95, road(s + 18) + 1.3), -1);
+    }
+  }
+
   /** 紅葉の峠: maples, ginkgo and cedars on the slopes, chevrons on the bends, reflector posts along the guardrail */
   *placeMountain(G, r, s0, s1, matAt, onGround, road, rwAt, H) {
     const mw = s => zoneW(s).mountain;
@@ -565,6 +595,7 @@ export class World {
         if (z === 'country') { u = rw + (r() < 0.6 ? r.range(0.2, 0.62) : r.range(2.18, 2.75)); dens = 0.95; }
         else if (z === 'sakura') { u = rw + 2.68 + r() * 1.3; dens = 0.55; fl = 0.3; }
         else if (z === 'coast') { if (side < 0) continue; u = rw + 0.95 + r() * 1.7; dens = 0.75; fl = 0.18; }
+        else if (z === 'snow') continue;
         else if (z === 'mountain') { u = side < 0 ? rw + 1.0 + r() * 0.35 : rw + 0.25 + r() * 0.2; dens = side < 0 ? 0.55 : 0.18; fl = 0.12; sc = 0.85; }
         else { if (nearSide(s, 5)) continue; u = rw + 3.02 + r() * 0.1; dens = 0.1; fl = 0.08; sc = 0.65; }
         if (r() > dens) continue;

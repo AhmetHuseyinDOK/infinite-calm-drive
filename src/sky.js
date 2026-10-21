@@ -304,14 +304,16 @@ export function makeMountains() {
     g.setIndex(idx);
     const mat = new THREE.ShaderMaterial({
       side: THREE.DoubleSide, fog: false,
-      uniforms: { uCol: { value: new THREE.Color(L.col) }, uHaze: { value: TOD.fog }, uHazeK: { value: L.haze }, uLight: { value: 1 }, uSeed: { value: li * 17.0 } },
+      uniforms: { uCol: { value: new THREE.Color(L.col) }, uHaze: { value: TOD.fog }, uHazeK: { value: L.haze }, uLight: { value: 1 }, uSeed: { value: li * 17.0 }, uSnow: { value: 0 } },
       vertexShader: 'attribute vec2 hf; varying vec2 vH; varying float vY; void main(){ vH = hf; vY = position.y; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
       fragmentShader: /* glsl */`
-        uniform vec3 uCol, uHaze; uniform float uHazeK, uLight, uSeed; varying vec2 vH; varying float vY;
+        uniform vec3 uCol, uHaze; uniform float uHazeK, uLight, uSeed, uSnow; varying vec2 vH; varying float vY;
         ${GLSL_NOISE}
         void main(){
           float ridge = vnoise(vec2(vH.y * 900.0 + uSeed, vY * 0.012)) * 0.6 + vnoise(vec2(vH.y * 2600.0, vY * 0.03)) * 0.4;
           vec3 c = uCol * uLight * (0.8 + 0.35 * smoothstep(0.35, 0.75, ridge));
+          float cap = uSnow * smoothstep(0.55, 0.75, vH.x + (ridge - 0.5) * 0.25);           // snowcaps in snow country
+          c = mix(c, vec3(0.93, 0.95, 1.0) * uLight * (0.85 + 0.2 * ridge), cap);
           float haze = clamp(uHazeK + (1.0 - uHazeK) * (1.0 - smoothstep(-60.0, 260.0, vY)) * 0.75, 0.0, 1.0);
           gl_FragColor = vec4(mix(c, uHaze, haze), 1.0);
         }`,
@@ -321,8 +323,9 @@ export function makeMountains() {
   });
   return {
     group,
-    update(cam) {
+    update(cam, snow = 0) {
       group.position.set(cam.x, 0, cam.z);
+      for (const m of group.children) m.material.uniforms.uSnow.value = snow;
       const light = (0.35 + 0.65 * (1 - TOD.night)) * (1 - 0.35 * TOD.overcast);
       for (const m of group.children) m.material.uniforms.uLight.value = light;
     },

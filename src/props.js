@@ -124,6 +124,14 @@ export function signPost(G, M, cell, dir, h = 2.3, size = 0.6) {
   if (dir < 0) nxq(G.atlas, -0.05, -size / 2, size / 2, h - size / 2, h + size / 2, cell);
   else pxq(G.atlas, 0.05, -size / 2, size / 2, h - size / 2, h + size / 2, cell);
 }
+export function snowPole(G, M, dir) { // 矢羽根: red-white striped pole, a down-pointing arrow hanging over the road edge
+  const c = G.color; c.setM(M);
+  for (let i = 0; i < 8; i++) c.cyl(0, i * 0.5, 0, 0.045, 0.045, 0.5, 6, i % 2 ? PAL.white : PAL.red, false);
+  c.rod([0, 3.85, 0], [0, 3.85, -0.95], 0.025, 0.025, 4, PAL.metal);
+  c.box(-0.02, 3.0, -1.12, 0.02, 3.9, -0.62, PAL.black);
+  G.atlas.setM(M);
+  if (dir < 0) nxq(G.atlas, -0.03, -1.12, -0.62, 3.02, 3.88, 'yabane'); else pxq(G.atlas, 0.03, -1.12, -0.62, 3.02, 3.88, 'yabane');
+}
 export function reflectorPost(G, M) { // 視線誘導標: a small white post with an amber reflector, on the guardrail
   const c = G.color; c.setM(M);
   c.box(-0.035, 0.84, -0.035, 0.035, 1.12, 0.035, C('#efefea'));
@@ -241,6 +249,27 @@ export function treeGinkgo(G, M, r, s = 1) { // a tall golden ginkgo
     cards(G, cen, Math.cos(a) * rad * 0.35, y, Math.sin(a) * rad * 0.35, Math.max(0.7, rad) * 1.05, 'ginkgo', 5, r, [1, 1, 1], dark, yr);
   }
 }
+export function treeBirch(G, M, r, s = 1) { // 白樺: a bare winter birch, white bark with dark marks
+  const c = G.color; c.setM(M);
+  const h = r.range(7, 10) * s, lean = (r() - 0.5) * 0.5;
+  c.rod([0, 0, 0], [lean, h, 0], 0.13 * s, 0.05 * s, 7, C('#eeece6'));
+  for (let i = 0; i < 7; i++) { const y = r.range(0.4, h * 0.85), t = y / h; c.cyl(lean * t, y, 0, 0.135 * s * (1 - t * 0.6), 0.13 * s * (1 - t * 0.6), 0.05, 7, C('#2b2b30'), false); }
+  for (let i = 0; i < 7; i++) {
+    const y = h * (0.45 + r() * 0.5), a = r() * 6.28, L = (0.8 + r() * 1.6) * s, t = y / h;
+    c.rod([lean * t, y, 0], [lean * t + Math.cos(a) * L, y + L * 0.9, Math.sin(a) * L], 0.035 * s, 0.012 * s, 4, C('#8b7f78'));
+  }
+}
+export function treeSnowCedar(G, M, r, s = 1) { // a cedar weighed down with snow
+  const h = r.range(9, 13) * s;
+  G.color.setM(M); G.color.cyl(0, 0, 0, 0.22 * s, 0.15 * s, h * 0.3, 6, PAL.trunkDark);
+  G.foliage.setM(M);
+  const DK = C('#1d3a2c'), SN = C('#eef2f8'), SN2 = C('#d7e0ec');
+  for (let i = 0; i < 4; i++) {
+    const y0 = h * (0.16 + i * 0.19), r0 = (1.9 - i * 0.38) * s, hh = h * 0.3;
+    G.foliage.cyl(0, y0, 0, r0, r0 * 0.3, hh, 9, DK);
+    G.foliage.cyl(0, y0 + hh * 0.45, 0, r0 * 0.72, 0.05, hh * 0.62, 9, i % 2 ? SN : SN2); // snow resting on each tier
+  }
+}
 export function treeCedar(G, M, r, s = 1) {
   const h = r.range(9, 14) * s;
   G.color.setM(M); G.color.cyl(0, 0, 0, 0.22 * s, 0.15 * s, h * 0.3, 6, PAL.trunkDark);
@@ -250,7 +279,7 @@ export function treeCedar(G, M, r, s = 1) {
 }
 
 // trees are built once per (kind, variant) and then stamped — much cheaper than rebuilding every tree
-const TREE_BUILDERS = { broad: treeBroad, sakura: treeSakura, pine: treePine, cedar: treeCedar, maple: treeMaple, ginkgo: treeGinkgo };
+const TREE_BUILDERS = { broad: treeBroad, sakura: treeSakura, pine: treePine, cedar: treeCedar, maple: treeMaple, ginkgo: treeGinkgo, birch: treeBirch, snowcedar: treeSnowCedar };
 const TCACHE = {};
 export function tree(G, M, kind, r, s = 1) {
   const v = Math.floor(r() * 4), key = kind + v;
@@ -408,13 +437,19 @@ function woodHouse(G, M, r, s) {
   addSides(a, w, d, fy, wood ? C('#9a7a62') : tint, r, litP);
   c.quad([-w / 2, 0, d], [w / 2, 0, d], [w / 2, H, d], [-w / 2, H, d], mulC(tint, 0.75));
   // gable roof, ridge parallel to the road
-  const o = 0.6, rh = Math.min(2.4, d * 0.32), k = uv('kawara'), RC = C('#c8ccd8');
+  const snow = !!s.snow, o = snow ? 0.75 : 0.6, rh = snow ? Math.min(3.4, d * 0.46) : Math.min(2.4, d * 0.32);
+  const k = uv(snow ? 'white' : 'kawara'), RC = snow ? C('#f3f5fa') : C('#c8ccd8');
   a.quad([w / 2 + o, H - 0.25, -o], [-w / 2 - o, H - 0.25, -o], [-w / 2 - o, H + rh, d / 2], [w / 2 + o, H + rh, d / 2], RC, k);
   a.quad([-w / 2 - o, H - 0.25, d + o], [w / 2 + o, H - 0.25, d + o], [w / 2 + o, H + rh, d / 2], [-w / 2 - o, H + rh, d / 2], RC, k);
   const gc = wood ? C('#7a5a42') : tint;
   tri(c, [-w / 2, H, 0], [-w / 2, H, d], [-w / 2, H + rh - 0.1, d / 2], gc);
   tri(c, [w / 2, H, d], [w / 2, H, 0], [w / 2, H + rh - 0.1, d / 2], gc);
-  c.box(-w / 2 - o, H + rh - 0.05, d / 2 - 0.15, w / 2 + o, H + rh + 0.18, d / 2 + 0.15, C('#3d4456'));
+  c.box(-w / 2 - o, H + rh - 0.05, d / 2 - 0.15, w / 2 + o, H + rh + 0.18, d / 2 + 0.15, snow ? C('#f6f7fb') : C('#3d4456'));
+  if (snow) { // the thick snow slab shows along the eaves, with a few icicles
+    c.box(-w / 2 - o - 0.05, H - 0.42, -o - 0.1, w / 2 + o + 0.05, H - 0.12, -o + 0.3, C('#eef1f7'));
+    c.box(-w / 2 - o - 0.05, H - 0.42, d + o - 0.3, w / 2 + o + 0.05, H - 0.12, d + o + 0.1, C('#eef1f7'));
+    for (let x = -w / 2; x < w / 2; x += 0.45 + r() * 0.5) c.cyl(x, H - 0.42 - 0.35, -o + 0.02, 0.0, 0.04, 0.35, 4, C('#dfe8f3'), false);
+  }
   if (floors > 1) { // little eave between floors
     const y = fh + 0.05;
     a.quad([w / 2 + 0.1, y - 0.3, -0.75], [-w / 2 - 0.1, y - 0.3, -0.75], [-w / 2 - 0.1, y + 0.05, 0], [w / 2 + 0.1, y + 0.05, 0], RC, k);

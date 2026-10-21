@@ -2,6 +2,15 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-21 · 05:xx — Snow country (雪国): the drive becomes four seasons
+- **A sixth place, 雪国 — Snow Country**, between the autumn mountain pass and the city, so the loop now runs city → spring sakura → summer coast and rice fields → autumn mountains → winter snow → city.
+- **The look**: soft blue-shadowed snowfields over buried paddies (their ridges faintly showing), plowed snow banks along the road, packed snow on the road with darker wheel tracks (the paint disappears under it), white hills, and snowcaps on the distant mountain ranges.
+- **Snow country things**: the red-and-white 矢羽根 poles with down-pointing arrows marking the road edge for the ploughs; farmhouses with steep snow-laden roofs, thick snow slabs on the eaves, icicles and warm windows; white birch groves (白樺); cedars weighed down with snow.
+- **Falling snow**: gentle flakes drift down (heavier when the sky is grey; snow replaces rain here), and the roads stay white rather than wet.
+- **Sound**: hushed — wind, crows, and a distant temple bell; no cicadas, frogs or crickets in the cold.
+- Snow arrives in patches as you come down from the autumn pass, rather than as a uniform fade.
+- Test hook: `?env=snow`.
+
 ## 2026-10-21 · 04:xx — Tunnels (トンネル)
 - **Tunnels** on the mountain pass and the coastal road: the road straightens and levels, runs into a cutting between concrete-lattice faces, and enters a concrete portal with a darker ring and a name plate (紅葉トンネル, 岬トンネル, 星見トンネル). Above it a ridge (on the coast, a pine-covered headland running down to the sea) carries the forest over the road.
 - **Inside**: no sun or sky — warm sodium lamps on both arch shoulders every 6 m sweep over the car as you pass, cream tiled walls and walkways, green evacuation lights, jet fans under the crown; the headlights come on and the taillights glow. Your eyes adapt: the exposure rises inside, so the exit glows bright and the world blooms open again as you leave.

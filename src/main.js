@@ -6,7 +6,7 @@ import { makeMaterials, U } from './materials.js';
 import { setAtlas, setFoliage } from './props.js';
 import { World } from './chunks.js';
 import { makeSky, paintClouds, makeClouds, makeMountains, updateTOD, applyWeather, TOD } from './sky.js';
-import { makeWeather, makeRain } from './weather.js';
+import { makeWeather, makeRain, makeSnow } from './weather.js';
 import { makeBirds } from './birds.js';
 import { makeSea, foamMaterial, riverMaterial } from './sea.js';
 import { makeCar } from './car.js';
@@ -70,7 +70,7 @@ async function main() {
   const post = makePost(renderer, scene, camera, { msaa: quality === 'high' ? 4 : quality === 'mid' ? 2 : 0 });
   const rig = makeCrossingRig(); scene.add(rig.group);
   const train = makeTrain(); scene.add(train.group);
-  const weather = makeWeather(QS), rain = makeRain(); scene.add(rain.mesh);
+  const weather = makeWeather(QS), rain = makeRain(), snowfall = makeSnow(); scene.add(rain.mesh, snowfall.mesh);
   const birds = makeBirds(); scene.add(birds.mesh);
   let wet = weather.W.rain;
 
@@ -332,10 +332,10 @@ async function main() {
     sun.position.copy(sun.target.position).addScaledVector(TOD.lightDir, 200);
     hemi.color.copy(TOD.hemiSky); hemi.groundColor.copy(TOD.hemiGround); hemi.intensity = TOD.hemiI;
     scene.fog.color.copy(TOD.fog);
-    const fogD = (w.city * 0.0022 + w.sakura * 0.0019 + w.coast * 0.0011 + w.country * 0.0014 + w.mountain * 0.0017) * (1 + TOD.night * 0.25);
+    const fogD = (w.city * 0.0022 + w.sakura * 0.0019 + w.coast * 0.0011 + w.country * 0.0014 + w.mountain * 0.0017 + w.snow * 0.0021) * (1 + TOD.night * 0.25);
     scene.fog.near = fogD * (1 + 0.55 * ov + 0.45 * rn); scene.fog.far = world.ahead * 0.92;
     U.uSkyHor.value.copy(TOD.horizon); U.uSkyZen.value.copy(TOD.zenith); U.uTime.value = t;
-    U.uWet.value = wet; U.uOrigin.value.set(world.origin.x, world.origin.z); U.uWind.value = 1 + 0.8 * rn;
+    U.uWet.value = wet * (1 - w.snow); U.uOrigin.value.set(world.origin.x, world.origin.z); U.uWind.value = 1 + 0.8 * rn;
     U.uCloudSh.value = (1 - ov) * sstep(0.04, 0.3, TOD.sunEl) * (1 - TOD.night);
     const su = sky.material.uniforms;
     su.uNight.value = TOD.night; su.uWarm.value = TOD.warm; su.uTime.value = t; su.uCirrusCol.value.copy(TOD.cLit).lerp(TOD.horizon, 0.25);
@@ -354,7 +354,7 @@ async function main() {
     su.uDeckLit.value.copy(TOD.horizon).lerp(TOD.cLit, 0.35); su.uDeckDark.value.copy(TOD.zenith).lerp(TOD.horizon, 0.25).multiplyScalar(0.82);
     sky.position.copy(camera.position);
     clouds.update(camera.position, dt);
-    mountains.update(camera.position);
+    mountains.update(camera.position, Math.max(w.snow, zoneW(st.s + 600).snow * 0.7));
     let seaW = 0; for (const d of [-150, 0, 250, 500, 800]) seaW = Math.max(seaW, zoneW(st.s + d).coast);
     sea.mesh.visible = seaW > 0.001;
     sea.update(camera.position, t, fogD * 0.8, sstep(0.0, 0.35, seaW));
@@ -378,13 +378,14 @@ async function main() {
     g.uSat.value = 1.1 - 0.12 * ov;
     g.uDay.value = day(); g.uWarm.value = TOD.warm; g.uTime.value = t;
 
-    rain.update(camera.position, t, rn * (1 - tunS), day());
+    rain.update(camera.position, t, rn * (1 - tunS) * (1 - w.snow), day());
+    snowfall.update(camera.position, t, w.snow * (0.3 + 0.7 * ov) * (1 - tunS), day());
     birds.setFog(scene.fog.near); birds.update(dt, t, camera.position, fwd, right, w, day(), rn, car.group.position);
     const tp0 = performance.now(); parts.update(dt, t, camera.position, fwd, right, w.sakura * (1 - tunS), f.y, nightK, (w.country + w.sakura * 0.4) * (1 - rn) * (1 - tunS), w.mountain * (1 - tunS)); const tp1 = performance.now();
     if (audio) {
       path.at(sx, fl); const dxc = Math.hypot(fl.x - world.origin.x - camera.position.x, fl.z - world.origin.z - camera.position.z);
       const trainD = train.st.active ? train.group.position.distanceTo(camera.position) : 1e9;
-      audio.update(st.speed / 15, w, day(), { bell: bell ? Math.pow(clamp(1 - dxc / 260, 0, 1), 1.5) : 0, train: Math.pow(clamp(1 - trainD / 230, 0, 1), 2), rain: rn * (1 - tunS), roof: st.cam !== 2, tunnel: tunS, water: (() => { const rv = riverNear(st.s); return Math.max(rv ? 1 - sstep(12, 150, Math.abs(st.s - rv.s)) : 0, w.mountain * 0.45); })(), dusk: TOD.warm * (st.tod > 0.5 ? 1 : 0.3) });
+      audio.update(st.speed / 15, w, day(), { bell: bell ? Math.pow(clamp(1 - dxc / 260, 0, 1), 1.5) : 0, train: Math.pow(clamp(1 - trainD / 230, 0, 1), 2), rain: rn * (1 - tunS) * (1 - w.snow), roof: st.cam !== 2, tunnel: tunS, water: (() => { const rv = riverNear(st.s); return Math.max(rv ? 1 - sstep(12, 150, Math.abs(st.s - rv.s)) : 0, w.mountain * 0.45); })(), dusk: TOD.warm * (st.tod > 0.5 ? 1 : 0.3) });
     }
     zoneCard(zoneAt(st.s + 40));
 

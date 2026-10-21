@@ -1,13 +1,14 @@
 // The infinite road: a centre-line integrated from smooth curvature noise, plus the zone schedule.
 import { clamp, lerp, smooth, sstep, noise1, fbm1 } from './util.js';
 
-export const ZONES = ['city', 'sakura', 'coast', 'country', 'mountain'];
+export const ZONES = ['city', 'sakura', 'coast', 'country', 'mountain', 'snow'];
 export const ZINFO = {
   city:    { jp: '街の灯',     en: 'City Streets',          curv: 1 / 1500, hill: 1.2, base: 4.0, rw: 3.1, speed: 10.5 },
   sakura:  { jp: '桜並木',     en: 'Cherry Blossom Avenue', curv: 1 / 520,  hill: 2.5, base: 4.5, rw: 3.3, speed: 11.5 },
   coast:   { jp: '海沿いの道', en: 'Coastal Road',          curv: 1 / 300,  hill: 1.6, base: 5.2, rw: 3.4, speed: 13.5 },
   country: { jp: '田舎道',     en: 'Country Road',          curv: 1 / 260,  hill: 7.0, base: 6.0, rw: 3.1, speed: 12.5 },
   mountain: { jp: '紅葉の峠',   en: 'Autumn Mountain Pass',  curv: 1 / 150,  hill: 11,  base: 14,  rw: 3.0, speed: 10 },
+  snow:     { jp: '雪国',       en: 'Snow Country',          curv: 1 / 380,  hill: 3.5, base: 9,   rw: 3.0, speed: 9.5 },
 };
 export const ZONE_LEN = 1500, TRANS = 260, SEA = 0;
 
@@ -21,7 +22,7 @@ export function zoneMix(s) {
   return { a: ZONES[(((z + START) % n) + n) % n], b: ZONES[(((z + START + 1) % n) + n) % n], t };
 }
 export function zoneW(s) {
-  const m = zoneMix(s), w = { city: 0, sakura: 0, coast: 0, country: 0, mountain: 0 };
+  const m = zoneMix(s), w = { city: 0, sakura: 0, coast: 0, country: 0, mountain: 0, snow: 0 };
   w[m.a] += 1 - m.t; w[m.b] += m.t;
   return w;
 }
@@ -155,6 +156,14 @@ export function groundOffset(zone, s, u, e, rw) {
       const d = a - (rw + 1.2);
       if (d < 32) return -d * 1.1;                          // steep wooded drop into the valley
       return -35.2 + sstep(105, 230, a) * 95 * (0.6 + 0.4 * noise1(s / 220, 67)); // valley floor, then the far mountainside
+    }
+    case 'snow': { // plowed banks along the road, deep snow over the fields, white hills beyond
+      if (a < rw + 0.15) return -0.06;
+      if (a < rw + 0.7) return -0.06 + ((a - rw - 0.15) / 0.55) * 1.36;  // the plowed snow wall rises
+      if (a < rw + 1.5) return 1.3;
+      if (a < rw + 2.65) return lerp(1.3, 0.55, (a - rw - 1.5) / 1.15);
+      if (a < 125) return 0.55 + 0.25 * (noise1(s / 40 + (u > 0 ? 3 : 0), 71) - 0.5);
+      return 0.55 + sstep(125, 210, a) * 40 * (0.45 + 0.55 * noise1(s / 230 + (u > 0 ? 11 : 0), 73));
     }
     case 'country':
     default:

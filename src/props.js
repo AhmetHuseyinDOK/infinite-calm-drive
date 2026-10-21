@@ -62,11 +62,12 @@ export function utilityPole(G, M, r, opt = {}) {
   return anchors.map(p => new THREE.Vector3(p[0], p[1], p[2]).applyMatrix4(M));
 }
 
-// where a lamp's light comes from (chunk-local), so the car can be lit as it passes (main.js → car.update)
+// where a light comes from (chunk-local) and how strong it is, so the car can be lit as it passes (main.js picks the two
+// that light it most): overhead street lamps 1.1, park lanterns 0.9, a lit shop window 0.7 (tunnel lamps: chunks.js)
 const _lp = new THREE.Vector3();
-function lampAt(G, M, x, y, z) { if (G.lamps) { _lp.set(x, y, z).applyMatrix4(M); G.lamps.push(_lp.x, _lp.y, _lp.z); } }
+export function lampAt(G, M, x, y, z, power) { if (G.lamps) { _lp.set(x, y, z).applyMatrix4(M); G.lamps.push(_lp.x, _lp.y, _lp.z, power); } }
 export function streetLamp(G, M, r, opt = {}) {
-  const c = G.color; c.setM(M); lampAt(G, M, 0, 6.28, -1.42);
+  const c = G.color; c.setM(M); lampAt(G, M, 0, 6.28, -1.42, 1.1);
   c.cyl(0, 0, 0, 0.08, 0.06, 6.0, 8, PAL.lampPole);
   c.rod([0, 5.95, 0], [0, 6.35, -0.45], 0.05, 0.045, 6, PAL.lampPole);
   c.rod([0, 6.35, -0.45], [0, 6.45, -1.35], 0.045, 0.04, 6, PAL.lampPole);
@@ -76,14 +77,14 @@ export function streetLamp(G, M, r, opt = {}) {
   G.pool.setM(M); G.pool.quad([-3.6, py, 2.2], [3.6, py, 2.2], [3.6, py, -5.2], [-3.6, py, -5.2], W1, { u0: 0, u1: 1, v0: 0, v1: 1 });
 }
 export function poleLamp(G, M, poolY = 0.04) { // lamp arm bolted onto a utility pole
-  const c = G.color; c.setM(M); lampAt(G, M, 0, 6.6, -1.5);
+  const c = G.color; c.setM(M); lampAt(G, M, 0, 6.6, -1.5, 1.1);
   c.rod([0, 6.2, -0.12], [0, 6.75, -0.7], 0.045, 0.04, 6, PAL.lampPole); c.rod([0, 6.75, -0.7], [0, 6.8, -1.45], 0.04, 0.035, 6, PAL.lampPole);
   c.box(-0.16, 6.68, -1.78, 0.16, 6.86, -1.22, PAL.lampHead);
   G.lamp.setM(M); G.lamp.box(-0.13, 6.63, -1.74, 0.13, 6.68, -1.26, W1);
   G.pool.setM(M); G.pool.quad([-3.6, poolY, 2.2], [3.6, poolY, 2.2], [3.6, poolY, -5.2], [-3.6, poolY, -5.2], W1, { u0: 0, u1: 1, v0: 0, v1: 1 });
 }
 export function oldLamp(G, M) { // short park/shrine lamp
-  const c = G.color; c.setM(M); lampAt(G, M, 0, 3.5, 0);
+  const c = G.color; c.setM(M); lampAt(G, M, 0, 3.5, 0, 0.9);
   c.cyl(0, 0, 0, 0.07, 0.06, 3.2, 8, C('#3a3a3e'));
   c.box(-0.2, 3.2, -0.2, 0.2, 3.25, 0.2, C('#3a3a3e')); c.cyl(0, 3.75, 0, 0.26, 0.04, 0.3, 8, C('#3a3a3e'));
   G.lamp.setM(M); G.lamp.box(-0.16, 3.25, -0.16, 0.16, 3.75, 0.16, W1);
@@ -351,11 +352,15 @@ export function building(G, M, r, spec) {
   }
 }
 
+const LIT_SHOP = new Set(['glass', 'door', 'cafe', 'noren']);
 function shopHouse(G, M, r, s) {
   const { w, d, floors, tint, litP } = s, a = G.atlas, c = G.color, fh0 = 3.6, fh = 3.0, H = fh0 + (floors - 1) * fh;
   const bays = Math.max(1, Math.round(w / 3)), bw = w / bays, x0 = -w / 2;
   const kinds = r.pick([['glass', 'door', 'glass'], ['noren', 'noren'], ['cafe', 'door'], ['shutter', 'shutter', 'door'], ['glass', 'glass', 'door'], ['house', 'garage'], ['noren', 'glass']]);
-  for (let i = 0; i < bays; i++) fq(a, x0 + i * bw, x0 + (i + 1) * bw, 0, fh0, 0, pickV(r, 'shop_' + kinds[i % kinds.length]));
+  for (let i = 0; i < bays; i++) {
+    const k = kinds[i % kinds.length]; fq(a, x0 + i * bw, x0 + (i + 1) * bw, 0, fh0, 0, pickV(r, 'shop_' + k));
+    if (LIT_SHOP.has(k)) lampAt(G, M, x0 + (i + 0.5) * bw, 1.9, -0.8, 0.7); // its window lights the street (and the car)
+  }
   const wk = r.pick([0, 0, 1, 5, 0, 1]);
   const fy = [0, fh0]; for (let f = 1; f < floors; f++) fy.push(fh0 + f * fh);
   for (let f = 1; f < floors; f++) for (let i = 0; i < bays; i++) {
@@ -437,7 +442,7 @@ function office(G, M, r, s) {
 }
 function konbini(G, M, r, s) {
   const { w, d } = s, a = G.atlas, c = G.color, H = 4.4, x0 = -w / 2, bays = Math.max(3, Math.round(w / 3)), bw = w / bays;
-  for (let i = 0; i < bays; i++) fq(a, x0 + i * bw, x0 + (i + 1) * bw, 0, 3.4, 0, 'shop_konbini');
+  for (let i = 0; i < bays; i++) { fq(a, x0 + i * bw, x0 + (i + 1) * bw, 0, 3.4, 0, 'shop_konbini'); lampAt(G, M, x0 + (i + 0.5) * bw, 1.9, -0.8, 0.8); }
   c.box(x0, 3.4, -0.35, -x0, H, 0, PAL.white);
   fq(a, x0, -x0, 3.4, H, -0.355, 'konbini_band');
   addSides(a, w, d, [0, H], C('#f2f2ee'), r, 0);

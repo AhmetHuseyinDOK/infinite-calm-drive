@@ -2,6 +2,25 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-22 · 03:xx — Realism pass 10: tunnel lights sweep over the car, shop windows light it in town
+- **Tunnels.** The sodium lamps every 6 m along the tunnel shoulders now light the car too, by day as well. Driving
+  through, the roof and body brighten and dim rhythmically as each lamp passes overhead: the familiar pulse of orange
+  light on a car in a tunnel. Before, the car was just evenly tinted khaki inside.
+- **Shopping streets at night.** Lit shop windows (glass fronts, cafés, noren restaurants, konbini) now count as lights,
+  so the side of the car facing the shops picks up their warm light as it drives past. Shutters, garages and houses
+  stay dark.
+- How: every light now has a power when its chunk registers it:
+  - street lamps 1.1, park lanterns 0.9, tunnel lamps 1.0, shop windows 0.7, konbini 0.8.
+  - The car takes the two lights that light it most (power over the shader's distance falloff) instead of simply the
+    nearest two. The light colour turns from warm white to sodium orange inside tunnels.
+  - Still no allocation per frame: it scans the car's chunk and its two neighbours.
+- Cost: none measurable. The shaders are the same as last pass; only the lights picked and their colour changed.
+  - 52 programs, none compiled mid-drive; every quality level compiles.
+  - GPU, alternating-order rounds against the live build at an extreme machine load of 70–80: night city +0.15 ms,
+    mountains −0.22, phone night city +0.10. The live build compared with itself read 0.00 ± 0.5.
+  - Flat out through tunnels: 6 world-build spikes against 10 on live; night city: 1 against 9.
+  - Startup 4.0 s; embed mode still starts on tap.
+
 ## 2026-10-22 · 02:xx — Realism pass 9: street lamps light the car at night
 - **The car catches the lamps it drives under.** At night the car was a flat dark-navy silhouette, even when it passed
   right under a street lamp. Now the lamps light it:

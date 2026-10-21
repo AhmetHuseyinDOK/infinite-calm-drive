@@ -533,23 +533,27 @@ async function main() {
     M.atlas.emissiveIntensity = 0.1 + nightK * 1.05;
     M.lamp.color.setRGB(0.85, 0.85, 0.8).lerp(new THREE.Color(3.6, 2.8, 1.8), nightK);
     M.pool.opacity = nightK * 0.42 * (1 + 0.8 * wet);
-    { // the two street lamps nearest the car light its paint and glass (car.js); lamps sit in their chunk's frame
-      const cp = car.group.position, L = car.lamps; let d0 = 900, d1 = 900, x0 = 0, y0 = -1e3, z0 = 0, x1 = 0, y1 = -1e3, z1 = 0; // (none: far below)
-      if (nightK > 0.01) {
+    { // the two lights that light the car most (street lamps, lit shop windows, tunnel lamps) light its paint and glass
+      // (car.js); lights sit in their chunk's frame. Sodium orange inside tunnels, which are lit by day too
+      const cp = car.group.position, L = car.lamps, K = Math.max(nightK, tunS);
+      let a0 = 0, a1 = 0, x0 = 0, y0 = -1e3, z0 = 0, x1 = 0, y1 = -1e3, z1 = 0, d0 = 900, d1 = 900; // (none: far below)
+      if (K > 0.01) {
         const cc = Math.floor(st.s / CH);
         for (let c = cc - 1; c <= cc + 1; c++) {
           const ch = world.chunks.get(c); if (!ch || !ch.lamps) continue;
           const P = ch.lamps, gp = ch.group.position;
-          for (let i = 0; i < P.length; i += 3) {
+          for (let i = 0; i < P.length; i += 4) {
             const x = P[i] + gp.x, y = P[i + 1], z = P[i + 2] + gp.z, d = (x - cp.x) ** 2 + (y - cp.y) ** 2 + (z - cp.z) ** 2;
-            if (d < d0) { d1 = d0; x1 = x0; y1 = y0; z1 = z0; d0 = d; x0 = x; y0 = y; z0 = z; } else if (d < d1) { d1 = d; x1 = x; y1 = y; z1 = z; }
+            const a = P[i + 3] / (1 + 0.045 * d); // how much it lights the car (the shader's falloff)
+            if (a > a0) { a1 = a0; d1 = d0; x1 = x0; y1 = y0; z1 = z0; a0 = a; d0 = d; x0 = x; y0 = y; z0 = z; } else if (a > a1) { a1 = a; d1 = d; x1 = x; y1 = y; z1 = z; }
           }
         }
         camera.updateMatrixWorld();
       }
-      // (fade out before 30 m, so swapping which lamp is "nearest" never pops)
-      L[0].set(x0, y0, z0, 1).applyMatrix4(camera.matrixWorldInverse).w = nightK * 1.1 * (1 - sstep(18, 30, Math.sqrt(d0)));
-      L[1].set(x1, y1, z1, 1).applyMatrix4(camera.matrixWorldInverse).w = nightK * 1.1 * (1 - sstep(18, 30, Math.sqrt(d1)));
+      // power back from the score; fade out before 30 m, so swapping which lights are picked never pops
+      L[0].set(x0, y0, z0, 1).applyMatrix4(camera.matrixWorldInverse).w = K * a0 * (1 + 0.045 * d0) * (1 - sstep(18, 30, Math.sqrt(d0)));
+      L[1].set(x1, y1, z1, 1).applyMatrix4(camera.matrixWorldInverse).w = K * a1 * (1 + 0.045 * d1) * (1 - sstep(18, 30, Math.sqrt(d1)));
+      car.lampCol.setRGB(1.0, 0.8 - 0.32 * tunS, 0.52 - 0.38 * tunS); // warm white → sodium orange in tunnels
     }
     M.pool.visible = M.pool.opacity > 0.003; // the night light pools were drawn all day at zero opacity (~11 draw calls)
     world.lod(st.s, DETAIL_FAR, nightK > 0.15, FAR_LEAF);

@@ -35,7 +35,8 @@ export function makeCar() {
   // street lamps overhead light the car as it passes under them: a warm wash on the roof and bonnet, a highlight sliding
   // along the paint and the glass (the two nearest lamps, set each frame in view space; w = strength, 0 = none)
   const lamps = [new THREE.Vector4(), new THREE.Vector4()];
-  const LAMPS = { uniforms: { uCarLamp: { value: lamps }, uCarLampCol: { value: new THREE.Color(1.0, 0.8, 0.52) } }, pars: '\nuniform vec4 uCarLamp[2]; uniform vec3 uCarLampCol;', apply: /* glsl */`
+  const lampCol = new THREE.Color(1.0, 0.8, 0.52);
+  const LAMPS = { uniforms: { uCarLamp: { value: lamps }, uCarLampCol: { value: lampCol } }, pars: '\nuniform vec4 uCarLamp[2]; uniform vec3 uCarLampCol;', apply: /* glsl */`
   for (int i = 0; i < 2; i++) {
     vec3 L = uCarLamp[i].xyz + vViewPosition; float d2 = max(dot(L, L), 1e-4); L *= inversesqrt(d2);
     float att = uCarLamp[i].w / (1.0 + 0.045 * d2);
@@ -111,7 +112,7 @@ export function makeCar() {
   const S = { roll: 0, rv: 0, pitch: 0, pv: 0, y: 0, yv: 0 }, soft = (x, cap) => cap * Math.tanh(x / cap); // body springs
 
   return {
-    group: car, lamps,
+    group: car, lamps, lampCol,
     /** m (optional): lat = sideways acceleration (m/s², + = towards the right), lon = speeding up (+) / braking (−),
      *  road = the surface's height under the car (m), jolt = vertical kick this frame (m/s), kick = pitch kick (rad/s, + = nose down) */
     update(dt, speed, night, rain = 0, m = null) {

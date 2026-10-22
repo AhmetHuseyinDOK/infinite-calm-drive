@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Path, ZONES, zoneW, zoneAt, zparam, ZINFO, setStartZone, crossingS, crossingValid, XING, XOFF, riverNear, groundOffsetMix, tunnelNear, T_HALF, T_RIDGE } from './path.js';
+import { Path, ZONES, zoneW, zoneAt, zparam, ZINFO, setStartZone, crossingS, crossingValid, XING, XOFF, riverNear, RIV, ROFF, groundOffsetMix, tunnelNear, T_HALF, T_RIDGE } from './path.js';
 import { makeCrossingRig, makeTrain, xingPosts } from './crossing.js';
 import { buildAtlas, buildFoliage } from './textures.js';
 import { makeMaterials, U, groundMaterialFor, setShadowTaps, setGrazeFade, makeCloudMap } from './materials.js';
@@ -293,8 +293,9 @@ async function main() {
   if (PROF) { PROF.gl = renderer.getContext(); PROF.tq = PROF.gl.getExtension('EXT_disjoint_timer_query_webgl2'); }
   const meteor = { p: -1, a: new THREE.Vector3(), b: new THREE.Vector3(), next: 5 };
   // the car's motion as its suspension feels it (see car.update): sideways / fore-aft acceleration, the road surface, rail jolts
-  const CM = { lat: 0, lon: 0, road: 0, jolt: 0, kick: 0, u: st.u, vu: 0, v: 0, s: st.s, yaw: 0 };
+  const CM = { lat: 0, lon: 0, road: 0, jolt: 0, kick: 0, u: st.u, vu: 0, v: 0, s: st.s, yaw: 0, brake: 0, rk: NaN, rb: null };
   const RAILS = [-2.5335, -1.4665, 1.4665, 2.5335], AXLES = [1.12, -1.12]; // rails of a crossing's two tracks (from sx); axles (from the car's centre)
+  const JOINTS = [-24.5, 24.5]; // a river bridge's expansion joints (from its centre, chunks.js placeRiver)
   function frame(now) {
     requestAnimationFrame(frame);
     const ft0 = performance.now();
@@ -365,12 +366,23 @@ async function main() {
       const vu = CM.vu + ((st.u - CM.u) / dt - CM.vu) * Math.min(1, dt * 6), au = (vu - CM.vu) / dt; CM.u = st.u; CM.vu = vu;
       CM.lat = au - st.speed * st.speed * kap;
       CM.lon += ((st.speed - CM.v) / dt - CM.lon) * Math.min(1, dt * 8); CM.v = st.speed;
+      // brakes (lights in car.js): on while really slowing down — not just easing off — and while waiting at a crossing
+      const waiting = X.phase !== 'idle' && xDist > 0 && xDist < 20 && st.speed < 0.5;
+      CM.brake = CM.lon < -0.6 || waiting ? 1 : CM.lon > -0.3 ? 0 : CM.brake;
       CM.yaw = -clamp(Math.atan(vu / Math.max(st.speed, 6)) * 0.8, -0.1, 0.1);
       // the asphalt's gentle undulation (at speed the springs smooth it out), and a jolt per axle per rail at a crossing
       CM.road = 0.004 * Math.sin(st.s * 0.48) + 0.003 * Math.sin(st.s * 0.86 + 1.3); CM.jolt = CM.kick = 0;
       if (xValid) for (let i = 0; i < 4; i++) for (let j = 0; j < 2; j++) {
         const p = sx + RAILS[i] - AXLES[j];
         if (CM.s < p && st.s >= p) { const v = 0.05 + Math.min(st.speed, 25) * 0.004; CM.jolt += v; CM.kick += j ? v * 0.9 : -v * 0.9; if (audio) audio.bump(0.25 + Math.min(st.speed, 25) / 50); }
+      }
+      { // …and a softer ka-tan over the expansion joints at each end of a river bridge
+        const rk = Math.round((st.s - ROFF) / RIV); if (rk !== CM.rk) { CM.rk = rk; CM.rb = riverNear(st.s); } // (looked up once per river)
+        const rb = CM.rb;
+        if (rb) for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) {
+          const p = rb.s + JOINTS[i] - AXLES[j];
+          if (CM.s < p && st.s >= p) { const v = 0.035 + Math.min(st.speed, 25) * 0.003; CM.jolt += v; CM.kick += j ? v * 0.9 : -v * 0.9; if (audio) audio.bump(0.2 + Math.min(st.speed, 25) / 60); }
+        }
       }
       CM.s = st.s;
     }

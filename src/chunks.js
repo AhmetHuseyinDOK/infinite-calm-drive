@@ -437,6 +437,8 @@ export class World {
     for (const zz of [-1, 1]) c.box(-24.5, -1.3, zz > 0 ? edge - 0.35 : -edge, 24.5, -0.95, zz > 0 ? edge : -edge + 0.35, [0.62, 0.61, 0.58]);
     for (const x of [-8, 8]) c.box(x - 0.7, -RIVER_DROP - 1.4, -edge + 0.6, x + 0.7, -1.0, edge - 0.6, CONC);
     for (const x of [-25.7, 25.7]) c.box(x - 1.2, -RIVER_DROP + 0.4, -edge - 0.4, x + 1.2, -0.05, edge + 0.4, CONC);
+    // steel expansion joints across the road where the deck meets each abutment (the car goes ka-tan over them, main.js)
+    for (const x of [-24.5, 24.5]) { c.box(x - 0.16, 0.004, -rw, x + 0.16, 0.016, rw, [0.33, 0.32, 0.31]); c.box(x - 0.02, 0.016, -rw, x + 0.02, 0.02, rw, [0.2, 0.19, 0.19]); }
     const yb = sw > 0 ? 0.15 : 0.0;
     for (const zz of [-1, 1]) {
       const z = zz * (edge - 0.14);

@@ -2,6 +2,29 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-22 · 06:xx — Realism pass 12: brake lights, and bridges you can feel
+- **Brake lights.** The car's tail lamps now brighten when it brakes. A small high-mount stop lamp
+  (ハイマウントストップランプ) along the top of the rear window lights up with them.
+  - They come on when the car really slows down: braking for a level crossing, or slowing down with ↓. Easing off
+    gently, for example between zones, doesn't trigger them.
+  - They stay on while the car waits at a crossing for the train, and go off as it pulls away.
+  - At night the brake glow blooms and, in the rain, reflects in the wet road.
+  - Logged at a crossing stop: brake on at 45 km/h as braking starts, held through the wait, off as the car pulls away
+    (no flicker).
+- **River bridges you can feel.** Each river bridge now has steel expansion joints across the road where the deck
+  meets the abutments. Driving over them gives a soft "ka-tan" (one jolt per axle per joint, four per bridge) with a
+  muffled thump in the audio, like the rail crossings but gentler.
+- Tried and dropped, before these: view-dependent glitter on sunlit snow. Three versions were measured inside one page
+  against the old snow shader, and each cost +0.25 to +0.45 ms on desktop, so it didn't ship.
+- Cost: none measurable.
+  - The stop lamp is one tiny extra mesh with no shadow and the tail lamps' own program (52/53 programs as before;
+    none compiled mid-drive). The joints are four boxes per bridge. The bridge lookup runs once per river, with no
+    per-frame allocation.
+  - GPU against the live build (alternating order, machine load ~25–35), country noon: per-build medians 21.36 → 21.40
+    and 21.27 → 21.31 ms. Night city 28.95 → 29.16; phone country −0.06. The live build compared with itself read +0.11
+    ± 0.9.
+  - Flat out with no missing chunks; embed mode still starts on tap.
+
 ## 2026-10-22 · 04:xx — Realism pass 11: night rain and snow only show where light catches them
 - **Rain at night.** Every raindrop used to be drawn as an equally bright white streak, even against a black sky, so a
   night shower looked like daytime rain painted on darkness. Real rain at night is nearly invisible except where light

@@ -48,6 +48,7 @@ export function makeCar() {
   const paint = (g, c) => { const n = g.attributes.position.count, a = new Float32Array(n * 4); for (let i = 0; i < n; i++) a.set([c.r, c.g, c.b, c.gloss], i * 4); g.setAttribute('color', new THREE.Float32BufferAttribute(a, 4)); return g; };
   const mGlass = withGloss(new THREE.MeshToonMaterial({ color: '#ffffff', map: glassTexture(), gradientMap: GRAD }), 1.2, 0.08, 'glass-l', LAMPS);
   const mTail = new THREE.MeshToonMaterial({ color: '#c8303a', emissive: '#ff2a2a', emissiveIntensity: 0.4, gradientMap: GRAD });
+  const mStop = new THREE.MeshToonMaterial({ color: '#4a1216', emissive: '#ff2a2a', emissiveIntensity: 0, gradientMap: GRAD }); // high-mount stop lamp (same program as mTail)
   const mAmber = new THREE.MeshToonMaterial({ color: '#f0a040', emissive: '#ff9a30', emissiveIntensity: 0.2, gradientMap: GRAD });
   const mPlate = new THREE.MeshBasicMaterial({ map: plateTexture() });
   // collect parts per material, then merge → ~9 draw calls for the whole car
@@ -65,6 +66,7 @@ export function makeCar() {
   add(new RoundedBoxGeometry(1.42, 0.66, 2.6, 4, 0.17), mBody, 0, 1.5, -0.25);
   add(new RoundedBoxGeometry(1.38, 0.09, 2.5, 3, 0.04), mRoof, 0, 1.84, -0.25);
   add(new THREE.PlaneGeometry(1.16, 0.5), mGlass, 0, 1.53, -1.556, 0, Math.PI, 0);
+  add(new RoundedBoxGeometry(0.42, 0.045, 0.04, 2, 0.015), mStop, 0, 1.752, -1.578); // ハイマウントストップランプ along the top of the rear glass
   for (const s of [-1, 1]) {
     add(new THREE.PlaneGeometry(2.25, 0.46), mGlass, s * 0.712, 1.54, -0.2, 0, (s * Math.PI) / 2, 0);
     add(new RoundedBoxGeometry(0.1, 0.12, 0.2, 2, 0.04), mBody, s * 0.82, 1.2, 0.95);
@@ -83,7 +85,7 @@ export function makeCar() {
   unsprung = false;
   for (const [mat, list] of parts) {
     const mesh = new THREE.Mesh(mergeGeometries(list), mat);
-    mesh.castShadow = mat !== mGlass && mat !== mPlate; mesh.receiveShadow = true;
+    mesh.castShadow = mat !== mGlass && mat !== mPlate && mat !== mStop; mesh.receiveShadow = true;
     inner.add(mesh);
   }
   { const mesh = new THREE.Mesh(mergeGeometries(wheels), mPaint); mesh.castShadow = mesh.receiveShadow = true; car.add(mesh); }
@@ -109,12 +111,13 @@ export function makeCar() {
   // headlights at night
   const head = new THREE.SpotLight(0xfff0d0, 0, 70, 0.55, 0.65, 1.2);
   head.position.set(0, 0.8, 1.6); head.target.position.set(0, 0, 18); inner.add(head, head.target);
-  const S = { roll: 0, rv: 0, pitch: 0, pv: 0, y: 0, yv: 0 }, soft = (x, cap) => cap * Math.tanh(x / cap); // body springs
+  const S = { roll: 0, rv: 0, pitch: 0, pv: 0, y: 0, yv: 0, br: 0 }, soft = (x, cap) => cap * Math.tanh(x / cap); // body springs
 
   return {
     group: car, lamps, lampCol, head,
     /** m (optional): lat = sideways acceleration (m/s², + = towards the right), lon = speeding up (+) / braking (−),
-     *  road = the surface's height under the car (m), jolt = vertical kick this frame (m/s), kick = pitch kick (rad/s, + = nose down) */
+     *  road = the surface's height under the car (m), jolt = vertical kick this frame (m/s), kick = pitch kick (rad/s, + = nose down),
+     *  brake = 1 while the brakes are on */
     update(dt, speed, night, rain = 0, m = null) {
       if (m) { // springs at ~1.2–1.5 Hz, a little under-damped like a soft family car; roll ≈ 9°/g, pitch ≈ 4.5°/g, both easing off at the limits
         const rollT = soft(-m.lat * 0.016, 0.045), pitchT = soft(-m.lon * 0.008, 0.03);
@@ -123,7 +126,9 @@ export function makeCar() {
         S.yv += ((m.road - S.y) * 85 - S.yv * 8) * dt + m.jolt; S.y += S.yv * dt;
         body.rotation.set(S.pitch, 0, S.roll); body.position.y = 0.35 + S.y;
       }
-      mTail.emissiveIntensity = 0.35 + night * 3.2;
+      // brake lights: the combination lamps brighten and the high-mount stop lamp comes on (they switch in ~0.1 s)
+      S.br += ((m ? m.brake : 0) - S.br) * Math.min(1, dt * 14);
+      mTail.emissiveIntensity = 0.35 + night * 3.2 + S.br * (1.7 + night * 2.0); mStop.emissiveIntensity = S.br * (2.4 + night * 1.6);
       if (rain > 0.15 || wiperT % 2.6 > 0.01) {
         wiperT += dt;
         const p = (wiperT % 2.6) / 2.6, sm = x => x * x * (3 - 2 * x);

@@ -100,7 +100,7 @@ export function riverMaterial() {
         float streak = smoothstep(0.72, 0.8, vnoise(vec2(vSU.y * 0.08 - uTime * 0.3, vSU.x * 1.4)));
         col += streak * 0.06 * (1.0 - uNight);
         col += uSunCol * pow(max(dot(R, uSunDir), 0.0), 180.0) * 4.0 * uSpecK * (1.0 - uNight * 0.7);
-        float edge = smoothstep(9.5, 11.5, abs(vSU.x));               // a little foam where it meets the banks
+        float edge = smoothstep(12.2, 14.2, abs(vSU.x));              // a little foam where it meets the banks
         col = mix(col, vec3(0.85, 0.9, 0.92) * (1.0 - 0.7 * uNight), edge * 0.35 * vnoise(vec2(vSU.y * 0.5 - uTime, vSU.x)));
         float fd = dist * uFogD;
         gl_FragColor = vec4(mix(col, uFog, 1.0 - exp(-fd * fd)), 1.0);

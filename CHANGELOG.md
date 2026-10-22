@@ -2,6 +2,29 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-22 · 22:xx — Graphics pass 10: rivers with revetments and reeds
+- **The river crossings look like Japanese rivers.** The countryside and cherry-blossom rivers were a straight blue
+  channel cut into a flat lawn: grass right down to the water. A strip of bare bank showed just above the waterline
+  where the water surface stopped short. Now:
+  - the **low-water banks are faced with concrete blocks** (間知ブロック, the diamond-laid blocks of Japanese river
+    revetments), grey and mortar-jointed, wet and darker at the waterline with a little moss, under a cast coping;
+  - **the water reaches the banks**: the surface now runs out to the waterline, with its foam line moved to match;
+  - **reed stands (ヨシ)** grow in clumps along the top of the revetments, swaying in the breeze like the other
+    grasses, starting 14 m from the road so they never crowd the chase camera.
+- How: one new texture-atlas cell, painted at load with its own random numbers (added last, so no other cell moves),
+  laid on 2.4 m strips along both banks for 150 m each side of the road. The reeds use the existing grass tufts. No
+  shader or draw-call change; +2% triangles at a river.
+- Cost: none measurable once trimmed.
+  - The first version had reeds right up to the road and measured ~0.9 ms more than a build without reeds, so they were
+    halved and moved out.
+  - Per page load at the bridge (8 loads each, chase camera): 21.66 ms new vs 21.76 without reeds vs 22.42 live.
+    Bridge eye view: 14.71 vs 14.59.
+  - Phone: the fast loads match (8.65–8.79 vs 8.74–8.82 ms); both builds swing between ~8.8 and ~11.5 load to load.
+  - Flat out past the rivers on the phone profile with ×4 CPU: world-build spikes 0 / 1 (worst 12–17 ms) against live's
+    1 / 0 (15–16 ms).
+  - 55 programs at a river, as on live; none compiled mid-drive; every quality level compiles. The bridge joints still
+    jolt. Startup 2.5 s; embed mode still starts on tap.
+
 ## 2026-10-22 · 21:xx — Graphics pass 9: tunnel portals like the real ones
 - **Tunnel portals look like Japanese mountain tunnels.** The mouth of each tunnel (mountain pass and coast) sat in a huge
   flat cream wall reaching all the way up to the top of the ridge, like a paper cut-out. Now the portal is built the way

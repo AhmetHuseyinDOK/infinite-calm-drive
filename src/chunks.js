@@ -423,7 +423,7 @@ export class World {
       const pos = [], su = [], idx = [], n = 74;
       for (let i = 0; i <= n; i++) {
         const u = -L + (2 * L * i) / n;
-        for (const ds of [12.5, -12.5]) { const p = xw(ds, u, wy); pos.push(p[0], p[1], p[2]); su.push(ds, u); }
+        for (const ds of [14.3, -14.3]) { const p = xw(ds, u, wy); pos.push(p[0], p[1], p[2]); su.push(ds, u); } // (to the waterline on the banks)
         if (i > 0) { const a = (i - 1) * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
       }
       const g = new THREE.BufferGeometry();
@@ -465,6 +465,27 @@ export class World {
       c.setM(M);
     }
     P.oldLamp(G, matAt(sr - 14, -(edge - 0.45), e + yb, 0, true)); P.oldLamp(G, matAt(sr + 14, edge - 0.45, e + yb, 0, true));
+    yield;
+    // the low-water banks are faced with concrete blocks (護岸) from just under the water up to the riverside flats, and
+    // reeds (ヨシ) stand in clumps along the top of them — the banks used to be lawn right down to the water
+    {
+      G.atlas.setM(new THREE.Matrix4());
+      const cell = P.uvOf('gogan'), SEG = 2.4, UMAX = 150;
+      for (const sg of [-1, 1]) for (let ua = -UMAX; ua < UMAX - 0.01; ua += SEG) {
+        const ub = ua + SEG, A = xw(sg * 13.9, ua, wy - 0.12), B = xw(sg * 13.9, ub, wy - 0.12), Cq = xw(sg * 16.05, ub, wy + 0.72), D = xw(sg * 16.05, ua, wy + 0.72);
+        // face the river (and the sky): the quad's normal is (B − A) × (D − A)
+        const nx = (B[1] - A[1]) * (D[2] - A[2]) - (B[2] - A[2]) * (D[1] - A[1]), nz = (B[0] - A[0]) * (D[1] - A[1]) - (B[1] - A[1]) * (D[0] - A[0]);
+        const toC = xw(0, (ua + ub) / 2, wy); const ok = nx * (toC[0] - A[0]) + nz * (toC[2] - A[2]) > 0;
+        const uv = { u0: cell.u0, u1: cell.u1, v0: cell.v0, v1: cell.v1 };
+        if (ok) G.atlas.quad(A, B, Cq, D, [1, 1, 1], uv); else G.atlas.quad(B, A, D, Cq, [1, 1, 1], { u0: cell.u1, u1: cell.u0, v0: cell.v0, v1: cell.v1 });
+      }
+      // (not right beside the road, where they'd fill the chase camera's view with cut-out cards: from 14 m out)
+      for (const sg of [-1, 1]) for (const side of [-1, 1]) for (let u = 14 + r() * 3; u < 125; u += r.range(2.4, 5)) {
+        if (r() < 0.35) continue; // gaps between the stands
+        const ds = sg * (16.2 + r() * 1.1), uu = side * u, n = 1 + (r() < 0.4 ? 1 : 0);
+        for (let k = 0; k < n; k++) { const p = xw(ds + sg * r() * 0.6, uu + (r() - 0.5) * 0.9, wy + 0.7); const m = new THREE.Matrix4().makeRotationY(r() * 6.28); m.setPosition(p[0], p[1], p[2]); P.tuft(G, m, r, 'grass', r.range(1.9, 2.8)); }
+      }
+    }
     yield;
     // trees along both banks: a sakura tunnel on the avenue, a few broad trees in the countryside
     for (const ds of [-18, 18]) for (const side of [-1, 1]) {

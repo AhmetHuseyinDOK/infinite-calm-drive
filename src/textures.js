@@ -534,6 +534,25 @@ export function buildAtlas() {
     rect(a, 0, 0, w, 7, '#e9ebee'); rect(a, 0, 6, w, 2, 'rgba(60,70,80,0.5)'); rect(a, 0, h - 6, w, 6, '#d5d8dc');
     for (let x = 3; x < w; x += 9) { rect(a, x, 7, 3, h - 13, '#e2e5e9'); rect(a, x + 2, 7, 1, h - 13, 'rgba(70,80,90,0.45)'); }
   });
+  // 護岸: a river's low-water revetment of concrete blocks laid diagonally (間知ブロック) — mortar joints, each block its own
+  // grey, wet and darker along the bottom (the waterline), a little moss there, a cast coping along the top. Own rng
+  A.add('gogan', 256, 224, (a, e, w, h) => {
+    const gr = rng(4242);
+    rect(a, 0, 0, w, h, '#3d3f3c');
+    const B = 38, sq = B / Math.SQRT2;
+    a.save(); a.beginPath(); a.rect(0, 22, w, h - 22); a.clip();
+    for (let j = -2; j * sq < h + B; j++) for (let i = -2; i * B < w + B; i++) { // diamonds on a 45° lattice
+      const cx = i * B + (j % 2 ? B / 2 : 0), cy = 22 + j * sq, g = 0.52 + gr() * 0.17, wet = Math.min(1, Math.max(0, (cy - h * 0.55) / (h * 0.4)));
+      const v = Math.round(255 * g * (1 - 0.38 * wet)), col = `rgb(${v - 4},${v - 2},${v - 9})`;
+      a.fillStyle = col; a.beginPath(); a.moveTo(cx, cy - sq + 3.5); a.lineTo(cx + sq - 3.5, cy); a.lineTo(cx, cy + sq - 3.5); a.lineTo(cx - sq + 3.5, cy); a.closePath(); a.fill();
+      a.fillStyle = 'rgba(255,255,255,0.12)'; a.beginPath(); a.moveTo(cx, cy - sq + 3.5); a.lineTo(cx + sq - 3.5, cy); a.lineTo(cx, cy); a.closePath(); a.fill(); // lit upper faces
+      if (wet > 0.3 && gr() < 0.5) { a.fillStyle = `rgba(70,96,52,${0.25 + 0.3 * gr()})`; a.beginPath(); a.arc(cx + (gr() - 0.5) * 10, cy + 6, 4 + gr() * 6, 0, 7); a.fill(); } // moss
+    }
+    a.restore();
+    vgrad(a, 0, h * 0.55, w, h * 0.45, [[0, 'rgba(26,32,28,0)'], [1, 'rgba(26,32,28,0.55)']]); // the waterline: wet, darker
+    rect(a, 0, 0, w, 22, '#8c8d87'); rect(a, 0, 18, w, 4, 'rgba(0,0,0,0.3)'); rect(a, 0, 0, w, 3, 'rgba(255,255,255,0.2)'); // the coping
+    grain(a, A, w, h, 0.12);
+  });
   return A;
 }
 

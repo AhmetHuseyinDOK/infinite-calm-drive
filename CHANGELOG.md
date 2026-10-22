@@ -2,6 +2,28 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-22 · 18:xx — Graphics pass 6: the car gets a face
+- **The car's front looks like a car.** Head-on, the car was a blank mint-green box with a windscreen: no lights, no
+  grille, no bumper. That is exactly what the X player card's film camera shows when the car comes down the road
+  toward a roadside camera. Now it has:
+  - round headlamps in dark surrounds at the bonnet's corners;
+  - a slim black grille between them and amber indicators below;
+  - a black front bumper with an air intake and a yellow kei number plate;
+  - wipers parked at the foot of the windscreen.
+  At night the headlamps glow with the headlights on, so the car coming toward you reads as a car at night, not a dark
+  box behind a light beam.
+- Tried and dropped: woods on the coast's hillsides. The cheap version read as a dark band of shadowed grass, and the
+  mountain pass's crown pattern looked like flat green paving up close. The grassy coastal hills stay as they were.
+- How: geometry on the car's existing materials, plus one small emissive headlamp material that reuses the tail lamps'
+  shader program. The car is 7,436 → 9,556 triangles and 9 → 10 meshes; the lamps cast no shadow.
+- Cost: none measurable.
+  - GPU against the live build (alternating order): country noon +0.21 ms, country night −0.03; the live build against
+    itself read −0.23 ± 0.8.
+  - Phone +0.41 (8 rounds, −1.6 to +1.9), but the phone profile compared with itself read +1.47 right now, so phone
+    cross-build numbers were noise this hour.
+  - 54 programs, none compiled mid-drive; every quality level compiles. Flat out: 0 world-build spikes against 1 on
+    live. Startup 2.7 s; embed mode still starts on tap.
+
 ## 2026-10-22 · 17:xx — Graphics pass 5: shops you can tell apart, and proper tiled roofs
 - **Shop windows show what each shop sells.** Every glass shopfront used to show the same shelves of coloured dots, so
   the whole street looked like one store repeated. Now some of them are:

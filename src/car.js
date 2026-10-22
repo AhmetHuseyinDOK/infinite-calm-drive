@@ -69,6 +69,7 @@ export function makeCar() {
   const mTail = new THREE.MeshToonMaterial({ color: '#c8303a', emissive: '#ff2a2a', emissiveIntensity: 0.4, gradientMap: GRAD });
   const mStop = new THREE.MeshToonMaterial({ color: '#4a1216', emissive: '#ff2a2a', emissiveIntensity: 0, gradientMap: GRAD }); // high-mount stop lamp (same program as mTail)
   const mAmber = new THREE.MeshToonMaterial({ color: '#f0a040', emissive: '#ff9a30', emissiveIntensity: 0.2, gradientMap: GRAD });
+  const mLamp = new THREE.MeshToonMaterial({ color: '#dfe4ea', emissive: '#fff4dc', emissiveIntensity: 0.15, gradientMap: GRAD }); // headlamps (mTail's program)
   const mPlate = new THREE.MeshBasicMaterial({ map: plateTexture() });
   // collect parts per material, then merge → ~9 draw calls for the whole car
   const parts = new Map(), wheels = []; let unsprung = false;
@@ -115,6 +116,23 @@ export function makeCar() {
   add(new RoundedBoxGeometry(1.52, 0.22, 0.22, 2, 0.07), mTrim, 0, 0.42, -1.62);
   add(new THREE.BoxGeometry(0.24, 0.04, 0.05), mTrim, 0, 0.84, -1.69);
   add(new THREE.PlaneGeometry(0.34, 0.17), mPlate, 0, 0.72, -1.7, 0, Math.PI, 0);
+  // the front (it was a blank painted face — and it is what the X card's film camera shows coming down the road): round
+  // headlamps in dark surrounds at the bonnet's corners, a slim grille between them, amber indicators, a black bumper
+  // with an air intake and the number plate, and wipers parked at the foot of the windscreen
+  for (const s of [-1, 1]) {
+    add(new RoundedBoxGeometry(0.4, 0.26, 0.04, 2, 0.06), mTrim, s * 0.5, 0.99, 1.692);
+    add(new THREE.CylinderGeometry(0.105, 0.105, 0.03, 16), mLamp, s * 0.55, 0.99, 1.71, Math.PI / 2, 0, 0);
+    add(new THREE.CylinderGeometry(0.055, 0.055, 0.03, 12), mLamp, s * 0.38, 0.99, 1.708, Math.PI / 2, 0, 0);
+    add(new RoundedBoxGeometry(0.1, 0.06, 0.04, 2, 0.015), mAmber, s * 0.62, 0.79, 1.69);
+    add(new THREE.BoxGeometry(0.46, 0.014, 0.014), mDark, s * 0.25, 1.285, 1.085, -0.12, s * 0.12, 0);
+  }
+  add(new RoundedBoxGeometry(0.5, 0.12, 0.03, 2, 0.03), mDark, 0, 0.98, 1.694);
+  for (let k = 0; k < 3; k++) add(new THREE.BoxGeometry(0.46, 0.012, 0.012), mSeam, 0, 0.945 + k * 0.035, 1.712);
+  add(new RoundedBoxGeometry(1.52, 0.24, 0.22, 2, 0.07), mTrim, 0, 0.44, 1.62);
+  add(new THREE.BoxGeometry(0.7, 0.07, 0.02), mDark, 0, 0.4, 1.732);
+  // (the front plate is painted, not the unlit plate texture: nothing lights a front plate at night)
+  add(new THREE.BoxGeometry(0.34, 0.17, 0.01), part('#f0cc38', 0.3), 0, 0.66, 1.733);
+  add(new THREE.BoxGeometry(0.3, 0.05, 0.004), part('#2f5a2f', 0.1), 0, 0.64, 1.739);
   // the rear hatch's seam, red reflectors at the bumper's corners, the exhaust under it
   for (const s of [-1, 1]) { add(new THREE.BoxGeometry(0.012, 0.63, 0.008), mSeam, s * 0.55, 0.875, -1.693); add(new THREE.BoxGeometry(0.13, 0.045, 0.01), mRefl, s * 0.6, 0.44, -1.734); }
   add(new THREE.BoxGeometry(1.1, 0.012, 0.008), mSeam, 0, 0.56, -1.693);
@@ -130,7 +148,7 @@ export function makeCar() {
   unsprung = false;
   for (const [mat, list] of parts) {
     const mesh = new THREE.Mesh(mergeGeometries(list), mat);
-    mesh.castShadow = mat !== mGlass && mat !== mPlate && mat !== mStop; mesh.receiveShadow = true;
+    mesh.castShadow = mat !== mGlass && mat !== mPlate && mat !== mStop && mat !== mLamp; mesh.receiveShadow = true;
     inner.add(mesh);
   }
   { const mesh = new THREE.Mesh(mergeGeometries(wheels), mPaint); mesh.castShadow = mesh.receiveShadow = true; car.add(mesh); }
@@ -181,7 +199,7 @@ export function makeCar() {
         wiper.rotation.z = 0.18 + a * 2.5;
         if (rain <= 0.15 && p >= 0.5) wiperT = 0;
       }
-      head.intensity = night * 60;
+      head.intensity = night * 60; mLamp.emissiveIntensity = 0.15 + night * 2.6; // (the lamps glow when the headlights are on)
     },
   };
 }

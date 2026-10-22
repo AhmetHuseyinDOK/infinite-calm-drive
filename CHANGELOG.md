@@ -2,6 +2,24 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-22 · 19:xx — Graphics pass 7: real guardrails along the coast and the mountain pass
+- **ガードレール that look like the real thing.** The guardrails on the coast road and the mountain pass, right beside the
+  car in most of those frames, were a single flat white plank on square sticks. Now they're the corrugated steel W-beam
+  you see on every Japanese road:
+  - two rounded bulges with a valley between them, so the rail catches the light in long bright and dark bands that
+    follow the road's curves;
+  - round steel posts set behind the beam;
+  - a small orange reflector in the valley at every other post.
+  The beam still throws its shadow line onto the road.
+- How: geometry only, built with the chunks (a four-facet profile, capless six-sided posts). The posts and reflectors
+  stay out of the shadow passes, so the rail now costs those passes less than the old one did. +2–2.5% triangles in
+  coast and mountain views; no shader or draw-call change.
+- Cost: none measurable.
+  - GPU against the live build (alternating order, 8 rounds): coast 23.01 → 22.99 ms (+0.24 median, while the live build
+    against itself read +0.34), mountains 28.76 → 28.88 (+0.17), phone coast −0.37.
+  - 54/55 programs as before, none compiled mid-drive; every quality level compiles. Flat out along the coast and the
+    pass, nothing missing. Startup 2.9 s; embed mode still starts on tap.
+
 ## 2026-10-22 · 18:xx — Graphics pass 6: the car gets a face
 - **The car's front looks like a car.** Head-on, the car was a blank mint-green box with a windscreen: no lights, no
   grille, no bumper. That is exactly what the X player card's film camera shows when the car comes down the road

@@ -8,6 +8,7 @@ import { rng, hash2, clamp, sstep } from './util.js';
 import { S_WRAP, groundMaterialFor, PROP_DEPTH } from './materials.js';
 
 export const CH = 60;
+const WBEAM = [[0.5, 0.055], [0.6, 0.075], [0.67, 0.025], [0.74, 0.075], [0.84, 0.055]]; // guardrail profile (m up, m out)
 const NEAR = [0.7, 0.9, 1.45, 1.5, 1.9, 2.0, 2.1, 2.65, 3.05, 3.4]; // 1.45: just outside a tunnel tube's wall
 const FAR = [7, 9, 11.5, 14.5, 18, 23, 29, 36, 45, 56, 70, 86, 104, 124, 140, 160, 185, 215];
 const POLE_SP = 32;
@@ -648,19 +649,27 @@ export class World {
     }
   }
 
+  // ガードレール: a corrugated W-beam (two bulges and a valley, folded edges) on round posts behind it, with an orange
+  // reflector in the valley at every other post. The facets catch the light in bands, as a real one does (it used to be
+  // one flat strip on square sticks)
   guardrail(G, sa, sb, world, road, rwAt) {
     G.color.setM(new THREE.Matrix4());
-    const n = Math.max(1, Math.round((sb - sa) / 2));
+    const n = Math.max(1, Math.round((sb - sa) / 2)), RAIL = P.PAL.rail, BACK = [0.62, 0.64, 0.66], POST = [0.74, 0.76, 0.79], REFL = [0.95, 0.55, 0.16];
     for (let i = 0; i < n; i++) {
       const s = sa + ((sb - sa) * i) / n, t = sa + ((sb - sa) * (i + 1)) / n;
       const ua = -(rwAt(s) + 0.95), ub = -(rwAt(t) + 0.95), ya = road(s), yb = road(t);
-      const p = (ss, u, y) => world(ss, u, y);
-      const A0 = p(s, ua, ya + 0.52), A1 = p(t, ub, yb + 0.52), B0 = p(s, ua, ya + 0.84), B1 = p(t, ub, yb + 0.84);
-      // road-facing beam (faces +R because it sits on the left)
-      G.color.quad(A0, A1, B1, B0, P.PAL.rail);
-      G.color.quad(A1, A0, B0, B1, [0.62, 0.64, 0.66]);
-      const q = world(s, ua - 0.05, ya);
-      G.color.box(q[0] - 0.05, ya, q[2] - 0.05, q[0] + 0.05, ya + 0.8, q[2] + 0.05, [0.7, 0.72, 0.75]);
+      for (let k = 0; k < WBEAM.length - 1; k++) { // the profile: (height, how far it stands out towards the road)
+        const [h0, d0] = WBEAM[k], [h1, d1] = WBEAM[k + 1];
+        G.color.quad(world(s, ua + d0, ya + h0), world(t, ub + d0, yb + h0), world(t, ub + d1, yb + h1), world(s, ua + d1, ya + h1), RAIL);
+      }
+      G.color.quad(world(t, ub + 0.05, yb + 0.5), world(s, ua + 0.05, ya + 0.5), world(s, ua + 0.05, ya + 0.84), world(t, ub + 0.05, yb + 0.84), BACK);
+      // posts and reflectors cast no shadow (the beam's shadow line on the road is the one you see): with them out of the
+      // shadow passes the rail costs those passes less than the old flat one did
+      G.color.noShadow = true;
+      const q = world(s, ua - 0.04, ya);
+      G.color.cyl(q[0], ya, q[2], 0.055, 0.055, 0.8, 6, POST, false); // (no caps: never seen)
+      if (Math.round(s / 2) % 2 === 0) { const c0 = world(s, ua + 0.035, ya + 0.64), c1 = world(s + 0.09, ua + 0.035, ya + 0.64); G.color.quad(c1, c0, [c0[0], c0[1] + 0.07, c0[2]], [c1[0], c1[1] + 0.07, c1[2]], REFL); }
+      G.color.noShadow = false;
     }
   }
 

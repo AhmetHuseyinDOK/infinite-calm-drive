@@ -611,7 +611,9 @@ function windowLights(sh) {
   sh.uniforms.uLightsOn = U.uLightsOn;
   sh.vertexShader = sh.vertexShader
     .replace('#include <common>', '#include <common>\nattribute float aLit; uniform float uLightsOn; varying float vOn;')
-    .replace('#include <begin_vertex>', '#include <begin_vertex>\nvOn = aLit < 0.002 ? 1.0 : clamp((uLightsOn - aLit) * 12.0, 0.0, 1.0);');
+    // aLit: 0 always on; 6/255 a shop's interior, warm by day too; 12/255 a neon sign, bright by day too (the shopping
+    // street glows in daylight, as in the reference art); 24…255 a home window switching on at its own moment at dusk
+    .replace('#include <begin_vertex>', '#include <begin_vertex>\nvOn = aLit < 0.002 ? 1.0 : aLit < 0.035 ? mix(3.0, 1.0, uLightsOn) : aLit < 0.08 ? mix(16.0, 1.25, uLightsOn) : clamp((uLightsOn - aLit) * 12.0, 0.0, 1.0);');
   sh.fragmentShader = sh.fragmentShader
     .replace('#include <common>', '#include <common>\nvarying float vOn;')
     .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance *= vOn;');
@@ -672,7 +674,7 @@ export function makeMaterials(atlasTex, folTex) {
   M.color = painterly(new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: GRAD }), 1.6, 0.1, 'color-v3', contactAO);
   M.atlas = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: GRAD, map: atlasTex.map, emissiveMap: atlasTex.emissive, emissive: 0xffffff, emissiveIntensity: 0.1, alphaTest: 0.5 });
   M.atlas.onBeforeCompile = sh => { contactAO(sh); windowLights(sh); worldShade(sh); };
-  M.atlas.customProgramCacheKey = () => 'atlas-v4';
+  M.atlas.customProgramCacheKey = () => 'atlas-v5';
   M.foliage = painterly(new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: GRAD_SOFT }), 2.6, 0.24, 'foliage-v2');
   M.lamp = new THREE.MeshBasicMaterial({ color: 0xf0eee6 });
   M.sig = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.15, 1.7, 1.1) }); // a lit 青 signal lamp

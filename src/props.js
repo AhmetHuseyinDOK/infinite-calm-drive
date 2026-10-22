@@ -32,7 +32,10 @@ export function sub(M, x, y, z, yaw = 0) {
 // at dusk the town lights up one window at a time: a lit home window ('win…L' / 'win…C') switches on at its own moment —
 // a byte hashed from where it is (geom.js aLit, materials.js windowLights); shops, signs and the konbini (0) are always on
 const litOf = (g, cell, a, b) => {
-  if (!g.hasLit || cell.charCodeAt(0) !== 119) return; const k = cell.charCodeAt(cell.length - 1); if (k !== 76 && k !== 67) return;
+  if (!g.hasLit) return; const c0 = cell.charCodeAt(0);
+  if (c0 === 118 && cell.charCodeAt(1) === 115) { g.litV = 12; return; } // a neon vertical sign: glows by day too
+  if (c0 === 115 && cell.startsWith('shop_')) { const c5 = cell[5]; if ((c5 === 'g' && cell[6] === 'l') || c5 === 'd' || c5 === 'k' || c5 === 'c' || c5 === 'n') g.litV = 6; return; } // a lit shop: warm by day too
+  if (c0 !== 119) return; const k = cell.charCodeAt(cell.length - 1); if (k !== 76 && k !== 67) return;
   const h = Math.sin(a * 12.9898 + b * 78.233 + g.e[12] * 0.731 + g.e[14] * 0.513) * 43758.5453; g.litV = 24 + Math.floor((h - Math.floor(h)) * 231);
 };
 const fq = (g, x0, x1, y0, y1, z, cell, c = W1) => { litOf(g, cell, x0 + z, y0); g.quad([x1, y0, z], [x0, y0, z], [x0, y1, z], [x1, y1, z], c, uv(cell)); g.litV = 0; };
@@ -397,7 +400,7 @@ function shopHouse(G, M, r, s) {
     c.quad([w / 2 - 0.2, y - 0.35, -1.1], [-w / 2 + 0.2, y - 0.35, -1.1], [-w / 2 + 0.2, y, -0.02], [w / 2 - 0.2, y, -0.02], col);
     c.quad([w / 2 - 0.2, y - 0.6, -1.1], [-w / 2 + 0.2, y - 0.6, -1.1], [-w / 2 + 0.2, y - 0.35, -1.1], [w / 2 - 0.2, y - 0.35, -1.1], mulC(col, 0.85));
   }
-  if (floors >= 2 && r() < 0.65) { const vx = (r() < 0.5 ? 1 : -1) * (w / 2 - 0.35); vsign(G, vx, fh0 + 0.3, Math.min(H - 0.15, fh0 + 2.8), r); }
+  if (floors >= 2 && r() < 0.85) { const vx = (r() < 0.5 ? 1 : -1) * (w / 2 - 0.35); vsign(G, vx, fh0 + 0.3, Math.min(H - 0.15, fh0 + 2.8), r); }
   for (let f = 1; f < floors; f++) {
     if (r() < 0.4) { // little balcony with a metal railing
       const i = Math.floor(r() * bays), xa = x0 + i * bw + 0.15, xb = x0 + (i + 1) * bw - 0.15, y = fy[f];
@@ -429,7 +432,11 @@ function machiya(G, M, r, s) {
   }
   const fy = [0, fh0]; for (let f = 1; f < floors; f++) fy.push(fh0 + f * fh);
   for (let f = 1; f < floors; f++) for (let i = 0; i < bays; i++) fq(a, x0 + i * bw, x0 + (i + 1) * bw, fy[f], fy[f + 1], 0, litCell('win4', r(), litP), W1);
-  addSides(a, w, d, fy, C('#9a7a62'), r, litP);
+  { // the side walls: timber boards, and lattice windows on the floors above (seen down every side street)
+    const segs = Math.max(1, Math.round(d / 3)), sd = d / segs;
+    for (const sx of [-1, 1]) for (let f = 0; f < fy.length - 1; f++) for (let j = 0; j < segs; j++)
+      (sx > 0 ? pxq : nxq)(a, (sx * w) / 2, j * sd, (j + 1) * sd, fy[f], fy[f + 1], f > 0 && r() < 0.45 ? litCell('win4', r(), litP) : 'woodwall', W1);
+  }
   c.quad([-w / 2, 0, d], [w / 2, 0, d], [w / 2, H, d], [-w / 2, H, d], C('#6a5240'));
   for (const x of [x0, -x0]) c.box(x - 0.09, 0, -0.12, x + 0.09, H, 0.02, DARK); // corner posts
   const { RC, k } = gableRoof(G, s, w, d, H, r, true);
@@ -444,7 +451,8 @@ function machiya(G, M, r, s) {
   // warm bulbs on short flexes under the canopy (lit by day too, as in a shopping street)
   G.sodium.setM(M);
   for (let i = 0; i < bays; i++) { const x = x0 + (i + 0.5) * bw; c.box(x - 0.008, y0 - 0.02, -0.62, x + 0.008, cy - drop * 0.6, -0.6, DARK); G.sodium.box(x - 0.06, y0 - 0.16, -0.67, x + 0.06, y0 - 0.04, -0.55, null); }
-  if (r() < 0.5) { // a fabric awning under the board
+  let awn = false;
+  if (r() < 0.5) { awn = true; // a fabric awning under the board
     const col = r.pick(AWNINGS), y = y0 - 0.12;
     c.quad([w / 2 - 0.2, y - 0.32, -0.95], [-w / 2 + 0.2, y - 0.32, -0.95], [-w / 2 + 0.2, y, -0.02], [w / 2 - 0.2, y, -0.02], col);
     c.quad([w / 2 - 0.2, y - 0.55, -0.95], [-w / 2 + 0.2, y - 0.55, -0.95], [-w / 2 + 0.2, y - 0.32, -0.95], [w / 2 - 0.2, y - 0.32, -0.95], mulC(col, 0.85));
@@ -462,7 +470,14 @@ function machiya(G, M, r, s) {
       for (let fx = xc - bl / 2 + 0.2; fx < xc + bl / 2 - 0.1; fx += 0.32) cards(G, [fx, yb + 0.95, zr - 0.11], fx, yb + 1.05, zr - 0.11, 0.26, r() < 0.65 ? 'sakura' : 'flowers', 3, r, [1, 0.92, 0.96], [0.7, 0.55, 0.62], [yb + 0.9, yb + 1.3]);
     }
   }
-  if (floors >= 2 && r() < 0.6) { const vx = (r() < 0.5 ? 1 : -1) * (w / 2 - 0.35); vsign(G, vx, fh0 + 0.6, Math.min(H - 0.2, fh0 + 2.7), r); }
+  if (floors >= 2 && r() < 0.9) { const sd = r() < 0.5 ? 1 : -1; vsign(G, sd * (w / 2 - 0.35), fh0 + 0.6, Math.min(H - 0.2, fh0 + 2.7), r); if (w > 7 && r() < 0.35) vsign(G, -sd * (w / 2 - 0.35), fh0 + 0.8, Math.min(H - 0.2, fh0 + 2.5), r); }
+  // paper lanterns (提灯) glowing at the canopy's edge: a pair by a noren or a café's door, now and then one elsewhere
+  { const pair = kinds.includes('noren') || kinds.includes('cafe'), nL = awn ? 0 : pair ? 2 : r() < 0.3 ? 1 : 0; // (not where an awning hangs)
+    G.sodium.setM(M);
+    for (let j = 0; j < nL; j++) { const x = nL === 2 ? (j ? 1 : -1) * Math.min(1.4, w / 2 - 0.6) : (r() - 0.5) * (w - 1.5), y = y0 - 0.5;
+      c.box(x - 0.006, y + 0.42, -cd + 0.12, x + 0.006, y0, -cd + 0.14, DARK);
+      G.sodium.cyl(x, y, -cd + 0.13, 0.11, 0.16, 0.18, 10, null, false); G.sodium.cyl(x, y + 0.18, -cd + 0.13, 0.16, 0.11, 0.18, 10, null, false); // a barrel of paper
+      c.cyl(x, y - 0.035, -cd + 0.13, 0.1, 0.1, 0.04, 8, DARK); c.cyl(x, y + 0.355, -cd + 0.13, 0.1, 0.1, 0.04, 8, DARK); } }
   // pots of plants along the shopfront
   for (let x = x0 + 0.45 + r() * 0.4; x < -x0 - 0.3; x += 0.7 + r() * 1.3) if (r() < 0.7) pottedPlant(G, M, r, x, -0.4);
   G.color.setM(M); G.atlas.setM(M);

@@ -2,6 +2,34 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-23 · 01:xx — Restyle 2: the shopping street glows (neon, lanterns, lit shops, timber walls)
+- Toward the reference's shopping street, where signs and shops glow even in daylight:
+  - **Vertical signs are neon light boxes.** A milky panel lit from inside carries a neon tube bent round its edge
+    (pink, violet, cyan, red, green or amber) and the name in strong ink; three in ten are coloured panels with glowing
+    white lettering. They glow by day and blaze at night. 9 in 10 shophouses carry one, wider ones sometimes a second,
+    and 85% of shop buildings.
+  - **Shop interiors are warm by day too.** By day they give off a third of their evening light, so the shopfronts
+    glow as in the reference instead of looking switched off.
+  - **Paper lanterns (提灯)** glow at the canopy edge: a pair by a noren or café door, now and then one elsewhere, and
+    none where an awning hangs.
+  - **Shophouse side walls are timber.** Down every side street they were flat brown slabs; now they are weathered
+    oiled boards (a new texture cell) with lattice windows on the floors above.
+- How: the atlas shader's per-vertex light switch (`aLit`) already had 0 = always on and 24–255 = a home window
+  switching on at dusk. Two unused codes now mean "shop, warm by day" (×3 by day) and "neon, bright by day" (×16 by
+  day, enough to cross the bloom threshold). It is a vertex-shader branch in the same program, so the program count is
+  still 54.
+- Also fixed: a per-frame `new THREE.Color` (the street lamps' night colour) is now one constant.
+- Atlas check: a per-cell diff against HEAD shows only the 10 sign cells changed; `woodwall` is new. A first try named
+  it `wood`, which silently replaced an existing cell — caught by the diff. The vending machines' glow layer differs
+  only by sub-pixel anti-aliasing.
+- Cost, against live (Restyle 1):
+  - **GPU, desktop** (interleaved A/B; A/A control +0.90): city start −1.19 ms, dusk −2.07 ms, at 600 m +1.03 ms (mixed
+    signs), at 950 m −0.53 ms. No measurable change; the random layout of the street shifted a little.
+  - **GPU, phone** (loads compared sorted pairwise): city start −2.3 ms (378k vs 432k triangles in view: a different
+    layout), at 950 m within ±0.8 ms (310k vs 288k triangles: more signs and lanterns).
+  - **World building** flat out through the city: 428–449 ms/km vs 459–615; worst step 11–15 ms vs 15–20.
+  - 54 programs at every quality level, none compiled mid-drive. No console errors. Embed mode starts on tap.
+
 ## 2026-10-23 · 00:xx — Restyle 1: the car, the camera and a shopping street (toward the reference art)
 - **New direction (set by the user):** match four painted anime reference images (a shopping street, a sakura avenue,
   a coast road with tetrapods, a countryside road), not "more real low poly". The images are kept locally, out of git.

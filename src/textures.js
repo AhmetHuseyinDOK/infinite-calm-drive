@@ -443,12 +443,24 @@ export function buildAtlas() {
     e.fillStyle = bg; e.fillRect(0, 0, w, h); e.globalAlpha = 0.9; textFit(e, nm, w / 2, h / 2 + 2, w * 0.7, 50, fg, 900); e.globalAlpha = 1;
   });
   // ---------------- vertical protruding signs (0.6 m × 2.4 m) ----------------
+  // neon light boxes, as on the reference art's shopping street: a milky panel lit from inside, a neon tube bent round its
+  // edge (pink, violet, cyan, red, green, amber) and the name in strong ink; three in ten are coloured panels with white
+  // lettering. They glow by day too (props.js gives them their own light code)
+  const NEON = ['#ff4fd8', '#b45cff', '#3fd8ff', '#ff4a5a', '#4dff9a', '#ffc94a'];
+  const rr = (g, x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
   for (let i = 0; i < 10; i++) A.add('vs' + i, 72, 288, (a, e, w, h) => {
-    const [bg, fg] = SIGN_COLS[(i * 3 + 1) % SIGN_COLS.length], name = VSIGNS[i % VSIGNS.length];
-    rect(a, 0, 0, w, h, bg); a.strokeStyle = 'rgba(0,0,0,0.3)'; a.lineWidth = 4; a.strokeRect(2, 2, w - 4, h - 4);
-    vText(a, name, w / 2, 12, h - 12, 56, fg, 900);
-    grain(a, A, w, h, 0.08);
-    rect(e, 0, 0, w, h, bg === '#fff' ? '#e8e8e8' : bg); vText(e, name, w / 2, 12, h - 12, 56, fg === '#fff' ? '#fff' : fg, 900);
+    const name = VSIGNS[i % VSIGNS.length], neon = NEON[(i * 5 + 2) % NEON.length], col = i % 10 === 3 || i % 10 === 6 || i % 10 === 8;
+    const [cbg, cfg] = SIGN_COLS[(i * 3 + 1) % SIGN_COLS.length], bg = col ? (cbg === '#fff' || cbg === '#f5efe0' ? '#2b2b33' : cbg) : '#fbf7ef';
+    const fg = col ? '#ffffff' : ['#c41e2a', '#1f2a6e', '#222226', '#b8186a'][i % 4];
+    rect(a, 0, 0, w, h, '#2a2b30'); rr(a, 3, 3, w - 6, h - 6, 8); a.fillStyle = bg; a.fill();
+    vgrad(a, 3, 3, w - 6, h - 6, [[0, 'rgba(255,255,255,0.12)'], [1, 'rgba(0,0,0,0.08)']]);
+    a.save(); rr(a, 8, 8, w - 16, h - 16, 6); a.strokeStyle = neon; a.globalAlpha = 0.55; a.lineWidth = 7; a.stroke(); a.globalAlpha = 1; a.strokeStyle = '#fff6fb'; a.lineWidth = 2.2; a.stroke(); a.restore();
+    vText(a, name, w / 2, 18, h - 18, 50, fg, 900);
+    grain(a, A, w, h, 0.06);
+    // the glow: the panel lit from behind (dimmer), the tube bright, white lettering glowing on a coloured panel
+    rect(e, 0, 0, w, h, '#000'); rr(e, 3, 3, w - 6, h - 6, 8); e.fillStyle = col ? '#3a3a3e' : '#4a4844'; e.fill();
+    e.save(); rr(e, 8, 8, w - 16, h - 16, 6); e.strokeStyle = neon; e.lineWidth = 7; e.stroke(); e.strokeStyle = '#ffffff'; e.lineWidth = 2.5; e.stroke(); e.restore();
+    vText(e, name, w / 2, 18, h - 18, 50, col ? '#ffffff' : '#000000', 900);
   });
   // ---------------- rooftop billboards ----------------
   const BB = [['夏祭り', '8月10日', '#2f6fd8'], ['ひまわり不動産', '駅徒歩3分', '#f0a020'], ['おいしい牛乳', '毎朝とどけます', '#3aa860'], ['花火大会', '河川敷にて', '#203070']];
@@ -648,6 +660,20 @@ export function buildAtlas() {
     rect(a, 0, h - 10, w, 10, '#5e412e'); rect(a, 0, h - 10, w, 2, 'rgba(255,225,190,0.18)');
     for (let x = 4; x < w; x += 12) { rect(a, x, 9, 5, h - 19, '#634632'); rect(a, x, 9, 1.2, h - 19, 'rgba(255,225,190,0.18)'); rect(a, x + 4, 9, 1, h - 19, 'rgba(20,10,5,0.4)'); }
     grain(a, A, w, h, 0.15);
+  });
+  // a 町家's side wall: weathered horizontal boards (dark, oiled), the odd board lighter or patched (it tiles every 3 m,
+  // so nothing in it may stand out). Its own rng (the shared one would repaint every later cell)
+  A.add('woodwall', B, B, (a, e, w, h) => {
+    const q = rng(5151);
+    rect(a, 0, 0, w, h, '#5e4130');
+    for (let y = 0; y < h; y += 16) {
+      const k = q();
+      rect(a, 0, y, w, 16, k < 0.15 ? '#6b4b37' : k < 0.3 ? '#553a2b' : '#5e4130');
+      rect(a, 0, y, w, 2, 'rgba(255,220,180,0.12)'); rect(a, 0, y + 14, w, 2, 'rgba(15,8,4,0.45)');
+      for (let x = q() * 80; x < w; x += 60 + q() * 90) rect(a, x, y + 2, 1.5, 12, 'rgba(15,8,4,0.35)'); // board ends
+    }
+    vgrad(a, 0, 0, w, h, [[0, 'rgba(255,240,220,0.06)'], [1, 'rgba(0,0,0,0.16)']]);
+    grain(a, A, w, h, 0.2);
   });
   return A;
 }

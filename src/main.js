@@ -299,6 +299,7 @@ async function main() {
   const meteor = { p: -1, a: new THREE.Vector3(), b: new THREE.Vector3(), next: 5 };
   // the car's motion as its suspension feels it (see car.update): sideways / fore-aft acceleration, the road surface, rail jolts
   const CM = { lat: 0, lon: 0, road: 0, jolt: 0, kick: 0, u: st.u, vu: 0, v: 0, s: st.s, yaw: 0, brake: 0, rk: NaN, rb: null };
+  const LAMP_NIGHT = new THREE.Color(3.6, 2.8, 1.8); // (the street lamps' night colour: one object, not one per frame)
   const RAILS = [-2.5335, -1.4665, 1.4665, 2.5335], AXLES = [1.12, -1.12]; // rails of a crossing's two tracks (from sx); axles (from the car's centre)
   const JOINTS = [-24.5, 24.5]; // a river bridge's expansion joints (from its centre, chunks.js placeRiver)
   function frame(now) {
@@ -556,7 +557,7 @@ async function main() {
     // home lights come on one by one over the two hours after sunset (18:00 → ~20:00 on the clock, ~40 s of driving) and
     // go off one by one at dawn; on a dark rainy day some are on in the daytime too
     U.uLightsOn.value = LIGHTS_ON >= 0 ? LIGHTS_ON : Math.max(sstep(0.02, 0.75, TOD.night), 0.3 * ov);
-    M.lamp.color.setRGB(0.85, 0.85, 0.8).lerp(new THREE.Color(3.6, 2.8, 1.8), nightK);
+    M.lamp.color.setRGB(0.85, 0.85, 0.8).lerp(LAMP_NIGHT, nightK);
     M.pool.opacity = nightK * 0.42 * (1 + 0.8 * wet);
     { // the two lights that light the car most (street lamps, lit shop windows, tunnel lamps) light its paint and glass
       // (car.js); lights sit in their chunk's frame. Sodium orange inside tunnels, which are lit by day too

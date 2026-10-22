@@ -2,6 +2,35 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-22 · 12:xx — Graphics pass 1: rice paddies that look like water
+- *(From now on the passes focus on the graphics: more real, keeping the anime style.)*
+- **Flooded rice paddies look like real water.** They used to be painted in the sky's colour and then reflect at least 40%
+  of the sky at every angle, so even right beside the road they looked like pale ice or plastic sheets. Now they follow
+  the real behaviour of shallow water:
+  - Looking down beside the road you see through it: warm grey-brown water over the mud, with rows of young rice
+    seedlings (田植え後). They are small tufts a little off the grid, now and then missing, and at a slant they merge
+    into rows that run off towards the horizon.
+  - The sky's reflection follows the Fresnel law for water: about 2% straight down, ~20% beside the road, rising to a
+    mirror of the sky and clouds in the distance.
+  - At sunset the near paddies stay dark and the pink sky shows only farther out, which gives the fields depth instead
+    of one flat pink sheet.
+- **No more moiré on the rice fields.** The planting rows on every field now fade to their average once they're thinner
+  than ~2 pixels. Before, they crawled in moiré bands across the far fields while driving.
+- Cost: at most ~0.15 ms on desktop in paddy-heavy views, nothing measurable on the phone.
+  - The new paddy code against the old in the same page (both programs compiled, flipped every 3 s), alongside a
+    control that flips two identical programs:
+    - Desktop: +0.04 / +0.25 / +0.20 ms at a paddy-heavy spot (control −0.31 to +0.28), and −0.03 / +0.11 / +0.08
+      at another.
+    - Phone profile: +0.16 / +0.01 / −0.03 (control −0.50 to +1.07) and +0.08 / +0.09 / +0.03.
+  - GPU against the live build (alternating order): country noon 21.66 → 21.47 ms, country sunset 29.39 → 29.18. The
+    phone reading (+1.26 ms) was not borne out by the in-page measurement at the same spot.
+  - 54 programs, none compiled mid-drive; every quality level compiles. Flat out: 3 world-build spikes vs 2 on live,
+    nothing missing. Startup 3.1 s; embed mode still starts on tap.
+- Tried and dropped this hour:
+  - finer asphalt grain with resurfaced patches and lane oil streaks: barely visible, +0.2 ms in the city;
+  - a sheen on dry asphalt towards a low sun: +0.05 ms always and +0.26 ms around sunrise and sunset, for a subtle
+    effect.
+
 ## 2026-10-22 · 11:xx — Realism pass 15: the town lights up one window at a time
 - **Home lights come on one by one at dusk.** Every lit window in town used to fade in at the same instant and the same
   rate, as if one switch ran the whole town. Now each home window has its own moment:

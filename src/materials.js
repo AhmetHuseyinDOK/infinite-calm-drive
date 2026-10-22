@@ -383,10 +383,26 @@ vec3 countryGround(float s, float u, float rw){
     float pu = a - (rw + 2.1);
     vec2 q = vec2(s/30.0, pu/17.0), id = floor(q), f = fract(q);
     float h = hash12(id + (u > 0.0 ? 31.0 : 0.0));
-    float rows = smoothstep(0.30, 0.48, abs(fract(pu/0.33) - 0.5));
+    // rows of rice 33 cm apart, hills 16 cm apart along them. Anti-aliased: once a row is narrower than ~2 pixels it
+    // fades to its average (the bare smoothstep used to crawl in moiré bands across the far fields as we drove)
+    vec2 cg = vec2(pu / 0.33, s / 0.16), cf = fract(cg) - 0.5;
+    float aa = clamp(max(fwidth(cg.x), fwidth(cg.y)) * 1.6 - 0.3, 0.0, 1.0);
+    float rows = mix(smoothstep(0.30, 0.48, abs(cf.x)), 0.4, aa);
     vec3 field = mix(L(vec3(0.47, 0.66, 0.24)), L(vec3(0.62, 0.76, 0.32)), h) * (0.88 + 0.14*rows);
-    vec3 water = mix(uSkyHor, L(vec3(0.55, 0.68, 0.75)), 0.3);
-    if (h < 0.28) { field = mix(water, field, rows*0.5); gWater = 1.0 - rows * 0.5; }
+    if (h < 0.28) {
+      // a flooded paddy after planting (田植え後): seedlings standing in muddy water. This is the light coming up through
+      // the water; MIRROR adds the sky's reflection by the Fresnel law — only ~20% looking down beside the road, a mirror
+      // towards the horizon. (The water used to be painted sky-blue *and* reflect at least 40%: pale ice sheets up close)
+      // each seedling hill is a small tuft a few cm across, a little off the grid and now and then missing; along the
+      // row they merge into lines at a slant, the way planted rows run off towards the horizon
+      vec3 vw = normalize(cameraPosition - vWP); float gz = 1.0 - vw.y; gz *= gz;
+      float hc = hash12(floor(cg) + 7.7), tx = abs(cf.x + (hc - 0.5) * 0.12), ty = abs(cf.y + (fract(hc * 31.0) - 0.5) * 0.25);
+      float tuft = (1.0 - smoothstep(0.05, 0.11, tx)) * (1.0 - smoothstep(0.18, 0.38, ty)) * step(0.08, fract(hc * 57.0));
+      float plant = clamp(mix(tuft, 0.1, aa) * (1.0 + 3.0 * gz), 0.0, 1.0); // at a slant the seedlings hide more water
+      vec3 mud = mix(L(vec3(0.47, 0.43, 0.31)), L(vec3(0.55, 0.49, 0.35)), fract(h * 7.3)); // shallow water over the mud
+      field = mix(mud, L(vec3(0.50, 0.68, 0.24)) * (0.9 + 0.2 * fract(h * 13.7)), plant);
+      gWater = 1.0 - plant;
+    }
     else if (h > 0.86) field = L(vec3(0.40, 0.52, 0.22)) * (0.88 + 0.16*rows);
     float ridge = max(max(step(f.x, 0.025), step(0.975, f.x)), max(step(f.y, 0.04), step(0.96, f.y)));
     gWater *= 1.0 - ridge;
@@ -486,8 +502,8 @@ if (gWater > 0.01) {
   float cl = smoothstep(0.5, 0.78, fbm2(R.xz / (R.y + 0.12) * 1.1 + 7.0));
   sky = mix(sky, mix(uSkyHor, vec3(1.0), 0.55) * (1.0 - 0.6 * uNight), cl * 0.55);
   sky += uSunCol * pow(max(dot(R, uSunDir), 0.0), 260.0) * 3.0 * (1.0 - uNight);
-  float fr = 0.4 + 0.6 * pow(1.0 - clamp(-V.y, 0.0, 1.0), 3.0);
-  outgoingLight = mix(outgoingLight, sky, clamp(gWater * fr, 0.0, 0.9));
+  float fi = 1.0 - clamp(-V.y, 0.0, 1.0), fi2 = fi * fi, fr = 0.02 + 0.98 * fi2 * fi2 * fi; // Fresnel (Schlick, water)
+  outgoingLight = mix(outgoingLight, sky, clamp(gWater * fr, 0.0, 0.95));
 }
 #endif`;
 
@@ -554,7 +570,7 @@ ${GROUND}`, WET + MIRROR, false);
     sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
 diffuseColor.rgb *= groundAlbedo();`);
   };
-  m.customProgramCacheKey = () => 'ground-v16-' + key;
+  m.customProgramCacheKey = () => 'ground-v17-' + key;
   return m;
 }
 

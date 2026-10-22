@@ -15,13 +15,32 @@ function plateTexture() {
   g.font = `800 58px ${f}`; g.fillText('あ 12-34', 128, 86);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
+// the glass: four cells side by side — 0 plain (windscreen, rear quarter windows), 1 the rear window, 2 a front side
+// window, 3 a sliding-door window — each tinted, with the cabin showing through as dark shapes: the rear seat's backrest
+// and headrests through the rear window (always in view behind the car), a headrest in each side window
+const GLASS_CELLS = 4;
 function glassTexture() {
-  const c = document.createElement('canvas'); c.width = 64; c.height = 128;
-  const g = c.getContext('2d'), gr = g.createLinearGradient(0, 0, 0, 128);
-  gr.addColorStop(0, '#9fbfe6'); gr.addColorStop(0.45, '#4a6690'); gr.addColorStop(1, '#1d2638');
-  g.fillStyle = gr; g.fillRect(0, 0, 64, 128);
-  g.fillStyle = 'rgba(255,255,255,0.35)'; g.beginPath(); g.moveTo(20, 0); g.lineTo(34, 0); g.lineTo(10, 128); g.lineTo(-4, 128); g.fill();
+  const W = 128, H = 128, c = document.createElement('canvas'); c.width = W * GLASS_CELLS; c.height = H;
+  const g = c.getContext('2d');
+  const rr = (x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); g.fill(); };
+  for (let i = 0; i < GLASS_CELLS; i++) {
+    const x0 = i * W, gr = g.createLinearGradient(0, 0, 0, H);
+    gr.addColorStop(0, '#9fbfe6'); gr.addColorStop(0.45, '#4a6690'); gr.addColorStop(1, '#1d2638');
+    g.fillStyle = gr; g.fillRect(x0, 0, W, H);
+    g.fillStyle = 'rgba(12,14,22,0.55)';
+    if (i === 1) { rr(x0 + 14, 84, 30, 50, 9); rr(x0 + 84, 84, 30, 50, 9); g.fillRect(x0 + 6, 112, W - 12, 16); rr(x0 + 52, 92, 24, 40, 7); } // rear seat: headrests, backrest; a front headrest beyond
+    if (i === 2) { rr(x0 + 62, 66, 44, 70, 12); g.fillRect(x0 + 50, 118, 70, 10); } // the driver's headrest and seat top
+    if (i === 3) { rr(x0 + 70, 78, 40, 60, 11); g.fillRect(x0 + 56, 120, 64, 8); }  // the rear seat's headrest
+    g.save(); g.beginPath(); g.rect(x0, 0, W, H); g.clip();
+    g.fillStyle = 'rgba(255,255,255,0.30)'; g.beginPath(); g.moveTo(x0 + 40, 0); g.lineTo(x0 + 68, 0); g.lineTo(x0 + 20, H); g.lineTo(x0 - 8, H); g.fill();
+    g.restore();
+  }
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+/** a glass plane's UVs onto one cell of the glass texture (flip: mirror it, for the other side of the car) */
+function glassCell(geo, cell, flip = false) {
+  const uv = geo.attributes.uv; for (let i = 0; i < uv.count; i++) { const u = uv.getX(i); uv.setX(i, (cell + (flip ? 1 - u : u)) / GLASS_CELLS); }
+  return geo;
 }
 
 export function makeCar() {
@@ -65,22 +84,48 @@ export function makeCar() {
   add(new RoundedBoxGeometry(1.48, 0.86, 3.38, 4, 0.15), mBody, 0, 0.77, 0);
   add(new RoundedBoxGeometry(1.42, 0.66, 2.6, 4, 0.17), mBody, 0, 1.5, -0.25);
   add(new RoundedBoxGeometry(1.38, 0.09, 2.5, 3, 0.04), mRoof, 0, 1.84, -0.25);
-  add(new THREE.PlaneGeometry(1.16, 0.5), mGlass, 0, 1.53, -1.556, 0, Math.PI, 0);
+  add(glassCell(new THREE.PlaneGeometry(1.16, 0.5), 1), mGlass, 0, 1.53, -1.556, 0, Math.PI, 0);
   add(new RoundedBoxGeometry(0.42, 0.045, 0.04, 2, 0.015), mStop, 0, 1.752, -1.578); // ハイマウントストップランプ along the top of the rear glass
+  const mDark = part('#16171b', 0), mSeam = part('#2b3134', 0.15), mRim = part('#b9bfc6', 0.9), mDish = part('#4d5258', 0.4), mRefl = part('#9a1c22', 0.6);
   for (const s of [-1, 1]) {
-    add(new THREE.PlaneGeometry(2.25, 0.46), mGlass, s * 0.712, 1.54, -0.2, 0, (s * Math.PI) / 2, 0);
+    // side windows, as on a tall kei car: front door, sliding rear door, rear quarter — split by a black B pillar and a
+    // body-coloured C pillar (it used to be one long glass strip), over a black rubber seal at the waistline
+    const ry = (s * Math.PI) / 2, flip = s < 0, xg = s * 0.712;
+    add(glassCell(new THREE.PlaneGeometry(0.94, 0.46), 2, flip), mGlass, xg, 1.54, 0.45, 0, ry, 0);
+    add(glassCell(new THREE.PlaneGeometry(0.62, 0.46), 3, flip), mGlass, xg, 1.54, -0.41, 0, ry, 0);
+    add(glassCell(new THREE.PlaneGeometry(0.5, 0.46), 0, flip), mGlass, xg, 1.54, -1.07, 0, ry, 0);
+    add(new THREE.BoxGeometry(0.012, 0.47, 0.085), mTrim, s * 0.716, 1.54, -0.06);
+    add(new THREE.BoxGeometry(0.014, 0.022, 2.3), mDark, s * 0.718, 1.305, -0.2);
+    // door seams (front door, sliding door), handles, the sliding door's rail
+    for (const [z, y0] of [[0.8, 0.64], [-0.06, 0.42], [-0.76, 0.64]]) add(new THREE.BoxGeometry(0.008, 1.19 - y0, 0.012), mSeam, s * 0.742, (y0 + 1.19) / 2, z);
+    add(new THREE.BoxGeometry(0.02, 0.028, 0.13), mSeam, s * 0.748, 1.06, 0.06);
+    add(new THREE.BoxGeometry(0.02, 0.028, 0.13), mSeam, s * 0.748, 1.06, -0.2);
+    add(new THREE.BoxGeometry(0.01, 0.022, 0.62), mSeam, s * 0.743, 1.165, -1.08);
+    // wheel wells: the dark opening above each wheel, edged by a black arch moulding
+    for (const z of [1.12, -1.12]) {
+      add(new THREE.CircleGeometry(0.345, 18, 0, Math.PI), mDark, s * 0.741, 0.29, z, 0, ry, 0);
+      add(new THREE.TorusGeometry(0.35, 0.024, 5, 18, Math.PI), mTrim, s * 0.744, 0.29, z, 0, ry, 0);
+    }
     add(new RoundedBoxGeometry(0.1, 0.12, 0.2, 2, 0.04), mBody, s * 0.82, 1.2, 0.95);
+    add(new THREE.BoxGeometry(0.07, 0.035, 0.05), mTrim, s * 0.765, 1.16, 0.96); // (the mirror's stalk)
     add(new RoundedBoxGeometry(0.14, 0.48, 0.08, 2, 0.035), mTail, s * 0.64, 1.0, -1.67);
     add(new RoundedBoxGeometry(0.12, 0.08, 0.06, 2, 0.02), mAmber, s * 0.64, 0.7, -1.67);
   }
-  add(new THREE.PlaneGeometry(1.2, 0.52), mGlass, 0, 1.52, 1.056, -0.12, 0, 0);
+  add(glassCell(new THREE.PlaneGeometry(1.2, 0.52), 0), mGlass, 0, 1.52, 1.056, -0.12, 0, 0);
   add(new RoundedBoxGeometry(1.52, 0.22, 0.22, 2, 0.07), mTrim, 0, 0.42, -1.62);
   add(new THREE.BoxGeometry(0.24, 0.04, 0.05), mTrim, 0, 0.84, -1.69);
   add(new THREE.PlaneGeometry(0.34, 0.17), mPlate, 0, 0.72, -1.7, 0, Math.PI, 0);
+  // the rear hatch's seam, red reflectors at the bumper's corners, the exhaust under it
+  for (const s of [-1, 1]) { add(new THREE.BoxGeometry(0.012, 0.63, 0.008), mSeam, s * 0.55, 0.875, -1.693); add(new THREE.BoxGeometry(0.13, 0.045, 0.01), mRefl, s * 0.6, 0.44, -1.734); }
+  add(new THREE.BoxGeometry(1.1, 0.012, 0.008), mSeam, 0, 0.56, -1.693);
+  add(new THREE.CylinderGeometry(0.035, 0.035, 0.14, 8), mDark, -0.42, 0.27, -1.68, Math.PI / 2, 0, 0);
   unsprung = true;
   for (const [x, z] of [[-0.67, 1.12], [0.67, 1.12], [-0.67, -1.12], [0.67, -1.12]]) {
-    add(new THREE.CylinderGeometry(0.29, 0.29, 0.2, 20), mTyre, x, 0.29, z, 0, 0, Math.PI / 2);
-    add(new THREE.CylinderGeometry(0.16, 0.16, 0.205, 12), mHub, x, 0.29, z, 0, 0, Math.PI / 2);
+    add(new THREE.CylinderGeometry(0.29, 0.29, 0.19, 24), mTyre, x, 0.29, z, 0, 0, Math.PI / 2);
+    add(new THREE.CylinderGeometry(0.195, 0.195, 0.194, 20), mRim, x, 0.29, z, 0, 0, Math.PI / 2);
+    add(new THREE.CylinderGeometry(0.155, 0.155, 0.198, 16), mDish, x, 0.29, z, 0, 0, Math.PI / 2);
+    for (let k = 0; k < 5; k++) { const a = (k / 5) * Math.PI * 2 + 0.3; add(new THREE.BoxGeometry(0.202, 0.03, 0.15), mRim, x, 0.29 - 0.085 * Math.sin(a), z + 0.085 * Math.cos(a), a, 0, 0); }
+    add(new THREE.CylinderGeometry(0.045, 0.045, 0.206, 10), mHub, x, 0.29, z, 0, 0, Math.PI / 2);
   }
   unsprung = false;
   for (const [mat, list] of parts) {

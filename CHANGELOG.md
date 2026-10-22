@@ -2,6 +2,28 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-22 · 15:xx — Graphics pass 3: the car looks like a real kei car
+- *(The passes now cover the car, the train and the buildings too, not only the landscape.)*
+- **The car, in close-up, looks like a real tall kei car** (think Honda N-BOX) instead of a toy:
+  - **Windows:** the side glass is split into a front-door window, a sliding-door window and a rear quarter window. A
+    black B pillar and a body-coloured C pillar divide them, over a black rubber seal at the waistline. It used to be
+    one long strip of glass.
+  - **The cabin shows through the glass:** the rear seat's backrest and headrests through the rear window (in view
+    behind the car all the time), and a headrest in each side window.
+  - **Doors:** panel seams for the front door and the sliding door, door handles, and the sliding door's rail.
+  - **Wheels:** silver five-spoke alloys with a dark dish and a centre cap on slimmer tyres, set in dark wheel wells
+    under black arch mouldings. They used to be black cylinders with flat white caps stuck on the side.
+  - **Rear:** the tailgate's outline, red reflectors at the bumper's corners, the exhaust pipe, and a black stalk under
+    each mirror.
+- How: all of it is geometry and the glass texture inside the car's existing materials. Still 9 meshes (no extra draw
+  calls) and no shader changes. 5,480 → 7,436 triangles.
+- Cost: none measurable.
+  - GPU against the live build (alternating order, quiet machine): country noon 20.93 → 21.03 ms (+0.09 median; the
+    live build compared with itself read +0.10), city +0.26 (one 0.81 ms outlier round), phone +0.18 with a −2.0 to
+    +0.8 spread.
+  - 54 programs, none compiled mid-drive; every quality level compiles. Flat out: 0 world-build spikes against 1 on
+    live. Startup 2.9 s; embed mode still starts on tap.
+
 ## 2026-10-22 · 14:xx — Graphics pass 2: leaves glow when the sun is low behind them
 - **Backlit foliage at golden hour.** Driving into a low sun at sunrise or sunset, leaves and grass now glow where the sun
   shines through them, tinted by their own colour. It's strongest at the edge of each canopy, where the light passes

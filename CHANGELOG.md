@@ -2,6 +2,23 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-22 · 16:xx — Graphics pass 4: a train with wheels
+- **The train at the level crossings looks like a real commuter train**, not three floating boxes:
+  - **Bogies:** each car rides on two bogies with side frames, axle boxes and two wheelsets each, so you can see wheels
+    rolling on the rails as it passes. Before, there were dark blocks under the cars and no wheels at all.
+  - **Underfloor equipment:** separate boxes between the bogies, as under real trains, instead of one long block.
+  - **Joined cars:** the cars are joined by dark gangway bellows. Before, there was a gap of sky between them.
+  - **Roof:** rounded, with a rain gutter along each side. The air-conditioners and the pantograph sit on top.
+    Before, it was a flat slab.
+- How: geometry only, built once at load, using the train's existing texture and material. Still one mesh and one
+  draw call; 258 → 2,868 triangles.
+- Cost: none measurable.
+  - GPU while the train passes in front of the stopped car: live 18.81 / 19.11 ms, new 19.04 / 18.92 / 19.08; phone
+    within noise.
+  - No hitch when the train first appears: the first 40 frames match the live build.
+  - 54 programs, none compiled when the train appears; every quality level compiles. Startup 3.7 s; embed mode still
+    starts on tap.
+
 ## 2026-10-22 · 15:xx — Graphics pass 3: the car looks like a real kei car
 - *(The passes now cover the car, the train and the buildings too, not only the landscape.)*
 - **The car, in close-up, looks like a real tall kei car** (think Honda N-BOX) instead of a toy:

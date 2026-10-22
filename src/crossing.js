@@ -117,7 +117,18 @@ export function makeTrain() {
   const mat = withCloudShadow(new THREE.MeshToonMaterial({ map: T.map, emissiveMap: T.em, emissive: 0xffffff, emissiveIntensity: 0.3, vertexColors: true, gradientMap: GRAD }));
   const g = new GB({ uv: true });
   const W1 = [1, 1, 1], ROOF = C('#9aa1a9'), DARK = C('#3b4047'), UNDER = C('#2a2d33');
-  const CAR = 19.5, GAP = 0.6, N = 3, hw = 1.45, y0 = 0.95, y1 = 4.0;
+  const CAR = 19.5, GAP = 0.6, N = 3, hw = 1.45, y0 = 0.95, y1 = 4.0, RS = 4, RH = 0.3, WHEEL = C('#33363b');
+  // untextured parts sample the texture's plain white patch, so their vertex colour shows true (and they don't glow at night)
+  const P6 = { nz: T.plain, pz: T.plain, nx: T.plain, px: T.plain, py: T.plain, ny: T.plain };
+  const pbox = (x0, y0, z0, x1, y1, z1, c, noBottom = false) => g.box(x0, y0, z0, x1, y1, z1, c, P6, noBottom ? { noBottom: true } : null);
+  const wheel = (x, y, z, r, w, c) => { // a wheel facing ±z: a 12-sided disc
+    const n = 12, z0 = z - w / 2, z1 = z + w / 2;
+    for (let i = 0; i < n; i++) {
+      const a0 = (i / n) * Math.PI * 2, a1 = ((i + 1) / n) * Math.PI * 2, x0 = x + Math.cos(a0) * r, y0 = y + Math.sin(a0) * r, x1 = x + Math.cos(a1) * r, y1 = y + Math.sin(a1) * r;
+      g.quad([x0, y0, z0], [x1, y1, z0], [x1, y1, z1], [x0, y0, z1], c, T.plain);
+      g.quad([x, y, z1], [x0, y0, z1], [x1, y1, z1], [x1, y1, z1], c, T.plain); g.quad([x, y, z0], [x1, y1, z0], [x0, y0, z0], [x0, y0, z0], c, T.plain);
+    }
+  };
   const total = N * CAR + (N - 1) * GAP;
   for (let i = 0; i < N; i++) {
     const cx = -total / 2 + CAR / 2 + i * (CAR + GAP), xa = cx - CAR / 2, xb = cx + CAR / 2;
@@ -127,14 +138,29 @@ export function makeTrain() {
     const front = i === N - 1, back = i === 0;
     g.quad([xb, y0, hw], [xb, y0, -hw], [xb, y1, -hw], [xb, y1, hw], front ? W1 : C('#c9ced4'), front ? T.front : T.plain);
     g.quad([xa, y0, -hw], [xa, y0, hw], [xa, y1, hw], [xa, y1, -hw], back ? W1 : C('#c9ced4'), back ? T.front : T.plain);
-    g.box(xa + 0.1, y1, -hw + 0.1, xb - 0.1, y1 + 0.14, hw - 0.1, ROOF, null, { noBottom: true });
-    for (const ax of [cx - 5.5, cx + 5.5]) g.box(ax - 1.3, y1 + 0.14, -0.8, ax + 1.3, y1 + 0.55, 0.8, C('#c4c9cf'), null, { noBottom: true });
-    g.box(xa + 2, 0.45, -hw + 0.25, xb - 2, y0, hw - 0.25, UNDER);
-    for (const bx of [cx - 7, cx + 7]) g.box(bx - 1.3, 0.1, -1.2, bx + 1.3, 0.75, 1.2, DARK);
+    // a rounded roof (it was a flat slab) with a rain gutter along each side, closed at both ends
+    for (let k = 0; k < RS; k++) for (const sd of [1, -1]) {
+      const t0 = (k / RS) * Math.PI / 2, t1 = ((k + 1) / RS) * Math.PI / 2;
+      const zA = sd * hw * Math.cos(t0), yA = y1 + RH * Math.sin(t0), zB = sd * hw * Math.cos(t1), yB = y1 + RH * Math.sin(t1);
+      g.quad([xa, yA, zA], [xb, yA, zA], [xb, yB, zB], [xa, yB, zB], ROOF, T.plain);
+      for (const xe of [xa, xb]) { const fan = [[xe, y1, 0], [xe, yA, zA], [xe, yB, zB]]; g.quad(fan[0], fan[1], fan[2], fan[2], ROOF, T.plain); g.quad(fan[0], fan[2], fan[1], fan[1], ROOF, T.plain); }
+    }
+    for (const sd of [1, -1]) pbox(xa, y1 - 0.02, sd * hw - 0.04, xb, y1 + 0.05, sd * hw + 0.04, DARK);
+    for (const ax of [cx - 5.5, cx + 5.5]) pbox(ax - 1.3, y1 + 0.2, -0.8, ax + 1.3, y1 + 0.62, 0.8, C('#c4c9cf'), true); // air-conditioners
+    // the underframe: a side sill, then equipment boxes between the bogies (it was one long block)
+    pbox(xa + 0.3, 0.82, -hw + 0.1, xb - 0.3, y0, hw - 0.1, UNDER);
+    for (const [ex, el, eh, ez] of [[-3.6, 2.2, 0.42, 0.35], [-0.9, 1.6, 0.5, -0.2], [1.3, 2.4, 0.38, 0.4], [3.9, 1.4, 0.46, -0.3]]) pbox(cx + ex - el / 2, 0.82 - eh, -1.15 + ez * 0.2, cx + ex + el / 2, 0.82, 1.15 + ez * 0.2, ez > 0 ? UNDER : DARK);
+    // bogies: side frames, axle boxes and two wheelsets on the rails (they were dark boxes)
+    for (const bx of [cx - 7, cx + 7]) {
+      for (const sd of [1, -1]) { pbox(bx - 1.35, 0.32, sd * 0.86, bx + 1.35, 0.56, sd * 1.02, DARK); for (const wx of [-1.05, 1.05]) pbox(bx + wx - 0.17, 0.3, sd * 0.84, bx + wx + 0.17, 0.58, sd * 1.06, UNDER); }
+      pbox(bx - 0.35, 0.5, -1.0, bx + 0.35, 0.8, 1.0, DARK);
+      for (const wx of [-1.05, 1.05]) for (const sd of [1, -1]) wheel(bx + wx, 0.43, sd * 0.6, 0.43, 0.13, WHEEL);
+    }
+    if (i < N - 1) pbox(xb, y0 + 0.15, -0.95, xb + GAP, y1 - 0.1, 0.95, C('#3a3e44')); // the gangway bellows to the next car
     if (i === 0) { // pantograph
-      const px = cx - 3, top = y1 + 0.55;
-      g.box(px - 0.6, y1 + 0.14, -0.6, px + 0.6, y1 + 0.3, 0.6, DARK);
-      g.rod([px - 0.5, y1 + 0.3, 0], [px, top + 0.9, 0], 0.03, 0.03, 4, DARK); g.rod([px + 0.5, y1 + 0.3, 0], [px, top + 0.9, 0], 0.03, 0.03, 4, DARK);
+      const px = cx - 3, top = y1 + 0.7;
+      g.box(px - 0.6, y1 + 0.26, -0.6, px + 0.6, y1 + 0.42, 0.6, DARK);
+      g.rod([px - 0.5, y1 + 0.42, 0], [px, top + 0.9, 0], 0.03, 0.03, 4, DARK); g.rod([px + 0.5, y1 + 0.42, 0], [px, top + 0.9, 0], 0.03, 0.03, 4, DARK);
       g.rod([px, top + 0.9, -0.85], [px, top + 0.9, 0.85], 0.03, 0.03, 4, DARK);
     }
   }

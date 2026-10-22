@@ -27,6 +27,11 @@ export function makeAudio() {
   const rainHiss = loop(noiseBuf(3, false), 'bandpass', 2600); rainHiss.f.Q.value = 0.35;
   const rainLow = loop(noiseBuf(2, true), 'lowpass', 520);
   const tyres = loop(noiseBuf(2, false), 'bandpass', 1500); tyres.f.Q.value = 0.7; // tyres on a wet road: a hiss that grows with speed
+  // the car's own engine, heard from behind: a small three-cylinder's low hum (firing frequency + its octave, softened),
+  // quiet at a steady cruise, rising and fuller as it pulls away
+  const engF = ac.createBiquadFilter(), engG = ac.createGain(), eng = ac.createOscillator(), eng2 = ac.createOscillator(), eng2G = ac.createGain();
+  eng.type = 'sawtooth'; eng2.type = 'triangle'; engF.type = 'lowpass'; engF.frequency.value = 320; engF.Q.value = 0.6; engG.gain.value = 0; eng2G.gain.value = 0.5;
+  eng.connect(engF); eng2.connect(eng2G); eng2G.connect(engF); engF.connect(engG); engG.connect(master); eng.start(); eng2.start();
   const stream = loop(noiseBuf(3, false), 'bandpass', 750); stream.f.Q.value = 0.6;
   const wind = loop(noiseBuf(3, true), 'lowpass', 420); // wind through the trees in the mountains
   const hum = loop(noiseBuf(2, true), 'lowpass', 140);   // a tunnel's jet fans and rolling echo
@@ -122,7 +127,7 @@ export function makeAudio() {
     o.connect(g); g.connect(verb); g.connect(master); o.start(t); o2.start(t); o.stop(t + 4.2); o2.stop(t + 4.2);
   }
   return {
-    ac, muted: false, tyres, // (tyres: for tests)
+    ac, muted: false, tyres, engG, // (for tests)
     bump(v) { thump(ac.currentTime + 0.01, v); }, // the car's wheels over rails
     update(sp, w, day, x = {}) {
       const t = ac.currentTime;
@@ -145,6 +150,13 @@ export function makeAudio() {
       while (nextChord < t + 1) { chord(nextChord); nextChord += 8; }
       if (nextBell < t + 0.5) { bell(nextBell); nextBell += 1.5 + Math.random() * 4.5; }
       const tun = x.tunnel || 0;
+      { // engine: a CVT keeps the revs low and steady at a cruise; they rise with speed and jump when pulling away
+        const v = x.speed || 0, load = x.load || 0, rpm = 850 + 2400 * (1 - Math.exp(-v / 15)) + Math.max(0, v - 25) * 60 + load * 1300;
+        const ff = rpm / 40; // 3 cylinders, 4 strokes: 1.5 firings per revolution
+        eng.frequency.setTargetAtTime(ff, t, 0.25); eng2.frequency.setTargetAtTime(ff * 2, t, 0.25);
+        engF.frequency.setTargetAtTime(200 + rpm * 0.08 + load * 260, t, 0.3);
+        engG.gain.setTargetAtTime((0.008 + 0.01 * Math.min(1, v / 15) + 0.024 * load) * (1 - 0.6 * (x.rush || 0)) * (x.roof === false ? 0.5 : 1) * (1 + 0.7 * tun), t, 0.3);
+      }
       road.g.gain.setTargetAtTime((0.03 + sp * 0.06) * (1 + 1.6 * tun), t, 0.35); road.f.frequency.setTargetAtTime((250 + sp * 500) * (1 + 0.5 * tun), t, 0.35);
       hum.g.gain.setTargetAtTime(tun * 0.07, t, 0.4); wet.gain.setTargetAtTime(0.55 + 0.6 * tun, t, 0.4);
       const swell = 0.5 + 0.5 * Math.sin(t * 0.55) * Math.sin(t * 0.21 + 1);

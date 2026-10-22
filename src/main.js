@@ -8,6 +8,7 @@ import { World, CH } from './chunks.js';
 import { makeSky, paintClouds, makeClouds, makeMountains, updateTOD, applyWeather, TOD, lightDirAt } from './sky.js';
 import { makeWeather, makeRain, makeSnow, PLIGHT } from './weather.js';
 import { makeSpray } from './spray.js';
+import { makeMirage } from './mirage.js';
 import { makeBirds } from './birds.js';
 import { makeSea, foamMaterial, riverMaterial } from './sea.js';
 import { makeCar } from './car.js';
@@ -127,7 +128,7 @@ async function main() {
   const rig = makeCrossingRig(); scene.add(rig.group);
   const train = makeTrain(); scene.add(train.group);
   const weather = makeWeather(QS), rain = makeRain(), snowfall = makeSnow(); scene.add(rain.mesh, snowfall.mesh);
-  const spray = makeSpray(); scene.add(spray.mesh); const sprayAmb = new THREE.Color(), spraySun = new THREE.Color(), sprayTail = new THREE.Vector4();
+  const spray = makeSpray(); scene.add(spray.mesh); const mirage = makeMirage(); scene.add(mirage.mesh); const sprayAmb = new THREE.Color(), spraySun = new THREE.Color(), sprayTail = new THREE.Vector4();
   const birds = makeBirds(); scene.add(birds.mesh);
   let wet = weather.W.rain;
 
@@ -160,7 +161,7 @@ async function main() {
     for (const m of mats) { const o = new THREE.Mesh(tri, m); o.castShadow = o.receiveShadow = true; o.frustumCulled = false; warm.add(o); }
     warm.position.set(0, 0, 0); scene.add(warm);
     sun.target.position.set(0, 0, 0); sun.position.set(0, 150, 60); // so the warm-up meshes sit inside the shadow camera
-    const hidden = [rain.mesh, snowfall.mesh, spray.mesh, train.group, rig.group, sea.mesh].filter(o => !o.visible);
+    const hidden = [rain.mesh, snowfall.mesh, spray.mesh, mirage.mesh, train.group, rig.group, sea.mesh].filter(o => !o.visible);
     for (const o of hidden) o.visible = true;
     renderer.setRenderTarget(post.composer.readBuffer); // the game draws into the post-processing buffer (linear output)
     renderer.compile(scene, camera);
@@ -592,6 +593,10 @@ async function main() {
     g.uDay.value = day(); g.uWarm.value = TOD.warm; g.uTime.value = t;
 
     rain.update(camera.position, t, rn * (1 - tunS) * (1 - w.snow), day());
+    { // 逃げ水: the road mirage of a hot clear summer day, around midday (mirage.js); not near a tunnel
+      const tq = tunnelNear(st.s + 190), hot = (w.city + w.country + w.coast) * (1 - ov) * (1 - wet) * sstep(0.6, 0.9, TOD.sunEl) * (st.mirage ?? 1) * (tq && Math.abs(st.s + 190 - tq.s) < 330 ? 0 : 1);
+      mirage.update(path, st.s, world.origin.x, world.origin.z, zparam(st.s + 150, 'rw'), hot, t, TOD.horizon);
+    }
     { // spray off the tyres on a wet road, powder on a snowy one, exhaust vapour in the cold (spray.js)
       const cold = clamp(w.snow + w.mountain * 0.6 * Math.max(TOD.night, 1 - sstep(0.27, 0.36, st.tod)), 0, 1) * (1 - tunS);
       sprayAmb.copy(TOD.fog).multiplyScalar(0.92); spraySun.copy(TOD.sunCol).multiplyScalar(Math.min(1, TOD.sunI / 3) * (1 - ov) * 0.6);
@@ -606,7 +611,7 @@ async function main() {
       path.at(sx, fl); const dxc = Math.hypot(fl.x - world.origin.x - camera.position.x, fl.z - world.origin.z - camera.position.z);
       const trainD = train.st.active ? train.group.position.distanceTo(camera.position) : 1e9;
       const spA = st.speed / 15; // road roar: louder with speed, but compressed above cruising (and a rush of wind instead)
-      audio.update(spA < 1.5 ? spA : 1.5 + (spA - 1.5) * 0.4, w, day(), { rush: clamp((st.speed - 25) / 40, 0, 1), bell: bell ? Math.pow(clamp(1 - dxc / 260, 0, 1), 1.5) : 0, train: Math.pow(clamp(1 - trainD / 230, 0, 1), 2), rain: rn * (1 - tunS) * (1 - w.snow), wetRoad: U.uWet.value * (1 - tunS), roof: st.cam !== 2, tunnel: tunS, water: (() => { const rv = riverNear(st.s); return Math.max(rv ? 1 - sstep(12, 150, Math.abs(st.s - rv.s)) : 0, w.mountain * 0.45); })(), dusk: TOD.warm * (st.tod > 0.5 ? 1 : 0.3) });
+      audio.update(spA < 1.5 ? spA : 1.5 + (spA - 1.5) * 0.4, w, day(), { rush: clamp((st.speed - 25) / 40, 0, 1), bell: bell ? Math.pow(clamp(1 - dxc / 260, 0, 1), 1.5) : 0, train: Math.pow(clamp(1 - trainD / 230, 0, 1), 2), rain: rn * (1 - tunS) * (1 - w.snow), wetRoad: U.uWet.value * (1 - tunS), speed: st.speed, load: clamp(CM.lon / 3, 0, 1), roof: st.cam !== 2, tunnel: tunS, water: (() => { const rv = riverNear(st.s); return Math.max(rv ? 1 - sstep(12, 150, Math.abs(st.s - rv.s)) : 0, w.mountain * 0.45); })(), dusk: TOD.warm * (st.tod > 0.5 ? 1 : 0.3) });
     }
     zoneCard(zoneAt(st.s + 40));
 

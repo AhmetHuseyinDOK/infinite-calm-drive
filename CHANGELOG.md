@@ -2,6 +2,29 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-22 · 10:xx — Realism pass 14: 逃げ水 on hot summer roads, and an engine you can hear
+- **The road mirage (逃げ水, "escaping water").** On a clear summer day around midday (city, countryside and coast, with
+  the sun more than ~35° up), the asphalt far down the road, past ~80 m, now seems to hold patches of water mirroring the
+  pale sky. Hot air just above the road bends the low sky into view. The patches shimmer and drift, and they recede as
+  you drive towards them, the classic summer-road look of Japanese anime.
+  - Not in the evening, under cloud, on wet roads or near tunnels.
+  - How: a thin strip along the road ahead, its shape taken from 24 road samples passed as a uniform array (no buffer
+    uploads). It is drawn only while it's hot and only shades far road pixels, which the view angle and distance limit
+    to a sliver near the vanishing point.
+- **An engine you can hear.** The kei car's small three-cylinder now has a quiet, low hum on a CVT-like rev curve.
+  - It idles softly while you wait at a crossing.
+  - It rises and fills out as the car pulls away or you speed up.
+  - At a steady cruise it sits under the road noise, and at very high speed the wind covers it. It's a little louder in
+    tunnels.
+  - Measured: gain 0.019 at 43 km/h cruise, 0.040 pulling away hard, 0.017 easing back.
+- Cost: none measurable.
+  - Mirage switched on/off every 3 s in one page at noon: city 0.00 / −0.09 ms, country −0.32 / −0.03, phone −1.07 / −0.11.
+  - GPU against the live build (alternating order): city 19.15 → 19.40 ms, country 20.70 → 20.79, phone 13.13 → 13.14.
+    The live build compared with itself read −0.20.
+  - The engine is audio only. The mirage shader is compiled at load (54 programs; none compiled mid-drive), and every
+    quality level compiles.
+  - Flat out, nothing missing; startup 3.2 s; embed mode still starts on tap.
+
 ## 2026-10-22 · 08:xx — Realism pass 13: tyre spray, snow powder and exhaust breath; no more fog on the cuttings
 - **The car throws spray.** Driving on a wet road, a fine mist of water now trails off the rear tyres: thicker the faster
   you go, and for as long as the road stays wet after the rain. At night it glows red from the tail lights (more when

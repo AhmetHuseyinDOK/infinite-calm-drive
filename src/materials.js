@@ -72,6 +72,7 @@ export const U = {
   uTime: { value: 0 },
   uNight: { value: 0 },
   uWet: { value: 0 },                          // 0 dry … 1 soaked (rain)
+  uLightsOn: { value: 1 },                     // how far into the evening the town's home lights have come on (0 … 1)
   uCloudSh: { value: 0 },                      // strength of drifting cloud shadows
   uOrigin: { value: new THREE.Vector2() },     // world-origin offset, so world-space patterns survive rebasing
   uSunDir: { value: new THREE.Vector3(0, 1, 0) },
@@ -573,6 +574,16 @@ diffuseColor.rgb *= ${(1 - amt / 2).toFixed(3)} + ${amt.toFixed(3)} * vnoise(vWP
 /** Contact shading: toward the ground, at the base of walls, poles, trunks and fences, ambient light fades (and a little of
  *  the sun) — from the per-vertex `aoD` byte the geometry builder writes (255 at the ground … 0 from 2.55 m up; absent →
  *  0 → none). Only on surfaces that face sideways, so plinths and steps don't turn into dark slabs. */
+// home windows switch on one by one at dusk (off again at dawn): worked out per vertex, so a pixel pays one multiply
+function windowLights(sh) {
+  sh.uniforms.uLightsOn = U.uLightsOn;
+  sh.vertexShader = sh.vertexShader
+    .replace('#include <common>', '#include <common>\nattribute float aLit; uniform float uLightsOn; varying float vOn;')
+    .replace('#include <begin_vertex>', '#include <begin_vertex>\nvOn = aLit < 0.002 ? 1.0 : clamp((uLightsOn - aLit) * 12.0, 0.0, 1.0);');
+  sh.fragmentShader = sh.fragmentShader
+    .replace('#include <common>', '#include <common>\nvarying float vOn;')
+    .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance *= vOn;');
+}
 function contactAO(sh) {
   sh.vertexShader = sh.vertexShader
     .replace('#include <common>', '#include <common>\nattribute float aoD; varying float vAoD;')
@@ -625,8 +636,8 @@ export function makeMaterials(atlasTex, folTex) {
   M.ground = groundMaterial();
   M.color = painterly(new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: GRAD }), 1.6, 0.1, 'color-v3', contactAO);
   M.atlas = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: GRAD, map: atlasTex.map, emissiveMap: atlasTex.emissive, emissive: 0xffffff, emissiveIntensity: 0.1, alphaTest: 0.5 });
-  M.atlas.onBeforeCompile = sh => { contactAO(sh); worldShade(sh); };
-  M.atlas.customProgramCacheKey = () => 'atlas-v3';
+  M.atlas.onBeforeCompile = sh => { contactAO(sh); windowLights(sh); worldShade(sh); };
+  M.atlas.customProgramCacheKey = () => 'atlas-v4';
   M.foliage = painterly(new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: GRAD_SOFT }), 2.6, 0.24, 'foliage-v2');
   M.lamp = new THREE.MeshBasicMaterial({ color: 0xf0eee6 });
   M.sig = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.15, 1.7, 1.1) }); // a lit 青 signal lamp

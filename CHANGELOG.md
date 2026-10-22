@@ -2,6 +2,28 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-22 · 11:xx — Realism pass 15: the town lights up one window at a time
+- **Home lights come on one by one at dusk.** Every lit window in town used to fade in at the same instant and the same
+  rate, as if one switch ran the whole town. Now each home window has its own moment:
+  - From sunset the windows light up one at a time over the next two hours on the clock (about 40 s of driving), until
+    the night town is fully lit.
+  - At dawn they go out one by one in reverse.
+  - Shops, signs, vending machines and the konbini stay lit as before.
+  - On a dark rainy or overcast day about a third of the homes have their lights on in the daytime.
+  - On a clear day home windows are now plain glass (they used to carry a faint glow even at noon).
+- How: lit home windows get a "switch-on" byte (hashed from where each window is) written into the buildings' geometry,
+  one extra byte per facade vertex. The building shader compares it with how far the evening has come, per vertex, so
+  each pixel pays a single multiply. The test hook `?lightson=0…1` forces the level.
+- Cost: none measurable.
+  - The building shader with vs without the window switch, flipped every 3 s in one page at dusk in the city: desktop
+    −0.02 / +0.05 ms.
+  - Phone profile: median +0.3 ms against +0.1 ms for a control flipping two identical programs. Both show 1.5–3 ms
+    spikes at this machine load (25–30), so phone in-page readings are noise-bound.
+  - GPU against the live build (alternating order): dusk city 29.40 → 28.92 ms, night city 29.08 → 29.31. Live against
+    itself: +0.11.
+  - 54 programs with none compiled mid-drive; every quality level compiles. Flat out at dusk: world-build spikes 41 vs
+    45 on live, nothing missing. Embed mode still starts on tap.
+
 ## 2026-10-22 · 10:xx — Realism pass 14: 逃げ水 on hot summer roads, and an engine you can hear
 - **The road mirage (逃げ水, "escaping water").** On a clear summer day around midday (city, countryside and coast, with
   the sun more than ~35° up), the asphalt far down the road, past ~80 m, now seems to hold patches of water mirroring the

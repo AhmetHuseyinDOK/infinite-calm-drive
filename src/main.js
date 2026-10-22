@@ -124,6 +124,7 @@ async function main() {
   const post = makePost(renderer, scene, camera, { msaa: AA === 'msaa' ? (quality === 'high' ? 4 : 2) : 0, fxaa: AA === 'fxaa' });
   U.uReflTex.value = post.refl.rt.texture;
   const hz = new THREE.Vector3(), camFlat = new THREE.Vector3(), REFL = QS.get('refl') || 'auto';
+  const LIGHTS_ON = QS.has('lightson') ? parseFloat(QS.get('lightson')) : -1; // (test hook)
   const glowV = new THREE.Vector3(), HAZE_GLOW = QS.has('haze') ? parseFloat(QS.get('haze')) : 1; // (test hook: ?haze=0 off)
   const rig = makeCrossingRig(); scene.add(rig.group);
   const train = makeTrain(); scene.add(train.group);
@@ -546,6 +547,9 @@ async function main() {
     foamMat.uniforms.uTime.value = t; foamMat.uniforms.uLight.value.setRGB(1, 1, 1).multiplyScalar(0.35 + 0.65 * day());
     const nightK = sstep(0.15, 0.8, TOD.night);
     M.atlas.emissiveIntensity = 0.1 + nightK * 1.05;
+    // home lights come on one by one over the two hours after sunset (18:00 → ~20:00 on the clock, ~40 s of driving) and
+    // go off one by one at dawn; on a dark rainy day some are on in the daytime too
+    U.uLightsOn.value = LIGHTS_ON >= 0 ? LIGHTS_ON : Math.max(sstep(0.02, 0.75, TOD.night), 0.3 * ov);
     M.lamp.color.setRGB(0.85, 0.85, 0.8).lerp(new THREE.Color(3.6, 2.8, 1.8), nightK);
     M.pool.opacity = nightK * 0.42 * (1 + 0.8 * wet);
     { // the two lights that light the car most (street lamps, lit shop windows, tunnel lamps) light its paint and glass

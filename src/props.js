@@ -28,9 +28,15 @@ export function sub(M, x, y, z, yaw = 0) {
   const r = new THREE.Matrix4().multiplyMatrices(M, m); r.groundY = M.groundY; return r; // (keeps the prop's ground: contact AO)
 }
 // atlas quads: front (faces −Z), +X side, −X side
-const fq = (g, x0, x1, y0, y1, z, cell, c = W1) => g.quad([x1, y0, z], [x0, y0, z], [x0, y1, z], [x1, y1, z], c, uv(cell));
-const pxq = (g, x, z0, z1, y0, y1, cell, c = W1) => g.quad([x, y0, z1], [x, y0, z0], [x, y1, z0], [x, y1, z1], c, uv(cell));
-const nxq = (g, x, z0, z1, y0, y1, cell, c = W1) => g.quad([x, y0, z0], [x, y0, z1], [x, y1, z1], [x, y1, z0], c, uv(cell));
+// at dusk the town lights up one window at a time: a lit home window ('win…L' / 'win…C') switches on at its own moment —
+// a byte hashed from where it is (geom.js aLit, materials.js windowLights); shops, signs and the konbini (0) are always on
+const litOf = (g, cell, a, b) => {
+  if (!g.hasLit || cell.charCodeAt(0) !== 119) return; const k = cell.charCodeAt(cell.length - 1); if (k !== 76 && k !== 67) return;
+  const h = Math.sin(a * 12.9898 + b * 78.233 + g.e[12] * 0.731 + g.e[14] * 0.513) * 43758.5453; g.litV = 24 + Math.floor((h - Math.floor(h)) * 231);
+};
+const fq = (g, x0, x1, y0, y1, z, cell, c = W1) => { litOf(g, cell, x0 + z, y0); g.quad([x1, y0, z], [x0, y0, z], [x0, y1, z], [x1, y1, z], c, uv(cell)); g.litV = 0; };
+const pxq = (g, x, z0, z1, y0, y1, cell, c = W1) => { litOf(g, cell, x + z0, y0); g.quad([x, y0, z1], [x, y0, z0], [x, y1, z0], [x, y1, z1], c, uv(cell)); g.litV = 0; };
+const nxq = (g, x, z0, z1, y0, y1, cell, c = W1) => { litOf(g, cell, x + z0, y0); g.quad([x, y0, z0], [x, y0, z1], [x, y1, z1], [x, y1, z0], c, uv(cell)); g.litV = 0; };
 const tri = (g, a, b, c, col, cell) => g.quad(a, b, c, c, col, cell ? uv(cell) : undefined);
 
 // ------------------------------------------------------------------ street furniture

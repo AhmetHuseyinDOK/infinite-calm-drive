@@ -123,7 +123,7 @@ export class World {
     const path = this.path, s0 = c * CH, s1 = s0 + CH;
     const O = path.at(s0), ox = O.x, oz = O.z;
     const r = rng(Math.floor(hash2(c, 777) * 4294967295));
-    const G = { atlas: new GB({ uv: true, ao: true }), color: new GB({ ao: true }), foliage: new GB(), leaf: new GB({ uv: true }), lamp: new GB({ color: false }), sig: new GB({ color: false }), sodium: new GB({ color: false }), decal: new GB({ uv: true }), pool: new GB({ uv: true, color: false }) };
+    const G = { atlas: new GB({ uv: true, ao: true, lit: true }), color: new GB({ ao: true }), foliage: new GB(), leaf: new GB({ uv: true }), lamp: new GB({ color: false }), sig: new GB({ color: false }), sodium: new GB({ color: false }), decal: new GB({ uv: true }), pool: new GB({ uv: true, color: false }) };
     const ground = new GroundB(), foam = [], river = [];
     G.lamps = []; // lights that can light the car: chunk-local x, y, z, power … (props.js lampAt)
     const f = {}, f2 = {};

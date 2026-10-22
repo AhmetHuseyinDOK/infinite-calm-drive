@@ -10,9 +10,10 @@ export class GB {
   // compact formats: float positions, 1-byte normals and colours (normalized), float UVs — half the memory and upload.
   // ao: also store, per vertex, how close it is to the ground under the prop being built (one byte, `aoD`: 255 at the
   // ground … 0 at 2.55 m or more) — from the matrix's `groundY` (set where props are placed; no groundY → no AO)
-  constructor({ uv = false, color = true, ao = false } = {}) {
-    this.hasUV = uv; this.hasColor = color; this.hasAO = ao; this.aoY0 = NaN; this.noShadow = false;
-    this.n = 0; this.cap = 0; this.P = null; this.N = null; this.U = null; this.Cl = null; this.A = null;
+  // lit: also store the current `litV` byte per vertex (`aLit`): when a lit window switches on at dusk (0 = always on)
+  constructor({ uv = false, color = true, ao = false, lit = false } = {}) {
+    this.hasUV = uv; this.hasColor = color; this.hasAO = ao; this.hasLit = lit; this.litV = 0; this.aoY0 = NaN; this.noShadow = false;
+    this.n = 0; this.cap = 0; this.P = null; this.N = null; this.U = null; this.Cl = null; this.A = null; this.Lt = null;
     this.bb = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
     this.m = new THREE.Matrix4(); this.nm = new THREE.Matrix3();
     this.e = this.m.elements; this.ne = this.nm.elements;
@@ -24,6 +25,7 @@ export class GB {
     if (this.hasUV) { const U = new Float32Array(cap * 2); if (this.U) U.set(this.U.subarray(0, n * 2)); this.U = U; }
     if (this.hasColor) { const C = new Uint8Array(cap * 3); if (this.Cl) C.set(this.Cl.subarray(0, n * 3)); this.Cl = C; }
     if (this.hasAO) { const A = new Uint8Array(cap); if (this.A) A.set(this.A.subarray(0, n)); this.A = A; }
+    if (this.hasLit) { const L = new Uint8Array(cap); if (this.Lt) L.set(this.Lt.subarray(0, n)); this.Lt = L; }
     this.cap = cap;
   }
   get count() { return this.n; }
@@ -41,6 +43,7 @@ export class GB {
     this.N[i3] = Math.round(X * l); this.N[i3 + 1] = Math.round(Y * l); this.N[i3 + 2] = Math.round(Z * l);
     if (this.hasUV) { this.U[this.n * 2] = u; this.U[this.n * 2 + 1] = v; }
     if (this.hasAO) this.A[this.n] = this.noShadow ? 1 : this.aoByte(py); // (1 = "casts no shadow": see PROP_DEPTH)
+    if (this.hasLit) this.Lt[this.n] = this.litV;
     if (this.hasColor) {
       const k = c || WHITE, C = this.Cl;
       C[i3] = k[0] >= 1 ? 255 : k[0] <= 0 ? 0 : k[0] * 255 + 0.5; C[i3 + 1] = k[1] >= 1 ? 255 : k[1] <= 0 ? 0 : k[1] * 255 + 0.5; C[i3 + 2] = k[2] >= 1 ? 255 : k[2] <= 0 ? 0 : k[2] * 255 + 0.5;
@@ -156,6 +159,7 @@ export class GB {
     g.setAttribute('normal', new THREE.BufferAttribute(this.N.slice(0, n * 3), 3, true));
     if (this.hasUV) g.setAttribute('uv', new THREE.BufferAttribute(this.U.slice(0, n * 2), 2));
     if (this.hasAO) g.setAttribute('aoD', new THREE.BufferAttribute(this.A.slice(0, n), 1, true));
+    if (this.hasLit) g.setAttribute('aLit', new THREE.BufferAttribute(this.Lt.slice(0, n), 1, true));
     if (this.hasColor) g.setAttribute('color', new THREE.BufferAttribute(this.Cl.slice(0, n * 3), 3, true));
     g.boundingBox = new THREE.Box3(new THREE.Vector3(bb[0], bb[1], bb[2]), new THREE.Vector3(bb[3], bb[4], bb[5]));
     g.boundingSphere = g.boundingBox.getBoundingSphere(new THREE.Sphere());

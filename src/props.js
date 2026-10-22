@@ -14,6 +14,8 @@ export const PAL = {
   roof: C('#bdbbb3'), parapet: C('#dcdad2'), pipe: C('#c4c4bf'), orange: C('#f07a22'), red: C('#d8352a'),
   vermilion: C('#e2482c'), concrete: C('#c9c7c0'), stone: C('#a8a69e'), terracotta: C('#b8653d'), rail: C('#eeeeea'),
 };
+// warm plasters (漆喰) for the plastered shophouses: cream, sand, warm white, a pale ochre
+export const PLASTER = ['#f4ead8', '#efe2c8', '#f6efe2', '#e9d8bc', '#f2e4cf', '#e6d5c0'].map(C);
 export const TINTS = ['#f6f2ea', '#efe4d2', '#e7eaee', '#f3e2d8', '#e2eadf', '#ebe3f0', '#f6ecd4', '#e1e7f1', '#ececec', '#ddd2c4', '#f2d9cf', '#d8e6ec'].map(C);
 const AWNINGS = ['#c8352b', '#2f7d4a', '#1f4e9c', '#e8c070', '#7a2f2f', '#3b6e8f'].map(C);
 
@@ -430,16 +432,21 @@ function machiya(G, M, r, s) {
     const k = kinds[i % kinds.length]; fq(a, x0 + i * bw, x0 + (i + 1) * bw, 0, fh0, 0, theme && k === 'glass' ? 'shop_glass' + theme : cells[i]);
     if (LIT_SHOP.has(k)) lampAt(G, M, x0 + (i + 0.5) * bw, 1.9, -0.8, 0.7);
   }
+  // timber, or (s.plaster) the cream-plastered kind: sliding windows with curtains or pairs of small windows in the
+  // plaster, a dark timber beam between the floors, plaster gables under the same tiled roof
+  const P = !!s.plaster, PT = s.tint;
   const fy = [0, fh0]; for (let f = 1; f < floors; f++) fy.push(fh0 + f * fh);
-  for (let f = 1; f < floors; f++) for (let i = 0; i < bays; i++) fq(a, x0 + i * bw, x0 + (i + 1) * bw, fy[f], fy[f + 1], 0, litCell('win4', r(), litP), W1);
-  { // the side walls: timber boards, and lattice windows on the floors above (seen down every side street)
+  const pk = P ? r.pick([0, 0, 1, 0, 2]) : 4;
+  for (let f = 1; f < floors; f++) for (let i = 0; i < bays; i++) fq(a, x0 + i * bw, x0 + (i + 1) * bw, fy[f], fy[f + 1], 0, litCell('win' + (P && i % 2 === 1 && r() < 0.3 ? 5 : pk === 2 ? 0 : pk), r(), litP), P ? PT : W1);
+  { // the side walls: timber boards and lattice windows, or plaster and small windows (seen down every side street)
     const segs = Math.max(1, Math.round(d / 3)), sd = d / segs;
     for (const sx of [-1, 1]) for (let f = 0; f < fy.length - 1; f++) for (let j = 0; j < segs; j++)
-      (sx > 0 ? pxq : nxq)(a, (sx * w) / 2, j * sd, (j + 1) * sd, fy[f], fy[f + 1], f > 0 && r() < 0.45 ? litCell('win4', r(), litP) : 'woodwall', W1);
+      (sx > 0 ? pxq : nxq)(a, (sx * w) / 2, j * sd, (j + 1) * sd, fy[f], fy[f + 1], P ? (f > 0 && r() < 0.35 ? litCell('win6', r(), litP) : 'plain') : f > 0 && r() < 0.45 ? litCell('win4', r(), litP) : 'woodwall', P ? PT : W1);
   }
-  c.quad([-w / 2, 0, d], [w / 2, 0, d], [w / 2, H, d], [-w / 2, H, d], C('#6a5240'));
+  c.quad([-w / 2, 0, d], [w / 2, 0, d], [w / 2, H, d], [-w / 2, H, d], P ? mulC(PT, 0.8) : C('#6a5240'));
   for (const x of [x0, -x0]) c.box(x - 0.09, 0, -0.12, x + 0.09, H, 0.02, DARK); // corner posts
-  const { RC, k } = gableRoof(G, s, w, d, H, r, true);
+  if (P) for (let f = 2; f < floors; f++) c.box(x0, fy[f] - 0.1, -0.08, -x0, fy[f] + 0.06, 0.0, DARK); // beams between the upper floors
+  const { RC, k } = gableRoof(G, s, w, d, H, r, !P);
   // the canopy (庇): tiles in ~3 m strips sloping down over the pavement, dark timber under it, the sign on its front board
   const cy = fh0 + 0.34, cd = 1.05, drop = 0.42, nS = Math.max(2, Math.round((w + 0.3) / 3));
   for (let i = 0; i < nS; i++) { const xa = x0 - 0.15 + ((w + 0.3) * i) / nS, xb = x0 - 0.15 + ((w + 0.3) * (i + 1)) / nS; a.quad([xb, cy - drop, -cd], [xa, cy - drop, -cd], [xa, cy, 0], [xb, cy, 0], RC, k); }
@@ -450,7 +457,7 @@ function machiya(G, M, r, s) {
   for (const x of [-sw / 2 + 0.25, sw / 2 - 0.25]) c.box(x - 0.03, y1, -cd + 0.02, x + 0.03, cy - drop * 0.1, -cd + 0.06, DARK); // the board's hangers
   // warm bulbs on short flexes under the canopy (lit by day too, as in a shopping street)
   G.sodium.setM(M);
-  for (let i = 0; i < bays; i++) { const x = x0 + (i + 0.5) * bw; c.box(x - 0.008, y0 - 0.02, -0.62, x + 0.008, cy - drop * 0.6, -0.6, DARK); G.sodium.box(x - 0.06, y0 - 0.16, -0.67, x + 0.06, y0 - 0.04, -0.55, null); }
+  c.noShadow = true; for (let i = 0; i < bays; i++) { const x = x0 + (i + 0.5) * bw; c.box(x - 0.008, y0 - 0.02, -0.62, x + 0.008, cy - drop * 0.6, -0.6, DARK); G.sodium.box(x - 0.06, y0 - 0.16, -0.67, x + 0.06, y0 - 0.04, -0.55, null); } c.noShadow = false;
   let awn = false;
   if (r() < 0.5) { awn = true; // a fabric awning under the board
     const col = r.pick(AWNINGS), y = y0 - 0.12;
@@ -458,7 +465,7 @@ function machiya(G, M, r, s) {
     c.quad([w / 2 - 0.2, y - 0.55, -0.95], [-w / 2 + 0.2, y - 0.55, -0.95], [-w / 2 + 0.2, y - 0.32, -0.95], [w / 2 - 0.2, y - 0.32, -0.95], mulC(col, 0.85));
   }
   // the balcony on the floor above: a plank floor on the canopy, the wooden rail, flower boxes hung on it
-  if (floors >= 2) {
+  if (floors >= 2 && (!P || r() < 0.5)) {
     const yb = fy[1] + 0.42, zr = -0.5, xa = x0 + 0.12, xb = -x0 - 0.12;
     c.box(xa, yb - 0.07, zr - 0.04, xb, yb, 0, WOOD);
     for (let i = 0; i < bays; i++) fq(a, x0 + 0.12 + ((w - 0.24) * i) / bays, x0 + 0.12 + ((w - 0.24) * (i + 1)) / bays, yb, yb + 0.95, zr, 'wrail');
@@ -466,7 +473,7 @@ function machiya(G, M, r, s) {
     G.leaf.setM(M);
     for (let i = 0; i < bays; i++) if (r() < 0.7) {
       const xc = x0 + (i + 0.5) * bw, bl = Math.min(bw * 0.7, 1.6);
-      c.box(xc - bl / 2, yb + 0.72, zr - 0.2, xc + bl / 2, yb + 0.92, zr - 0.02, C('#7a5236'));
+      c.noShadow = true; c.box(xc - bl / 2, yb + 0.72, zr - 0.2, xc + bl / 2, yb + 0.92, zr - 0.02, C('#7a5236')); c.noShadow = false;
       for (let fx = xc - bl / 2 + 0.2; fx < xc + bl / 2 - 0.1; fx += 0.32) cards(G, [fx, yb + 0.95, zr - 0.11], fx, yb + 1.05, zr - 0.11, 0.26, r() < 0.65 ? 'sakura' : 'flowers', 3, r, [1, 0.92, 0.96], [0.7, 0.55, 0.62], [yb + 0.9, yb + 1.3]);
     }
   }
@@ -475,9 +482,9 @@ function machiya(G, M, r, s) {
   { const pair = kinds.includes('noren') || kinds.includes('cafe'), nL = awn ? 0 : pair ? 2 : r() < 0.3 ? 1 : 0; // (not where an awning hangs)
     G.sodium.setM(M);
     for (let j = 0; j < nL; j++) { const x = nL === 2 ? (j ? 1 : -1) * Math.min(1.4, w / 2 - 0.6) : (r() - 0.5) * (w - 1.5), y = y0 - 0.5;
-      c.box(x - 0.006, y + 0.42, -cd + 0.12, x + 0.006, y0, -cd + 0.14, DARK);
+      c.noShadow = true; c.box(x - 0.006, y + 0.42, -cd + 0.12, x + 0.006, y0, -cd + 0.14, DARK);
       G.sodium.cyl(x, y, -cd + 0.13, 0.11, 0.16, 0.18, 10, null, false); G.sodium.cyl(x, y + 0.18, -cd + 0.13, 0.16, 0.11, 0.18, 10, null, false); // a barrel of paper
-      c.cyl(x, y - 0.035, -cd + 0.13, 0.1, 0.1, 0.04, 8, DARK); c.cyl(x, y + 0.355, -cd + 0.13, 0.1, 0.1, 0.04, 8, DARK); } }
+      c.cyl(x, y - 0.035, -cd + 0.13, 0.1, 0.1, 0.04, 8, DARK); c.cyl(x, y + 0.355, -cd + 0.13, 0.1, 0.1, 0.04, 8, DARK); c.noShadow = false; } }
   // pots of plants along the shopfront
   for (let x = x0 + 0.45 + r() * 0.4; x < -x0 - 0.3; x += 0.7 + r() * 1.3) if (r() < 0.7) pottedPlant(G, M, r, x, -0.4);
   G.color.setM(M); G.atlas.setM(M);

@@ -2,6 +2,34 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-23 · 01:xx — Restyle 3: a street of shophouses, timber and plaster
+- **The shopping street is shophouses on both sides**, as in the reference art. The grey modern blocks along the
+  frontage (pastel-concrete shops, flats, offices) gave way to 町家 shophouses, now 70% of the frontage (was 50%).
+  Pastel-concrete shops are down to 5% (from 20%), flats to 6%, offices to 2%. The taller modern blocks still stand in
+  the row behind, as in the reference.
+- **A second kind of shophouse: cream plaster (漆喰).** About 4 in 10 shophouses are plastered:
+  - upper floors of sliding windows with curtains, or pairs of small windows, in warm cream, sand or pale-ochre
+    plaster;
+  - dark timber corner posts, and a timber beam between the upper floors;
+  - plaster side walls with small windows down the side streets, and plaster gables under the same tiled roof;
+  - the same tiled canopy, sign board, warm bulbs, lanterns, vertical neon signs and pots as the timber kind, and a
+    balcony on half of them.
+  The street now alternates dark timber and cream plaster under tiled canopies and roofs, like the reference.
+- Small props high up (the bulbs' flexes, lantern caps, balcony flower boxes) no longer cast shadows (no visible
+  shadow; it saves shadow-pass work).
+- Cost, against live (Restyle 2):
+  - **GPU averaged over a 0.9 km city drive** (new measurement, `gpudrive.mjs`: a single spot mostly measures how the
+    street's random layout fell there):
+    - desktop +0.9 ms (20.2 vs 19.3 ms, three interleaved runs; +1.0 ms in a repeat);
+    - phone +0.2 ms (12.4 vs 12.2 ms, within noise).
+    The extra layers of canopy, sign board and balcony in front of the facades are the cost; pots and leaf cards are
+    not (in-page leaf toggle: 0.22 ms desktop).
+  - **GPU at single spots, desktop** (A/A +0.05): +0.11 ms at 500 m, +0.34 ms at 1150 m, +2.2 ms at the start, where
+    the reshuffled street puts different buildings in view.
+  - **World building** flat out: desktop 468–500 ms/km vs 781–814 for live in the same session; phone ×4 1506–1635 vs
+    1382–1687.
+  - 54 programs at every quality level, none compiled mid-drive. No console errors. Embed mode starts on tap.
+
 ## 2026-10-23 · 01:xx — Restyle 2: the shopping street glows (neon, lanterns, lit shops, timber walls)
 - Toward the reference's shopping street, where signs and shops glow even in daylight:
   - **Vertical signs are neon light boxes.** A milky panel lit from inside carries a neon tube bent round its edge

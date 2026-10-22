@@ -2,6 +2,26 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-22 · 20:xx — Graphics pass 8: winter birches with crowns
+- **The snow country's white birches (白樺) have their winter crowns.** They used to be bare white poles with a few
+  stick branches, more like telegraph poles than trees. Now each has a crown of fine bare twigs, branching and
+  branching again, in the purple-brown of birch twigs in winter. Against the snow and the sky the groves read as trees,
+  with the soft haze of a real leafless birch wood. Their white bark with its dark marks is unchanged.
+- How: one new cell in the foliage texture (a twig crown painted at load with its own random numbers, so every other
+  tree paints exactly as before), drawn on 2–3 alpha-tested cards per birch through the existing leaf material. No
+  shader change. The foliage texture grew from 1024×2048 to 1024×2560 (+2.5 MB of GPU memory). Snow chunks now draw a
+  leaf mesh, which adds ~1 draw call each.
+- Tried and dropped, before this: lighter, thinner twigs (they vanished at a distance under the cut-out alpha) and
+  heavier dark ones (they read as brown blobs).
+- Cost: none measurable.
+  - The twig crowns flipped visible / hidden every 3 s in the same page (all 10 in view, with their shadows): GPU
+    desktop +0.07 / +0.02 / −0.23 ms, phone −0.01 / −0.01 / +0.09.
+  - GPU against the live build: snow desktop 20.15 → 20.13 ms (A/A −0.11). The phone cross-build read was noise
+    (+1.23 over 4 rounds; the in-page phone toggle is the clean number).
+  - CPU per frame on the phone profile at ×4 throttling: 67.1 ms live vs 59.7 new (noise at load 22). Draw calls 89 → 98.
+  - Flat out through the snow: world-build spikes median 8 against live's 12, nothing missing.
+  - 54 programs, none compiled mid-drive; every quality level compiles. Embed mode still starts on tap.
+
 ## 2026-10-22 · 19:xx — Graphics pass 7: real guardrails along the coast and the mountain pass
 - **ガードレール that look like the real thing.** The guardrails on the coast road and the mountain pass, right beside the
   car in most of those frames, were a single flat white plank on square sticks. Now they're the corrugated steel W-beam

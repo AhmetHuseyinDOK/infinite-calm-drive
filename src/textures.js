@@ -539,7 +539,7 @@ export function buildAtlas() {
 
 // ---------------- foliage clump textures (leaves, sakura blossom, pine needles) ----------------
 export function buildFoliage(renderer) {
-  const S = 1024, SH = 2048, cv = canvas(S, SH), g = cv.getContext('2d'), r = rng(321), cells = {};
+  const S = 1024, SH = 2560, cv = canvas(S, SH), g = cv.getContext('2d'), r = rng(321), cells = {}, Y0 = 512; // (row 0: bare twigs)
   const PALS = {
     leafA: ['#2f6634', '#4a8a3e', '#6aa64a', '#94c460', '#c4e08a'],
     leafB: ['#476e2e', '#6a9238', '#8db44a', '#b4d066', '#e0ec9a'],
@@ -618,10 +618,31 @@ export function buildFoliage(renderer) {
     g.restore();
     cells[name] = { u0: ox / S, u1: (ox + 512) / S, v0: 1 - (oy + 512) / SH, v1: 1 - oy / SH };
   };
-  paint('leafA', 0, 0); paint('leafB', 512, 0); paint('sakura', 0, 512); paint('pine', 512, 512);
-  paint('momiji', 0, 1024); paint('ginkgo', 512, 1024);
-  tuft('grass', 0, 1536, false); tuft('flowers', 512, 1536, true); // tufts stay in the bottom row (the breeze shader keys on it)
+  // a bare winter crown (a birch's): twigs branching and branching again into a fine haze, darker purple-brown at the
+  // tips, filling a narrow upright oval. Its own rng, so the other cells paint exactly as before
+  const twigs = (name, ox, oy) => {
+    const tr = rng(97);
+    g.save(); g.translate(ox, oy); g.beginPath(); g.rect(0, 0, 512, 512); g.clip(); g.lineCap = 'round';
+    const br = (x, y, a, len, w, depth) => {
+      const x2 = x + Math.cos(a) * len, y2 = y + Math.sin(a) * len;
+      g.strokeStyle = depth > 3 ? '#76605f' : depth > 1 ? '#6c5458' : '#62494f'; g.lineWidth = w; // (purple-brown: a haze, not a blob)
+      g.beginPath(); g.moveTo(x, y); g.lineTo(x2, y2); g.stroke();
+      if (depth <= 0 || w < 0.7) return;
+      const n = 2 + (tr() < 0.4 ? 1 : 0);
+      for (let i = 0; i < n; i++) {
+        let na = a + (tr() - 0.5) * 1.1 + (i - (n - 1) / 2) * 0.42; na = na * 0.8 + (-Math.PI / 2) * 0.2; // (they turn upwards)
+        br(x2, y2, na, len * (0.62 + tr() * 0.2), w * 0.68, depth - 1);
+      }
+    };
+    for (let k = 0; k < 6; k++) br(256 + (tr() - 0.5) * 40, 500, -Math.PI / 2 + (tr() - 0.5) * 0.9, 110 + tr() * 50, 5.6, 6);
+    g.restore();
+    cells[name] = { u0: ox / S, u1: (ox + 512) / S, v0: 1 - (oy + 512) / SH, v1: 1 - oy / SH };
+  };
+  twigs('twigs', 0, 0);
+  paint('leafA', 0, Y0); paint('leafB', 512, Y0); paint('sakura', 0, Y0 + 512); paint('pine', 512, Y0 + 512);
+  paint('momiji', 0, Y0 + 1024); paint('ginkgo', 512, Y0 + 1024);
+  tuft('grass', 0, Y0 + 1536, false); tuft('flowers', 512, Y0 + 1536, true); // tufts stay in the bottom row (the breeze shader keys on it)
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
-  return { tex, cells, tuftV: [0, 1 - 1536 / SH] };
+  return { tex, cells, tuftV: [0, 1 - (Y0 + 1536) / SH] };
 }

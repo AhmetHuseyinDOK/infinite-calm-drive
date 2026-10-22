@@ -276,6 +276,9 @@ export function treeBirch(G, M, r, s = 1) { // 白樺: a bare winter birch, whit
     const y = h * (0.45 + r() * 0.5), a = r() * 6.28, L = (0.8 + r() * 1.6) * s, t = y / h;
     c.rod([lean * t, y, 0], [lean * t + Math.cos(a) * L, y + L * 0.9, Math.sin(a) * L], 0.035 * s, 0.012 * s, 4, C('#8b7f78'));
   }
+  // the crown of fine bare twigs, a purple-brown haze around the branches (it was a white pole with a few sticks)
+  const cy = h * 0.7, R = (1.5 + r() * 0.5) * s;
+  G.leaf.setM(M); cards(G, [lean * 0.7, cy, 0], lean * 0.7, cy, 0, R, 'twigs', 3, r, [1, 1, 1], [0.92, 0.9, 0.92], [cy - R, cy + R]);
 }
 export function treeSnowCedar(G, M, r, s = 1) { // a cedar weighed down with snow
   const h = r.range(9, 13) * s;

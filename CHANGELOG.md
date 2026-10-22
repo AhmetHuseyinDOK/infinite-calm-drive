@@ -2,6 +2,32 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-22 · 14:xx — Graphics pass 2: leaves glow when the sun is low behind them
+- **Backlit foliage at golden hour.** Driving into a low sun at sunrise or sunset, leaves and grass now glow where the sun
+  shines through them, tinted by their own colour. It's strongest at the edge of each canopy, where the light passes
+  through the fewest leaves:
+  - the cherry blossoms of the avenue turn warm pink-orange against the evening sky;
+  - autumn maples on the mountain pass glow orange and gold;
+  - a lone country tree at sunrise lights up yellow-green.
+  Before, trees seen against the sun were flatly lit or dark, like cut-outs. Trees with the sun behind the camera, and
+  all trees at midday, look exactly as before.
+- How: worked out once per leaf-card corner (per vertex) and carried to the pixels in the existing cloud-shadow varying,
+  so each leaf pixel only adds one multiply. The strength is zero unless the sun is low and out.
+- Cost: small but measurable on desktop, nothing on the phone.
+  - The leaf shader with vs without the glow, flipped in one page:
+    - desktop, looking into the sun: +0.10 / +0.48 ms;
+    - desktop at noon: +0.35 / +0.30 / +0.06 (control +0.23 / −0.18);
+    - phone: +0.09 to +0.23.
+  - GPU against the live build (alternating order): desktop sakura noon +0.45 ms median and golden hour +0.47 (frames
+    of 26–33 ms); phone 0.00.
+  - The cherry-blossom canopies are many cut-out layers deep, and that shader reacts to any change at all.
+  - Per pixel (the first version) it cost ~1.5 ms looking into the sun, so it went per vertex.
+  - 54 programs, none compiled mid-drive; every quality level compiles. Flat out through the avenue at golden hour:
+    4 and 7 world-build hitches against 15 and 15 on live (load noise), nothing missing. Embed mode still starts on tap.
+- Tried and dropped: windows that reflect the sky by the Fresnel law (panes along a street turning bright, a sunlit
+  pane catching the sun). It was subtle in stills and still cost +0.2–0.3 ms on desktop after moving it per vertex
+  (+0.5 ms per pixel).
+
 ## 2026-10-22 · 12:xx — Graphics pass 1: rice paddies that look like water
 - *(From now on the passes focus on the graphics: more real, keeping the anime style.)*
 - **Flooded rice paddies look like real water.** They used to be painted in the sky's colour and then reflect at least 40%

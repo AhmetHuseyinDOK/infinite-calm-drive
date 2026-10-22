@@ -73,6 +73,7 @@ export const U = {
   uNight: { value: 0 },
   uWet: { value: 0 },                          // 0 dry … 1 soaked (rain)
   uLightsOn: { value: 1 },                     // how far into the evening the town's home lights have come on (0 … 1)
+  uBacklit: { value: 0 },                      // how strongly a low sun shines through leaves and grass (0 … 1.6)
   uCloudSh: { value: 0 },                      // strength of drifting cloud shadows
   uOrigin: { value: new THREE.Vector2() },     // world-origin offset, so world-space patterns survive rebasing
   uSunDir: { value: new THREE.Vector3(0, 1, 0) },
@@ -587,9 +588,24 @@ diffuseColor.rgb *= ${(1 - amt / 2).toFixed(3)} + ${amt.toFixed(3)} * vnoise(vWP
   return m;
 }
 
-/** Contact shading: toward the ground, at the base of walls, poles, trunks and fences, ambient light fades (and a little of
- *  the sun) — from the per-vertex `aoD` byte the geometry builder writes (255 at the ground … 0 from 2.55 m up; absent →
- *  0 → none). Only on surfaces that face sideways, so plinths and steps don't turn into dark slabs. */
+// leaves and grass glow when a low sun shines through them towards us — tinted by their own colour, strongest at a
+// canopy's rim, where the light passes through the fewest leaves. Worked out per vertex (a leaf card's corners): canopies
+// are many alpha-tested layers deep, and per pixel it cost ~1.5 ms looking into the sun. Per vertex, measured in-page:
+// ~0.1–0.5 ms while the sun is low ahead, ~0.2 ms otherwise (this shader is sensitive to any change)
+function backlit(sh) { // (after worldShade: it rides in the cloud-shadow varying, vCloud → vCloudB.x, vBack → .y)
+  for (const k of ['uSunDir', 'uSunCol', 'uBacklit']) sh.uniforms[k] = U[k];
+  sh.vertexShader = sh.vertexShader
+    .replace('varying float vCloud;', 'varying vec2 vCloudB;\n#define vCloud vCloudB.x\n#define vBack vCloudB.y')
+    .replace('#include <common>', '#include <common>\nuniform vec3 uSunDir; uniform float uBacklit;')
+    .replace('#include <fog_vertex>', `#include <fog_vertex>
+{ vec3 bV = normalize(-mvPosition.xyz), bS = normalize((viewMatrix * vec4(uSunDir, 0.0)).xyz);
+  float bl = max(-dot(bV, bS), 0.0); bl *= bl; bl *= bl;
+  vBack = bl * (0.35 + 0.65 * (1.0 - abs(dot(normalize(transformedNormal), bV)))) * uBacklit; }`);
+  sh.fragmentShader = sh.fragmentShader
+    .replace('varying float vCloud;', 'varying vec2 vCloudB;\n#define vCloud vCloudB.x\n#define vBack vCloudB.y')
+    .replace('#include <common>', '#include <common>\nuniform vec3 uSunCol;')
+    .replace('#include <opaque_fragment>', 'outgoingLight += diffuseColor.rgb * uSunCol * vBack;\n#include <opaque_fragment>');
+}
 // home windows switch on one by one at dusk (off again at dawn): worked out per vertex, so a pixel pays one multiply
 function windowLights(sh) {
   sh.uniforms.uLightsOn = U.uLightsOn;
@@ -600,6 +616,9 @@ function windowLights(sh) {
     .replace('#include <common>', '#include <common>\nvarying float vOn;')
     .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance *= vOn;');
 }
+/** Contact shading: toward the ground, at the base of walls, poles, trunks and fences, ambient light fades (and a little of
+ *  the sun) — from the per-vertex `aoD` byte the geometry builder writes (255 at the ground … 0 from 2.55 m up; absent →
+ *  0 → none). Only on surfaces that face sideways, so plinths and steps don't turn into dark slabs. */
 function contactAO(sh) {
   sh.vertexShader = sh.vertexShader
     .replace('#include <common>', '#include <common>\nattribute float aoD; varying float vAoD;')
@@ -666,7 +685,7 @@ export function makeMaterials(atlasTex, folTex) {
     M.leaf = new THREE.MeshToonMaterial({ map: folTex, vertexColors: true, gradientMap: GRAD_SOFT, alphaTest: 0.42, side: THREE.DoubleSide });
     M.leaf.onBeforeCompile = sh => { // keep the spherical canopy normals on back faces too
       sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>', THREE.ShaderChunk.normal_fragment_begin.replace('gl_FrontFacing ? 1.0 : - 1.0', '1.0'));
-      worldShade(sh);
+      worldShade(sh); backlit(sh);
       sh.uniforms.uTuftV = U.uTuftV; sh.uniforms.uWind = U.uWind;
       // a gentle breeze: whole crowns drift a few centimetres, grass tufts bend from the root
       sh.vertexShader = sh.vertexShader
@@ -683,7 +702,7 @@ export function makeMaterials(atlasTex, folTex) {
   diffuseColor.a *= smoothstep(0.07, 0.3, abs(dot(gN, normalize(vViewPosition)))); }
 #include <alphatest_fragment>`);
     };
-    M.leaf.customProgramCacheKey = () => 'leaf-v3';
+    M.leaf.customProgramCacheKey = () => 'leaf-v4';
   }
   M.wire = new THREE.MeshBasicMaterial({ color: 0x23242c });
   // soft light pools under street lamps at night (additive)

@@ -6,7 +6,7 @@ import { makeMaterials, U, groundMaterialFor, setShadowTaps, setGrazeFade, makeC
 import { setAtlas, setFoliage, warmTrees, setLeafDensity } from './props.js';
 import { World, CH } from './chunks.js';
 import { makeSky, paintClouds, makeClouds, makeMountains, updateTOD, applyWeather, TOD, lightDirAt } from './sky.js';
-import { makeWeather, makeRain, makeSnow } from './weather.js';
+import { makeWeather, makeRain, makeSnow, PLIGHT } from './weather.js';
 import { makeBirds } from './birds.js';
 import { makeSea, foamMaterial, riverMaterial } from './sea.js';
 import { makeCar } from './car.js';
@@ -551,9 +551,14 @@ async function main() {
         camera.updateMatrixWorld();
       }
       // power back from the score; fade out before 30 m, so swapping which lights are picked never pops
-      L[0].set(x0, y0, z0, 1).applyMatrix4(camera.matrixWorldInverse).w = K * a0 * (1 + 0.045 * d0) * (1 - sstep(18, 30, Math.sqrt(d0)));
-      L[1].set(x1, y1, z1, 1).applyMatrix4(camera.matrixWorldInverse).w = K * a1 * (1 + 0.045 * d1) * (1 - sstep(18, 30, Math.sqrt(d1)));
+      const w0 = K * a0 * (1 + 0.045 * d0) * (1 - sstep(18, 30, Math.sqrt(d0))), w1 = K * a1 * (1 + 0.045 * d1) * (1 - sstep(18, 30, Math.sqrt(d1)));
+      L[0].set(x0, y0, z0, 1).applyMatrix4(camera.matrixWorldInverse).w = w0;
+      L[1].set(x1, y1, z1, 1).applyMatrix4(camera.matrixWorldInverse).w = w1;
       car.lampCol.setRGB(1.0, 0.8 - 0.32 * tunS, 0.52 - 0.38 * tunS); // warm white → sodium orange in tunnels
+      // the same two lights, and the headlight beam, light the rain and snow around the car (weather.js PLIGHT)
+      PLIGHT.uLampW.value[0].set(x0, y0, z0, w0); PLIGHT.uLampW.value[1].set(x1, y1, z1, w1); PLIGHT.uLampCol.value.copy(car.lampCol);
+      car.head.getWorldPosition(PLIGHT.uHeadPos.value); car.head.target.getWorldPosition(glowV);
+      PLIGHT.uHeadDir.value.copy(glowV).sub(PLIGHT.uHeadPos.value).normalize(); PLIGHT.uHeadI.value = car.head.intensity / 60;
     }
     M.pool.visible = M.pool.opacity > 0.003; // the night light pools were drawn all day at zero opacity (~11 draw calls)
     world.lod(st.s, DETAIL_FAR, nightK > 0.15, FAR_LEAF);

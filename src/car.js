@@ -112,7 +112,7 @@ export function makeCar() {
   const S = { roll: 0, rv: 0, pitch: 0, pv: 0, y: 0, yv: 0 }, soft = (x, cap) => cap * Math.tanh(x / cap); // body springs
 
   return {
-    group: car, lamps, lampCol,
+    group: car, lamps, lampCol, head,
     /** m (optional): lat = sideways acceleration (m/s², + = towards the right), lon = speeding up (+) / braking (−),
      *  road = the surface's height under the car (m), jolt = vertical kick this frame (m/s), kick = pitch kick (rad/s, + = nose down) */
     update(dt, speed, night, rain = 0, m = null) {

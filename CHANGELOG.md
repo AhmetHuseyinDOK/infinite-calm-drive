@@ -2,6 +2,23 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-22 · 04:xx — Realism pass 11: night rain and snow only show where light catches them
+- **Rain at night.** Every raindrop used to be drawn as an equally bright white streak, even against a black sky, so a
+  night shower looked like daytime rain painted on darkness. Real rain at night is nearly invisible except where light
+  hits it. Now:
+  - drops are dark in the dark;
+  - they light up in the headlight beam ahead of the car and around the street lamps, shop windows and tunnel lamps
+    near it, where they glint brighter and stay visible further out;
+  - by day nothing changes.
+- **Snow at night** works the same way: dim flakes in the dark, bright ones in the beam and under the lamps.
+- How: the particles use the same two lights the car picked (pass 9/10) plus the headlight cone. That's worked out per
+  particle corner in the vertex shader (~10k vertices); main.js updates them once per frame in world space.
+- Cost: none measurable.
+  - GPU, alternating-order rounds against the live build (machine load ~20): rainy country night +0.74 ms on the first
+    run and −0.03 on the re-run (8 rounds), rainy city night +0.14, phone rainy country night +0.02. The live build
+    compared with itself read +0.14 ± 0.5.
+  - 52 programs, none compiled when the rain starts; every quality level compiles; embed mode still starts on tap.
+
 ## 2026-10-22 · 03:xx — Realism pass 10: tunnel lights sweep over the car, shop windows light it in town
 - **Tunnels.** The sodium lamps every 6 m along the tunnel shoulders now light the car too, by day as well. Driving
   through, the roof and body brighten and dim rhythmically as each lamp passes overhead: the familiar pulse of orange

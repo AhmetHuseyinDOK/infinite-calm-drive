@@ -34,6 +34,21 @@ export function makeWeather(QS) {
   };
 }
 
+// At night rain and snow are only seen where light falls on them: the headlight beam ahead of the car and the two lights
+// near the car (street lamps, shop windows, tunnel lamps — the ones main.js picks for the car). Worked out per particle
+// corner in the vertex shader; main.js fills these each frame (world space)
+export const PLIGHT = {
+  uHeadPos: { value: new THREE.Vector3() }, uHeadDir: { value: new THREE.Vector3(0, 0, 1) }, uHeadI: { value: 0 },
+  uLampW: { value: [new THREE.Vector4(0, -1e3, 0, 0), new THREE.Vector4(0, -1e3, 0, 0)] }, uLampCol: { value: new THREE.Color(1, 0.8, 0.52) },
+};
+const PLIGHT_V = /* glsl */`
+uniform vec3 uHeadPos, uHeadDir, uLampCol; uniform float uHeadI; uniform vec4 uLampW[2];
+vec3 particleLight(vec3 w) {
+  vec3 hv = w - uHeadPos; float hd = max(length(hv), 0.001);
+  vec3 lit = vec3(1.0, 0.95, 0.86) * smoothstep(0.84, 0.96, dot(hv / hd, uHeadDir)) * uHeadI / (1.0 + hd * hd * 0.012);
+  for (int i = 0; i < 2; i++) { vec3 lv = uLampW[i].xyz - w; lit += uLampCol * uLampW[i].w / (1.0 + dot(lv, lv) * 0.06); }
+  return lit;
+}`;
 export function makeSnow() { // soft flakes drifting down around the camera
   const N = 2400, BOX = new THREE.Vector3(42, 22, 42);
   const base = new THREE.PlaneGeometry(1, 1);
@@ -45,9 +60,10 @@ export function makeSnow() { // soft flakes drifting down around the camera
   geo.instanceCount = N;
   const mat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, fog: false,
-    uniforms: { uTime: { value: 0 }, uCam: { value: new THREE.Vector3() }, uAmt: { value: 0 }, uBox: { value: BOX }, uCol: { value: new THREE.Color(1, 1, 1) } },
+    uniforms: { uTime: { value: 0 }, uCam: { value: new THREE.Vector3() }, uAmt: { value: 0 }, uBox: { value: BOX }, uCol: { value: new THREE.Color(1, 1, 1) }, ...PLIGHT },
     vertexShader: /* glsl */`
-      attribute vec4 aOff; uniform float uTime, uAmt; uniform vec3 uCam, uBox; varying float vA; varying vec2 vUv;
+      attribute vec4 aOff; uniform float uTime, uAmt; uniform vec3 uCam, uBox; varying float vA; varying vec2 vUv; varying vec3 vLit;
+      ${PLIGHT_V}
       void main(){
         vUv = uv;
         if (aOff.w > uAmt) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); vA = 0.0; return; }
@@ -58,12 +74,13 @@ export function makeSnow() { // soft flakes drifting down around the camera
         float size = 0.045 + fract(ph) * 0.05;
         vec3 pos = w + (right * position.x + up * position.y) * size;
         float d = length(uCam - w);
-        vA = (1.0 - smoothstep(9.0, 21.0, d)) * smoothstep(0.5, 1.6, d);
+        vLit = particleLight(w); float lk = min(dot(vLit, vec3(0.33)), 1.0); // (lit flakes stay visible further out)
+        vA = (1.0 - smoothstep(9.0 + 9.0 * lk, 21.0, d)) * smoothstep(0.5, 1.6, d);
         gl_Position = projectionMatrix * viewMatrix * vec4(pos, 1.0);
       }`,
     fragmentShader: /* glsl */`
-      uniform vec3 uCol; varying float vA; varying vec2 vUv;
-      void main(){ float r = length(vUv - 0.5); gl_FragColor = vec4(uCol, vA * 0.85 * (1.0 - smoothstep(0.25, 0.5, r))); }`,
+      uniform vec3 uCol; varying float vA; varying vec2 vUv; varying vec3 vLit;
+      void main(){ float r = length(vUv - 0.5); gl_FragColor = vec4(uCol + vLit, vA * 0.85 * (1.0 - smoothstep(0.25, 0.5, r))); }`,
   });
   const mesh = new THREE.Mesh(geo, mat); mesh.frustumCulled = false; mesh.renderOrder = 5;
   return {
@@ -71,7 +88,7 @@ export function makeSnow() { // soft flakes drifting down around the camera
     update(cam, t, amt, light) {
       mesh.visible = amt > 0.01;
       mat.uniforms.uTime.value = t; mat.uniforms.uCam.value.copy(cam); mat.uniforms.uAmt.value = amt;
-      mat.uniforms.uCol.value.setRGB(0.62 + 0.38 * light, 0.66 + 0.34 * light, 0.78 + 0.22 * light);
+      mat.uniforms.uCol.value.setRGB(0.3 + 0.7 * light, 0.33 + 0.67 * light, 0.42 + 0.58 * light); // (dim at night unless lit)
     },
   };
 }
@@ -87,9 +104,10 @@ export function makeRain() {
   geo.instanceCount = N;
   const mat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, fog: false,
-    uniforms: { uTime: { value: 0 }, uCam: { value: new THREE.Vector3() }, uRain: { value: 0 }, uBox: { value: BOX }, uCol: { value: new THREE.Color(0.8, 0.85, 0.95) } },
+    uniforms: { uTime: { value: 0 }, uCam: { value: new THREE.Vector3() }, uRain: { value: 0 }, uBox: { value: BOX }, uCol: { value: new THREE.Color(0.8, 0.85, 0.95) }, ...PLIGHT },
     vertexShader: /* glsl */`
-      attribute vec4 aOff; uniform float uTime, uRain; uniform vec3 uCam, uBox; varying float vA; varying vec2 vUv;
+      attribute vec4 aOff; uniform float uTime, uRain; uniform vec3 uCam, uBox; varying float vA; varying vec2 vUv; varying vec3 vLit;
+      ${PLIGHT_V}
       void main(){
         vUv = uv;
         if (aOff.w > uRain) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); vA = 0.0; return; }
@@ -100,12 +118,15 @@ export function makeRain() {
         vec3 up = normalize(vec3(0.12, 1.0, 0.05));
         vec3 pos = w + right * (position.x * 0.018) + up * (position.y * 0.62);
         float d = length(uCam - w);
-        vA = (1.0 - smoothstep(6.0, 23.0, d)) * smoothstep(0.6, 2.0, d);
+        vLit = particleLight(w); float lk = min(dot(vLit, vec3(0.33)), 1.0); // (lit drops stay visible further out: the beam
+        vA = (1.0 - smoothstep(6.0 + 14.0 * lk, 23.0, d)) * smoothstep(0.6, 2.0, d); // starts ~9 m ahead of the camera)
         gl_Position = projectionMatrix * viewMatrix * vec4(pos, 1.0);
       }`,
     fragmentShader: /* glsl */`
-      uniform vec3 uCol; varying float vA; varying vec2 vUv;
-      void main(){ gl_FragColor = vec4(uCol, vA * 0.32 * smoothstep(0.0, 0.35, vUv.y) * (1.0 - smoothstep(0.75, 1.0, vUv.y))); }`,
+      uniform vec3 uCol; varying float vA; varying vec2 vUv; varying vec3 vLit;
+      void main(){ // lit drops also show more (they glint in the beam)
+        float lit = min(dot(vLit, vec3(0.33)), 1.0);
+        gl_FragColor = vec4(uCol + vLit, vA * (0.32 + 0.3 * lit) * smoothstep(0.0, 0.35, vUv.y) * (1.0 - smoothstep(0.75, 1.0, vUv.y))); }`,
   });
   const mesh = new THREE.Mesh(geo, mat); mesh.frustumCulled = false; mesh.renderOrder = 5;
   return {
@@ -113,7 +134,7 @@ export function makeRain() {
     update(cam, t, rain, light) {
       mesh.visible = rain > 0.01;
       mat.uniforms.uTime.value = t; mat.uniforms.uCam.value.copy(cam); mat.uniforms.uRain.value = rain;
-      mat.uniforms.uCol.value.setRGB(0.55 + 0.35 * light, 0.6 + 0.35 * light, 0.7 + 0.3 * light);
+      mat.uniforms.uCol.value.setRGB(0.1 + 0.8 * light, 0.12 + 0.83 * light, 0.16 + 0.84 * light); // (barely there at night unless lit)
     },
   };
 }

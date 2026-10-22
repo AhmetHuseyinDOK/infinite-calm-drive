@@ -267,11 +267,99 @@ export function buildAtlas() {
       }
       const mx = x + ww - 32; ell(mx, y + wh * 0.16, 7, 8, '#d8cfc4'); a.fillStyle = pk(['#c84a5a', '#4a6a9a', '#e8d8b8']); a.beginPath(); a.moveTo(mx - 14, y + wh * 0.24); a.lineTo(mx + 14, y + wh * 0.24); a.lineTo(mx + 18, y + wh * 0.66); a.lineTo(mx - 18, y + wh * 0.66); a.closePath(); a.fill(); rect(a, mx - 2, y + wh * 0.66, 4, wh * 0.24, '#8a8a8a');
       rect(a, x + 8, y + wh * 0.74, ww * 0.55, 6, '#8a6a4a'); for (let bx = x + 12; bx < x + ww * 0.55; bx += 14) rect(a, bx, y + wh * 0.74 - 8, 11, 8, pk(['#e8e2d4', '#3a4a6a', '#a8b8c8', '#d8b8a8']));
-    } else { // a general store: shelves of goods
-      for (let sy = y + wh * 0.25; sy < y + wh; sy += wh * 0.22) {
-        rect(a, x, sy, ww, 3, 'rgba(60,50,40,0.5)');
-        for (let gx = x + 3; gx < x + ww - 6; gx += 6 + r() * 8) { a.fillStyle = R.pick(['#e44', '#4a8', '#fc4', '#48c', '#f8a', '#fff', '#a6d', '#f93']); a.fillRect(gx, sy - 6 - r() * 10, 4 + r() * 5, 6 + r() * 10); }
+    } else { // a general store, a konbini, a cafe. The old layout's draws are replayed first, unchanged: the shared R feeds
+      // every later atlas cell, so taking more or fewer numbers from it would repaint half the town
+      let seed = 7;
+      for (let sy = y + wh * 0.25; sy < y + wh; sy += wh * 0.22) for (let gx = x + 3; gx < x + ww - 6; gx += 6 + r() * 8) { R(); seed = (Math.imul(seed, 31) + Math.floor(r() * 997 + r() * 61 + r() * 7)) | 0; }
+      if (theme === 'cafe') cafeInterior(a, x, y, ww, wh, rng(seed >>> 0)); else storeInterior(a, x, y, ww, wh, rng(seed >>> 0), theme === 'konbini');
+    }
+  };
+  // goods on a shelf, the way a real one is stocked: runs of the same product side by side (2–6 facings), each a box, a
+  // bottle, a can, a cup or a bag with its label, lit from above (a lighter top and left edge, a darker right edge)
+  const GOODS = ['#d8423a', '#e8a23a', '#f2d24a', '#3a7ac8', '#2f9a5a', '#f4f1ea', '#c83a6a', '#6a4ab0', '#2a2a30', '#e86a2a', '#8ac83a', '#4ab8d8', '#a8642a', '#f6f6f2'];
+  const shelfGoods = (a, x0, x1, base, hmax, q, kinds = 'bbccutp') => {
+    let gx = x0 + 1 + q() * 3;
+    while (gx < x1 - 4) {
+      const kind = kinds[Math.floor(q() * kinds.length)], col = GOODS[Math.floor(q() * GOODS.length)], band = q() < 0.5 ? '#f8f6f0' : GOODS[Math.floor(q() * GOODS.length)];
+      const iw = { b: 8 + q() * 6, c: 6 + q() * 2, u: 9 + q() * 2, t: 5 + q() * 2, p: 12 + q() * 5 }[kind], ih = Math.min(hmax, { b: 14 + q() * 12, c: 11 + q() * 3, u: 10 + q() * 3, t: 18 + q() * 9, p: 14 + q() * 8 }[kind]);
+      const n = 2 + Math.floor(q() * 5);
+      for (let k = 0; k < n && gx + iw < x1 - 1; k++, gx += iw + 0.6) {
+        const top = base - ih;
+        if (kind === 't') { // a bottle: shoulders, a neck and a cap
+          rect(a, gx, top + ih * 0.3, iw, ih * 0.7, col); rect(a, gx + iw * 0.3, top + ih * 0.1, iw * 0.4, ih * 0.22, col);
+          rect(a, gx + iw * 0.28, top, iw * 0.44, ih * 0.11, band === '#f8f6f0' ? '#e8e8e4' : '#d83a2a'); rect(a, gx, top + ih * 0.5, iw, ih * 0.22, band);
+        } else if (kind === 'c') { // a can: a silver rim on top
+          rect(a, gx, top, iw, ih, col); rect(a, gx, top, iw, 1.5, '#d8dce0'); rect(a, gx, top + ih * 0.35, iw, ih * 0.3, band);
+        } else if (kind === 'u') { // a cup of noodles: tapering, a paper lid
+          a.fillStyle = col; a.beginPath(); a.moveTo(gx, top + 2); a.lineTo(gx + iw, top + 2); a.lineTo(gx + iw - 1.2, base); a.lineTo(gx + 1.2, base); a.fill();
+          rect(a, gx - 0.4, top, iw + 0.8, 2.2, '#f2efe6'); rect(a, gx + 1, top + ih * 0.45, iw - 2, ih * 0.25, band);
+        } else if (kind === 'p') { // a bag of snacks: a rounded, crimped top
+          a.fillStyle = col; a.beginPath(); a.moveTo(gx, base); a.lineTo(gx, top + 3); a.quadraticCurveTo(gx + iw / 2, top - 1.5, gx + iw, top + 3); a.lineTo(gx + iw, base); a.fill();
+          rect(a, gx + 1.5, top + ih * 0.35, iw - 3, ih * 0.35, band); rect(a, gx, top + 2, iw, 1, 'rgba(0,0,0,0.18)');
+        } else { // a box with a printed panel
+          rect(a, gx, top, iw, ih, col); rect(a, gx + 1.5, top + ih * 0.3, iw - 3, ih * 0.4, band);
+        }
+        rect(a, gx, top + 1, 1, ih - 1, 'rgba(255,255,255,0.28)'); rect(a, gx + iw - 1.3, top + 1, 1.3, ih - 1, 'rgba(0,0,0,0.22)');
       }
+      gx += 1.5 + q() * 3;
+    }
+  };
+  // a shelf rail: the price strip, the price tags, and the shadow it throws on the goods below
+  const shelfRail = (a, x, w, sy, q) => {
+    vgrad(a, x, sy + 4, w, 9, [[0, 'rgba(0,0,0,0.3)'], [1, 'rgba(0,0,0,0)']]);
+    rect(a, x, sy, w, 4, '#d3d6da'); rect(a, x, sy + 3.2, w, 0.8, 'rgba(40,40,50,0.45)');
+    for (let tx = x + 4 + q() * 10; tx < x + w - 6; tx += 14 + q() * 16) rect(a, tx, sy + 0.6, 5, 2.6, q() < 0.25 ? '#f2d23a' : q() < 0.2 ? '#e84a3a' : '#ffffff');
+  };
+  const storeInterior = (a, x, y, ww, wh, q, konbini) => {
+    const wallC = konbini ? '#f3f1ea' : '#ece5d8';
+    rect(a, x, y, ww, wh, wallC);
+    // the ceiling and its fluorescent tubes
+    rect(a, x, y, ww, wh * 0.13, konbini ? '#f6f6f2' : '#efebe2');
+    for (const fy of [0.035, 0.085]) { rect(a, x, y + wh * fy, ww, 2.4, '#ffffff'); vgrad(a, x, y + wh * fy + 2.4, ww, 6, [[0, 'rgba(255,255,250,0.5)'], [1, 'rgba(255,255,250,0)']]); }
+    vgrad(a, x, y + wh * 0.13, ww, wh * 0.87, [[0, 'rgba(255,255,255,0.12)'], [1, 'rgba(70,60,50,0.18)']]);
+    // hanging aisle signs
+    for (let k = 0, sx = x + 18 + q() * 30; k < 2 && sx < x + ww - 40; k++, sx += 90 + q() * 40) { rect(a, sx + 13, y + wh * 0.13, 1, 6, '#888'); rect(a, sx, y + wh * 0.13 + 6, 28, 9, GOODS[Math.floor(q() * 9)]); rect(a, sx + 4, y + wh * 0.13 + 9.5, 20, 2, 'rgba(255,255,255,0.8)'); }
+    // gondola shelving: four shelves of goods between grey uprights, a dark kick plate at the floor
+    const top = y + wh * 0.25, lv = wh * 0.165;
+    rect(a, x, top - 4, ww, 4, '#c9ccd0');
+    for (let i = 0; i < 4; i++) {
+      const sy = top + lv * (i + 1);
+      vgrad(a, x, sy - lv, ww, lv, [[0, 'rgba(40,36,34,0.32)'], [1, 'rgba(40,36,34,0.12)']]); // the shelf's back, darker under the shelf above
+      shelfGoods(a, x, x + ww, sy, lv - 6, q);
+      shelfRail(a, x, ww, sy, q);
+    }
+    rect(a, x, top + lv * 4 + 4, ww, y + wh - top - lv * 4 - 4, '#5c6068'); rect(a, x, top + lv * 4 + 4, ww, 1.5, '#8a8e96');
+    for (let ux = x + 2 + q() * 20; ux < x + ww; ux += 70 + q() * 12) { rect(a, ux, top - 4, 3, lv * 4 + 8, '#b4b8be'); rect(a, ux + 2.2, top - 4, 0.8, lv * 4 + 8, 'rgba(0,0,0,0.3)'); }
+    if (konbini) { // the magazine rack along the window, covers facing out
+      const my = y + wh * 0.7;
+      rect(a, x, my + 26, ww, y + wh - my - 26, '#7a7e86'); rect(a, x, my + 26, ww, 2, '#a8acb2');
+      for (let mx = x + 2; mx < x + ww - 14; mx += 15.5) {
+        const c = GOODS[Math.floor(q() * GOODS.length)], tilt = q() * 2;
+        rect(a, mx, my + tilt, 14, 26 - tilt, c); rect(a, mx, my + tilt, 14, 5, q() < 0.6 ? '#ffffff' : '#e8343a');
+        rect(a, mx + 2, my + tilt + 8, 10, 10, q() < 0.5 ? '#f2c8a8' : GOODS[Math.floor(q() * GOODS.length)]); rect(a, mx + 13, my + tilt, 1, 26 - tilt, 'rgba(0,0,0,0.25)');
+      }
+    }
+  };
+  const cafeInterior = (a, x, y, ww, wh, q) => {
+    rect(a, x, y, ww, wh, '#b88a5e'); vgrad(a, x, y, ww, wh, [[0, 'rgba(255,230,190,0.25)'], [1, 'rgba(60,35,20,0.35)']]);
+    for (let bx = x; bx < x + ww; bx += 9) rect(a, bx, y + wh * 0.55, 1, wh * 0.45, 'rgba(60,35,20,0.25)'); // wainscot boards
+    // a back counter: shelves of cups and jars, a coffee machine, a chalkboard menu
+    const sy0 = y + wh * 0.3;
+    for (let i = 0; i < 2; i++) { const sy = sy0 + i * 22; rect(a, x + 8, sy, ww * 0.55, 3, '#6a4428'); shelfGoods(a, x + 10, x + ww * 0.55 + 6, sy, 14, q, 'ctu'); }
+    rect(a, x + ww * 0.64, y + wh * 0.22, ww * 0.28, wh * 0.26, '#2e3a32'); rect(a, x + ww * 0.64, y + wh * 0.22, ww * 0.28, 2, '#6a4428');
+    for (let l = 0; l < 5; l++) rect(a, x + ww * 0.67, y + wh * (0.27 + l * 0.04), ww * (0.12 + q() * 0.1), 1.6, 'rgba(240,240,230,0.75)');
+    rect(a, x + 4, y + wh * 0.56, ww - 8, 6, '#5a3820'); rect(a, x + 4, y + wh * 0.56 + 6, ww - 8, wh * 0.08, '#7a5232');
+    rect(a, x + ww * 0.3, y + wh * 0.47, 18, wh * 0.09, '#c8ccd0'); rect(a, x + ww * 0.3 + 3, y + wh * 0.47 + 3, 12, 5, '#3a3a40');
+    // pendant lamps and, in front, little round tables and chairs
+    for (let lx = x + 30 + q() * 20; lx < x + ww - 20; lx += 70 + q() * 20) {
+      rect(a, lx, y, 1, wh * 0.14, '#3a2a1e');
+      a.fillStyle = '#2f3a36'; a.beginPath(); a.moveTo(lx - 9, y + wh * 0.2); a.quadraticCurveTo(lx + 0.5, y + wh * 0.12, lx + 10, y + wh * 0.2); a.fill();
+      a.fillStyle = 'rgba(255,214,150,0.9)'; a.beginPath(); a.ellipse(lx + 0.5, y + wh * 0.2, 7, 2, 0, 0, 7); a.fill();
+    }
+    for (let tx = x + 26 + q() * 16; tx < x + ww - 26; tx += 78 + q() * 20) {
+      rect(a, tx - 16, y + wh * 0.74, 32, 4, '#4a2e1c'); rect(a, tx - 1.5, y + wh * 0.74 + 4, 3, wh * 0.2, '#2e2420'); rect(a, tx - 8, y + wh * 0.94, 16, 2, '#2e2420');
+      for (const cx of [-24, 24]) { rect(a, tx + cx - 6, y + wh * 0.8, 12, 3, '#3a2618'); rect(a, tx + cx + (cx < 0 ? -6 : 4), y + wh * 0.66, 2, wh * 0.17, '#3a2618'); rect(a, tx + cx - 5, y + wh * 0.83, 1.6, wh * 0.13, '#3a2618'); rect(a, tx + cx + 3.4, y + wh * 0.83, 1.6, wh * 0.13, '#3a2618'); }
+      a.fillStyle = '#f4f0e8'; a.beginPath(); a.ellipse(tx - 6, y + wh * 0.74 - 1.5, 3, 1.5, 0, 0, 7); a.fill();
     }
   };
   const shopBay = (a, e, w, h, kind, seed, theme = '') => {
@@ -281,7 +369,7 @@ export function buildAtlas() {
       const x = 6, y = h * 0.22, ww = w - 12, wh = h * 0.78 - 4;
       const inner = kind === 'konbini' ? '#f6f4ea' : kind === 'cafe' ? '#7a5a40' : '#8a7a68';
       rect(a, x, y, ww, wh, inner);
-      shopInterior(a, x, y, ww, wh, r, theme);
+      shopInterior(a, x, y, ww, wh, r, theme || kind);
       if (kind === 'konbini') rect(a, x, y + 4, ww, 5, '#ffffff');
       // posters and the open sign hang inside the glass
       if (kind === 'door') { rect(a, w / 2 - 30, y + 18, 60, 24, '#fff'); textFit(a, '営業中', w / 2, y + 30, 54, 18, '#c82828'); }
@@ -552,6 +640,14 @@ export function buildAtlas() {
     vgrad(a, 0, h * 0.55, w, h * 0.45, [[0, 'rgba(26,32,28,0)'], [1, 'rgba(26,32,28,0.55)']]); // the waterline: wet, darker
     rect(a, 0, 0, w, 22, '#8c8d87'); rect(a, 0, 18, w, 4, 'rgba(0,0,0,0.3)'); rect(a, 0, 0, w, 3, 'rgba(255,255,255,0.2)'); // the coping
     grain(a, A, w, h, 0.12);
+  });
+  // a 町家 balcony's wooden rail (alpha-tested): a top rail and a foot board, square balusters between, dark weathered wood
+  A.add('wrail', 240, 80, (a, e, w, h) => {
+    a.clearRect(0, 0, w, h);
+    rect(a, 0, 0, w, 9, '#6a4a34'); rect(a, 0, 0, w, 2, 'rgba(255,225,190,0.25)'); rect(a, 0, 8, w, 2, 'rgba(20,10,5,0.45)');
+    rect(a, 0, h - 10, w, 10, '#5e412e'); rect(a, 0, h - 10, w, 2, 'rgba(255,225,190,0.18)');
+    for (let x = 4; x < w; x += 12) { rect(a, x, 9, 5, h - 19, '#634632'); rect(a, x, 9, 1.2, h - 19, 'rgba(255,225,190,0.18)'); rect(a, x + 4, 9, 1, h - 19, 'rgba(20,10,5,0.4)'); }
+    grain(a, A, w, h, 0.15);
   });
   return A;
 }

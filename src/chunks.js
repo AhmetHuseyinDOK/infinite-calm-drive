@@ -766,8 +766,9 @@ export class World {
         if (cs > 145.6 || cs < 3.4) { s += 1; continue; }          // side street at each crosswalk (≈ sc−4.4 … sc+3.4)
         const rw = rwAt(s), sw = walkW(s) || 3.0, front = rw + sw + 0.15;
         const t = r();
-        const type = t < 0.42 ? 'shop' : t < 0.58 ? 'apt' : t < 0.68 ? 'office' : t < 0.82 ? 'house' : t < 0.88 ? 'konbini' : t < 0.94 ? 'parking' : 'gap';
-        let w = type === 'shop' ? r.range(5, 9) : type === 'apt' ? r.range(10, 16) : type === 'office' ? r.range(10, 14) : type === 'house' ? r.range(7, 9.5)
+        // a shopping street (商店街) first: mostly 町家 shophouses and shops, a few blocks of flats and offices between them
+        const type = t < 0.5 ? 'machiya' : t < 0.7 ? 'shop' : t < 0.77 ? 'apt' : t < 0.8 ? 'office' : t < 0.86 ? 'house' : t < 0.91 ? 'konbini' : t < 0.95 ? 'parking' : 'gap';
+        let w = type === 'shop' ? r.range(5, 9) : type === 'machiya' ? r.range(6, 9.5) : type === 'apt' ? r.range(10, 16) : type === 'office' ? r.range(10, 14) : type === 'house' ? r.range(7, 9.5)
           : type === 'konbini' ? r.range(12, 14) : type === 'parking' ? r.range(7, 11) : r.range(2, 3.5);
         if (s + w > s1) { if (s1 - s < 5 || type === 'konbini') break; w = s1 - s - 0.2; }
         { const gap = Math.ceil((s + 4.4) / 150) * 150 - 4.4; // never build into the side-street mouth
@@ -780,10 +781,10 @@ export class World {
         } else if (type !== 'gap') {
           const M = matAt(sm, side * front, e + 0.15);
           const spec = { type, w, d: type === 'apt' || type === 'office' ? r.range(10, 14) : r.range(8, 12),
-            floors: type === 'shop' ? r.int(2, 4) : type === 'apt' ? r.int(4, 9) : type === 'office' ? r.int(4, 8) : 2, tint, litP, fence: type === 'house' && r() < 0.5 ? 1.2 : 0 };
+            floors: type === 'shop' ? r.int(2, 4) : type === 'machiya' ? (r() < 0.75 ? 2 : 3) : type === 'apt' ? r.int(4, 9) : type === 'office' ? r.int(4, 8) : 2, tint, litP, fence: type === 'house' && r() < 0.5 ? 1.2 : 0 };
           P.building(G, M, r, spec);
           if (type !== 'house' && r() < 0.28) P.vendingMachine(G, matAt(sm + (r() - 0.5) * (w - 1.2), side * (front - 0.42), e + 0.15), r);
-          if ((type === 'shop' || type === 'konbini') && r() < 0.3) for (let b = 0; b < 1 + r() * 3; b++) P.bicycle(G, matAt(sm - w / 2 + 0.8 + b * 0.55, side * (front - 0.75), e + 0.15, Math.PI / 2 + 0.1), r);
+          if ((type === 'shop' || type === 'konbini' || type === 'machiya') && r() < 0.3) for (let b = 0; b < 1 + r() * 3; b++) P.bicycle(G, matAt(sm - w / 2 + 0.8 + b * 0.55, side * (front - 0.75), e + 0.15, Math.PI / 2 + 0.1), r);
           if (type === 'house' && r() < 0.6) for (let p = 0; p < 2 + r() * 3; p++) P.pottedPlant(G, matAt(sm + 1 + p * 0.5, side * (front - 0.3), e + 0.15), r);
           if (r() < 0.03) for (let k = 0; k < 3; k++) P.cone(G, matAt(sm + k * 0.9, side * (rw + 0.35), e));
         }

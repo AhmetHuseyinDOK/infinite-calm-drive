@@ -163,17 +163,35 @@ function cumulusPuffs(r, tall) {
     }
     y += tall ? 0.115 : 0.075; w *= tall ? 0.8 : 0.66;
   }
-  // cauliflower bumps on the upper rims
+  // cauliflower bumps on the upper rims, and smaller bumps on those (sunlit cumulus is lumpy at every scale)
   const big = P.slice();
   for (const p of big) {
-    if (P.length > 92) break;
+    if (P.length > 84) break;
     const k = 1 + Math.floor(r() * 2);
     for (let j = 0; j < k; j++) {
       const a = 0.35 + r() * 2.4, rr = p[3] * (0.35 + r() * 0.2);
       P.push([p[0] + Math.cos(a) * p[3] * 0.82, p[1] + Math.sin(a) * p[3] * 0.82, p[2] + 0.04, rr]);
     }
   }
-  const out = P.slice(0, 96);
+  const mid = P.slice(big.length);
+  // bumps on the faces of the big lobes too, not only along the outline: they catch the light as small bright domes
+  for (const p of big) {
+    if (p[1] < base + 0.12 || P.length > 104) continue;
+    const k = 1 + Math.floor(r() * 2);
+    for (let j = 0; j < k; j++) {
+      const a = 0.3 + r() * 2.5, rho = p[3] * (0.3 + r() * 0.4), rr = p[3] * (0.28 + r() * 0.16);
+      P.push([p[0] + Math.cos(a) * rho, p[1] + Math.sin(a) * rho, p[2] + Math.sqrt(p[3] * p[3] - rho * rho) - rr * 0.6, rr]);
+    }
+  }
+  for (const p of mid) {
+    if (P.length > 124) break;
+    const k = 1 + Math.floor(r() * 2);
+    for (let j = 0; j < k; j++) {
+      const a = 0.2 + r() * 2.7, rr = p[3] * (0.38 + r() * 0.2);
+      P.push([p[0] + Math.cos(a) * p[3] * 0.85, p[1] + Math.sin(a) * p[3] * 0.85, p[2] + 0.02, rr]);
+    }
+  }
+  const out = P.slice(0, 128);
   // fit the whole cloud inside the texture (no flat clipped tops/sides)
   let minX = 1e9, maxX = -1e9, maxY = -1e9;
   for (const p of out) { minX = Math.min(minX, p[0] - p[3] * 1.12); maxX = Math.max(maxX, p[0] + p[3] * 1.12); maxY = Math.max(maxY, p[1] + p[3] * 1.12); }
@@ -183,39 +201,92 @@ function cumulusPuffs(r, tall) {
 }
 
 export function paintClouds(renderer) {
-  const SZ = 1024, puffU = { value: Array.from({ length: 96 }, () => new THREE.Vector4()) };
-  const mat = new THREE.ShaderMaterial({
+  const SZ = 1024, puffU = { value: Array.from({ length: 128 }, () => new THREE.Vector4()) };
+  const VS = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy * 2.0, 0.0, 1.0); }';
+  // pass 1 — the cloud as a height field: the front surface of the puffs, smoothly unioned (a soft max, so lobes melt
+  // into each other instead of meeting in hard ball seams), with its normal and coverage
+  const hMat = new THREE.ShaderMaterial({
     uniforms: { uP: puffU, uN: { value: 0 }, uSeed: { value: 0 }, uBase: { value: 0.1 }, uNoiseTex: MU.uNoiseTex },
-    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy * 2.0, 0.0, 1.0); }',
+    vertexShader: VS,
     fragmentShader: /* glsl */`
-      uniform vec4 uP[96]; uniform int uN; uniform float uSeed, uBase; varying vec2 vUv;
+      uniform vec4 uP[128]; uniform int uN; uniform float uSeed, uBase; varying vec2 vUv;
       ${GLSL_NOISE}
       void main(){
         vec2 p = vec2(vUv.x - 0.5, vUv.y);
-        float best = -1e9, union_ = 0.0; vec3 nrm = vec3(0.0, 0.0, 1.0);
-        for (int i = 0; i < 96; i++) {
+        float m = -1.0, s = 0.0, cov = 0.0; vec3 ns = vec3(0.0);
+        for (int i = 0; i < 128; i++) {
           if (i >= uN) break;
-          vec4 q = uP[i]; vec2 d = p - q.xy;
-          float ang = atan(d.y, d.x);
-          float r = q.w * (1.0 + 0.09 * (fbm2(vec2(ang * 2.5 + float(i) * 7.1, uSeed)) - 0.5) + 0.05 * (vnoise(p * 60.0 + float(i)) - 0.5));
-          float dd = dot(d, d);
-          union_ = max(union_, 1.0 - smoothstep(r * 0.93, r, sqrt(dd)));
-          if (dd < r * r) { float hz = sqrt(r * r - dd); float depth = q.z + hz; if (depth > best) { best = depth; nrm = normalize(vec3(d, hz)); } }
+          vec4 q = uP[i]; vec2 d = p - q.xy; float dd = dot(d, d), rm = q.w * 1.1;
+          if (dd > rm * rm) continue;
+          // the rim wobbles (noise read along the direction, so there is no seam at ±180°); the core stays round
+          float fi = float(i), dist = sqrt(dd); vec2 u = d / max(dist, 1e-5);
+          float wob = 0.08 * (vnoiseL(u * 2.2 + vec2(fi * 7.1, uSeed)) - 0.5) + 0.035 * (vnoiseL(u * 7.0 + vec2(fi * 3.3, uSeed + 5.0)) - 0.5);
+          float r = q.w * (1.0 + wob * smoothstep(0.4, 0.9, dist / q.w));
+          cov = max(cov, 1.0 - smoothstep(r - 0.004, r, dist));
+          if (dist < r) {
+            float hz = sqrt(r * r - dd), h = q.z + hz;
+            if (h > m) { float sc = exp((m - h) * 220.0); s *= sc; ns *= sc; m = h; }
+            float w = exp((h - m) * 220.0); s += w; ns += w * vec3(d, hz) / r;
+          }
         }
-        float a = union_ * smoothstep(uBase - 0.012, uBase + 0.02, p.y);
+        float jag = (vnoiseL(vec2(p.x * 40.0, uSeed)) - 0.5) * 0.012;
+        cov *= smoothstep(uBase - 0.014, uBase + 0.022, p.y + jag);
+        if (s <= 0.0) { gl_FragColor = vec4(0.0, 0.5, 0.5, 0.0); return; }
+        float H = m + log(s) / 220.0; vec3 n = normalize(ns);
+        gl_FragColor = vec4(clamp((H + 0.12) / 0.5, 0.0, 1.0), n.xy * 0.5 + 0.5, cov);
+      }`,
+    depthTest: false, depthWrite: false, blending: THREE.NoBlending,
+  });
+  // pass 2 — light it like a volume: a broad normal from the blurred height field (the cloud's big masses) over the lobes'
+  // own, lobes shadowing the ones below them, light dimming as it crosses the cloud, darker creases and a darker base.
+  // Lit from the upper left (R) and the upper right (B): the billboard blends between them, so a cloud never "flips"
+  // when the sun passes behind it
+  const hRT = new THREE.WebGLRenderTarget(SZ, SZ, { generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false });
+  const sMat = new THREE.ShaderMaterial({
+    uniforms: { uH: { value: hRT.texture }, uBase: { value: 0.1 }, uSeed: { value: 0 }, uNoiseTex: MU.uNoiseTex },
+    vertexShader: VS,
+    fragmentShader: /* glsl */`
+      uniform sampler2D uH; uniform float uBase, uSeed; varying vec2 vUv;
+      ${GLSL_NOISE}
+      float hAt(vec2 uv, float l){ return textureLod(uH, uv, l).r * 0.5 - 0.12; }
+      float light(vec2 uv, vec3 L, vec3 nM, vec3 nm){
+        float lam = dot(normalize(mix(nM, nm, 0.72)), L);
+        // lobes in front shadow the ones behind and below them (a soft march over the height field)
+        float sh = 1.0, t = 0.012, hb = hAt(uv, 2.0);
+        for (int i = 0; i < 11; i++) {
+          float h = hAt(uv + L.xy * t, 2.0);
+          sh = min(sh, clamp(3.0 * (hb + L.z * t - h) / max(t, 0.04) + 0.6, 0.0, 1.0));
+          t *= 1.33;
+        }
+        // light dims as it crosses the cloud: optical depth along the light, from the blurred coverage
+        float tau = 0.0; t = 0.02;
+        for (int i = 0; i < 8; i++) { tau += textureLod(uH, uv + L.xy * t, 3.0).a * t * 0.3; t *= 1.38; }
+        float tr = exp(-tau * 5.0);
+        return smoothstep(0.06, 0.3, lam) * mix(0.28, 1.0, sh) * mix(0.55, 1.0, smoothstep(0.2, 0.9, tr));
+      }
+      void main(){
+        vec4 A = textureLod(uH, vUv, 0.0);
+        float a = A.a;
         if (a < 0.002) { gl_FragColor = vec4(0.0); return; }
-        float ao = smoothstep(uBase, uBase + 0.32, p.y), grain = (fbm2(p * 18.0 + uSeed) - 0.5) * 0.1;
-        // lit from the upper left (R) and from the upper right (B): the billboard blends between them,
-        // so a cloud never "flips" when the sun passes behind it
-        float lamL = dot(nrm, normalize(vec3(-0.55, 0.62, 0.55))), lamR = dot(nrm, normalize(vec3(0.55, 0.62, 0.55)));
-        float litL = clamp((smoothstep(-0.25, 0.12, lamL) * 0.55 + smoothstep(0.32, 0.58, lamL) * 0.45) * mix(0.5, 1.0, ao) + grain, 0.0, 1.0);
-        float litR = clamp((smoothstep(-0.25, 0.12, lamR) * 0.55 + smoothstep(0.32, 0.58, lamR) * 0.45) * mix(0.5, 1.0, ao) + grain, 0.0, 1.0);
-        float rim = 1.0 - smoothstep(0.0, 0.55, nrm.z);
+        float h0 = A.r * 0.5 - 0.12;
+        vec3 nm = vec3(A.gb * 2.0 - 1.0, 0.0); nm.z = sqrt(max(1.0 - dot(nm.xy, nm.xy), 0.0));
+        nm = normalize(vec3(nm.xy * 0.8, nm.z));
+        float e = 1.0 / 64.0, l = 4.5;
+        vec2 g = vec2(hAt(vUv + vec2(e, 0.0), l) - hAt(vUv - vec2(e, 0.0), l), hAt(vUv + vec2(0.0, e), l) - hAt(vUv - vec2(0.0, e), l)) / (2.0 * e);
+        vec3 nM = normalize(vec3(-g * 1.4, 1.0));
+        float crease = clamp(1.0 + (h0 - hAt(vUv, 2.5)) * 9.0, 0.0, 1.0);
+        vec2 p = vec2(vUv.x - 0.5, vUv.y);
+        float base = smoothstep(uBase, uBase + 0.26, p.y), grain = (fbm2(p * 18.0 + uSeed) - 0.5) * 0.08;
+        float k = mix(0.3, 1.0, base) * mix(0.62, 1.0, crease), amb = 0.1 * base;
+        float litL = clamp(amb + (1.0 - amb) * light(vUv, normalize(vec3(-0.55, 0.62, 0.55)), nM, nm) * k + grain, 0.0, 1.0);
+        float litR = clamp(amb + (1.0 - amb) * light(vUv, normalize(vec3(0.55, 0.62, 0.55)), nM, nm) * k + grain, 0.0, 1.0);
+        // the silver lining is the thin outer edge only (not every lobe's outline)
+        float rim = 1.0 - smoothstep(0.35, 0.95, textureLod(uH, vUv, 3.5).a);
         gl_FragColor = vec4(vec3(litL, rim, litR) * a, a);
       }`,
     depthTest: false, depthWrite: false, blending: THREE.NoBlending,
   });
-  const quad = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat), scene = new THREE.Scene(), cam = new THREE.Camera();
+  const quad = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), hMat), scene = new THREE.Scene(), cam = new THREE.Camera();
   scene.add(quad);
   // one 2048² atlas with four 1024² clouds (two towering, two wide)
   const rt = new THREE.WebGLRenderTarget(SZ * 2, SZ * 2, { generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter });
@@ -225,15 +296,15 @@ export function paintClouds(renderer) {
   for (let i = 0; i < 4; i++) {
     const tall = i % 2 === 0, P = cumulusPuffs(r, tall);
     P.forEach((p, j) => puffU.value[j].set(p[0], p[1], p[2], p[3]));
-    mat.uniforms.uN.value = P.length; mat.uniforms.uSeed.value = i * 13.7;
-    rt.viewport.set((i % 2) * SZ, Math.floor(i / 2) * SZ, SZ, SZ);
+    hMat.uniforms.uN.value = P.length; hMat.uniforms.uSeed.value = sMat.uniforms.uSeed.value = i * 13.7;
+    quad.material = hMat; renderer.setRenderTarget(hRT); renderer.render(scene, cam);
+    quad.material = sMat; rt.viewport.set((i % 2) * SZ, Math.floor(i / 2) * SZ, SZ, SZ);
     renderer.setRenderTarget(rt); renderer.render(scene, cam);
     kinds.push({ cell: [i % 2, Math.floor(i / 2)], tall });
   }
   rt.viewport.set(0, 0, SZ * 2, SZ * 2);
   renderer.autoClear = prevAuto; renderer.setRenderTarget(prevRT);
-  // regenerate mipmaps for the whole atlas now that all cells are painted
-  mat.dispose(); quad.geometry.dispose();
+  hMat.dispose(); sMat.dispose(); hRT.dispose(); quad.geometry.dispose();
   return { tex: rt.texture, kinds, rt };
 }
 

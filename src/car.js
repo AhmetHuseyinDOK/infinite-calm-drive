@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { GRAD, withGloss } from './materials.js';
+import { GRAD, GRAD_SOFT, withGloss } from './materials.js';
 
 function plateTexture() {
   const c = document.createElement('canvas'); c.width = 256; c.height = 128;
@@ -61,12 +61,13 @@ export function makeCar() {
     float att = uCarLamp[i].w / (1.0 + 0.045 * d2);
     outgoingLight += uCarLampCol * att * (diffuseColor.rgb * max(dot(nV, L), 0.0) + pow(max(dot(nV, normalize(L + vV)), 0.0), 60.0) * 1.5 * gm);
   }` };
-  const mPaint = withGloss(new THREE.MeshToonMaterial({ color: '#ffffff', vertexColors: true, gradientMap: GRAD }), 0.85, 0.06, 'paint-l', LAMPS);
+  const mPaint = withGloss(new THREE.MeshToonMaterial({ color: '#ffffff', vertexColors: true, gradientMap: GRAD_SOFT }), 0.85, 0.06, 'paint-l', LAMPS); // (the soft ramp: a rounded body shades in gradients, not bands)
   const part = (hex, gloss) => Object.assign(new THREE.Color(hex), { gloss });
-  const mBody = part('#9fd8c8', 1), mRoof = part('#e9e7e0', 0.55), mTrim = part('#2a2c33', 0.35), mTyre = part('#1b1c20', 0.04), mHub = part('#c8ccd2', 0.8);
+  const mBody = part('#9fd8c8', 1), mRoof = part('#eeece4', 0.6), mTrim = part('#2a2c33', 0.35), mTyre = part('#1b1c20', 0.04), mHub = part('#c8ccd2', 0.8), mChrome = part('#d4d8de', 1.3);
   const paint = (g, c) => { const n = g.attributes.position.count, a = new Float32Array(n * 4); for (let i = 0; i < n; i++) a.set([c.r, c.g, c.b, c.gloss], i * 4); g.setAttribute('color', new THREE.Float32BufferAttribute(a, 4)); return g; };
   const mGlass = withGloss(new THREE.MeshToonMaterial({ color: '#ffffff', map: glassTexture(), gradientMap: GRAD }), 1.2, 0.08, 'glass-l', LAMPS);
   const mTail = new THREE.MeshToonMaterial({ color: '#c8303a', emissive: '#ff2a2a', emissiveIntensity: 0.4, gradientMap: GRAD });
+  const mTailBar = new THREE.MeshToonMaterial({ color: '#ff9a9a', emissive: '#ff4a40', emissiveIntensity: 1, gradientMap: GRAD }); // the LED bar in each lamp (mTail's program)
   const mStop = new THREE.MeshToonMaterial({ color: '#4a1216', emissive: '#ff2a2a', emissiveIntensity: 0, gradientMap: GRAD }); // high-mount stop lamp (same program as mTail)
   const mAmber = new THREE.MeshToonMaterial({ color: '#f0a040', emissive: '#ff9a30', emissiveIntensity: 0.2, gradientMap: GRAD });
   const mLamp = new THREE.MeshToonMaterial({ color: '#dfe4ea', emissive: '#fff4dc', emissiveIntensity: 0.15, gradientMap: GRAD }); // headlamps (mTail's program)
@@ -82,61 +83,143 @@ export function makeCar() {
     if (!parts.has(mat)) parts.set(mat, []);
     parts.get(mat).push(g);
   };
-  add(new RoundedBoxGeometry(1.48, 0.86, 3.38, 4, 0.15), mBody, 0, 0.77, 0);
-  add(new RoundedBoxGeometry(1.42, 0.66, 2.6, 4, 0.17), mBody, 0, 1.5, -0.25);
-  add(new RoundedBoxGeometry(1.38, 0.09, 2.5, 3, 0.04), mRoof, 0, 1.84, -0.25);
-  add(glassCell(new THREE.PlaneGeometry(1.16, 0.5), 1), mGlass, 0, 1.53, -1.556, 0, Math.PI, 0);
-  add(new RoundedBoxGeometry(0.42, 0.045, 0.04, 2, 0.015), mStop, 0, 1.752, -1.578); // ハイマウントストップランプ along the top of the rear glass
   const mDark = part('#16171b', 0), mSeam = part('#2b3134', 0.15), mRim = part('#b9bfc6', 0.9), mDish = part('#4d5258', 0.4), mRefl = part('#9a1c22', 0.6);
+  // ---- the body: one smooth shell lofted along the car (it was two stacked rounded boxes, a step at the waist and box
+  // edges all round). Every cross-section is a rounded rectangle from the sills to the roof; the roof drops over a raked
+  // windscreen to a short bonnet, the cabin leans in above the waist, and both ends round off like a soap bar (over each
+  // end's last ~0.2 m the section shrinks on a quarter circle, then a flat cap closes it: the hatch, the nose)
+  const L = 1.7, HW = 0.745, YB = 0.3;
+  const sst = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  const roofY = z => (z < 0.8 ? 1.8 : z < 1.22 ? 1.8 - 0.6 * sst(0.8, 1.22, z) : 1.2 - 0.1 * ((z - 1.22) / (L - 1.22)) ** 2);
+  const tumble = y => 1 - 0.085 * sst(1.15, 1.8, y);
+  const section = (z, d) => { // the right half, bottom centre → top centre, shrunk by d at the ends (less at the top edge
+    // and the sills than at the corners: the hatch's glass reaches up close under the roof, as on the real car)
+    const xm = HW - d, yb = YB + d * 0.6, yt = roofY(z) - d * (z < 0 ? 0.4 : 1), rb = Math.max(0.05, 0.1 - d * 0.5), rt = Math.max(0.06, (z < 0.8 ? 0.17 : 0.13) - d * 0.5);
+    const P = [[0, yb], [(xm - rb) * 0.5, yb], [xm - rb, yb]];
+    for (let k = 1; k < 4; k++) { const a = -Math.PI / 2 + (k / 8) * Math.PI; P.push([xm - rb + rb * Math.cos(a), yb + rb + rb * Math.sin(a)]); }
+    for (let j = 0; j <= 8; j++) P.push([xm, yb + rb + (j / 8) * (yt - rt - yb - rb)]);
+    for (let k = 1; k < 5; k++) { const a = (k / 10) * Math.PI; P.push([xm - rt + rt * Math.cos(a), yt - rt + rt * Math.sin(a)]); }
+    P.push([xm - rt, yt], [(xm - rt) * 0.5, yt], [0, yt]);
+    const ring = P.map(([x, y]) => [x * tumble(y), y]);
+    for (let j = P.length - 2; j > 0; j--) ring.push([-ring[j][0], ring[j][1]]);
+    return ring;
+  };
+  {
+    const st = []; // [z, shrink]
+    const RE = 0.2, FE = 0.22;
+    for (let k = 0; k <= 6; k++) { const th = (k / 6) * Math.PI / 2; st.push([-L + RE * (1 - Math.cos(th)), RE * (1 - Math.sin(th))]); }
+    for (let z = -L + RE + 0.12; z < 0.78; z += 0.13) st.push([z, 0]);
+    for (let z = 0.8; z < 1.225; z += 0.06) st.push([z, 0]);
+    for (const z of [1.3, 1.39]) st.push([z, 0]);
+    for (let k = 6; k >= 0; k--) { const th = (k / 6) * Math.PI / 2; st.push([L - FE * (1 - Math.cos(th)), FE * (1 - Math.sin(th))]); }
+    const pos = [], idx = [];
+    const rings = st.map(([z, d]) => section(z, d)), n = rings[0].length;
+    rings.forEach((ring, i) => ring.forEach(([x, y]) => pos.push(x, y, st[i][0])));
+    for (let i = 0; i < rings.length - 1; i++) for (let j = 0; j < n; j++) {
+      const a = i * n + j, b = i * n + ((j + 1) % n), c = a + n, e = b + n;
+      idx.push(a, b, c, b, e, c);
+    }
+    for (const [i, sg] of [[0, -1], [rings.length - 1, 1]]) { // the end caps (a fan from the middle)
+      const ctr = pos.length / 3, ring = rings[i];
+      pos.push(0, (ring[0][1] + ring[(n / 2) | 0][1]) / 2, st[i][0]);
+      for (let j = 0; j < n; j++) { const a = i * n + j, b = i * n + ((j + 1) % n); if (sg < 0) idx.push(ctr, b, a); else idx.push(ctr, a, b); }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx);
+    g.computeVertexNormals();
+    // (the loft's winding: if a flank's normal points inwards, turn every triangle round)
+    { const nr = g.attributes.normal, q = n * 10 + 12; if (nr.getX(q) < 0) { for (let k = 0; k < idx.length; k += 3) { const t = idx[k + 1]; idx[k + 1] = idx[k + 2]; idx[k + 2] = t; } g.setIndex(idx); g.computeVertexNormals(); } }
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array((pos.length / 3) * 2), 2));
+    // two-tone: the roof and its rounded shoulders white, the rest the body colour (per triangle, so the line is crisp)
+    const ng = g.toNonIndexed(), P = ng.attributes.position, col = new Float32Array(P.count * 4);
+    for (let t = 0; t < P.count; t += 3) {
+      const cy = (P.getY(t) + P.getY(t + 1) + P.getY(t + 2)) / 3, cz = (P.getZ(t) + P.getZ(t + 1) + P.getZ(t + 2)) / 3, c = cy > 1.665 && cz < 0.84 && cz > -1.52 ? mRoof : mBody; // (not round the hatch's top edge: the roof cap covers it)
+      for (let k = 0; k < 3; k++) col.set([c.r, c.g, c.b, c.gloss], (t + k) * 4);
+    }
+    ng.setAttribute('color', new THREE.Float32BufferAttribute(col, 4));
+    add(ng, mPaint, 0, 0, 0);
+  }
+  // the white roof: a thick cap over the cabin that overhangs it a little all round (the kei wagon's two-tone)
+  add(new RoundedBoxGeometry(1.42, 0.08, 2.62, 3, 0.038), mRoof, 0, 1.815, -0.44);
+  // glass laid on the skin (4 mm proud of it), following its curves: the rear window on the flat hatch, three side windows
+  // on the leaning flanks, the windscreen along the roof's curve down to the bonnet
+  const glassPatch = (pts, nu, nv, cell, flip) => { // pts(u, v) → [x, y, z, nx, ny, nz]
+    const g = new THREE.BufferGeometry(), P = [], N = [], T = [], I = [];
+    for (let j = 0; j <= nv; j++) for (let i = 0; i <= nu; i++) { const u = i / nu, v = j / nv, q = pts(u, v); P.push(q[0] + q[3] * 0.004, q[1] + q[4] * 0.004, q[2] + q[5] * 0.004); N.push(q[3], q[4], q[5]); T.push(u, v); }
+    for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) { const a = j * (nu + 1) + i, b = a + 1, c = a + nu + 1, d = c + 1; I.push(a, b, d, a, d, c); }
+    g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(T, 2)); g.setIndex(I);
+    { const p0 = new THREE.Vector3().fromArray(P, 0), p1 = new THREE.Vector3().fromArray(P, 3), p2 = new THREE.Vector3().fromArray(P, (nu + 1) * 3), nn = new THREE.Vector3().fromArray(N, 0);
+      if (p1.sub(p0).cross(p2.sub(p0)).dot(nn) < 0) { for (let k = 0; k < I.length; k += 3) { const t = I[k + 1]; I[k + 1] = I[k + 2]; I[k + 2] = t; } g.setIndex(I); } }
+    return glassCell(g, cell, flip);
+  };
+  const sideN = y => { const e = 0.01, dx = HW * (tumble(y + e) - tumble(y - e)) / (2 * e); const l = Math.hypot(1, dx); return [1 / l, -dx / l]; };
+  const zA = y => { let lo = 0.8, hi = 1.22; for (let k = 0; k < 24; k++) { const m = (lo + hi) / 2; if (roofY(m) > y) lo = m; else hi = m; } return lo; }; // the A pillar's line
   for (const s of [-1, 1]) {
-    // side windows, as on a tall kei car: front door, sliding rear door, rear quarter — split by a black B pillar and a
-    // body-coloured C pillar (it used to be one long glass strip), over a black rubber seal at the waistline
-    const ry = (s * Math.PI) / 2, flip = s < 0, xg = s * 0.712;
-    add(glassCell(new THREE.PlaneGeometry(0.94, 0.46), 2, flip), mGlass, xg, 1.54, 0.45, 0, ry, 0);
-    add(glassCell(new THREE.PlaneGeometry(0.62, 0.46), 3, flip), mGlass, xg, 1.54, -0.41, 0, ry, 0);
-    add(glassCell(new THREE.PlaneGeometry(0.5, 0.46), 0, flip), mGlass, xg, 1.54, -1.07, 0, ry, 0);
-    add(new THREE.BoxGeometry(0.012, 0.47, 0.085), mTrim, s * 0.716, 1.54, -0.06);
-    add(new THREE.BoxGeometry(0.014, 0.022, 2.3), mDark, s * 0.718, 1.305, -0.2);
+    const flip = s < 0;
+    const win = (z0f, z1f, cell) => add(glassPatch((u, v) => { const y = 1.21 + v * 0.39, z = s > 0 ? z1f(y) + (z0f(y) - z1f(y)) * u : z0f(y) + (z1f(y) - z0f(y)) * u, [nx, ny] = sideN(y); return [s * HW * tumble(y), y, z, s * nx, ny, 0]; }, 1, 6, cell, false), mGlass, 0, 0, 0);
+    win(() => 0.06, y => zA(y) - 0.07, 2); win(() => -0.72, () => -0.08, 3); win(() => -1.42, () => -0.84, 0);
+    add(new THREE.BoxGeometry(0.012, 0.41, 0.07), mTrim, s * 0.731, 1.405, -0.01, 0, 0, -s * 0.07); // the B pillar
+    add(new THREE.BoxGeometry(0.014, 0.022, 2.42), mDark, s * 0.748, 1.2, -0.26);                    // the waist seal
     // door seams (front door, sliding door), handles, the sliding door's rail
-    for (const [z, y0] of [[0.8, 0.64], [-0.06, 0.42], [-0.76, 0.64]]) add(new THREE.BoxGeometry(0.008, 1.19 - y0, 0.012), mSeam, s * 0.742, (y0 + 1.19) / 2, z);
-    add(new THREE.BoxGeometry(0.02, 0.028, 0.13), mSeam, s * 0.748, 1.06, 0.06);
-    add(new THREE.BoxGeometry(0.02, 0.028, 0.13), mSeam, s * 0.748, 1.06, -0.2);
-    add(new THREE.BoxGeometry(0.01, 0.022, 0.62), mSeam, s * 0.743, 1.165, -1.08);
+    for (const [z, y0] of [[0.8, 0.64], [-0.06, 0.42], [-0.76, 0.64]]) add(new THREE.BoxGeometry(0.008, 1.17 - y0, 0.012), mSeam, s * 0.749, (y0 + 1.17) / 2, z);
+    add(new THREE.BoxGeometry(0.02, 0.028, 0.13), mSeam, s * 0.752, 1.06, 0.06);
+    add(new THREE.BoxGeometry(0.02, 0.028, 0.13), mSeam, s * 0.752, 1.06, -0.2);
+    add(new THREE.BoxGeometry(0.01, 0.022, 0.62), mSeam, s * 0.749, 1.155, -1.08);
     // wheel wells: the dark opening above each wheel, edged by a black arch moulding
     for (const z of [1.12, -1.12]) {
-      add(new THREE.CircleGeometry(0.345, 18, 0, Math.PI), mDark, s * 0.741, 0.29, z, 0, ry, 0);
-      add(new THREE.TorusGeometry(0.35, 0.024, 5, 18, Math.PI), mTrim, s * 0.744, 0.29, z, 0, ry, 0);
+      add(new THREE.CircleGeometry(0.345, 18, 0, Math.PI), mDark, s * 0.749, 0.29, z, 0, (s * Math.PI) / 2, 0);
+      add(new THREE.TorusGeometry(0.35, 0.024, 5, 18, Math.PI), mTrim, s * 0.752, 0.29, z, 0, (s * Math.PI) / 2, 0);
     }
-    add(new RoundedBoxGeometry(0.1, 0.12, 0.2, 2, 0.04), mBody, s * 0.82, 1.2, 0.95);
-    add(new THREE.BoxGeometry(0.07, 0.035, 0.05), mTrim, s * 0.765, 1.16, 0.96); // (the mirror's stalk)
-    add(new RoundedBoxGeometry(0.14, 0.48, 0.08, 2, 0.035), mTail, s * 0.64, 1.0, -1.67);
-    add(new RoundedBoxGeometry(0.12, 0.08, 0.06, 2, 0.02), mAmber, s * 0.64, 0.7, -1.67);
+    add(new RoundedBoxGeometry(0.1, 0.12, 0.2, 2, 0.04), mBody, s * 0.83, 1.24, 1.02);
+    add(new THREE.BoxGeometry(0.07, 0.035, 0.05), mTrim, s * 0.775, 1.2, 1.03); // (the mirror's stalk)
+    // combination lamps: tall capsules in chrome bezels with a brighter LED bar down the middle, the amber indicator below
+    add(new RoundedBoxGeometry(0.16, 0.4, 0.05, 3, 0.075), mChrome, s * 0.56, 0.95, -1.703);
+    add(new RoundedBoxGeometry(0.13, 0.37, 0.05, 3, 0.062), mTail, s * 0.56, 0.95, -1.716);
+    add(new RoundedBoxGeometry(0.036, 0.27, 0.02, 2, 0.016), mTailBar, s * 0.56, 0.95, -1.742);
+    add(new RoundedBoxGeometry(0.11, 0.06, 0.04, 2, 0.02), mAmber, s * 0.56, 0.69, -1.707);
   }
-  add(glassCell(new THREE.PlaneGeometry(1.2, 0.52), 0), mGlass, 0, 1.52, 1.056, -0.12, 0, 0);
-  add(new RoundedBoxGeometry(1.52, 0.22, 0.22, 2, 0.07), mTrim, 0, 0.42, -1.62);
-  add(new THREE.BoxGeometry(0.24, 0.04, 0.05), mTrim, 0, 0.84, -1.69);
-  add(new THREE.PlaneGeometry(0.34, 0.17), mPlate, 0, 0.72, -1.7, 0, Math.PI, 0);
-  // the front (it was a blank painted face — and it is what the X card's film camera shows coming down the road): round
-  // headlamps in dark surrounds at the bonnet's corners, a slim grille between them, amber indicators, a black bumper
-  // with an air intake and the number plate, and wipers parked at the foot of the windscreen
+  // the rear window on the hatch: a rounded trapezoid (the cabin leans in), the rear seats behind it
+  {
+    const sh = new THREE.Shape(), w = 0.52, y0 = 1.15, y1 = 1.66, r = 0.07;
+    sh.moveTo(-w + r, y0); sh.lineTo(w - r, y0); sh.absarc(w - r, y0 + r, r, -Math.PI / 2, 0); sh.lineTo(w, y1 - r); sh.absarc(w - r, y1 - r, r, 0, Math.PI / 2);
+    sh.lineTo(-w + r, y1); sh.absarc(-w + r, y1 - r, r, Math.PI / 2, Math.PI); sh.lineTo(-w, y0 + r); sh.absarc(-w + r, y0 + r, r, Math.PI, Math.PI * 1.5);
+    const g = new THREE.ShapeGeometry(sh, 6), P = g.attributes.position, T = g.attributes.uv;
+    for (let i = 0; i < P.count; i++) { const x = P.getX(i), y = P.getY(i), v = (y - y0) / (y1 - y0); T.setXY(i, (x + w) / (2 * w), v); P.setX(i, x * (1 - 0.08 * v)); }
+    add(glassCell(g, 1), mGlass, 0, 0, -L - 0.004, 0, Math.PI, 0);
+  }
+  add(new RoundedBoxGeometry(0.36, 0.04, 0.03, 2, 0.014), mStop, 0, 1.69, -1.712); // ハイマウントストップランプ above the rear glass
+  // the windscreen, bending with the roof down to the bonnet
+  add(glassPatch((u, v) => { const z = 1.19 - v * 0.36, y = roofY(z), hw = 0.56 - 0.07 * v, dz = 0.005, sl = (roofY(z + dz) - roofY(z - dz)) / (2 * dz), l = Math.hypot(1, sl);
+    return [(u * 2 - 1) * hw, y, z, 0, 1 / l, -sl / l]; }, 2, 7, 0, false), mGlass, 0, 0, 0);
+  // the hatch: a recessed panel for the plate under a chrome handle, the hatch's outline, the bumper with its dark lower
+  // lip, red reflectors and a chrome tailpipe
+  add(new RoundedBoxGeometry(0.46, 0.25, 0.012, 2, 0.05), part('#86bdb0', 0.6), 0, 0.73, -1.701);
+  add(new THREE.PlaneGeometry(0.34, 0.17), mPlate, 0, 0.72, -1.709, 0, Math.PI, 0);
+  add(new RoundedBoxGeometry(0.25, 0.034, 0.03, 2, 0.013), mChrome, 0, 0.9, -1.708);
+  for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.01, 0.56, 0.006), mSeam, s * 0.47, 0.85, -1.703);
+  add(new THREE.BoxGeometry(0.95, 0.01, 0.006), mSeam, 0, 0.565, -1.703);
+  add(new RoundedBoxGeometry(1.5, 0.2, 0.26, 3, 0.08), mBody, 0, 0.44, -1.6);
+  add(new RoundedBoxGeometry(1.38, 0.08, 0.22, 2, 0.03), mTrim, 0, 0.33, -1.61);
+  for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.13, 0.035, 0.01), mRefl, s * 0.56, 0.44, -1.731);
+  add(new THREE.CylinderGeometry(0.036, 0.036, 0.12, 12), mChrome, 0.46, 0.29, -1.68, Math.PI / 2, 0, 0);
+  add(new THREE.CylinderGeometry(0.024, 0.024, 0.124, 10), mDark, 0.46, 0.29, -1.68, Math.PI / 2, 0, 0);
+  // the front (it is what the X card's film camera shows coming down the road): round headlamps in dark surrounds at the
+  // nose's corners, a slim grille between them, amber indicators, a black bumper with an air intake and the number
+  // plate, and wipers parked at the foot of the windscreen
   for (const s of [-1, 1]) {
-    add(new RoundedBoxGeometry(0.4, 0.26, 0.04, 2, 0.06), mTrim, s * 0.5, 0.99, 1.692);
-    add(new THREE.CylinderGeometry(0.105, 0.105, 0.03, 16), mLamp, s * 0.55, 0.99, 1.71, Math.PI / 2, 0, 0);
-    add(new THREE.CylinderGeometry(0.055, 0.055, 0.03, 12), mLamp, s * 0.38, 0.99, 1.708, Math.PI / 2, 0, 0);
-    add(new RoundedBoxGeometry(0.1, 0.06, 0.04, 2, 0.015), mAmber, s * 0.62, 0.79, 1.69);
-    add(new THREE.BoxGeometry(0.46, 0.014, 0.014), mDark, s * 0.25, 1.285, 1.085, -0.12, s * 0.12, 0);
+    add(new RoundedBoxGeometry(0.4, 0.26, 0.04, 2, 0.06), mTrim, s * 0.42, 0.85, 1.702);
+    add(new THREE.CylinderGeometry(0.105, 0.105, 0.03, 16), mLamp, s * 0.46, 0.85, 1.72, Math.PI / 2, 0, 0);
+    add(new THREE.CylinderGeometry(0.055, 0.055, 0.03, 12), mLamp, s * 0.3, 0.85, 1.718, Math.PI / 2, 0, 0);
+    add(new RoundedBoxGeometry(0.1, 0.06, 0.04, 2, 0.015), mAmber, s * 0.52, 0.66, 1.705);
+    add(new THREE.BoxGeometry(0.46, 0.014, 0.014), mDark, s * 0.25, 1.215, 1.2, -0.3, s * 0.12, 0);
   }
-  add(new RoundedBoxGeometry(0.5, 0.12, 0.03, 2, 0.03), mDark, 0, 0.98, 1.694);
-  for (let k = 0; k < 3; k++) add(new THREE.BoxGeometry(0.46, 0.012, 0.012), mSeam, 0, 0.945 + k * 0.035, 1.712);
+  add(new RoundedBoxGeometry(0.36, 0.12, 0.03, 2, 0.03), mDark, 0, 0.84, 1.704);
+  for (let k = 0; k < 3; k++) add(new THREE.BoxGeometry(0.32, 0.012, 0.012), mSeam, 0, 0.805 + k * 0.035, 1.722);
   add(new RoundedBoxGeometry(1.52, 0.24, 0.22, 2, 0.07), mTrim, 0, 0.44, 1.62);
   add(new THREE.BoxGeometry(0.7, 0.07, 0.02), mDark, 0, 0.4, 1.732);
   // (the front plate is painted, not the unlit plate texture: nothing lights a front plate at night)
-  add(new THREE.BoxGeometry(0.34, 0.17, 0.01), part('#f0cc38', 0.3), 0, 0.66, 1.733);
-  add(new THREE.BoxGeometry(0.3, 0.05, 0.004), part('#2f5a2f', 0.1), 0, 0.64, 1.739);
-  // the rear hatch's seam, red reflectors at the bumper's corners, the exhaust under it
-  for (const s of [-1, 1]) { add(new THREE.BoxGeometry(0.012, 0.63, 0.008), mSeam, s * 0.55, 0.875, -1.693); add(new THREE.BoxGeometry(0.13, 0.045, 0.01), mRefl, s * 0.6, 0.44, -1.734); }
-  add(new THREE.BoxGeometry(1.1, 0.012, 0.008), mSeam, 0, 0.56, -1.693);
-  add(new THREE.CylinderGeometry(0.035, 0.035, 0.14, 8), mDark, -0.42, 0.27, -1.68, Math.PI / 2, 0, 0);
+  add(new THREE.BoxGeometry(0.34, 0.17, 0.01), part('#f0cc38', 0.3), 0, 0.62, 1.733);
+  add(new THREE.BoxGeometry(0.3, 0.05, 0.004), part('#2f5a2f', 0.1), 0, 0.6, 1.739);
   unsprung = true;
   for (const [x, z] of [[-0.67, 1.12], [0.67, 1.12], [-0.67, -1.12], [0.67, -1.12]]) {
     add(new THREE.CylinderGeometry(0.29, 0.29, 0.19, 24), mTyre, x, 0.29, z, 0, 0, Math.PI / 2);
@@ -148,7 +231,7 @@ export function makeCar() {
   unsprung = false;
   for (const [mat, list] of parts) {
     const mesh = new THREE.Mesh(mergeGeometries(list), mat);
-    mesh.castShadow = mat !== mGlass && mat !== mPlate && mat !== mStop && mat !== mLamp; mesh.receiveShadow = true;
+    mesh.castShadow = mat !== mGlass && mat !== mPlate && mat !== mStop && mat !== mLamp && mat !== mTailBar; mesh.receiveShadow = true;
     inner.add(mesh);
   }
   { const mesh = new THREE.Mesh(mergeGeometries(wheels), mPaint); mesh.castShadow = mesh.receiveShadow = true; car.add(mesh); }
@@ -167,7 +250,7 @@ export function makeCar() {
     ao.rotation.x = -Math.PI / 2; ao.position.y = 0.03; ao.renderOrder = 3; car.add(ao);
   }
   // rear wiper (its own mesh so it can sweep when it rains)
-  const wiperPivot = new THREE.Group(); wiperPivot.position.set(0.02, 1.3, -1.57); inner.add(wiperPivot);
+  const wiperPivot = new THREE.Group(); wiperPivot.position.set(0.02, 1.19, -1.716); inner.add(wiperPivot);
   const wg = new THREE.BoxGeometry(0.52, 0.026, 0.02); wg.translate(0.27, 0, 0);
   const wiper = new THREE.Mesh(paint(wg, mTrim), mPaint); wiper.rotation.z = 0.18; wiperPivot.add(wiper);
   let wiperT = 0;
@@ -192,6 +275,7 @@ export function makeCar() {
       // brake lights: the combination lamps brighten and the high-mount stop lamp comes on (they switch in ~0.1 s)
       S.br += ((m ? m.brake : 0) - S.br) * Math.min(1, dt * 14);
       mTail.emissiveIntensity = 0.35 + night * 3.2 + S.br * (1.7 + night * 2.0); mStop.emissiveIntensity = S.br * (2.4 + night * 1.6);
+      mTailBar.emissiveIntensity = 1 + night * 3 + S.br * (2 + night * 2);
       if (rain > 0.15 || wiperT % 2.6 > 0.01) {
         wiperT += dt;
         const p = (wiperT % 2.6) / 2.6, sm = x => x * x * (3 - 2 * x);

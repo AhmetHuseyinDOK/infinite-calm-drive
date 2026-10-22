@@ -2,6 +2,59 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-23 · 00:xx — Restyle 1: the car, the camera and a shopping street (toward the reference art)
+- **New direction (set by the user):** match four painted anime reference images (a shopping street, a sakura avenue,
+  a coast road with tetrapods, a countryside road), not "more real low poly". The images are kept locally, out of git.
+  This first step does the car (in every frame) and the city (where the drive starts).
+- **The car is one smooth body, the reference's kei wagon.** It was two stacked rounded boxes: a step at the waist, box
+  edges, a full-width dark glass band at the back and flat red bars for lamps. Now:
+  - **one lofted shell.** Every cross-section is a rounded rectangle. The roof drops over a raked windscreen to a short
+    bonnet, the cabin leans in above the waist, and both ends round off like a soap bar. It is shaded with the soft
+    ramp, so it reads in gradients, not bands;
+  - **two-tone:** the white roof and shoulders are painted into the shell, under a thick white roof cap with a small
+    overhang;
+  - **the back:** a tall rear window framed by body-coloured pillars right up under the roof, with the seats behind it
+    and the stop lamp above it. Capsule tail lamps sit in chrome bezels with a brighter LED bar, amber indicators
+    below. The plate sits in a recess under a chrome handle, with a body-coloured bumper, a dark lower lip, red
+    reflectors and a chrome tailpipe;
+  - **glass on the skin:** side windows that follow the leaning flanks, and a windscreen that bends with the roof.
+  - Cost: 14.8k triangles (was 9.6k) and 11 draws (was 10). The LED bars cast no shadow and share the lamps' shader.
+- **The chase camera frames the car like the reference art:** 6.8 m back and 2.4 m up, looking level, so the horizon
+  sits near the middle and half the picture is sky. It was 8.2 m back and 3.1 m up, looking down on the car. A
+  `?rig=back,up,ahead,lookY` test hook was added for framing.
+- **The city is a shopping street (商店街).** Half the street frontage is now 町家 shophouses:
+  - a shop on the ground floor under a deep tiled canopy (庇), with the shop's sign on the canopy's front board;
+  - warm bulbs hanging under the canopy, lit by day as on a real shopping street;
+  - a fabric awning on half of them;
+  - a timber upper floor of lattice windows behind a wooden balcony rail (a new alpha-tested texture cell), with
+    flower boxes of pink and wild flowers;
+  - a tiled gable roof (the house roof, now a shared helper);
+  - vertical signs, and pots of plants along the shopfront.
+  - Fewer flats and offices line the street (the taller blocks still stand behind).
+- **Shop windows are stocked** (from the last polish pass, shipped with this step):
+  - general stores, konbini and cafés showed rows of random coloured rectangles. Now they have gondola shelves under
+    fluorescent tubes, with runs of the same product (boxes, bottles, cans, cup noodles, snack bags), price rails and
+    shadows. Konbini have a magazine rack along the window, and cafés have pendant lamps, a chalkboard menu and little
+    tables;
+  - a themed shop (a florist, a bakery…) now shows its theme in every glass bay;
+  - the old draws from the shared random stream are replayed first. Checked by a per-cell atlas diff: only the 5
+    intended cells changed, and the other 111 are pixel-identical.
+- **Cumulus clouds** (also from the last pass): the cloud painter builds a smooth height field of the puffs, then
+  lights it like a volume: big masses from the blurred field, lobes shadowing the ones below, light dimming through
+  the cloud, darker creases and a darker base. They were piles of separately shaded balls. It paints at load in
+  ~200 ms (was ~600 ms); the per-frame shader is unchanged.
+- Cost, measured against live:
+  - **GPU, desktop** (interleaved A/B, 6 rounds): city +0.94 ms (A/A control +0.35), country −0.58 ms.
+  - **GPU, camera alone** (in-page, flipping the framing on the same page): the new framing is *cheaper*, by 1.6 ms on
+    the phone and 0.65 ms on desktop, because more of the picture is sky.
+  - **GPU, phone city** (6 loads each, sorted pairwise): about +0.9 ms (live 9.1–13.6 ms, new 10.5–14.2 ms); the
+    loads swing up and down as before. Triangles in view 345k → 432k, draws 107 → 122. The shophouse canopies and
+    signs add pixels in front of the facades.
+  - **World building** while driving flat out through the city: cheaper on desktop (440–500 ms/km vs 620–705, worst
+    step 18–20 ms vs 42–47), because the shophouses are lighter than the flats they replace. Phone ×4 CPU is within
+    noise of live (1566–1743 vs 1241–2072 ms/km).
+  - 54 programs at every quality level, none compiled mid-drive. No console errors. Embed mode starts on tap.
+
 ## 2026-10-22 · 22:xx — Graphics pass 10: rivers with revetments and reeds
 - **The river crossings look like Japanese rivers.** The countryside and cherry-blossom rivers were a straight blue
   channel cut into a flat lawn: grass right down to the water. A strip of bare bank showed just above the waterline

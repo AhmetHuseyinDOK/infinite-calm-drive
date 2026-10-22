@@ -409,8 +409,11 @@ async function main() {
 
     // camera
     // camera rigs: 0 chase, 1 low "anime layout" angle, 2 eye level with no car (pure background art)
-    const RIGS = [{ back: 8.2, up: 3.1, ahead: 22, lookY: 1.45, cu: 0.85, lu: 0.5 }, { back: 7.0, up: 1.3, ahead: 26, lookY: 2.9, cu: 0.85, lu: 0.5, side: 1.15 }, { back: -0.6, up: 1.55, ahead: 30, lookY: 2.3, cu: 1, lu: 0.6 },
+    // (the chase framing of the reference art: close behind the car, a little above its roof, looking level — the horizon
+    // near the middle of the frame, half the picture sky; it was 8.2 m back and 3.1 m up, looking down on the car)
+    const RIGS = [{ back: 6.8, up: 2.4, ahead: 22, lookY: 2.0, cu: 0.85, lu: 0.5 }, { back: 7.0, up: 1.3, ahead: 26, lookY: 2.9, cu: 0.85, lu: 0.5, side: 1.15 }, { back: -0.6, up: 1.55, ahead: 30, lookY: 2.3, cu: 1, lu: 0.6 },
       { back: 0.01, up: parseFloat(QS.get('top')) || 45, ahead: 0, lookY: 0, cu: 0, lu: 0 }]; // [3] = test-only top-down view
+    if (QS.has('rig')) { const [b, u, a, l] = QS.get('rig').split(',').map(Number); Object.assign(RIGS[0], { back: b, up: u, ahead: a, lookY: l }); } // test hook: chase framing
     const lt = new THREE.Vector3();
     let follow = 6, hideCar = st.cam === 2;
     if (st.cam === 4) {

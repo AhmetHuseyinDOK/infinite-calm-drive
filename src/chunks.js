@@ -514,7 +514,15 @@ export class World {
       }
       yield;
     }
-    // the portal faces: from the arch (or the cutting) up to the ridge, wide enough to hide the step in the terrain
+    // the portal faces: from the arch (or the cutting) up to the ridge, wide enough to hide the step in the terrain.
+    // A weathered concrete headwall round the opening — a projecting arch ring, a coping along its top, rain streaks
+    // running down from it, dirt at its foot — and above and beside it the steep hill face held by a concrete lattice
+    // frame (法枠), like the cutting slopes either side. (It used to be one huge flat cream wall up to the ridge)
+    const hk = (a, b) => { const h = Math.sin(a * 12.9898 + b * 78.233 + t.k * 37.719) * 43758.5453; return h - Math.floor(h); };
+    const mix3 = (p, q, k) => [p[0] + (q[0] - p[0]) * k, p[1] + (q[1] - p[1]) * k, p[2] + (q[2] - p[2]) * k];
+    const CB = [0.5, 0.5, 0.47], BEAM = [0.55, 0.53, 0.47], CAP = [0.6, 0.6, 0.57], RING = [0.58, 0.58, 0.55], mulRing = [0.42, 0.42, 0.4];
+    const cellCol = (zi, yi) => { const h = hk(zi, yi); return autumnT ? mix3([0.26, 0.29, 0.08], [0.42, 0.3, 0.09], h) : mix3([0.22, 0.29, 0.08], [0.36, 0.36, 0.12], h); };
+    const autumnT = w.mountain > 0.5, HW = WT + 2.6, LAT = 2.6;
     for (const sd of [-1, 1]) {
       const sp = t.s + sd * T_HALF, xp = sd * (T_HALF + 0.08);
       if (sp < s0 || sp >= s1) continue;
@@ -522,25 +530,79 @@ export class World {
       for (const o of NEAR) if (o >= 1.44) zs.push(rw + o, -(rw + o));
       for (const a of FAR) if (a > rw + 3.5 && a < rw + 21) zs.push(a, -a);
       for (let k = 0; k <= 24; k++) zs.push(-WT + (2 * WT * k) / 24);
-      zs.push(-WT - 0.01, WT + 0.01); zs.sort((p, q) => p - q);
+      zs.push(-WT - 0.01, WT + 0.01, -HW, HW); zs.sort((p, q) => p - q);
       const arch = z => 3.2 + 3.0 * Math.sqrt(Math.max(0, 1 - (z / WT) ** 2));
       const top = z => Math.max(H(sp - sd * 0.03, z) - e, ridgeHr(sd * (T_HALF - 0.03), z));
       const bot = z => (Math.abs(z) <= WT + 1e-6 ? arch(z) : H(sp + sd * 0.03, z) - e);
-      const CONC = [0.78, 0.77, 0.73], RING = [0.66, 0.65, 0.62];
+      // the headwall's height: ~2.2 m over the crown of the arch, lower where the ridge is low
+      let HY = 8.4; for (const z of zs) if (Math.abs(z) <= HW) HY = Math.min(HY, top(z) - 0.4);
+      const wall = HY > 6.6;
       c.setM(M);
+      const nx = sd; // the face looks out along the road
+      const quad4 = (z0, z1, y00, y01, y10, y11, c0, c1) => { // a face strip from (z0: y00→y10) to (z1: y01→y11), colour c0 below → c1 above
+        const P0 = [xp, y00, z0], P1 = [xp, y01, z1], P2 = [xp, y11, z1], P3 = [xp, y10, z0];
+        const A = sd < 0 ? [P0, P1, P2, P3] : [P1, P0, P3, P2], Cc = sd < 0 ? [c0, c0, c1, c1] : [c0, c0, c1, c1];
+        for (const k of [0, 1, 2, 0, 2, 3]) c.vtx(A[k][0], A[k][1], A[k][2], nx, 0, 0, 0, 0, Cc[k]);
+      };
+      const lerp = (p, q, k) => p + (q - p) * k;
       for (let i = 0; i < zs.length - 1; i++) {
         const za = zs[i], zb = zs[i + 1]; if (zb - za < 1e-4) continue;
         const ta = top(za), tb = top(zb), ba = bot(za), bb = bot(zb);
         if (ta - ba < 0.01 && tb - bb < 0.01) continue;
-        if (sd < 0) c.quad([xp, ba, za], [xp, bb, zb], [xp, tb, zb], [xp, ta, za], CONC);
-        else c.quad([xp, bb, zb], [xp, ba, za], [xp, ta, za], [xp, tb, zb], CONC);
+        const zm = (za + zb) / 2, inWall = wall && Math.abs(zm) < HW;
+        let y0a = ba, y0b = bb;
+        if (inWall) { // concrete from the bottom up to the coping: cast in ~2.4 m panels, streaked below the top, dirty at the foot
+          const pc = mix3(CB, [0.46, 0.46, 0.44], hk(Math.floor(zm / 2.4), 3.1)), streak = 0.8 + 2.6 * hk(Math.floor(zm / 0.8), 7.7), dark = mix3(pc, [0.27, 0.27, 0.26], 0.35 + 0.3 * hk(Math.floor(zm / 0.8), 9.9));
+          const ha = Math.min(HY, ta), hb = Math.min(HY, tb), sa = Math.max(ba, ha - streak), sb = Math.max(bb, hb - streak);
+          if (Math.abs(zm) > WT) { // the foot meets the ground: a band of grime and moss
+            const fa = Math.min(sa, ba + 0.9), fb = Math.min(sb, bb + 0.9);
+            quad4(za, zb, ba, bb, fa, fb, mix3(pc, [0.25, 0.29, 0.18], 0.45), pc); quad4(za, zb, fa, fb, sa, sb, pc, pc);
+          } else quad4(za, zb, ba, bb, sa, sb, pc, pc);
+          quad4(za, zb, sa, sb, ha, hb, pc, dark);
+          y0a = ha; y0b = hb;
+          if (ta - ha < 0.01 && tb - hb < 0.01) continue;
+        }
+        // the lattice frame's cells, a row at a time (the beams go over the joins)
+        const zi = Math.floor(zm / LAT);
+        let ya = y0a, yb = y0b;
+        for (let row = Math.floor(Math.min(ya, yb) / LAT) + 1; ya < ta - 0.01 || yb < tb - 0.01; row++) {
+          const yc = row * LAT, na = Math.min(ta, Math.max(ya, yc)), nb = Math.min(tb, Math.max(yb, yc));
+          const cc = cellCol(zi, row);
+          quad4(za, zb, ya, yb, na, nb, mix3(cc, [0.2, 0.22, 0.1], 0.25), cc);
+          ya = na; yb = nb; if (row > 60) break;
+        }
       }
-      // a slightly darker concrete ring around the opening, and the name plate above it
+      // the lattice beams (they stand 12 cm proud of the face)
+      const x0 = Math.min(xp, xp + sd * 0.12), x1 = Math.max(xp, xp + sd * 0.12);
+      const colAt = z => { for (let i = 0; i < zs.length - 1; i++) if (z >= zs[i] && z <= zs[i + 1] && zs[i + 1] > zs[i]) { const k = (z - zs[i]) / (zs[i + 1] - zs[i]); return [lerp(bot(zs[i]), bot(zs[i + 1]), k), lerp(top(zs[i]), top(zs[i + 1]), k)]; } return null; };
+      const zMin = zs[0], zMax = zs[zs.length - 1];
+      for (let zj = Math.ceil(zMin / LAT) * LAT; zj < zMax; zj += LAT) { // uprights
+        const bt = colAt(zj); if (!bt) continue;
+        const lo = (wall && Math.abs(zj) < HW ? Math.max(HY + 0.3, bt[0]) : bt[0]) + 0.05, hi = bt[1] - 0.05;
+        if (hi - lo > 0.4 && !(Math.abs(zj) <= WT + 0.3 && !wall)) c.box(x0, lo, zj - 0.14, x1, hi, zj + 0.14, BEAM);
+      }
+      for (let row = 1; row < 60; row++) { // crossbars, in runs between the face's edges
+        const y = row * LAT; let run = null;
+        const flush = () => { if (run && run[1] - run[0] > 0.3) c.box(x0, y - 0.14, run[0], x1, y + 0.14, run[1], BEAM); run = null; };
+        let any = false;
+        for (let i = 0; i < zs.length - 1; i++) {
+          const za = zs[i], zb = zs[i + 1]; if (zb - za < 1e-4) continue;
+          const zm = (za + zb) / 2, lo = Math.max(bot(za), bot(zb), wall && Math.abs(zm) < HW ? HY + 0.3 : -1e9), hi = Math.min(top(za), top(zb));
+          if (y > lo + 0.2 && y < hi - 0.2) { any = true; if (run) run[1] = zb; else run = [za, zb]; } else flush();
+        }
+        flush(); if (!any && y > 30) break;
+      }
+      if (wall) { // the coping along the headwall's top, and the ring round the opening standing proud of it
+        c.box(Math.min(xp, xp + sd * 0.32), HY - 0.05, -HW, Math.max(xp, xp + sd * 0.32), HY + 0.3, HW, CAP);
+      }
+      const xo = xp + sd * 0.32, rz = k => -WT + (2 * WT * k) / 24, inner = k => [rz(k), arch(rz(k))], outer = k => [rz(k) * 1.12, arch(rz(k)) + 0.6];
       for (let k = 0; k < 24; k++) {
-        const z0 = -WT + (2 * WT * k) / 24, z1 = -WT + (2 * WT * (k + 1)) / 24, y0 = arch(z0), y1 = arch(z1), xo = xp + sd * 0.02;
-        if (sd < 0) c.quad([xo, y0, z0], [xo, y1, z1], [xo, y1 + 0.55, z1 * 1.08], [xo, y0 + 0.55, z0 * 1.08], RING);
-        else c.quad([xo, y1, z1], [xo, y0, z0], [xo, y0 + 0.55, z0 * 1.08], [xo, y1 + 0.55, z1 * 1.08], RING);
+        const [z0, y0] = inner(k), [z1, y1] = inner(k + 1), [oz0, oy0] = outer(k), [oz1, oy1] = outer(k + 1);
+        if (sd < 0) c.quad([xo, y0, z0], [xo, y1, z1], [xo, oy1, oz1], [xo, oy0, oz0], RING); else c.quad([xo, y1, z1], [xo, y0, z0], [xo, oy0, oz0], [xo, oy1, oz1], RING);
+        if (sd < 0) c.quad([xp, y0, z0], [xp, y1, z1], [xo, y1, z1], [xo, y0, z0], mulRing); else c.quad([xp, y1, z1], [xp, y0, z0], [xo, y0, z0], [xo, y1, z1], mulRing);
+        if (sd < 0) c.quad([xp, oy1, oz1], [xp, oy0, oz0], [xo, oy0, oz0], [xo, oy1, oz1], RING); else c.quad([xp, oy0, oz0], [xp, oy1, oz1], [xo, oy1, oz1], [xo, oy0, oz0], RING);
       }
+      for (const zz of [-1, 1]) c.box(Math.min(xp, xo), 0.2, zz > 0 ? WT : -WT * 1.12, Math.max(xp, xo), 3.2, zz > 0 ? WT * 1.12 : -WT, RING); // its legs down to the walkway
       G.atlas.setM(M);
       const pw = 1.9, py0 = 7.05, py1 = 7.85, xq = xp + sd * 0.03, cell = P.uvOf('tunnel' + (w.coast > 0.5 ? 1 : Math.abs(t.k) % 2 ? 2 : 0));
       if (sd < 0) G.atlas.quad([xq, py0, -pw], [xq, py0, pw], [xq, py1, pw], [xq, py1, -pw], [1, 1, 1], cell);

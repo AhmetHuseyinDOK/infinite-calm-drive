@@ -2,6 +2,27 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-22 · 21:xx — Graphics pass 9: tunnel portals like the real ones
+- **Tunnel portals look like Japanese mountain tunnels.** The mouth of each tunnel (mountain pass and coast) sat in a huge
+  flat cream wall reaching all the way up to the top of the ridge, like a paper cut-out. Now the portal is built the way
+  real ones are:
+  - a **concrete headwall** round the opening, cast in panels, with a coping along its top, rain streaks running down
+    from it and grime and moss at its foot;
+  - a **projecting arch ring** with a visible thickness (soffit and rim), whose legs run down to the walkways;
+  - the tunnel's name plate on the headwall, as before;
+  - above and beside the headwall, the steep **hill face held by a concrete lattice frame** (法枠), the same as the
+    cutting slopes either side, so the cutting, the portal and the ridge read as one engineered hillside.
+- How: geometry with vertex colours, built once with the chunk (per-corner colours give the streak and grime gradients).
+  No shader or draw-call change; +1.8% triangles in a tunnel view (114k → 116k).
+- Cost: none measurable.
+  - Per page load at the portals (5–6 loads each, sequential): coast 21.98 ms median vs live 21.88, mountains 26.55 vs
+    26.45.
+  - The alternating cross-build A/B was bimodal (±4 ms per round) at these spots, while live against itself read
+    −0.22 ± 0.8. Phone +0.10.
+  - Flat out through the tunnels on the phone profile with ×4 CPU throttling: world-build spikes 0 / 0 / 2 (worst step
+    13–20 ms) against live's 3 / 1 / 8 (22–35 ms).
+  - 54 programs, none compiled mid-drive; every quality level compiles. Startup 2.4 s; embed mode still starts on tap.
+
 ## 2026-10-22 · 20:xx — Graphics pass 8: winter birches with crowns
 - **The snow country's white birches (白樺) have their winter crowns.** They used to be bare white poles with a few
   stick branches, more like telegraph poles than trees. Now each has a crown of fine bare twigs, branching and

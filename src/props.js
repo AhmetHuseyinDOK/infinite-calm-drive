@@ -21,7 +21,8 @@ let A = null;
 export function setAtlas(a) { A = a; }
 const uv = n => A.uv(n);
 export const uvOf = uv;
-const pickV = (r, base) => (A.has(base + '2') && r() < 0.5 ? base + '2' : base);
+// a cell or one of its variants (base, base2, base3 …), with one random number when there are any (layouts stay as before)
+const pickV = (r, base) => { let n = 1; while (A.has(base + (n + 1))) n++; if (n === 1) return base; const k = Math.floor(r() * n); return k ? base + (k + 1) : base; };
 
 export function sub(M, x, y, z, yaw = 0) {
   const m = new THREE.Matrix4().makeRotationY(yaw); m.setPosition(x, y, z);
@@ -359,12 +360,15 @@ export function building(G, M, r, spec) {
 }
 
 const LIT_SHOP = new Set(['glass', 'door', 'cafe', 'noren']);
+const THEME_SIGN = { 3: 'hs5', 4: 'hs9', 5: 'hs_花屋', 6: 'hs_洋品店' }; // shop_glass3 bakery → パン, 4 books → 書店, 5 → 花屋, 6 → 洋品店
 function shopHouse(G, M, r, s) {
   const { w, d, floors, tint, litP } = s, a = G.atlas, c = G.color, fh0 = 3.6, fh = 3.0, H = fh0 + (floors - 1) * fh;
   const bays = Math.max(1, Math.round(w / 3)), bw = w / bays, x0 = -w / 2;
   const kinds = r.pick([['glass', 'door', 'glass'], ['noren', 'noren'], ['cafe', 'door'], ['shutter', 'shutter', 'door'], ['glass', 'glass', 'door'], ['house', 'garage'], ['noren', 'glass']]);
+  let theme = 0; // a bakery, bookshop, florist or clothes shop window: the signboard above says so
   for (let i = 0; i < bays; i++) {
-    const k = kinds[i % kinds.length]; fq(a, x0 + i * bw, x0 + (i + 1) * bw, 0, fh0, 0, pickV(r, 'shop_' + k));
+    const k = kinds[i % kinds.length], cell = pickV(r, 'shop_' + k); fq(a, x0 + i * bw, x0 + (i + 1) * bw, 0, fh0, 0, cell);
+    if (!theme && cell.startsWith('shop_glass') && cell.length > 10) theme = +cell.slice(10);
     if (LIT_SHOP.has(k)) lampAt(G, M, x0 + (i + 0.5) * bw, 1.9, -0.8, 0.7); // its window lights the street (and the car)
   }
   const wk = r.pick([0, 0, 1, 5, 0, 1]);
@@ -379,7 +383,8 @@ function shopHouse(G, M, r, s) {
   // signboard over the shop
   const sw = w * 0.94;
   c.box(-sw / 2, fh0 - 0.8, -0.3, sw / 2, fh0 + 0.08, -0.02, PAL.black);
-  fq(a, -sw / 2, sw / 2, fh0 - 0.8, fh0 + 0.08, -0.305, 'hs' + Math.floor(r() * 14));
+  const hs = 'hs' + Math.floor(r() * 14);
+  fq(a, -sw / 2, sw / 2, fh0 - 0.8, fh0 + 0.08, -0.305, THEME_SIGN[theme] || hs);
   if (r() < 0.55) { // awning
     const col = r.pick(AWNINGS), y = fh0 - 0.85;
     c.quad([w / 2 - 0.2, y - 0.35, -1.1], [-w / 2 + 0.2, y - 0.35, -1.1], [-w / 2 + 0.2, y, -0.02], [w / 2 - 0.2, y, -0.02], col);
@@ -454,6 +459,9 @@ function konbini(G, M, r, s) {
   addSides(a, w, d, [0, H], C('#f2f2ee'), r, 0);
   flatRoof(c, w, d, H, r);
 }
+const gcol = (s, wood) => (wood ? C('#7a5a42') : s.tint); // a house's gable / wall colour
+let _kawara = null; // the used 240 px of the kawara cell (textures.js), inside its margin of tiles
+const KAWARA = () => { if (!_kawara) { const c = uv('kawara'), du = (16 / 272) * (c.u1 - c.u0); _kawara = { u0: c.u0 + du, u1: c.u1 - du, v0: c.v0, v1: c.v1 }; } return _kawara; };
 function woodHouse(G, M, r, s) {
   const { w, d, floors, tint, litP } = s, a = G.atlas, c = G.color, fh = 2.9, H = floors * fh, x0 = -w / 2;
   const wood = r() < 0.5, bays = Math.max(2, Math.round(w / 3)), bw = w / bays;
@@ -468,10 +476,32 @@ function woodHouse(G, M, r, s) {
   c.quad([-w / 2, 0, d], [w / 2, 0, d], [w / 2, H, d], [-w / 2, H, d], mulC(tint, 0.75));
   // gable roof, ridge parallel to the road
   const snow = !!s.snow, o = snow ? 0.75 : 0.6, rh = snow ? Math.min(3.4, d * 0.46) : Math.min(2.4, d * 0.32);
-  const k = uv(snow ? 'white' : 'kawara'), RC = snow ? C('#f3f5fa') : C('#c8ccd8');
-  a.quad([w / 2 + o, H - 0.25, -o], [-w / 2 - o, H - 0.25, -o], [-w / 2 - o, H + rh, d / 2], [w / 2 + o, H + rh, d / 2], RC, k);
-  a.quad([-w / 2 - o, H - 0.25, d + o], [w / 2 + o, H - 0.25, d + o], [w / 2 + o, H + rh, d / 2], [-w / 2 - o, H + rh, d / 2], RC, k);
-  const gc = wood ? C('#7a5a42') : tint;
+  const k = snow ? uv('white') : KAWARA(), RC = snow ? C('#f3f5fa') : C('#c8ccd8'), EDGE = snow ? C('#e4e8f0') : C('#3d4456');
+  // the tiles at their real size: the roof is laid in strips ~3 m wide, each carrying the whole tile texture (one stretched
+  // texture made each tile ~1 m wide). (Snow has no tiles to show: one strip)
+  const nS = snow ? 1 : Math.max(2, Math.round((w + 2 * o) / 3)), xs = i => -w / 2 - o + ((w + 2 * o) * i) / nS;
+  for (let i = 0; i < nS; i++) {
+    const xa = xs(i), xb = xs(i + 1);
+    a.quad([xb, H - 0.25, -o], [xa, H - 0.25, -o], [xa, H + rh, d / 2], [xb, H + rh, d / 2], RC, k);
+    a.quad([xa, H - 0.25, d + o], [xb, H - 0.25, d + o], [xb, H + rh, d / 2], [xa, H + rh, d / 2], RC, k);
+  }
+  // the roof's edges have thickness: a fascia board along each eave, barge boards up the gables, and the underside of
+  // the overhang (it used to be a paper-thin sheet, invisible from below)
+  const fascia = (xa, xb, y0, y1, z, out) => { // the board's outer face and underside only (the rest is never seen)
+    if (out < 0) { c.quad([xb, y0, z], [xa, y0, z], [xa, y1, z], [xb, y1, z], EDGE); c.quad([xa, y0, z], [xb, y0, z], [xb, y0, z + 0.08], [xa, y0, z + 0.08], EDGE); }
+    else { c.quad([xa, y0, z], [xb, y0, z], [xb, y1, z], [xa, y1, z], EDGE); c.quad([xb, y0, z], [xa, y0, z], [xa, y0, z - 0.08], [xb, y0, z - 0.08], EDGE); }
+  };
+  for (const [ze, zw] of [[-o, 0], [d + o, d]]) {
+    fascia(-w / 2 - o, w / 2 + o, H - 0.42, H - 0.22, ze < 0 ? ze - 0.04 : ze + 0.04, ze < 0 ? -1 : 1);
+    c.quad(ze < 0 ? [-w / 2 - o, H - 0.26, ze] : [w / 2 + o, H - 0.26, ze], ze < 0 ? [w / 2 + o, H - 0.26, ze] : [-w / 2 - o, H - 0.26, ze], ze < 0 ? [w / 2 + o, H - 0.26, zw] : [-w / 2 - o, H - 0.26, zw], ze < 0 ? [-w / 2 - o, H - 0.26, zw] : [w / 2 + o, H - 0.26, zw], mulC(gcol(s, wood), 0.62));
+  }
+  for (const sx of [-1, 1]) {
+    const x = sx * (w / 2 + o + 0.02), t = 0.2, A0 = [x, H - 0.25, -o], A1 = [x, H + rh, d / 2], A2 = [x, H - 0.25, d + o];
+    const dn = p => [p[0], p[1] - t, p[2]];
+    if (sx > 0) { c.quad(dn(A1), dn(A0), A0, A1, EDGE); c.quad(dn(A2), dn(A1), A1, A2, EDGE); } // (facing outwards, ±x)
+    else { c.quad(dn(A0), dn(A1), A1, A0, EDGE); c.quad(dn(A1), dn(A2), A2, A1, EDGE); }
+  }
+  const gc = gcol(s, wood);
   tri(c, [-w / 2, H, 0], [-w / 2, H, d], [-w / 2, H + rh - 0.1, d / 2], gc);
   tri(c, [w / 2, H, d], [w / 2, H, 0], [w / 2, H + rh - 0.1, d / 2], gc);
   c.box(-w / 2 - o, H + rh - 0.05, d / 2 - 0.15, w / 2 + o, H + rh + 0.18, d / 2 + 0.15, snow ? C('#f6f7fb') : C('#3d4456'));
@@ -482,7 +512,8 @@ function woodHouse(G, M, r, s) {
   }
   if (floors > 1) { // little eave between floors
     const y = fh + 0.05;
-    a.quad([w / 2 + 0.1, y - 0.3, -0.75], [-w / 2 - 0.1, y - 0.3, -0.75], [-w / 2 - 0.1, y + 0.05, 0], [w / 2 + 0.1, y + 0.05, 0], RC, k);
+    for (let i = 0; i < nS; i++) { const xa = -w / 2 - 0.1 + ((w + 0.2) * i) / nS, xb = -w / 2 - 0.1 + ((w + 0.2) * (i + 1)) / nS; a.quad([xb, y - 0.3, -0.75], [xa, y - 0.3, -0.75], [xa, y + 0.05, 0], [xb, y + 0.05, 0], RC, k); }
+    fascia(-w / 2 - 0.1, w / 2 + 0.1, y - 0.42, y - 0.28, -0.79, -1);
   }
   if (s.fence) { // concrete block wall in front, with a gap for the gate
     const z = -s.fence, h = 1.2;

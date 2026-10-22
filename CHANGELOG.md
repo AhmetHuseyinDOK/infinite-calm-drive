@@ -2,6 +2,31 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-22 · 17:xx — Graphics pass 5: shops you can tell apart, and proper tiled roofs
+- **Shop windows show what each shop sells.** Every glass shopfront used to show the same shelves of coloured dots, so
+  the whole street looked like one store repeated. Now some of them are:
+  - a **bakery** (パン): wooden shelves of loaves and rolls, a counter of pastries, a 焼きたて sign;
+  - a **bookshop** (書店): tall shelves of book spines and a rack of magazines out front;
+  - a **florist** (花屋): buckets of cut flowers on tiered stands under trailing plants;
+  - a **clothes shop** (洋品店): garments on a rail, folded shirts and a mannequin.
+  The signboard above each of them now names what's in the window (a bakery's sign says パン). They light up from inside
+  at night like the other shops.
+- **House roofs look like tiled roofs.** The village houses' kawara tiles were stretched about three times too wide, and
+  the roof was a paper-thin sheet. Now:
+  - the tiles are at their real size (~30 cm);
+  - the roof has a fascia board along the eaves and dark barge boards up the gables, so its edges have thickness;
+  - the overhang has an underside;
+  - the two-storey houses' lower eave matches.
+- How: painting at load (four new shop cells and two signs in the texture atlas, which still had room: 3,152 of
+  4,096 rows used) and a little more geometry per house (+1–2% triangles in view). The new cells use their own random
+  numbers, so every other shop, house and sign looks exactly as before. No shader or draw-call change.
+- Cost: at most ~0.1 ms.
+  - GPU against the live build (alternating order, 8 rounds): sakura +0.11 ms median, city +0.33 on one run. Split
+    apart, the shops alone measured +0.04 and the roofs on top of them +0.11; the live build against itself read
+    −0.26 ± 0.6. Phone sakura +0.19, inside the noise.
+  - Flat out through the city: world-build spikes 0 / 2 / 1 / 6 / 9 against live's 4 / 0 / 2 / 5 / 0, nothing missing.
+  - 54 programs, none compiled mid-drive; every quality level compiles. Startup 2.7 s; embed mode still starts on tap.
+
 ## 2026-10-22 · 16:xx — Graphics pass 4: a train with wheels
 - **The train at the level crossings looks like a real commuter train**, not three floating boxes:
   - **Bogies:** each car rides on two bogies with side frames, axle boxes and two wheelsets each, so you can see wheels

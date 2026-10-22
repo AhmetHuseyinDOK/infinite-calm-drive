@@ -222,22 +222,70 @@ export function buildAtlas() {
 
   // ---------------- ground-floor bays (3 m × 3.6 m → 240×288) ----------------
   const SH = 288;
-  const shopBay = (a, e, w, h, kind, seed) => {
+  // what a shop window shows: a general store's shelves of goods, or (theme) a bakery, a bookshop, a florist, a clothes shop
+  const shopInterior = (a, x, y, ww, wh, r, theme) => {
+    const ell = (cx, cy, rx, ry, col, rot = 0) => { a.fillStyle = col; a.beginPath(); a.ellipse(cx, cy, rx, ry, rot, 0, 7); a.fill(); };
+    const pk = arr => arr[Math.floor(r() * arr.length)]; // (the cell's own rng: the shared one would change every later cell)
+    if (theme === 'bakery') { // パン屋: warm wooden shelves of loaves and rolls, a glass counter of pastries in front
+      rect(a, x, y, ww, wh, '#d9b98a'); vgrad(a, x, y, ww, wh, [[0, 'rgba(255,240,210,0.35)'], [1, 'rgba(90,60,30,0.25)']]);
+      for (let sy = y + wh * 0.28; sy < y + wh * 0.72; sy += wh * 0.2) {
+        rect(a, x, sy, ww, 5, '#8a5a32');
+        for (let bx = x + 8; bx < x + ww - 8; bx += 15 + r() * 10) { const lw = 7 + r() * 6, lh = 4 + r() * 3; ell(bx, sy - lh, lw, lh, pk(['#c98a3e', '#b4732e', '#d9a256', '#a4632a'])); ell(bx - lw * 0.2, sy - lh * 1.4, lw * 0.5, lh * 0.35, 'rgba(255,230,180,0.5)'); }
+      }
+      rect(a, x + 4, y + wh * 0.8, ww - 8, wh * 0.2, '#efe7d8'); rect(a, x + 4, y + wh * 0.8, ww - 8, 3, '#9a9a96');
+      for (let bx = x + 14; bx < x + ww - 10; bx += 18) ell(bx, y + wh * 0.9, 6, 4, pk(['#e8b35a', '#c06a3a', '#f2d29a']));
+      rect(a, x + ww - 64, y + 10, 52, 22, '#7a3e1e'); textFit(a, '焼きたて', x + ww - 38, y + 21, 46, 14, '#fff3dc', 800);
+    } else if (theme === 'books') { // 書店: tall shelves of book spines, a rack of magazines at the front
+      rect(a, x, y, ww, wh, '#6f5a46');
+      for (let sy = y + 6; sy < y + wh * 0.72; sy += wh * 0.17) {
+        rect(a, x, sy + wh * 0.15, ww, 4, '#4a3828');
+        for (let bx = x + 3; bx < x + ww - 4; ) { const bw = 3 + r() * 4, bh = wh * (0.1 + r() * 0.045); rect(a, bx, sy + wh * 0.15 - bh, bw, bh, pk(['#a8322e', '#2f5a8a', '#d8c9a4', '#3e6e4a', '#e0d8c8', '#8a6a3a', '#5a3e6e', '#c7a03a'])); bx += bw + (r() < 0.1 ? 4 : 0.6); }
+      }
+      rect(a, x + 4, y + wh * 0.76, ww - 8, wh * 0.24, '#8a7560');
+      for (let bx = x + 8; bx < x + ww - 22; bx += 24) { rect(a, bx, y + wh * 0.79, 20, 28, pk(['#e85a7a', '#5ab4e8', '#f2d24a', '#f6f6f2', '#7ac46a'])); rect(a, bx + 3, y + wh * 0.79 + 4, 14, 3, 'rgba(0,0,0,0.4)'); }
+    } else if (theme === 'florist') { // 花屋: buckets of cut flowers on tiered stands, potted plants, greenery on the walls
+      rect(a, x, y, ww, wh, '#e8e2d2'); vgrad(a, x, y, ww, wh, [[0, 'rgba(255,250,235,0.3)'], [1, 'rgba(60,50,30,0.15)']]);
+      for (let k = 0; k < 7; k++) { // trailing plants hanging from the top: strands of small leaves
+        const px = x + 8 + r() * (ww - 16), len = wh * (0.15 + r() * 0.25);
+        for (let t = 0; t < len; t += 3.5) ell(px + Math.sin(t * 0.25 + k) * 4 + (r() - 0.5) * 6, y + 4 + t, 3.4, 1.8, pk(['#4f7f3c', '#6a9a48', '#3e6a32', '#82b05a']), r() * 3);
+      }
+      for (let row = 0; row < 3; row++) {
+        const by = y + wh * (0.5 + row * 0.17);
+        rect(a, x, by + 14, ww, 4, '#9a8a76');
+        for (let bx = x + 10 + row * 6; bx < x + ww - 8; bx += 19) {
+          const fc = pk(['#e8344a', '#f6d23a', '#f6f2f4', '#f28ab0', '#a46ad8', '#f08a3a']);
+          for (let k = 0; k < 6; k++) { a.strokeStyle = '#4a7a3a'; a.lineWidth = 1.2; a.beginPath(); const fx = bx + (r() - 0.5) * 14; a.moveTo(bx, by + 10); a.lineTo(fx, by - 6 - r() * 8); a.stroke(); ell(fx, by - 8 - r() * 8, 3.2, 3, fc); }
+          rect(a, bx - 6, by + 4, 12, 11, pk(['#5a7a9a', '#d8d4cc', '#3a4a5a']));
+        }
+      }
+    } else if (theme === 'clothes') { // 洋品店: garments on a rail, folded shirts on a table, a mannequin
+      rect(a, x, y, ww, wh, '#efece6'); vgrad(a, x, y, ww, wh, [[0, 'rgba(255,255,255,0.3)'], [1, 'rgba(0,0,0,0.12)']]);
+      rect(a, x + 6, y + wh * 0.18, ww - 60, 3, '#7a7a7a');
+      for (let bx = x + 12; bx < x + ww - 66; bx += 13 + r() * 5) {
+        a.fillStyle = pk(['#3a4a6a', '#c8b89a', '#a8343a', '#e8e2d4', '#5a7a5a', '#d88a5a', '#2a2a2e']);
+        const top = y + wh * 0.18 + 3, len = wh * (0.3 + r() * 0.2); a.beginPath(); a.moveTo(bx - 5, top); a.lineTo(bx + 5, top); a.lineTo(bx + 8, top + len); a.lineTo(bx - 8, top + len); a.closePath(); a.fill();
+      }
+      const mx = x + ww - 32; ell(mx, y + wh * 0.16, 7, 8, '#d8cfc4'); a.fillStyle = pk(['#c84a5a', '#4a6a9a', '#e8d8b8']); a.beginPath(); a.moveTo(mx - 14, y + wh * 0.24); a.lineTo(mx + 14, y + wh * 0.24); a.lineTo(mx + 18, y + wh * 0.66); a.lineTo(mx - 18, y + wh * 0.66); a.closePath(); a.fill(); rect(a, mx - 2, y + wh * 0.66, 4, wh * 0.24, '#8a8a8a');
+      rect(a, x + 8, y + wh * 0.74, ww * 0.55, 6, '#8a6a4a'); for (let bx = x + 12; bx < x + ww * 0.55; bx += 14) rect(a, bx, y + wh * 0.74 - 8, 11, 8, pk(['#e8e2d4', '#3a4a6a', '#a8b8c8', '#d8b8a8']));
+    } else { // a general store: shelves of goods
+      for (let sy = y + wh * 0.25; sy < y + wh; sy += wh * 0.22) {
+        rect(a, x, sy, ww, 3, 'rgba(60,50,40,0.5)');
+        for (let gx = x + 3; gx < x + ww - 6; gx += 6 + r() * 8) { a.fillStyle = R.pick(['#e44', '#4a8', '#fc4', '#48c', '#f8a', '#fff', '#a6d', '#f93']); a.fillRect(gx, sy - 6 - r() * 10, 4 + r() * 5, 6 + r() * 10); }
+      }
+    }
+  };
+  const shopBay = (a, e, w, h, kind, seed, theme = '') => {
     const r = rng(seed);
     wall(a, A, w, h, '#e6e2da');
     if (kind === 'glass' || kind === 'door' || kind === 'konbini' || kind === 'cafe') {
       const x = 6, y = h * 0.22, ww = w - 12, wh = h * 0.78 - 4;
       const inner = kind === 'konbini' ? '#f6f4ea' : kind === 'cafe' ? '#7a5a40' : '#8a7a68';
       rect(a, x, y, ww, wh, inner);
-      // shelves and goods
-      for (let sy = y + wh * 0.25; sy < y + wh; sy += wh * 0.22) {
-        rect(a, x, sy, ww, 3, 'rgba(60,50,40,0.5)');
-        for (let gx = x + 3; gx < x + ww - 6; gx += 6 + r() * 8) { a.fillStyle = R.pick(['#e44', '#4a8', '#fc4', '#48c', '#f8a', '#fff', '#a6d', '#f93']); a.fillRect(gx, sy - 6 - r() * 10, 4 + r() * 5, 6 + r() * 10); }
-      }
+      shopInterior(a, x, y, ww, wh, r, theme);
       if (kind === 'konbini') rect(a, x, y + 4, ww, 5, '#ffffff');
       // posters and the open sign hang inside the glass
       if (kind === 'door') { rect(a, w / 2 - 30, y + 18, 60, 24, '#fff'); textFit(a, '営業中', w / 2, y + 30, 54, 18, '#c82828'); }
-      if (kind === 'glass' && r() < 0.7) { rect(a, x + 10, y + 14, 44, 60, R.pick(['#f6d34a', '#fff', '#ff8aa0'])); textFit(a, R.pick(['特売', '新商品', 'SALE', '本日']), x + 32, y + 44, 40, 16, '#c02020'); }
+      if (kind === 'glass' && !theme && r() < 0.7) { rect(a, x + 10, y + 14, 44, 60, R.pick(['#f6d34a', '#fff', '#ff8aa0'])); textFit(a, R.pick(['特売', '新商品', 'SALE', '本日']), x + 32, y + 44, 40, 16, '#c02020'); }
       // at night: the shop seen lit from inside (cool white in a konbini, amber in a cafe, warm white elsewhere)
       litInterior(a, e, x, y, ww, wh, kind === 'konbini' ? '#e4eef8' : kind === 'cafe' ? '#f0a868' : '#f2d2a6');
       // the glass's reflection over it all, then the frames and the cafe's board out front, dark at night
@@ -286,6 +334,8 @@ export function buildAtlas() {
   ['glass', 'door', 'shutter', 'noren', 'konbini', 'house', 'garage', 'cafe'].forEach((k, i) => {
     A.add('shop_' + k, B, SH, (a, e, w, h) => shopBay(a, e, w, h, k, 100 + i));
     if (k === 'glass' || k === 'noren' || k === 'house') A.add('shop_' + k + '2', B, SH, (a, e, w, h) => shopBay(a, e, w, h, k, 200 + i));
+    // glass shopfronts you can tell apart: a bakery, a bookshop, a florist, a clothes shop (props.js pickV picks among them)
+    if (k === 'glass') ['bakery', 'books', 'florist', 'clothes'].forEach((th, j) => A.add('shop_glass' + (j + 3), B, SH, (a, e, w, h) => shopBay(a, e, w, h, 'glass', 300 + j, th)));
   });
 
   // ---------------- horizontal shop signs (6 m × 0.9 m) ----------------
@@ -297,6 +347,12 @@ export function buildAtlas() {
     grain(a, A, w, h, 0.08);
     e.fillStyle = bg === '#fff' || bg === '#f5efe0' ? '#d9d6cc' : bg; e.fillRect(0, 0, w, h);
     e.globalAlpha = 0.9; textFit(e, name, w / 2 + (i % 3 === 0 ? 24 : 0), h / 2 + 2, w * 0.7, 50, fg === '#fff' ? '#ffffff' : fg, 900); e.globalAlpha = 1;
+  });
+  // signs for the shops whose window shows flowers or clothes (props.js puts the matching sign over a themed window)
+  for (const [nm, bg, fg] of [['花屋', '#2f7d4a', '#fff'], ['洋品店', '#2b2b33', '#f5d36b']]) A.add('hs_' + nm, 512, 76, (a, e, w, h) => {
+    rect(a, 0, 0, w, h, bg); rect(a, 0, 0, w, 5, 'rgba(255,255,255,0.35)'); rect(a, 0, h - 6, w, 6, 'rgba(0,0,0,0.18)');
+    textFit(a, nm, w / 2, h / 2 + 2, w * 0.7, 50, fg, 900); grain(a, A, w, h, 0.08);
+    e.fillStyle = bg; e.fillRect(0, 0, w, h); e.globalAlpha = 0.9; textFit(e, nm, w / 2, h / 2 + 2, w * 0.7, 50, fg, 900); e.globalAlpha = 1;
   });
   // ---------------- vertical protruding signs (0.6 m × 2.4 m) ----------------
   for (let i = 0; i < 10; i++) A.add('vs' + i, 72, 288, (a, e, w, h) => {
@@ -381,10 +437,10 @@ export function buildAtlas() {
     else { rect(a, 0, 0, w, 7, 'rgba(255,255,255,0.4)'); for (let x = w / 3; x < w; x += w / 3) rect(a, x - 1, 0, 2, h, 'rgba(0,0,0,0.08)'); }
     rect(a, 0, h - 6, w, 6, 'rgba(0,0,0,0.12)'); streak(a, w * 0.3, h - 6, 10, 10, 0.2);
   });
-  A.add('kawara', 256, 256, (a, e, w, h) => {
+  A.add('kawara', 272, 256, (a, e, w, h) => { // (16 px of tiles either side of the 240 px that is used: props.js KAWARA)
     rect(a, 0, 0, w, h, '#58617a');
     for (let y = 0; y < h; y += 16) { vgrad(a, 0, y, w, 16, [[0, 'rgba(255,255,255,0.12)'], [0.7, 'rgba(0,0,0,0)'], [1, 'rgba(0,0,0,0.35)']]); }
-    for (let x = 0; x < w; x += 20) rect(a, x, 0, 2, h, 'rgba(0,0,0,0.18)');
+    for (let x = 16 - 20; x < w; x += 20) rect(a, x, 0, 2, h, 'rgba(0,0,0,0.18)');
     grain(a, A, w, h, 0.12);
   });
   A.add('wood', 256, 256, (a, e, w, h) => {

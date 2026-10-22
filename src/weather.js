@@ -41,7 +41,7 @@ export const PLIGHT = {
   uHeadPos: { value: new THREE.Vector3() }, uHeadDir: { value: new THREE.Vector3(0, 0, 1) }, uHeadI: { value: 0 },
   uLampW: { value: [new THREE.Vector4(0, -1e3, 0, 0), new THREE.Vector4(0, -1e3, 0, 0)] }, uLampCol: { value: new THREE.Color(1, 0.8, 0.52) },
 };
-const PLIGHT_V = /* glsl */`
+export const PLIGHT_V = /* glsl */`
 uniform vec3 uHeadPos, uHeadDir, uLampCol; uniform float uHeadI; uniform vec4 uLampW[2];
 vec3 particleLight(vec3 w) {
   vec3 hv = w - uHeadPos; float hd = max(length(hv), 0.001);

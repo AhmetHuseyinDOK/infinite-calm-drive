@@ -7,6 +7,7 @@ import { setAtlas, setFoliage, warmTrees, setLeafDensity } from './props.js';
 import { World, CH } from './chunks.js';
 import { makeSky, paintClouds, makeClouds, makeMountains, updateTOD, applyWeather, TOD, lightDirAt } from './sky.js';
 import { makeWeather, makeRain, makeSnow, PLIGHT } from './weather.js';
+import { makeSpray } from './spray.js';
 import { makeBirds } from './birds.js';
 import { makeSea, foamMaterial, riverMaterial } from './sea.js';
 import { makeCar } from './car.js';
@@ -126,6 +127,7 @@ async function main() {
   const rig = makeCrossingRig(); scene.add(rig.group);
   const train = makeTrain(); scene.add(train.group);
   const weather = makeWeather(QS), rain = makeRain(), snowfall = makeSnow(); scene.add(rain.mesh, snowfall.mesh);
+  const spray = makeSpray(); scene.add(spray.mesh); const sprayAmb = new THREE.Color(), spraySun = new THREE.Color(), sprayTail = new THREE.Vector4();
   const birds = makeBirds(); scene.add(birds.mesh);
   let wet = weather.W.rain;
 
@@ -133,7 +135,7 @@ async function main() {
   // speed: the zone's cruising speed × mult (0.4 … 5.5, so up to ~190–265 km/h); uHome: the lane the car settles back
   // into when nobody steers — wherever the player last steered it (it used to always drift back to the left lane)
   const MULT_MIN = 0.4, MULT_MAX = 5.5;
-  const st = { s: Math.max(100, parseFloat(QS.get('s')) || 140), u: -1.65, uHome: -1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
+  const st = { s: Math.max(100, parseFloat(QS.get('s')) || 140), u: -1.65, uHome: -1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, spray: QS.has('nospray') ? 0 : 1 /* test switch */, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
   let started = false;
   status('building the road…');
   await new Promise(r => setTimeout(r, 10));
@@ -158,7 +160,7 @@ async function main() {
     for (const m of mats) { const o = new THREE.Mesh(tri, m); o.castShadow = o.receiveShadow = true; o.frustumCulled = false; warm.add(o); }
     warm.position.set(0, 0, 0); scene.add(warm);
     sun.target.position.set(0, 0, 0); sun.position.set(0, 150, 60); // so the warm-up meshes sit inside the shadow camera
-    const hidden = [rain.mesh, snowfall.mesh, train.group, rig.group, sea.mesh].filter(o => !o.visible);
+    const hidden = [rain.mesh, snowfall.mesh, spray.mesh, train.group, rig.group, sea.mesh].filter(o => !o.visible);
     for (const o of hidden) o.visible = true;
     renderer.setRenderTarget(post.composer.readBuffer); // the game draws into the post-processing buffer (linear output)
     renderer.compile(scene, camera);
@@ -353,7 +355,7 @@ async function main() {
     if (Math.abs(f.x - world.origin.x) > 900 || Math.abs(f.z - world.origin.z) > 900) {
       const dx = Math.round(f.x) - world.origin.x, dz = Math.round(f.z) - world.origin.z;
       world.setOrigin(Math.round(f.x), Math.round(f.z));
-      camPos.x -= dx; camPos.z -= dz; look.x -= dx; look.z -= dz; parts.shift && parts.shift(dx, dz); birds.shift(dx, dz);
+      camPos.x -= dx; camPos.z -= dz; look.x -= dx; look.z -= dz; parts.shift && parts.shift(dx, dz); birds.shift(dx, dz); spray.shift(dx, dz);
     }
     const ox = world.origin.x, oz = world.origin.z;
 
@@ -590,6 +592,13 @@ async function main() {
     g.uDay.value = day(); g.uWarm.value = TOD.warm; g.uTime.value = t;
 
     rain.update(camera.position, t, rn * (1 - tunS) * (1 - w.snow), day());
+    { // spray off the tyres on a wet road, powder on a snowy one, exhaust vapour in the cold (spray.js)
+      const cold = clamp(w.snow + w.mountain * 0.6 * Math.max(TOD.night, 1 - sstep(0.27, 0.36, st.tod)), 0, 1) * (1 - tunS);
+      sprayAmb.copy(TOD.fog).multiplyScalar(0.92); spraySun.copy(TOD.sunCol).multiplyScalar(Math.min(1, TOD.sunI / 3) * (1 - ov) * 0.6);
+      const cy = Math.cos(car.group.rotation.y), sy = Math.sin(car.group.rotation.y), cp = car.group.position;
+      sprayTail.set(cp.x - 1.75 * sy, cp.y + 0.95, cp.z - 1.75 * cy, Math.max(TOD.night, tunS) * (0.5 + 1.2 * CM.brake));
+      spray.update(dt, car.group, st.speed, U.uWet.value * (1 - tunS), w.snow * (1 - tunS), cold, sprayAmb, spraySun, sprayTail, camera.position, st.spray);
+    }
     snowfall.update(camera.position, t, w.snow * (0.3 + 0.7 * ov) * (1 - tunS), day());
     birds.setFog(scene.fog.near); birds.update(dt, t, camera.position, fwd, right, w, day(), rn, car.group.position);
     const tp0 = performance.now(); parts.update(dt, t, camera.position, fwd, right, w.sakura * (1 - tunS), f.y, nightK, (w.country + w.sakura * 0.4) * (1 - rn) * (1 - tunS), w.mountain * (1 - tunS)); const tp1 = performance.now();
@@ -638,7 +647,7 @@ async function main() {
     if (started && frames > 150 && dt > 0.03) slowT += dt; else slowT = Math.max(0, slowT - dt * 0.5);
     if (slowT > 3 && !QS.has('q')) { slowT = 0; stepDown(); }
   }
-  window.__dbg = { renderer, st, scene, camera, world, TOD, X, train, weather, U, birds, cine, post, car, sun, M, clouds, sky, mountains, shadowDir, CM, get audio() { return audio; } };
+  window.__dbg = { renderer, st, scene, camera, world, TOD, X, train, weather, U, birds, cine, post, car, sun, M, clouds, sky, mountains, shadowDir, CM, spray, get audio() { return audio; } };
   status('');
   $start.classList.add('ready');
   if (QS.has('auto')) begin();

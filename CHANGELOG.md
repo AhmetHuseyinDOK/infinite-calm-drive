@@ -2,6 +2,33 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-22 · 08:xx — Realism pass 13: tyre spray, snow powder and exhaust breath; no more fog on the cuttings
+- **The car throws spray.** Driving on a wet road, a fine mist of water now trails off the rear tyres: thicker the faster
+  you go, and for as long as the road stays wet after the rain. At night it glows red from the tail lights (more when
+  braking) and picks up the street lamps, the classic look of a car driving through rain after dark.
+  - On the snowy roads of 雪国 the tyres kick up fine snow powder instead.
+  - In the cold (snow country, and the mountain pass at night and early morning) the exhaust breathes small white
+    clouds.
+  - How: a small pool of soft billboards simulated on the CPU without allocations, drawn in one transparent call only
+    while something is in the air. The particle state goes to the GPU as uniform arrays indexed by `gl_InstanceID`.
+  - A first version updated instanced vertex buffers every frame. That cost about 0.5 ms of GPU time plus the odd
+    multi-millisecond stall (pinned down with a diagnostic build: uploads with no drawing +0.47 ms; drawing with no
+    uploads +0.15 ms).
+  - Particles shrink and fade before they reach the camera and vanish within 4.5 m of it, so no huge quads. The spray
+    covers ~6% of the screen while driving in rain.
+- **No more white fog on the tunnel cuttings.** The cutting faces at tunnel approaches had a white, foggy smear across
+  their lower part on the coast's sea side (grey/red streaks in the mountains). The slope's colour was blended with the
+  beach sand and verge below it over the bottom ~2 m of every face, and the flat verge took a third of the grid colour.
+  The slope-protection grid now starts cleanly at the foot of the face. This was a vertex-attribute change only.
+- Cost: none measurable.
+  - Spray switched on/off every 3 s while driving in rain, in one page: desktop −0.17 / +0.23 / −0.34 ms; phone profile
+    +0.28 / +0.28 / −0.13.
+  - GPU against the live build (alternating order): coast −0.06 ms, rainy country −0.14, phone coast −0.62.
+  - Allocation while driving in rain (phone, ×4 CPU): 2.1–2.5 MB/s against 2.6–2.7 live, with the same top sites.
+  - The spray shader is compiled at load (53 programs; none compiled when the rain starts or in snow); every quality
+    level compiles.
+  - Flat out in rain: 7 world-build spikes, the same as live, with nothing missing; embed mode still starts on tap.
+
 ## 2026-10-22 · 06:xx — Realism pass 12: brake lights, and bridges you can feel
 - **Brake lights.** The car's tail lamps now brighten when it brakes. A small high-mount stop lamp
   (ハイマウントストップランプ) along the top of the rear window lights up with them.

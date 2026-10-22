@@ -162,7 +162,11 @@ export class World {
       for (const [j0, j1, gl, gr] of [[0, qtr, 0, 1], [qtr - 1, half, 1, 0], [half, half + qtr + 1, 0, 1], [half + qtr, nc, 1, 0]]) {
         ground.gridN(rowS.length, j1 - j0, (i, jj) => {
           const R = rowS[i], F = R.f, j = j0 + jj, o = offs[j], u = o < 0 || (o === 0 && j < half) ? o - R.rw : o + R.rw;
-          const y = F.y + groundOffsetMix(R.s, u, F.y, R.rw), rg = Math.min(1, RAISE / 1.5);
+          // the ridge look (slope-protection grid) belongs on the cutting face only — it starts 1 m beyond the road edge — at full
+          // weight once the face stands 0.5 m proud of the natural ground. (It used to be RAISE / 1.5 everywhere: the bottom ~2 m
+          // of every face blended into the beach sand / verge — a white fog smear on the coast's sea side — and the flat verge
+          // took a third of the grid colour)
+          const y = F.y + groundOffsetMix(R.s, u, F.y, R.rw), rg = Math.abs(u) > R.rw + 0.98 ? Math.min(1, RAISE / 0.5) : 0;
           return [F.x + F.rx * u - ox, y, F.z + F.rz * u - oz, 0, 1, 0, mod(R.s, S_WRAP), u, R.w[0], R.w[1], R.w[2], R.w[3], R.rw, 0, R.rb > 0 ? R.rb : -rg, R.w[4]];
         }, gl, gr);
         yield;

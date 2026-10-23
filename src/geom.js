@@ -13,6 +13,15 @@ export const BILL_OCT = (() => {
   for (let i = 1; i < 7; i++) out.push(...P[0], ...P[i], ...P[i + 1]); // a fan from the first corner (counter-clockwise, facing +z)
   return out;
 })();
+// a hexagon round the same circle (its sides 1 from the middle, its corners 1.155): 4 triangles instead of the octagon's
+// 6 (a third fewer vertices to build and stamp) for 5% more fragments. Its corners reach past ±1, so map it with an inset
+// of at most 0.86 (bill()), or they would read the neighbouring cell
+export const BILL_HEX = (() => {
+  const P = [], out = [];
+  for (let i = 0; i < 6; i++) { const a = (Math.PI / 3) * i - Math.PI / 6, r = 2 / Math.sqrt(3); P.push([Math.cos(a) * r, Math.sin(a) * r]); }
+  for (let i = 1; i < 5; i++) out.push(...P[0], ...P[i], ...P[i + 1]);
+  return out;
+})();
 
 export class GB {
   // Vertices go straight into growable typed arrays (no big JS-array → typed-array copy when a chunk finishes) in

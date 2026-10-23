@@ -126,7 +126,7 @@ export class World {
     const O = path.at(s0), ox = O.x, oz = O.z;
     const r = rng(Math.floor(hash2(c, 777) * 4294967295));
     const G = { atlas: new GB({ uv: true, ao: true, lit: true }), color: new GB({ ao: true }), foliage: new GB(), leaf: new GB({ uv: true }), lamp: new GB({ color: false }), sig: new GB({ color: false }), sodium: new GB({ color: false }), decal: new GB({ uv: true }), pool: new GB({ uv: true, color: false }),
-      gleaf: new GB({ uv: true, off: true }) }; // (gleaf: the broadleaf crowns' painted clusters, camera-facing)
+      gleaf: new GB({ uv: true, off: true }), gblossom: new GB({ uv: true, off: true }) }; // (the broadleaf and cherry crowns' painted clusters, camera-facing)
     const ground = new GroundB(), foam = [], river = [];
     G.lamps = []; // lights that can light the car: chunk-local x, y, z, power … (props.js lampAt)
     const f = {}, f2 = {};
@@ -247,6 +247,9 @@ export class World {
     add(G.foliage.build(), this.M.foliage, true, true);
     add(G.leaf.build(), this.M.leaf, true, true, 0, 'leaf');
     if (this.M.gleaf) { const m = add(G.gleaf.build(), this.M.gleaf, true, true, 0, 'leaf'); if (m) m.customDepthMaterial = this.M.gleafDepth; } // (clusters face the sun in the shadow pass)
+    // (blossom casts shadows but doesn't receive them: its shaded undersides already face away from the sun, and the
+    // received shadows changed its colours by under 1% for ~0.4 ms on desktop)
+    if (this.M.gblossom) { const m = add(G.gblossom.build(), this.M.gblossom, true, false, 0, 'leaf'); if (m) m.customDepthMaterial = this.M.gleafDepth; }
     yield;
     add(G.lamp.build(), this.M.lamp, false, false, 0, 'light');
     add(G.sig.build(), this.M.sig, false, false, 0, 'small');
@@ -736,6 +739,21 @@ export class World {
       }
       yield;
     }
+    // 花壇: low flower beds along the cherry avenue's lawns, a few clumps of daisies and wildflowers between the trees, as
+    // in the painting (their own random numbers: the rest of the layout is unchanged)
+    const fb = rng(Math.floor(hash2(c, 2417) * 4294967295));
+    for (const side of [-1, 1]) {
+      G.leaf.setM(IDENT);
+      for (let s = s0 + fb() * 8; s < s1; s += fb.range(8, 14)) {
+        if (zoneW(s).sakura < 0.6 || nearR(s, 31)) continue;
+        const n = 2 + Math.floor(fb() * 4), u0 = side * (rwAt(s) + 2.85 + fb() * 0.5);
+        path.at(s, f); const y = f.y + groundOffsetMix(s, u0, f.y, rwAt(s)); // (one ground height for the bed: it is 1–2.5 m long)
+        for (let k = 0; k < n; k++) {
+          const d = k * 0.5 + fb() * 0.2, u = u0 + side * (fb() - 0.5) * 0.35, a = (fb() - 0.5) * 1.2, ca = Math.cos(a) * side, sa = Math.sin(a) * side;
+          P.bank(G, f.x + f.fx * d + f.rx * u - ox, y, f.z + f.fz * d + f.rz * u - oz, f.rx * ca + f.fx * sa, f.rz * ca + f.fz * sa, fb, fb.range(0.42, 0.58));
+        }
+      }
+    }
   }
 
   /** 雑草: tufts of grass and wildflowers along shoulders, field edges and verges (sparse weeds at the foot of city walls) */
@@ -851,7 +869,8 @@ export class World {
       for (let s = s0 + r() * 4; s < s1; s += r.range(7.5, 10)) {
         if (zoneW(s).sakura < 0.45 || nearR(s, 30)) continue;
         const rw = rwAt(s);
-        P.tree(G, onGround(s, side * (rw + 3.7), 0, r() * 6), 'sakura', r, r.range(1.05, 1.3));
+        // the avenue's trees face the road (a little turned, at random), so their crowns arch out over it
+        P.tree(G, onGround(s, side * (rw + 3.7), 0, P.GHIBLI.bcells ? (r() - 0.5) * 0.6 : r() * 6), 'sakuraAve', r, r.range(1.05, 1.3));
         if (r() < 0.45) P.tree(G, onGround(s + 3, side * (rw + r.range(9, 18)), 0, r() * 6), 'sakura', r, r.range(0.9, 1.25));
       }
       yield;

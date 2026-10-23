@@ -3,12 +3,12 @@
 // x runs along the road, the front faces −Z (towards the road), depth goes to +Z.
 import * as THREE from 'three';
 import { C, mulC, mixC, rng } from './util.js';
-import { GB, BILL_OCT } from './geom.js';
+import { GB, BILL_OCT, BILL_HEX } from './geom.js';
 
 const W1 = [1, 1, 1];
 export const PAL = {
   pole: C('#b1b0a9'), metal: C('#8d9198'), black: C('#2a2b30'), yellow: C('#f2c230'), white: C('#f4f3ee'), trans: C('#a0a3a8'),
-  lampPole: C('#727780'), lampHead: C('#dcdcd6'), trunk: C('#6a5444'), trunkDark: C('#4b3a33'),
+  lampPole: C('#727780'), lampHead: C('#dcdcd6'), trunk: C('#6a5444'), trunkDark: C('#4b3a33'), bark: C('#7a6556'),
   leaf: C('#86ba4c'), leafShade: C('#2c6640'), sakura: C('#ffd3e3'), sakuraShade: C('#de94b4'),
   pine: C('#55874c'), pineShade: C('#1d4632'), cedar: C('#41713e'), cedarShade: C('#1b3e2a'),
   roof: C('#bdbbb3'), parapet: C('#dcdad2'), pipe: C('#c4c4bf'), orange: C('#f07a22'), red: C('#d8352a'),
@@ -95,11 +95,29 @@ export function poleLamp(G, M, poolY = 0.04) { // lamp arm bolted onto a utility
   G.lamp.setM(M); G.lamp.box(-0.13, 6.63, -1.74, 0.13, 6.68, -1.26, W1);
   G.pool.setM(M); G.pool.quad([-3.6, poolY, 2.2], [3.6, poolY, 2.2], [3.6, poolY, -5.2], [-3.6, poolY, -5.2], W1, { u0: 0, u1: 1, v0: 0, v1: 1 });
 }
-export function oldLamp(G, M) { // short park/shrine lamp
-  const c = G.color; c.setM(M); lampAt(G, M, 0, 3.5, 0, 0.9);
-  c.cyl(0, 0, 0, 0.07, 0.06, 3.2, 8, C('#3a3a3e'));
-  c.box(-0.2, 3.2, -0.2, 0.2, 3.25, 0.2, C('#3a3a3e')); c.cyl(0, 3.75, 0, 0.26, 0.04, 0.3, 8, C('#3a3a3e'));
-  G.lamp.setM(M); G.lamp.box(-0.16, 3.25, -0.16, 0.16, 3.75, 0.16, W1);
+/** a square frustum: half-width a at y0 → b at y1, faces along x and z, with optional top and bottom caps */
+function sqFrustum(g, y0, y1, a, b, col, cap = false, bottom = false) {
+  const P = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+  for (let i = 0; i < 4; i++) {
+    const [x0, z0] = P[i], [x1, z1] = P[(i + 1) % 4];
+    g.quad([x0 * a, y0, z0 * a], [x0 * b, y1, z0 * b], [x1 * b, y1, z1 * b], [x1 * a, y0, z1 * a], col);
+  }
+  if (cap && b > 0.001) g.quad([-b, y1, -b], [-b, y1, b], [b, y1, b], [b, y1, -b], col);
+  if (bottom) g.quad([-a, y0, -a], [a, y0, -a], [a, y0, a], [-a, y0, a], col);
+}
+const LAMP_IRON = C('#202127');
+/** a lantern-headed park lamp (as along the cherry avenue, by river bridges and on station platforms): a slim black
+ *  post, a square black lantern of four warm glass panes in a frame, under a pyramid roof with a finial */
+export function oldLamp(G, M) {
+  const c = G.color; c.setM(M); lampAt(G, M, 0, 3.4, 0, 0.9);
+  const K = LAMP_IRON, NB = { noBottom: true }; // (every chunk of the avenue builds five: kept to ~350 vertices)
+  c.cyl(0, 0, 0, 0.12, 0.1, 0.28, 6, K); c.cyl(0, 0.28, 0, 0.065, 0.05, 2.8, 6, K, false); // plinth and post
+  sqFrustum(c, 3.04, 3.17, 0.05, 0.17, K, true);                                      // the cup under the lantern
+  for (const [x, z] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) c.box(x * 0.155 - 0.018, 3.17, z * 0.155 - 0.018, x * 0.155 + 0.018, 3.6, z * 0.155 + 0.018, K, null, NB); // corner frames
+  c.box(-0.165, 3.6, -0.165, 0.165, 3.64, 0.165, K, null, NB);                        // top band
+  sqFrustum(c, 3.64, 3.84, 0.23, 0.05, K); sqFrustum(c, 3.6, 3.64, 0.2, 0.23, K, false, true); // roof (with its eave)
+  c.cyl(0, 3.84, 0, 0.035, 0.0, 0.12, 4, K, false);                                   // finial
+  G.lamp.setM(M); G.lamp.box(-0.14, 3.17, -0.14, 0.14, 3.6, 0.14, W1);                // the glass
   G.pool.setM(M); G.pool.quad([-2.5, 0.04, 2.5], [2.5, 0.04, 2.5], [2.5, 0.04, -2.5], [-2.5, 0.04, -2.5], W1, { u0: 0, u1: 1, v0: 0, v1: 1 });
 }
 
@@ -325,7 +343,7 @@ export function treeCedar(G, M, r, s = 1) {
 // ---- Ghibli-style broadleaf crowns from painted leaf clusters (ghibli.js; materials.js makeGhibliLeaf lights them) ----
 // GHIBLI.cells: the cluster atlas's leaf cells, once it has loaded (main.js); until then, and if it fails, the broadleaf
 // trees keep their card crowns (treeBroad)
-export const GHIBLI = { cells: null };
+export const GHIBLI = { cells: null, bcells: null };
 /** a broadleaf tree with a crown of painted leaf clusters, like the reference art's: a stout bole forking into limbs
  *  that reach up into the crown, and 26–32 camera-facing clusters on the crown's shell, pulled toward 5–7 lobe
  *  directions so the crown reads as a few big masses with gaps between them. Through the gaps shows the crown's core:
@@ -361,16 +379,76 @@ export function treeGhibli(G, M, r, s = 1) {
   }
 }
 
-// trees are built once per (kind, variant) and then stamped — much cheaper than rebuilding every tree
-const TREE_BUILDERS = { broad: (G, M, r, s) => (GHIBLI.cells ? treeGhibli : treeBroad)(G, M, r, s), sakura: treeSakura, pine: treePine, cedar: treeCedar, maple: treeMaple, ginkgo: treeGinkgo, birch: treeBirch, snowcedar: treeSnowCedar };
+// ---- cherry trees (桜) from painted blossom clusters, as the sakura painting draws them (GHIBLI.bcells: the atlas's
+// blossom cells; without them the cherry trees keep their card crowns, treeSakura) ----
+/** A big old cherry tree: a thick dark trunk forking at 2.2–2.7 m into three or four limbs that rise in a wide V, and a
+ *  broad crown of blossom clusters high on them, 8–9 m across (at s = 1). `ave`: an avenue tree, built facing the road
+ *  (−z): its trunk leans a little away from the road and its crown reaches a little out over it, so the crowns of the two
+ *  rows close into a tunnel down the road, as in the painting, leaving a slot of sky over the middle near the car. The
+ *  crown's core (two big clusters in its shade) is drawn first and hides the clusters behind it. 23–26 hexagonal cards
+ *  in all (the old card crown had ~46 square ones, at random angles) */
+export function treeGhibliSakura(G, M, r, s = 1, ave = false) {
+  const c = G.color; c.setM(M);
+  const lean = ave ? 1 : 0, h0 = r.range(2.2, 2.7) * s, r0 = r.range(0.3, 0.35) * s;
+  const top = [r.range(-0.15, 0.15) * s, h0, lean * 0.3 * s];
+  c.rod([0, 0, 0], top, r0, r0 * 0.8, 7, PAL.bark);
+  c.cyl(0, 0, 0, r0 * 1.25, r0, 0.35 * s, 7, PAL.bark, false); // (the root flare)
+  // the crown: a broad dome high over the fork, pushed out over the road on an avenue
+  const cy = r.range(6.3, 6.9) * s, cz = -lean * 0.5 * s, Rx = r.range(4.0, 4.5) * s, Rz = r.range(3.6, 4.0) * s, Ry = r.range(1.7, 2.0) * s;
+  // the limbs: three or four rising steeply in a wide V from the fork (one of them toward the road on an avenue), each
+  // bending once on its way up, then forking into branches that reach into the crown's underside
+  const nL = r() < 0.35 ? 4 : 3, a0 = ave ? -Math.PI / 2 + r.range(-0.35, 0.35) : r() * 6.283;
+  for (let i = 0; i < nL; i++) {
+    const a = a0 + (i / nL) * 6.283 + r.range(-0.3, 0.3), ca = Math.cos(a), sa = Math.sin(a), out = r.range(0.32, 0.46);
+    const tip = [top[0] + ca * Rx * out, cy - Ry * r.range(0.35, 0.55), top[2] * 0.5 + cz * 0.4 + sa * Rz * out];
+    const mid = [top[0] + (tip[0] - top[0]) * 0.45 + ca * 0.25 * s, h0 + (tip[1] - h0) * 0.55, top[2] + (tip[2] - top[2]) * 0.45 + sa * 0.25 * s];
+    // (each piece starts a little back inside the one before it, so no gap opens at the bend)
+    const back = (p, q, d) => { const l = Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]) || 1; return [q[0] - ((q[0] - p[0]) / l) * d, q[1] - ((q[1] - p[1]) / l) * d, q[2] - ((q[2] - p[2]) / l) * d]; };
+    c.rod(top, mid, r0 * 0.62, r0 * 0.46, 6, PAL.bark); c.rod(back(top, mid, r0 * 0.5), tip, r0 * 0.47, r0 * 0.3, 5, PAL.bark);
+    const tb = back(mid, tip, r0 * 0.35), nb = i % 2 ? 1 : 2; // (branches up into the crown: two on every other limb)
+    for (let j = 0; j < nb; j++) {
+      const b = (j ? 1 : -1) * r.range(0.3, 0.9), L = r.range(1.2, 1.9) * s;
+      c.rod(tb, [tip[0] + Math.cos(a + b) * L, tip[1] + r.range(0.7, 1.2) * s, tip[2] + Math.sin(a + b) * L], r0 * 0.27, 0.04 * s, 4, PAL.bark);
+    }
+  }
+  // 6–7 lobe directions, as on the broadleaf crowns: the clusters gather toward them, so the crown reads as a few big
+  // billows of blossom with gaps between them
+  const lobes = [], nl = 6 + Math.floor(r() * 2);
+  for (let i = 0; i < nl; i++) { const a = (i / nl) * 6.283 + r() * 0.5, el = r.range(-0.2, 0.6), ce = Math.sqrt(1 - el * el); lobes.push([Math.cos(a) * ce, el, Math.sin(a) * ce]); }
+  lobes.push([0, 1, 0]);
+  const all = [[-Rx * 0.3, cy, cz, 1.75 * s, 1], [Rx * 0.3, cy, cz, 1.75 * s, 1]]; // the core
+  const nc = 21 + Math.floor(r() * 4);
+  for (let i = 0; i < nc; i++) {
+    let dx = r() * 2 - 1, dy = r.range(-0.3, 1), dz = r() * 2 - 1, l = Math.hypot(dx, dy, dz) || 1; dx /= l; dy /= l; dz /= l;
+    let best = lobes[0], bd = -2; for (const L of lobes) { const d = L[0] * dx + L[1] * dy + L[2] * dz; if (d > bd) { bd = d; best = L; } }
+    dx = dx * 0.5 + best[0] * 0.5; dy = dy * 0.5 + best[1] * 0.5; dz = dz * 0.5 + best[2] * 0.5; l = Math.hypot(dx, dy, dz) || 1; dx /= l; dy /= l; dz /= l;
+    const rr = r.range(0.8, 0.95);
+    all.push([dx * Rx * rr, cy + dy * Ry * rr, cz + dz * Rz * rr, r.range(1.0, 1.3) * s, 0]);
+  }
+  const tint = [1, r.range(0.96, 1.03), r.range(0.97, 1.02)]; // (a little variety: some trees rosier, some paler)
+  const g = G.gblossom; g.setM(M);
+  for (const [x, y, z, rad, core] of all) {
+    let nx = x / Rx, ny = (y - cy) / Ry + 0.12, nz = (z - cz) / Rz; const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
+    if (core) { nx = nz = 0; ny = -1; } // (a straight-down normal marks the core for the shader: it casts no shadow, and takes the crown's)
+    // (hexagons round each cluster's paint, mapped with a 0.86 inset: the same painted size as the broadleaf crowns'
+    // octagons at 0.88, with a third fewer vertices to stamp into every chunk)
+    const ht = Math.min(1, Math.max(0, (y - (cy - Ry)) / (2 * Ry))), k = core ? 0.62 : 0.8 + 0.2 * ht, hh = (rad / 0.8) * 0.86;
+    g.bill(x, y, z, nx, ny, nz, hh, hh, GHIBLI.bcells[Math.floor(r() * GHIBLI.bcells.length)], [tint[0] * k, tint[1] * k, tint[2] * k], BILL_HEX, 0.86);
+  }
+}
+
+// trees are built once per (kind, variant) and then stamped — much cheaper than rebuilding every tree. 'sakuraAve': the
+// avenue's cherry trees, built facing the road (chunks.js placeSakura)
+const TREE_BUILDERS = { broad: (G, M, r, s) => (GHIBLI.cells ? treeGhibli : treeBroad)(G, M, r, s), sakura: (G, M, r, s) => (GHIBLI.bcells ? treeGhibliSakura(G, M, r, s) : treeSakura(G, M, r, s)),
+  sakuraAve: (G, M, r, s) => (GHIBLI.bcells ? treeGhibliSakura(G, M, r, s, true) : treeSakura(G, M, r, s)), pine: treePine, cedar: treeCedar, maple: treeMaple, ginkgo: treeGinkgo, birch: treeBirch, snowcedar: treeSnowCedar };
 const TCACHE = {};
 function treeTemplate(kind, v) {
   const key = kind + v;
   let t = TCACHE[key];
   if (!t) {
-    const g = { color: new GB(), foliage: new GB(), leaf: new GB({ uv: true }), gleaf: new GB({ uv: true, off: true }) };
+    const g = { color: new GB(), foliage: new GB(), leaf: new GB({ uv: true }), gleaf: new GB({ uv: true, off: true }), gblossom: new GB({ uv: true, off: true }) };
     TREE_BUILDERS[kind](g, new THREE.Matrix4(), rng(1000 + v * 77 + kind.length * 13), 1);
-    t = TCACHE[key] = { c: g.color.toArrays(), f: g.foliage.toArrays(), l: g.leaf.toArrays(), g: g.gleaf.toArrays() };
+    t = TCACHE[key] = { c: g.color.toArrays(), f: g.foliage.toArrays(), l: g.leaf.toArrays(), g: g.gleaf.toArrays(), b: g.gblossom.toArrays() };
   }
   return t;
 }
@@ -382,6 +460,7 @@ export function tree(G, M, kind, r, s = 1) {
   const m = M.clone().scale(new THREE.Vector3(s, s, s)); m.groundY = M.groundY;
   G.color.stamp(t.c, m); G.foliage.stamp(t.f, m); G.leaf.stamp(t.l, m);
   if (t.g.n) G.gleaf.stamp(t.g, m);
+  if (t.b.n) G.gblossom.stamp(t.b, m);
 }
 
 // ------------------------------------------------------------------ buildings
@@ -839,12 +918,18 @@ export function alarmPost(G, M) {
 }
 
 // ------------------------------------------------------------------ shrine / park / coast bits
+/** a stone lantern (石灯籠), square throughout as in the cherry avenue's painting: a footing, a post, a platform, the fire
+ *  box with its two windows, a pyramid roof and a knob on top */
 export function stoneLantern(G, M) {
   const c = G.color; c.setM(M);
-  c.box(-0.4, 0, -0.4, 0.4, 0.25, 0.4, PAL.stone); c.cyl(0, 0.25, 0, 0.14, 0.12, 0.95, 8, PAL.stone);
-  c.box(-0.32, 1.2, -0.32, 0.32, 1.3, 0.32, PAL.stone); c.box(-0.26, 1.3, -0.26, 0.26, 1.72, 0.26, mulC(PAL.stone, 1.05));
-  c.cyl(0, 1.72, 0, 0.55, 0.08, 0.38, 6, mulC(PAL.stone, 0.92));
-  G.lamp.setM(M); G.lamp.box(-0.18, 1.38, -0.27, 0.18, 1.62, -0.25, W1); G.lamp.box(-0.18, 1.38, 0.25, 0.18, 1.62, 0.27, W1);
+  const S0 = PAL.stone, S1 = mulC(PAL.stone, 1.06), S2 = mulC(PAL.stone, 0.92);
+  c.box(-0.36, 0, -0.36, 0.36, 0.18, 0.36, S2); c.box(-0.26, 0.18, -0.26, 0.26, 0.26, 0.26, S0); // footing
+  c.box(-0.13, 0.26, -0.13, 0.13, 1.0, 0.13, S0);                                                 // post
+  sqFrustum(c, 1.0, 1.1, 0.16, 0.3, S1, true, true);                                              // platform
+  c.box(-0.2, 1.1, -0.2, 0.2, 1.48, 0.2, S1);                                                     // fire box
+  sqFrustum(c, 1.48, 1.54, 0.25, 0.35, S2, false, true); sqFrustum(c, 1.54, 1.78, 0.35, 0.07, S2); // roof
+  c.cyl(0, 1.78, 0, 0.07, 0.04, 0.1, 6, S0); c.cyl(0, 1.88, 0, 0.05, 0.0, 0.08, 6, S0);           // knob (宝珠)
+  G.lamp.setM(M); G.lamp.box(-0.1, 1.2, -0.205, 0.1, 1.38, -0.195, W1); G.lamp.box(-0.1, 1.2, 0.195, 0.1, 1.38, 0.205, W1);
 }
 export function torii(G, M, span, h = 6.2) {
   const c = G.color; c.setM(M);

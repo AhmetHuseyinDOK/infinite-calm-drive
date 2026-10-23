@@ -26,6 +26,7 @@ export function makeParticles(glowTex) {
     shift(dx, dz) { for (const o of P) { o.p.x -= dx; o.p.z -= dz; } for (const o of F) { o.p.x -= dx; o.p.z -= dz; } },
     update(dt, t, cam, fwd, right, wSakura, groundY, night, wFly, wAutumn = 0) {
       const n = Math.floor(N * Math.min(1, wSakura * 1.1 + wAutumn * 0.55));
+      petalMat.color.setScalar(1 - 0.72 * night); // (unlit: at night they sparkled like snow; now they fall in the dark)
       let recolor = false;
       petals.count = n;
       for (let i = 0; i < n; i++) {

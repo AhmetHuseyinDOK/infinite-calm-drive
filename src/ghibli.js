@@ -92,8 +92,8 @@ export async function loadTreeAtlas(tier, timeoutMs = 15000) {
   const base = ASSETS + 'trees/';
   return orNull((async () => {
     if (typeof DecompressionStream === 'undefined') throw new Error('no DecompressionStream');
-    const r = await fetch(base + 'trees.json');
-    if (!r.ok) throw new Error('trees.json ' + r.status);
+    const r = await fetch(base + 'crowns.json'); // (leaf clusters in its first row, cherry blossom in its second)
+    if (!r.ok) throw new Error('crowns.json ' + r.status);
     const J = await r.json(), file = J.files[tier] ? tier : 'hi';
     const ri = await fetch(base + J.files[file]);
     if (!ri.ok) throw new Error(J.files[file] + ' ' + ri.status);

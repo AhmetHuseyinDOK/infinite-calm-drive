@@ -249,6 +249,22 @@ export function makeCar() {
     const ao = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 4.1), new THREE.MeshBasicMaterial({ color: 0x000000, alphaMap: new THREE.CanvasTexture(c), transparent: true, opacity: 0.55, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }));
     ao.rotation.x = -Math.PI / 2; ao.position.y = 0.03; ao.renderOrder = 3; car.add(ao);
   }
+  // on a wet road the tail lamps mirror in it: two soft red streaks on the asphalt behind the car, where the chase camera
+  // sees their reflections (one small additive quad pair, part of the car; the light pools' program)
+  const streakMat = (() => {
+    const W = 16, H = 64, c = document.createElement('canvas'); c.width = W; c.height = H;
+    const g = c.getContext('2d'), img = g.createImageData(W, H);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      // (v = 0 at the bumper: brightest just behind the car, where the chase camera sees the road, fading away from it)
+      const v = 1 - (y + 0.5) / H, u = ((x + 0.5) / W - 0.5) * 2, a = Math.exp(-u * u * 5) * Math.min(1, v / 0.06) * Math.pow(1 - v, 1.6) * (0.78 + 0.22 * Math.sin(v * 31 + u * 2));
+      const i4 = (y * W + x) * 4; img.data[i4] = img.data[i4 + 1] = img.data[i4 + 2] = Math.round(255 * Math.max(0, a)); img.data[i4 + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+    return new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), color: 0xff3a30, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+  })();
+  { const q = [];
+    for (const x of [-0.56, 0.56]) { const g = new THREE.PlaneGeometry(0.22, 1.5); g.rotateX(-Math.PI / 2); g.translate(x, 0.035, -1.72 - 0.75); q.push(g); }
+    const st = new THREE.Mesh(mergeGeometries(q), streakMat); st.renderOrder = 3; st.visible = false; car.add(st); streakMat.mesh = st; }
   // rear wiper (its own mesh so it can sweep when it rains)
   const wiperPivot = new THREE.Group(); wiperPivot.position.set(0.02, 1.19, -1.716); inner.add(wiperPivot);
   const wg = new THREE.BoxGeometry(0.52, 0.026, 0.02); wg.translate(0.27, 0, 0);
@@ -264,7 +280,7 @@ export function makeCar() {
     /** m (optional): lat = sideways acceleration (m/s², + = towards the right), lon = speeding up (+) / braking (−),
      *  road = the surface's height under the car (m), jolt = vertical kick this frame (m/s), kick = pitch kick (rad/s, + = nose down),
      *  brake = 1 while the brakes are on */
-    update(dt, speed, night, rain = 0, m = null) {
+    update(dt, speed, night, rain = 0, m = null, wet = 0) { // (wet: how wet the road is under the car)
       if (m) { // springs at ~1.2–1.5 Hz, a little under-damped like a soft family car; roll ≈ 9°/g, pitch ≈ 4.5°/g, both easing off at the limits
         const rollT = soft(-m.lat * 0.016, 0.045), pitchT = soft(-m.lon * 0.008, 0.03);
         S.rv += ((rollT - S.roll) * 55 - S.rv * 8) * dt; S.roll += S.rv * dt;
@@ -276,6 +292,7 @@ export function makeCar() {
       S.br += ((m ? m.brake : 0) - S.br) * Math.min(1, dt * 14);
       mTail.emissiveIntensity = 0.35 + night * 3.2 + S.br * (1.7 + night * 2.0); mStop.emissiveIntensity = S.br * (2.4 + night * 1.6);
       mTailBar.emissiveIntensity = 1 + night * 3 + S.br * (2 + night * 2);
+      streakMat.opacity = wet * Math.min(1, 0.22 + mTail.emissiveIntensity * 0.22); streakMat.mesh.visible = streakMat.opacity > 0.01;
       if (rain > 0.15 || wiperT % 2.6 > 0.01) {
         wiperT += dt;
         const p = (wiperT % 2.6) / 2.6, sm = x => x * x * (3 - 2 * x);

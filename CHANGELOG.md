@@ -2,6 +2,73 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-24 · 01:xx — Restyle 9: a tunnel of painted cherry blossom over a wet road
+- **The cherry trees have the sakura painting's crowns.** The speckled pink cards at random angles, purple in the
+  shade, gave way to big old cherry trees:
+  - a thick dark trunk forking low into three or four limbs that rise in a wide V, with branches into the crown;
+  - a broad crown of painted blossom clusters: bunches of five-petal flowers, each a flat painted shape in its own pink
+    with a deeper eye, dark twigs where the bunches part, and single flowers at the crown's edge;
+  - lit by the game's sun: nearly white pink where the flowers face the light, a glowing rose in the shade (thin
+    petals let the light through).
+- **The avenue is a tunnel of blossom.** Its trees face the road and lean a little away from it. Their crowns close
+  into a pink tunnel down the road, with a slot of sky and cumulus over the middle near the car.
+- **The road under the trees is wet**, in any weather, as in the painting: a dark blue-grey that mirrors the pink
+  crowns and the sky (more toward the distance), with the car's tail lamps glowing red on it. It comes and goes with
+  the avenue. In rain the rain's own wet look takes over, and the two don't add up.
+- **Black lantern lamps and stone lanterns.** Slim black posts carry a square black lantern of four warm cream panes
+  under a pyramid roof, lit at night (also at river bridges and station platforms). The stone lanterns (石灯籠) are
+  square, with a pyramid roof and a knob on top.
+- **Petals and flowers.** Fallen petals lie on the road (gathered at the kerb), on the pavements and under the trees.
+  The pink blotches on the lawns are gone, and the lawns are the painting's lighter, warmer green. Low flower beds
+  stand between the trees. The falling petals no longer glow at night.
+- **Measured against the reference** (ΔE at s=600):
+  - blossom shade / mid / lit: 19.2 / 17.7 / 8.5 → 6.9 / 11.3 / 6.0;
+  - the lawn in the sun: 14.2 → 8.2;
+  - wet asphalt in the sun: 22.7 → 13.1;
+  - mean of 7 patches: 14.4 → 9.0.
+- **Dusk, night and rain keep their look.** The rose shade is a bright-day look. At golden hour and sunset the crowns
+  are a warm pink-magenta, at night a dark violet with the lamps lit and mirrored in the road, and in rain a soft mauve.
+- **If the atlas can't be loaded** (missing, broken or truncated), the trees keep their card crowns. Tested with each.
+- Research: R1's blossom prototype, ported onto the broadleaf crowns, with a new flower painter (R1's clusters read as
+  cotton balls). Built by a subagent; verified independently by the main agent.
+- **Caught in verification:** the first version left the new petal code out of every ground shader variant except the
+  sakura one, so the ground failed to compile, and vanished, in all the other zones. This build doesn't render shader
+  errors without `?debug`, so the usual checks passed. Caught by the cross-zone screenshots and fixed before shipping.
+  Every zone is now checked for shader errors (`sherr.mjs`) and screenshotted.
+- How:
+  - **The atlas** gains a row of 4 blossom clusters (`~/cdtest/gt/bake`, `paintBlossom`); the leaf cells are
+    byte-identical.
+    - Sizes: 1024×512 (514 KB) on desktops, from 560 px tall (was 900); 512×256 (162 KB) on phones and in the X card.
+    - Files: `assets/trees/crowns.*` replace `assets/trees/trees.*`.
+  - **One material** with the leaves' code: the albedo byte is a key into the painting's pinks, with a softer wrapped
+    light ramp and its own shade tint. One more program (59 at the city and sakura starts), compiled at load; the
+    shadow pass shares the leaves'. The blossom casts shadows but doesn't receive them (under 1% of colour, for
+    ~0.4 ms).
+  - **Trees:** 23–26 hexagonal clusters a tree (2 core clusters drawn first), instead of ~46 square cards.
+  - **The wet road** reuses the rain's wet-road code and ⅛-size reflection copy, on the road only, weighted by the
+    zone. The rest of the avenue skips it when it isn't raining.
+  - **Petals:** a hashed scatter in the sakura ground shader (sakura variants only).
+  - **Tail-lamp reflections:** two additive quads behind the car, using the light pools' program.
+- Cost: measured by the main agent on the desktop machine (GTX 1660 Super, quiet), interleaved with live:
+  - **GPU averaged over 0.9 km drives:**
+
+    | | Live | Staging | Difference |
+    |---|---|---|---|
+    | Sakura, desktop | 3.19 ms | 2.97 ms | −7% |
+    | Sakura, phone profile | 4.09 ms | 4.25 ms | +0.16 ms |
+    | Country, desktop | 3.17 ms | 3.17 ms | 0 |
+    | Country, phone profile | 4.03 ms | 4.13 ms | within noise |
+
+  - **On the shared box's Vega iGPU** (the subagent's runs): avenue drives −3.8 ms desktop and −1.5 ms phone; the old
+    card crowns cost ~6.9 ms there.
+  - **World building:** chunk generation is unchanged (50–53 ms per 20 chunks for both). Flat out on the phone profile
+    (×4), there were no spikes on either build.
+  - **Start-up:** 1.12 vs 1.02 s (the larger atlas is decoded in JS).
+  - **Checks:**
+    - 0 shader errors in all six zones;
+    - 59 programs at every quality level, none compiled through sunset, night, rain or a drive;
+    - no console errors, and embed mode starts on tap.
+
 ## 2026-10-23 · 20:xx — Restyle 8: round Ghibli trees of painted leaf clumps
 - **The broadleaf trees have the reference art's round, clumpy crowns.** The old crowns were flat speckled cards at
   random angles, olive and lacy. Each crown is now a round mass of small leaf clumps, as the coast and country paintings

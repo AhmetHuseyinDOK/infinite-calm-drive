@@ -72,6 +72,7 @@ export const U = {
   uTime: { value: 0 },
   uNight: { value: 0 },
   uWet: { value: 0 },                          // 0 dry … 1 soaked (rain)
+  uSakWet: { value: 0 },                       // the cherry avenue's wet road (its zone weight scales it per vertex)
   uLightsOn: { value: 1 },                     // how far into the evening the town's home lights have come on (0 … 1)
   uBacklit: { value: 0 },                      // how strongly a low sun shines through leaves and grass (0 … 1.6)
   uCloudSh: { value: 0 },                      // strength of drifting cloud shadows
@@ -80,6 +81,7 @@ export const U = {
   uSunCol: { value: new THREE.Color(1, 1, 1) },
   uTuftV: { value: new THREE.Vector4(0.167, 0.333, 0.164, 0.165) }, // foliage atlas v: the tuft row's bottom and top, the verge banks' top, a split between them
   uGhShade: { value: new THREE.Vector3(0.3, 0.85, 1.7) }, // the painted crowns' shade tint (makeGhibliLeaf): teal on a bright day, else neutral (main.js)
+  uBlShade: { value: new THREE.Vector3(7.5, 3, 2.3) },    // …and the cherry blossom's: a bright rose-magenta on a bright day
   uTunA: { value: new THREE.Vector3(0, -1e4, 0) },  // the current tunnel's axis (portal to portal, at road level)
   uTunB: { value: new THREE.Vector3(0, -1e4, 0) },
   uTunR: { value: 4.6 },
@@ -219,6 +221,19 @@ const GROUND = /* glsl */`
 // an anti-aliased line of half-width hw (world units) at d = 0, given d's screen-space footprint fw; fades out once it is
 // thinner than a pixel
 float crackLine(float d, float hw, float fw){ fw = max(fw, 1e-4); return clamp((hw - abs(d)) / fw + 0.5, 0.0, 1.0) * min(1.0, 2.0 * hw / fw); }
+#ifdef Z_SAKURA
+// fallen cherry petals (花びら): a scatter of little pink ovals, one chance in each 15 cm cell (dens: that chance), each
+// turned its own way. Anti-aliased: once a cell is under ~3 pixels they fade to their average, a faint pink
+const vec3 PETAL = vec3(0.96, 0.66, 0.76);
+float petalsAt(vec2 p, float dens){
+  vec2 q = p * 6.5, id = floor(q), f = fract(q) - 0.5;
+  float h = hash12(id), fw = fwidth(q.x) + fwidth(q.y);
+  vec2 d = f - (vec2(fract(h * 37.1), fract(h * 91.7)) - 0.5) * 0.5;
+  d.x += d.y * (fract(h * 13.3) - 0.5) * 2.4;                       // (a shear turns each petal its own way)
+  float pet = (1.0 - smoothstep(0.17 - fw * 0.5, 0.17 + fw * 0.5, length(d * vec2(1.0, 1.7)))) * step(h, dens);
+  return mix(pet, dens * 0.05, clamp(fw * 1.5 - 0.5, 0.0, 1.0));
+}
+#endif
 vec3 roadCol(float s, float u, float rw){
   float a = abs(u); vec2 p = vec2(s, u);
   vec3 c = L(vec3(0.58, 0.57, 0.57));
@@ -258,6 +273,9 @@ vec3 roadCol(float s, float u, float rw){
 #endif
   paint = clamp(paint, 0.0, 1.0) * (0.8 + 0.2*vnoise(p*6.0));
   c = mix(c, L(vec3(0.96, 0.96, 0.93)), paint);
+#ifdef Z_SAKURA
+  c = mix(c, PETAL, petalsAt(p, mix(0.02, 0.3, smoothstep(rw - 0.7, rw - 0.1, a))) * vZW.y); // (gathered along the kerb)
+#endif
 #ifdef Z_SNOW
   if (vZS > 0.01) {
     vec3 packed = L(vec3(0.84, 0.86, 0.91)) * (0.92 + 0.1 * fbm2(p * 0.6));
@@ -347,6 +365,9 @@ vec3 sidewalkCol(float s, float u, float rw){
   vec3 base = mix(L(vec3(0.90, 0.85, 0.81)), L(vec3(0.82, 0.77, 0.73)), hash12(id));
   vec3 c = base * (1.0 - 0.2*clamp(step(f.x, 0.05) + step(f.y, 0.05), 0.0, 1.0));
   if (d > 0.45 && d < 0.75) { c = L(vec3(0.93, 0.78, 0.2)); vec2 q = fract(vec2(s, d)/0.075) - 0.5; c *= 1.0 - 0.18*(1.0 - smoothstep(0.18, 0.24, length(q))); }
+#ifdef Z_SAKURA
+  c = mix(c, PETAL, petalsAt(vec2(s, u), 0.09) * vZW.y);
+#endif
   return c * (0.92 + 0.12*fbm2(vec2(s, u)*0.8));
 }
 vec3 cityGround(float s, float u, float rw){
@@ -363,12 +384,17 @@ vec3 grassCol(vec2 p, vec3 lush, vec3 light){
   g *= 0.8 + 0.28 * vnoise(p * vec2(0.5, 0.7) + 1.7);
   return g * (0.9 + 0.18 * vnoise(p * vec2(2.4, 9.0) + 5.9));
 }
+#ifdef Z_SAKURA
+// (only in the variants with the avenue: it needs petalsAt, and nothing else calls it)
 vec3 sakuraGround(float s, float u, float rw){
   vec2 p = vec2(s, u);
-  vec3 g = grassCol(p, L(vec3(0.36, 0.60, 0.28)), L(vec3(0.62, 0.78, 0.37)));
-  float pet = smoothstep(0.7, 0.8, vnoise(p*3.3)) * (1.0 - 0.6*smoothstep(rw + 6.0, rw + 20.0, abs(u)));
-  return mix(g, L(vec3(1.0, 0.83, 0.89)), pet*0.85);
+  // (the painting's lawns are a light, warm green in the sun: (167, 193, 70) against our (117, 172, 47))
+  vec3 g = grassCol(p, L(vec3(0.44, 0.64, 0.27)), L(vec3(0.74, 0.84, 0.38)));
+  // a few petals on the lawn, most under the avenue's trees (the painting's lawns are a clean green: they used to be
+  // splashed with pink blotches)
+  return mix(g, PETAL, petalsAt(p, 0.12 * (1.0 - 0.8 * smoothstep(rw + 5.0, rw + 12.0, abs(u)))));
 }
+#endif
 vec3 coastGround(float s, float u, float rw){
   vec2 p = vec2(s, u); float a = abs(u);
   if (u > 0.0) return grassCol(p, L(vec3(0.31, 0.60, 0.25)), L(vec3(0.52, 0.79, 0.32)));
@@ -511,26 +537,40 @@ if (gWater > 0.01) {
 }
 #endif`;
 
-// wet ground: darker asphalt, a sky-coloured sheen (stronger at grazing angles), puddles with rain rings
+// wet ground: darker asphalt, a sky-coloured sheen (stronger at grazing angles), puddles with rain rings. Rain wets every
+// hard surface (uWet); the cherry avenue's road is wet in any weather (uSakWet, by the zone's weight), as in the sakura
+// painting: a dark mirror of the pink crowns and the sky, without the puddles and rings of rain
 const WET = /* glsl */`
-if (uWet > 0.01) {
+float isRoad = step(0.5, vRK.y) * step(vRK.y, 1.5);
+#ifdef Z_SAKURA
+float wetS = uSakWet * vZW.y * isRoad; // (only the road: the rest of the avenue skips all this when it isn't raining)
+#else
+const float wetS = 0.0;
+#endif
+if (uWet > 0.01 || wetS > 0.01) {
   float kind = vRK.y;
   float hard = ((kind > 0.5 && kind < 7.5) || kind > 9.5) ? 1.0 : 0.0;
   float fr = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 4.0);
-  float isRoad = step(0.5, kind) * step(kind, 1.5);
-  float puddle = smoothstep(0.6, 0.72, fbm2(vSU * vec2(0.22, 0.35) + 3.7)) * isRoad;
-  vec2 rc = vSU * 1.6, fp = fract(rc) - 0.5; float ph = fract(uTime * 0.85 + hash12(floor(rc)));
-  float ring = (1.0 - smoothstep(0.0, 0.045, abs(length(fp) - ph * 0.48))) * (1.0 - ph) * puddle;
+  float puddle = 0.0, ring = 0.0;
+  if (uWet > 0.01) {
+    puddle = smoothstep(0.6, 0.72, fbm2(vSU * vec2(0.22, 0.35) + 3.7)) * isRoad;
+    vec2 rc = vSU * 1.6, fp = fract(rc) - 0.5; float ph = fract(uTime * 0.85 + hash12(floor(rc)));
+    ring = (1.0 - smoothstep(0.0, 0.045, abs(length(fp) - ph * 0.48))) * (1.0 - ph) * puddle;
+  }
   vec3 refl = mix(uSkyHor, uSkyZen, 0.35) * (0.75 - 0.4 * uNight);
-  float k = uWet * hard * clamp(0.05 + fr * 0.55 + puddle * 0.6, 0.0, 0.9);
-  if (uReflOn > 0.5 && k > 0.12) { // the lights and the street mirror in the wet road (skipped where it reflects little):
+  // (the avenue: a darker asphalt and a stronger mirror than rain gives, even looking down at the road near the car)
+  float k = max(uWet * hard * clamp(0.05 + fr * 0.55 + puddle * 0.6, 0.0, 0.9), wetS * clamp(0.04 + fr * 0.75, 0.0, 0.9));
+  if (uReflOn > 0.5 && k > 0.08) { // the lights and the street mirror in the wet road (skipped where it reflects little):
     vec2 suv = gl_FragCoord.xy / uReflRes;   // sample last frame's light above the horizon, where the reflected ray's scenery
     float my = uHorizon + (uHorizon - suv.y) * uReflK, st = mix(0.03, 0.012, puddle); // sits (uReflK corrects for the camera
     vec3 r = textureLod(uReflTex, vec2(suv.x, my), 0.0).rgb * 0.45 + textureLod(uReflTex, vec2(suv.x, my + st), 0.0).rgb * 0.33 // height), stretched
       + textureLod(uReflTex, vec2(suv.x, my + 2.2 * st), 0.0).rgb * 0.22;                       // into vertical streaks like rough wet asphalt
-    refl = mix(refl, r, smoothstep(1.0, 0.9, my)); // (off the top of the screen: the sky colour as before)
+    // (the avenue's mirror keeps a third of the sky's colour in it: the painting's wet road is a blue-grey with pink in it,
+    // not a mirror of the crowns)
+    float skyMix = wetS > uWet * hard ? 0.33 : 0.0;
+    refl = mix(refl, mix(r, refl, skyMix), smoothstep(1.0, 0.9, my) * smoothstep(0.08, 0.14, k)); // (off the top of the screen: the sky colour as before)
   }
-  outgoingLight = mix(outgoingLight * (1.0 - 0.38 * uWet * hard), refl, k) + ring * 0.1 * uWet * (refl + 0.05);
+  outgoingLight = mix(outgoingLight * (1.0 - max(0.38 * uWet * hard, 0.3 * wetS)), refl, k) + ring * 0.1 * uWet * (refl + 0.05);
   outgoingLight *= 1.0 - 0.12 * uWet * (1.0 - hard);
 }`;
 
@@ -557,7 +597,7 @@ export function groundMaterial(defines = groundDefines(Object.keys(ZDEF)), key =
   const m = new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: GRAD });
   m.defines = defines;
   m.onBeforeCompile = sh => {
-    sh.uniforms.uSkyHor = U.uSkyHor; sh.uniforms.uSkyZen = U.uSkyZen; sh.uniforms.uWet = U.uWet; sh.uniforms.uNight = U.uNight; sh.uniforms.uSunDir = U.uSunDir; sh.uniforms.uSunCol = U.uSunCol;
+    sh.uniforms.uSkyHor = U.uSkyHor; sh.uniforms.uSkyZen = U.uSkyZen; sh.uniforms.uWet = U.uWet; sh.uniforms.uSakWet = U.uSakWet; sh.uniforms.uNight = U.uNight; sh.uniforms.uSunDir = U.uSunDir; sh.uniforms.uSunCol = U.uSunCol;
     for (const k of ['uReflTex', 'uReflOn', 'uReflRes', 'uHorizon', 'uReflK']) sh.uniforms[k] = U[k];
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
@@ -566,7 +606,7 @@ varying vec2 vSU; varying vec4 vZW; varying vec2 vRK; varying float vWY; varying
       .replace('#include <begin_vertex>', `#include <begin_vertex>
 vSU = su; vZW = zw; vRK = rk; vRV = rv; vZS = zs; vWY = (modelMatrix * vec4(position, 1.0)).y; vWN = normalize(mat3(modelMatrix) * objectNormal);`);
     worldShade(sh, `
-uniform vec3 uSkyHor, uSkyZen, uSunDir, uSunCol; uniform float uWet, uNight;
+uniform vec3 uSkyHor, uSkyZen, uSunDir, uSunCol; uniform float uWet, uSakWet, uNight;
 uniform sampler2D uReflTex; uniform vec2 uReflRes; uniform float uReflOn, uHorizon, uReflK;
 varying vec2 vSU; varying vec4 vZW; varying vec2 vRK; varying float vWY; varying float vRV; varying vec3 vWN; varying float vZS;
 float gWater = 0.0;
@@ -574,7 +614,7 @@ ${GROUND}`, WET + MIRROR, false);
     sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
 diffuseColor.rgb *= groundAlbedo();`);
   };
-  m.customProgramCacheKey = () => 'ground-v17-' + key;
+  m.customProgramCacheKey = () => 'ground-v18-' + key;
   return m;
 }
 
@@ -816,12 +856,16 @@ export function makeMaterials(atlasTex, folTex) {
 // ------------------------------------------------------------------ painted-cluster crowns (ghibli.js, props.js treeGhibli)
 // A painterly ramp over N·L: a deep shade, a quick soft terminator, then a broad sunlit cap (the paintings' crowns read as
 // lit caps over dark undersides). Linear filtering keeps the terminator soft at a distance.
-export const GRAD_GHIBLI = (() => {
-  const n = 64, v = new Uint8Array(n), lo = -0.05, hi = 0.5; // (N·L where the shade ends / the lit cap begins)
-  for (let i = 0; i < n; i++) { const x = ((i + 0.5) / n) * 2 - 1, t = Math.min(1, Math.max(0, (x - lo) / (hi - lo))), s = t * t * (3 - 2 * t); v[i] = Math.round(255 * (0.05 + 0.95 * s)); }
+function gradGhibli(lo, hi, floor) { // (N·L where the shade ends / the lit cap begins; the shade's share of the sun)
+  const n = 64, v = new Uint8Array(n);
+  for (let i = 0; i < n; i++) { const x = ((i + 0.5) / n) * 2 - 1, t = Math.min(1, Math.max(0, (x - lo) / (hi - lo))), s = t * t * (3 - 2 * t); v[i] = Math.round(255 * (floor + (1 - floor) * s)); }
   const t = new THREE.DataTexture(v, n, 1, THREE.RedFormat); t.minFilter = t.magFilter = THREE.LinearFilter; t.generateMipmaps = false; t.needsUpdate = true;
   return t;
-})();
+}
+export const GRAD_GHIBLI = gradGhibli(-0.05, 0.5, 0.05);
+// cherry blossom: thin petals let the light through, so the sun reaches well round into a crown's shade (a wrapped,
+// softer terminator, and a little sun even in the deepest shade): the crowns glow pink from below, as in the painting
+const GRAD_BLOSSOM = gradGhibli(-0.5, 0.45, 0.12);
 // The clusters face the camera: each corner is spread along the view's right / up vectors (chunk meshes only translate, so
 // object space is world space up to an offset), with a slow sideways sway of the whole cluster. The shadow pass runs the
 // same code with the sun's view, so the clusters face the sun and the crown casts a lobed shadow.
@@ -837,18 +881,24 @@ function billboard(sh, depth) {
   // the crown's core (marked by a straight-down normal) casts no shadow: its sun-facing twin would cut it in two
   if (depth) sh.vertexShader = sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\nif (normal.y < -0.97) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);');
 }
+// Cherry blossom (the atlas's second row): B is a key into the sakura painting's colours, not a brightness. Twigs (~0.06)
+// are a dark bark brown, the gaps between flowers (~0.3) a deep rose, and the flowers run from a rose pink to the pale,
+// nearly white pink of the petals in full sun (1). Shade and light then come from each flower's own normal
+const bl = (r, g, b) => { const c = new THREE.Color().setRGB(r / 255, g / 255, b / 255, THREE.SRGBColorSpace); return `vec3(${c.r.toFixed(4)}, ${c.g.toFixed(4)}, ${c.b.toFixed(4)})`; };
+const BLOSSOM_RAMP = `diffuseColor.rgb *= mix(${bl(62, 38, 34)}, mix(${bl(205, 105, 150)}, ${bl(255, 232, 242)}, smoothstep(0.3, 1.0, gTx.b)), smoothstep(0.1, 0.26, gTx.b));`;
 /** The crowns' material (`tex`: the cluster atlas, ghibli.js). Every cluster lights its own painted leaves: its normal is
  *  the crown's (from the crown's centre, per vertex) mixed with the cluster's own from the atlas, so each lobe of the
  *  crown gets its lit cap and its shade under the real sun. Returns { mat, depth } (depth: the shadow pass's twin). */
-export function makeGhibliLeaf(tex) {
+export function makeGhibliLeaf(tex, { blossom = false } = {}) {
   // base leaf green (sRGB), a little yellower than the sunlit grass, as in the paintings; the atlas's albedo (~0.8 on
-  // average, darker in the crevices) and the per-cluster vertex colour (crown occlusion, per-tree tint) multiply it
-  const m = new THREE.MeshToonMaterial({ map: tex, vertexColors: true, color: new THREE.Color().setRGB(0.68, 0.85, 0.46, THREE.SRGBColorSpace), gradientMap: GRAD_GHIBLI, alphaTest: 0.5, side: THREE.FrontSide });
+  // average, darker in the crevices) and the per-cluster vertex colour (crown occlusion, per-tree tint) multiply it.
+  // Blossom: the atlas's B is a key into the sakura painting's own colours (BLOSSOM_RAMP), so the material is white
+  const m = new THREE.MeshToonMaterial({ map: tex, vertexColors: true, color: blossom ? 0xffffff : new THREE.Color().setRGB(0.68, 0.85, 0.46, THREE.SRGBColorSpace), gradientMap: blossom ? GRAD_BLOSSOM : GRAD_GHIBLI, alphaTest: 0.5, side: THREE.FrontSide });
   m.shadowSide = THREE.DoubleSide; // (three flips FrontSide to BackSide for shadows; the depth twins face the sun)
   m.onBeforeCompile = sh => {
     worldShade(sh); backlit(sh);
     billboard(sh, false); // (uTime comes with the vertex cloud shadows)
-    sh.uniforms.uGhShade = U.uGhShade;
+    sh.uniforms.uGhShade = blossom ? U.uBlShade : U.uGhShade; // (blossom: its own shade, a bright rose-magenta)
     // the sun's shadow is looked up from the cluster's sunward surface (~1.1 × its half-width out), so a cluster never
     // shadows itself (its sun-facing depth twin cuts through its middle) while the lobes above and toward the sun still
     // shade the ones below. The crown's core (marked by a straight-down normal) looks it up 2.5 m deeper into the crown:
@@ -863,7 +913,7 @@ worldPosition.xyz += uSunDir * mix(-2.5, length(aOff) * 1.11, step(-0.97, object
 vec4 gTx = texture2D(map, vMapUv);
 vec2 gN2 = gTx.rg * 2.0 - 1.0;
 vec3 gTexN = vec3(gN2, sqrt(max(0.0, 1.0 - dot(gN2, gN2))));
-diffuseColor.rgb *= gTx.b;
+${blossom ? BLOSSOM_RAMP : 'diffuseColor.rgb *= gTx.b;'}
 diffuseColor.a *= gTx.a;`)
       // the cluster's own normal (in card = view space) mixed with the crown's
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
@@ -875,7 +925,7 @@ reflectedLight.indirectDiffuse = hemisphereLights[0].skyColor * BRDF_Lambert(dif
 #endif
 #include <aomap_fragment>`);
   };
-  m.customProgramCacheKey = () => 'gleaf-v1';
+  m.customProgramCacheKey = () => (blossom ? 'gblossom-v1' : 'gleaf-v1');
   const d = new THREE.MeshDepthMaterial();
   d.onBeforeCompile = sh => billboard(sh, true);
   d.customProgramCacheKey = () => 'gleaf-depth-v1';

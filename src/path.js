@@ -27,6 +27,11 @@ export function zoneW(s) {
   return w;
 }
 export const zoneAt = s => { const m = zoneMix(s); return m.t < 0.5 ? m.a : m.b; };
+/** zoneW(s)[key] without the garbage (for every frame) */
+export function zoneWeight(s, key) {
+  const z = Math.floor(s / ZONE_LEN), l = s - z * ZONE_LEN, t = smooth(clamp((l - (ZONE_LEN - TRANS)) / TRANS, 0, 1)), n = ZONES.length;
+  return (ZONES[(((z + START) % n) + n) % n] === key ? 1 - t : 0) + (ZONES[(((z + START + 1) % n) + n) % n] === key ? t : 0);
+}
 export function zparam(s, key) { const m = zoneMix(s); return lerp(ZINFO[m.a][key], ZINFO[m.b][key], m.t); }
 
 // ---- railway level crossings (踏切): every XING metres, where the road runs through city or countryside

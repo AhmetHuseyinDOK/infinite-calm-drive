@@ -17,6 +17,7 @@ import { makePost } from './post.js';
 import { makeAudio } from './audio.js';
 import { makeParticles } from './particles.js';
 import { clamp, lerp, sstep, setSeed, hash2 } from './util.js';
+import { loadCloudAtlas, makePaintedClouds, updatePainted } from './painted.js';
 
 const QS = new URLSearchParams(location.search);
 // inside an X player card (or any iframe): lighter quality, compact UI, tap-only start
@@ -41,6 +42,12 @@ async function main() {
   renderer.toneMapping = THREE.NeutralToneMapping; renderer.toneMappingExposure = 1.0;
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.debug.checkShaderErrors = QS.has('debug'); // checking forces each shader compile to finish synchronously
+  // the painted cumulus (painted.js) download while the town is painted. The full atlas (4096²×½, towers ~600 px tall)
+  // only where the frame is tall enough to show it; phones, the embed and smaller windows take the half-size one (it
+  // decodes and uploads 4× faster, and its towers are still ~1:1 at 720 px)
+  // (test hook ?clouds=old: the procedural clouds only; ?clouds=both: both are built and st.pclouds flips between them)
+  const CLOUDS = QS.get('clouds') || 'painted';
+  const pcLoad = CLOUDS === 'old' ? Promise.resolve(null) : loadCloudAtlas(quality === 'high' && innerHeight * DPR >= 900 ? 'hi' : 'lo');
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0xc6ddf2, 0.0019, 700); // near = exp² density, far = draw distance (see materials.js)
@@ -115,7 +122,6 @@ async function main() {
   const grass = makeGrass(quality, QS.has('grass') ? QS.get('grass').split(',').map(Number) : null); for (const m of grass.meshes) scene.add(m);
   const world = new World(scene, path, M, foamMat, riverMat);
   const sky = makeSky(); scene.add(sky);
-  const clouds = makeClouds(paintClouds(renderer)); scene.add(clouds.group);
   const mountains = makeMountains(); scene.add(mountains.group);
   const sea = makeSea(); scene.add(sea.mesh);
   const car = makeCar(); car.group.rotation.order = 'YXZ'; scene.add(car.group);
@@ -126,6 +132,10 @@ async function main() {
   const AA = QS.get('aa') || (quality === 'high' ? 'msaa' : quality === 'mid' ? 'fxaa' : 'none');
   const post = makePost(renderer, scene, camera, { msaa: AA === 'msaa' ? (quality === 'high' ? 4 : 2) : 0, fxaa: AA === 'fxaa' });
   U.uReflTex.value = post.refl.rt.texture;
+  // the cumulus: painted ones when their atlas has loaded, else (or with ?clouds=both, also) the procedural ones
+  const pcAtlas = await pcLoad;
+  const pclouds = pcAtlas ? makePaintedClouds(pcAtlas, post) : null; if (pclouds) scene.add(pclouds.mesh);
+  const clouds = !pclouds || CLOUDS === 'both' ? makeClouds(paintClouds(renderer)) : null; if (clouds) scene.add(clouds.group);
   const hz = new THREE.Vector3(), camFlat = new THREE.Vector3(), REFL = QS.get('refl') || 'auto';
   const BACKLIT_K = QS.has('backlit') ? parseFloat(QS.get('backlit')) : 1; // (test hook)
   const LIGHTS_ON = QS.has('lightson') ? parseFloat(QS.get('lightson')) : -1; // (test hook)
@@ -141,8 +151,9 @@ async function main() {
   // speed: the zone's cruising speed × mult (0.4 … 5.5, so up to ~190–265 km/h); uHome: the lane the car settles back
   // into when nobody steers — wherever the player last steered it (it used to always drift back to the left lane)
   const MULT_MIN = 0.4, MULT_MAX = 5.5;
-  const st = { s: Math.max(100, parseFloat(QS.get('s')) || 140), u: -1.65, uHome: -1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, spray: QS.has('nospray') ? 0 : 1 /* test switch */, grass: 1 /* test switch: the meadow's blades */, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
+  const st = { s: Math.max(100, parseFloat(QS.get('s')) || 140), u: -1.65, uHome: -1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, spray: QS.has('nospray') ? 0 : 1 /* test switch */, grass: 1 /* test switch: the meadow's blades */, pclouds: 1 /* test switch: painted clouds (0: the procedural ones, with ?clouds=both) */, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
   let started = false;
+  if (pclouds) pclouds.opening = ['sakura', 'city'].includes(zoneAt(st.s)) ? 'center' : 'flank'; // (a narrow sky over the road: one tower over it)
   status('building the road…');
   await new Promise(r => setTimeout(r, 10));
   // build only the first stretch up-front; the rest streams in while the title screen is up
@@ -277,6 +288,7 @@ async function main() {
     post.grade.uniforms.uAspect.value = asp;
     post.grade.uniforms.uTexel.value.set(1 / post.composer.readBuffer.width, 1 / post.composer.readBuffer.height);
     U.uReflRes.value.set(post.composer.readBuffer.width, post.composer.readBuffer.height);
+    updatePainted(renderer);
   }
   addEventListener('resize', () => { needResize = true; });
   if (window.visualViewport) visualViewport.addEventListener('resize', () => { needResize = true; });
@@ -559,7 +571,9 @@ async function main() {
     su.uMetP.value = meteor.p; su.uMetA.value.copy(meteor.a); su.uMetB.value.copy(meteor.b);
     su.uDeckLit.value.copy(TOD.horizon).lerp(TOD.cLit, 0.35); su.uDeckDark.value.copy(TOD.zenith).lerp(TOD.horizon, 0.25).multiplyScalar(0.82);
     sky.position.copy(camera.position);
-    clouds.update(camera.position, dt);
+    { const painted = !!pclouds && (st.pclouds !== 0 || !clouds);
+      if (pclouds) { pclouds.mesh.visible = painted; if (painted) pclouds.update(camera, dt); }
+      if (clouds) { clouds.group.visible = !painted; if (!painted) clouds.update(camera.position, dt); } }
     mountains.update(camera.position, Math.max(w.snow, zoneW(st.s + 600).snow * 0.7));
     let seaW = 0; for (const d of [-150, 0, 250, 500, 800]) seaW = Math.max(seaW, zoneW(st.s + d).coast);
     sea.mesh.visible = seaW > 0.001;
@@ -682,7 +696,7 @@ async function main() {
     if (started && frames > 150 && dt > 0.03) slowT += dt; else slowT = Math.max(0, slowT - dt * 0.5);
     if (slowT > 3 && !QS.has('q')) { slowT = 0; stepDown(); }
   }
-  window.__dbg = { renderer, st, scene, camera, world, TOD, KEYS, X, train, weather, U, birds, cine, post, car, sun, M, clouds, sky, mountains, shadowDir, CM, spray, grass, get audio() { return audio; } };
+  window.__dbg = { renderer, st, scene, camera, world, TOD, KEYS, X, train, weather, U, birds, cine, post, car, sun, M, clouds, pclouds, sky, mountains, shadowDir, CM, spray, grass, get audio() { return audio; } };
   status('');
   $start.classList.add('ready');
   if (QS.has('auto')) begin();

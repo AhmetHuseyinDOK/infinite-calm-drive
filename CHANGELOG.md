@@ -2,6 +2,59 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-23 · 14:xx — Restyle 6: painted clouds from the reference art
+- **The cumulus are painted, like the reference art's.** The procedural towers (smooth, shaded blobs) gave way to
+  painted cumulus with the paintings' cauliflower lobes and brushwork: white in the sun, with light, saturated blue
+  shade.
+  - **22 different clouds:** 7 are cut from the references themselves (two country towers, two coast towers, a far
+    coast cloud, the sakura tower and a city cloud); 15 are generated in their style with Grok Imagine (11 from asset
+    batch 1 and 4 made for this step).
+  - **On a clear day they show the paintings' own colours.** Their shader runs the exact inverse of the frame's grade.
+- **The sky is composed like the references'.**
+  - Giant towers rise from the horizon past the top of the frame, two or three in any view.
+  - Cumulus sit between and in front of their feet, a low bank runs along the horizon, and smaller cumulus float
+    higher up, filling the taller sky of a portrait phone.
+  - The drive opens with two tall towers flanking the road (country, coast, mountains, snow), or one standing over the
+    road where the sky is a narrow slot (the sakura avenue, the shopping street).
+- **The clouds stay put while the road turns,** and the same cloud never appears twice within 145°, so you never see
+  it twice or next to its own mirror image.
+- **Each cloud is lit from the sun's side.** It is mirrored to face the sun, but only while it is out of view, so
+  nothing flips in front of you.
+- **Dawn, golden hour, sunset, night and grey skies keep their colours.**
+  - The clouds take the time-of-day palette as before: peach and violet at sunset, navy at night, grey under cloud.
+  - They keep the painted brushwork, with a silver lining facing a low sun.
+  - In rain they still melt into the grey deck.
+- **If the cloud atlas can't be loaded** (missing, broken or truncated), the game keeps its procedural clouds. The main
+  agent tested this with the files removed.
+- **Research and assets:**
+  - R2's painted-sprite prototype and its inverse grade were ported.
+  - The reference clouds were re-cut with SAM mattes. Its interior is opaque, which fixes the blue-shaded undersides
+    the colour key lost. LaMa removed the poles and wires in front of them and completed tops cut off by the frame.
+  - The generated clouds were remapped to the references' cloud palette, keeping their brushwork.
+  - Built by a subagent; verified independently by the main agent.
+- How:
+  - **Drawing:** new `painted.js`. One instanced draw of 33 camera-facing billboards in one blended pass.
+  - **The atlas:** WebP, 4096×2048 (576 KB) where the frame is at least 900 px tall; 2048×1024 (279 KB) on phones, in
+    the X card and in smaller windows. It downloads while the town is painted.
+  - **Shading:** on a bright day the shader runs the inverse grade. Elsewhere it maps the painted luminance between the
+    time-of-day shade and lit colours, and takes a rim from a coarse mip of the alpha.
+  - **Programs:** one shader program replaces the procedural cloud program (55, as on live), compiled at load. The
+    procedural cloud painter no longer runs at load.
+  - **Memory:** +21 MB of GPU memory on desktop, −11 MB on phones.
+- Cost: moderate, and it follows the pixel count. The painted clouds cover about twice as much sky as the old ones,
+  all alpha-blended. Main agent's independent check, interleaved with live:
+  - **GPU averaged over 0.9 km country drives:**
+    - desktop 21.5 vs 20.7 ms (+0.8);
+    - phone 10.1 vs 9.85 ms (+0.25).
+    One run on each side returned a corrupt timer reading and was dropped.
+  - **The subagent's figures:** 1920×1080 desktop 38.6 vs 37.3 ms (+1.3). In-page toggle in the cloudiest view:
+    desktop +0.75/+0.90 ms and phone +0.25/+0.30.
+  - **Start-up:** median 2.45 vs 2.31 s.
+  - **Checks:** 55 programs at every quality level, none compiled through sunset, night, rain or snow. No console
+    errors. Embed mode starts on tap.
+  - **A cheaper path if needed later:** draw the clouds into a single-sample layer, or tighten the sprite outlines
+    (~24% fewer cloud pixels).
+
 ## 2026-10-23 · 10:xx — Restyle 5: the country road between banks of wildflowers, through a meadow of real grass
 - **Banks of tall grass and wildflowers line the country road (土手の草むら), as in the reference art.** The verges were a
   strip of grey gravel and a ditch with a scatter of small tufts. Now a continuous, knee-high bank of long grass runs

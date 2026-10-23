@@ -32,12 +32,13 @@ const GradeShader = {
   uniforms: {
     tDiffuse: { value: null }, toneMappingExposure: { value: 1 }, uSun: { value: new THREE.Vector2(0.5, 0.8) }, uSunVis: { value: 0 }, uDay: { value: 1 }, uWarm: { value: 0 },
     uTime: { value: 0 }, uAspect: { value: 1 }, uVig: { value: 0.55 }, uSat: { value: 1.1 }, uTexel: { value: new THREE.Vector2(1 / 1280, 1 / 720) },
+    uLo: { value: new THREE.Vector3(-0.014, 0.0, 0.03) },
   },
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
   fragmentShader: /* glsl */`
     // tone mapping + sRGB output and the anime grade in ONE full-screen pass (was OutputPass + a separate grade pass)
     #include <tonemapping_pars_fragment>
-    uniform sampler2D tDiffuse; uniform vec2 uSun; uniform float uSunVis, uDay, uWarm, uTime, uAspect, uVig, uSat; varying vec2 vUv;
+    uniform sampler2D tDiffuse; uniform vec2 uSun; uniform float uSunVis, uDay, uWarm, uTime, uAspect, uVig, uSat; uniform vec3 uLo; varying vec2 vUv;
     float h11(float p){ p = fract(p * .1031); p *= p + 33.33; p *= p + p; return fract(p); }
     float n1(float x){ float i = floor(x), f = fract(x); return mix(h11(i), h11(i + 1.0), f * f * (3.0 - 2.0 * f)); }
     #ifdef USE_FXAA
@@ -71,7 +72,7 @@ const GradeShader = {
       vec3 c = sRGBTransferOETF(src).rgb;
       float l = dot(c, vec3(0.299, 0.587, 0.114));
       c = mix(vec3(l), c, uSat);
-      c += vec3(-0.014, 0.0, 0.03) * (1.0 - l) + vec3(0.03, 0.014, -0.018) * l * uDay;
+      c += uLo * (1.0 - l) + vec3(0.03, 0.014, -0.018) * l * uDay; // cool shadows (indigo on a bright day), warm highlights
       if (uSunVis > 0.001) { // sun streaks and lens ghosts only while the sun is on screen
         vec2 d = vUv - uSun; d.x *= uAspect; float dist = length(d), ang = atan(d.y, d.x);
         vec3 rc = mix(vec3(1.0, 0.97, 0.88), vec3(1.0, 0.78, 0.52), uWarm);

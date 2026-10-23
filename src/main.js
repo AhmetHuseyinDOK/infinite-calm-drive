@@ -5,7 +5,7 @@ import { buildAtlas, buildFoliage } from './textures.js';
 import { makeMaterials, U, groundMaterialFor, setShadowTaps, setGrazeFade, makeCloudMap } from './materials.js';
 import { setAtlas, setFoliage, warmTrees, setLeafDensity } from './props.js';
 import { World, CH } from './chunks.js';
-import { makeSky, paintClouds, makeClouds, makeMountains, updateTOD, applyWeather, TOD, lightDirAt } from './sky.js';
+import { makeSky, paintClouds, makeClouds, makeMountains, updateTOD, applyWeather, TOD, lightDirAt, KEYS } from './sky.js';
 import { makeWeather, makeRain, makeSnow, PLIGHT } from './weather.js';
 import { makeSpray } from './spray.js';
 import { makeMirage } from './mirage.js';
@@ -465,7 +465,11 @@ async function main() {
 
     // lighting & atmosphere
     const w = zoneW(st.s);
-    sun.color.copy(TOD.sunCol); sun.intensity = TOD.sunI;
+    // On a bright day the whole frame is exposed 25% higher and the sun and sky lights are turned down by the same
+    // factor: lit surfaces keep their level while everything that glows or is painted (the sky, the clouds, the haze, the
+    // sea) reaches the bright, nearly white tones of the reference art, which the tone curve otherwise caps at ~240
+    const dayExp = 1 + 0.25 * TOD.bright * (1 - tunS);
+    sun.color.copy(TOD.sunCol); sun.intensity = TOD.sunI / dayExp;
     // Shadows (see the notes where the sun is created): the light itself follows the sun every frame; the shadow
     // camera is re-aimed only every ~6°, centred 26 m ahead of the car and snapped to whole texels; the skew
     // P' = P + (P.y − y0)·(D/D.y − L/L.y) slides each point along the true light L onto the camera's direction D.
@@ -493,7 +497,7 @@ async function main() {
     // the car's shadow map moves with the car (its texels are far below a pixel) and follows the sun continuously
     carSun.target.position.set(car.group.position.x, car.group.position.y + 0.9, car.group.position.z);
     carSun.position.copy(carSun.target.position).addScaledVector(TOD.lightDir, 12);
-    hemi.color.copy(TOD.hemiSky); hemi.groundColor.copy(TOD.hemiGround); hemi.intensity = TOD.hemiI;
+    hemi.color.copy(TOD.hemiSky); hemi.groundColor.copy(TOD.hemiGround); hemi.intensity = TOD.hemiI / dayExp;
     { // aerial perspective has a direction: looking towards a low sun the haze glows with it (the sky dome's broad sun glow
       // at the horizon, averaged across the view), looking away it stays cool. Worked out once per frame on the CPU and
       // folded into the shared fog colour — shading it per vertex or per pixel measured +0.3–1.7 ms, this costs nothing
@@ -527,6 +531,7 @@ async function main() {
     U.uCloudSh.value = (1 - ov) * sstep(0.04, 0.3, TOD.sunEl) * (1 - TOD.night);
     if (U.uCloudSh.value > 0.001) cloudMap.update(renderer, camera.position.x, camera.position.z, world.origin.x, world.origin.z);
     const su = sky.material.uniforms;
+    su.uBright.value = TOD.bright;
     su.uNight.value = TOD.night; su.uWarm.value = TOD.warm; su.uTime.value = t; su.uCirrusCol.value.copy(TOD.cLit).lerp(TOD.horizon, 0.25);
     su.uCirrus.value = 0.6 * (1 - ov) * (1 - 0.65 * sstep(0.4, 0.9, TOD.night)); su.uOvercast.value = ov;
     su.uMilky.value = sstep(0.55, 0.95, TOD.night) * (1 - ov);
@@ -592,7 +597,7 @@ async function main() {
     post.bloom.strength = lerp(0.32, 0.55, nightK); post.bloom.threshold = lerp(1.35, 0.95, nightK); post.bloom.radius = lerp(0.55, 0.35, nightK);
     // bloom only where it shows (night lamps, sunsets, tunnels): by day at threshold 1.35 it cost ~7 ms for almost nothing
     { const need = Math.max(nightK, tunS, sstep(0.25, 0.6, TOD.warm) * (1 - ov)); post.bloom.enabled = bloomAllowed && need > 0.02; post.bloom.strength *= Math.min(1, need * 4); }
-    renderer.toneMappingExposure = lerp(1.0, 1.15, nightK) * (1 + 0.35 * tunS);
+    renderer.toneMappingExposure = lerp(1.0, 1.15, nightK) * (1 + 0.35 * tunS) * dayExp;
 
     // sun streaks in the grade pass
     tmp.copy(camera.position).addScaledVector(TOD.sunDir, 1000).project(camera);
@@ -600,7 +605,9 @@ async function main() {
     const inFront = tmp.z < 1 ? 1 : 0, edge = Math.max(Math.abs(tmp.x), Math.abs(tmp.y));
     g.uSun.value.set(tmp.x * 0.5 + 0.5, tmp.y * 0.5 + 0.5);
     g.uSunVis.value = inFront * (1 - sstep(1.0, 1.9, edge)) * sstep(-0.02, 0.15, TOD.sunEl) * (1 - TOD.night) * (1 - ov) * (1 - tunS);
-    g.uSat.value = 1.1 - 0.12 * ov;
+    // the grade of the reference art: punchy colour (muted again under grey skies), and on a bright day an indigo lift in
+    // the shadows and only a light vignette (the paintings have none); sunsets and nights keep their old grade
+    g.uSat.value = 1.22 - 0.24 * ov; g.uVig.value = 0.55 - 0.43 * TOD.bright; g.uLo.value.set(-0.014 + 0.026 * TOD.bright, 0, 0.03);
     g.uDay.value = day(); g.uWarm.value = TOD.warm; g.uTime.value = t;
 
     rain.update(camera.position, t, rn * (1 - tunS) * (1 - w.snow), day());
@@ -663,7 +670,7 @@ async function main() {
     if (started && frames > 150 && dt > 0.03) slowT += dt; else slowT = Math.max(0, slowT - dt * 0.5);
     if (slowT > 3 && !QS.has('q')) { slowT = 0; stepDown(); }
   }
-  window.__dbg = { renderer, st, scene, camera, world, TOD, X, train, weather, U, birds, cine, post, car, sun, M, clouds, sky, mountains, shadowDir, CM, spray, get audio() { return audio; } };
+  window.__dbg = { renderer, st, scene, camera, world, TOD, KEYS, X, train, weather, U, birds, cine, post, car, sun, M, clouds, sky, mountains, shadowDir, CM, spray, get audio() { return audio; } };
   status('');
   $start.classList.add('ready');
   if (QS.has('auto')) begin();

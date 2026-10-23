@@ -5,13 +5,16 @@ import { GLSL_NOISE, U as MU } from './materials.js';
 
 // ---------------------------------------------------------------- palette
 //  t, zenith, horizon, sun colour, sun I, hemi sky, hemi ground, hemi I, fog, cloud lit, cloud shade, cloud rim, night, warm
-const KEYS = [
+export const KEYS = [
   [0.00, '#070b26', '#1c2752', '#8ea4ff', 0.55, '#2a3c74', '#16141f', 1.0, '#19223f', '#3d4a78', '#1b2244', '#2a3050', 1.0, 0],
   [0.20, '#1c2560', '#56568a', '#9fb0ff', 0.45, '#42508a', '#262432', 1.0, '#41497a', '#6a6a9a', '#3a3a6a', '#7a6aa0', 0.85, 0],
   [0.245, '#3a56aa', '#f2aa8a', '#ffb48a', 1.7, '#8a92cc', '#6a5060', 1.25, '#dcaca2', '#ffd2b2', '#9a88b2', '#ffd8a8', 0.3, 0.9],
-  [0.30, '#3473d4', '#cde3f8', '#fff0d8', 3.1, '#9cc0ff', '#b8a890', 1.5, '#cfe0ef', '#ffffff', '#a2b6d8', '#fff4e0', 0.0, 0.2],
-  [0.45, '#1656d6', '#b6daff', '#fffaf0', 3.5, '#a4c8ff', '#c8b8a0', 1.6, '#bfdaf4', '#ffffff', '#9ab0d6', '#ffffff', 0.0, 0],
-  [0.62, '#1a5cd4', '#bcdfff', '#fff4e4', 3.4, '#a8c8f8', '#c8b49a', 1.55, '#c4ddf3', '#ffffff', '#9eb2d6', '#fffaf0', 0.0, 0.1],
+  // the clear day, matched to the reference paintings: a deep azure sky paling to near-white at the horizon, a warm
+  // cream sun and a saturated blue skylight (so shadows are deep blue: it is all the light they get; together they light
+  // a white wall white), white cumulus with light-blue shading
+  [0.30, '#3270c2', '#e2effc', '#fff2d3', 3.15, '#93b3ec', '#b8a890', 1.35, '#d6e8f8', '#ffffff', '#acc4ea', '#fff4e0', 0.0, 0.2],
+  [0.45, '#2f68bb', '#e0f0ff', '#fff5dd', 3.35, '#8fb1ec', '#c8b8a0', 1.35, '#d0e7fb', '#ffffff', '#a8c4ec', '#ffffff', 0.0, 0],
+  [0.62, '#3068ba', '#e0efff', '#fff4db', 3.3, '#91b1e9', '#c8b49a', 1.35, '#d2e7fa', '#ffffff', '#aac4ea', '#fffaf0', 0.0, 0.1],
   [0.70, '#2e5ec2', '#ffd8a6', '#ffcf8a', 2.9, '#a8b4e0', '#c0a080', 1.4, '#eed0ae', '#fff2d8', '#a2a0c8', '#ffd890', 0.0, 0.6],
   [0.75, '#3a3a9a', '#ff946c', '#ff8a52', 1.9, '#9a88c8', '#8a6070', 1.2, '#e0968a', '#ffb894', '#8a6aa0', '#ffcf8a', 0.15, 1.0],
   // end of civil twilight (sun ~6° down): no more sunlight on the ground — the light softens and cools into skylight
@@ -25,6 +28,7 @@ const KEYS = [
 export const TOD = {
   zenith: new THREE.Color(), horizon: new THREE.Color(), sunCol: new THREE.Color(), sunI: 1, hemiSky: new THREE.Color(), hemiGround: new THREE.Color(), hemiI: 1,
   fog: new THREE.Color(), cLit: new THREE.Color(), cShade: new THREE.Color(), cRim: new THREE.Color(), night: 0, warm: 0, overcast: 0, rain: 0,
+  bright: 1, // how much this is a bright clear day (not night, dawn/dusk or overcast): drives the day-only parts of the look
   sunDir: new THREE.Vector3(), moonDir: new THREE.Vector3(), lightDir: new THREE.Vector3(), sunEl: 0,
 };
 export function updateTOD(t) {
@@ -60,7 +64,7 @@ const OV = {
 };
 const _oc = new THREE.Color();
 export function applyWeather(ov, rain) {
-  TOD.overcast = ov; TOD.rain = rain;
+  TOD.overcast = ov; TOD.rain = rain; TOD.bright = (1 - TOD.night) * (1 - TOD.warm) * (1 - ov);
   if (ov <= 0.001) return;
   const n = TOD.night;
   for (const k of ['zenith', 'horizon', 'fog', 'hemiSky', 'hemiGround', 'cLit', 'cShade']) {
@@ -79,17 +83,21 @@ export function makeSky() {
       uZenith: { value: TOD.zenith }, uHorizon: { value: TOD.horizon }, uSunDir: { value: TOD.sunDir }, uMoonDir: { value: TOD.moonDir },
       uNoiseTex: MU.uNoiseTex, uSunCol: { value: TOD.sunCol }, uNight: { value: 0 }, uWarm: { value: 0 }, uTime: { value: 0 }, uCirrus: { value: 0.6 }, uCirrusCol: { value: new THREE.Color() }, uOvercast: { value: 0 }, uDeckLit: { value: new THREE.Color() }, uDeckDark: { value: new THREE.Color() },
       uMilky: { value: 0 }, uMetA: { value: new THREE.Vector3(0, 1, 0) }, uMetB: { value: new THREE.Vector3(0, 1, 0) }, uMetP: { value: -1 },
+      uBright: { value: 0 },
     },
     vertexShader: /* glsl */`varying vec3 vDir; void main(){ vDir = position; vec4 p = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * p; }`,
     fragmentShader: /* glsl */`
-      uniform vec3 uZenith, uHorizon, uSunDir, uMoonDir, uSunCol, uCirrusCol, uDeckLit, uDeckDark, uMetA, uMetB; uniform float uNight, uWarm, uTime, uCirrus, uOvercast, uMilky, uMetP;
+      uniform vec3 uZenith, uHorizon, uSunDir, uMoonDir, uSunCol, uCirrusCol, uDeckLit, uDeckDark, uMetA, uMetB; uniform float uNight, uWarm, uTime, uCirrus, uOvercast, uMilky, uMetP, uBright;
       varying vec3 vDir;
       ${GLSL_NOISE}
       float hash13(vec3 p){ p = fract(p * .1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
       void main(){
         vec3 d = normalize(vDir); float e = d.y;
         float h = pow(clamp(1.0 - max(e, 0.0), 0.0, 1.0), 4.0);
-        vec3 col = mix(uZenith, uHorizon, h);
+        // on a clear day the painted gradient of the reference art: deep azure from ~20° up, through a bright saturated
+        // sky blue (red comes in last) to near-white at the horizon; dawn, dusk, night and grey skies keep the old curve
+        float hb = clamp(1.0 - max(e, 0.0) * 2.8, 0.0, 1.0);
+        vec3 col = mix(uZenith, uHorizon, mix(vec3(h), vec3(hb * hb, hb, hb), uBright));
         if (e < 0.0) col = uHorizon * (1.0 - clamp(-e * 2.0, 0.0, 0.25));
         float sd = max(dot(d, uSunDir), 0.0);
         float day = (1.0 - uNight) * (1.0 - uOvercast);
@@ -315,7 +323,7 @@ export function makeClouds(atlas) {
   geo.setAttribute('aD', aD); geo.setAttribute('aR', aR);
   const mat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, fog: false, premultipliedAlpha: true,
-    uniforms: { map: { value: atlas.tex }, uLit: { value: TOD.cLit }, uShade: { value: TOD.cShade }, uRim: { value: TOD.cRim }, uHaze: { value: TOD.horizon }, uOpacity: { value: 1 } },
+    uniforms: { map: { value: atlas.tex }, uLit: { value: new THREE.Color() }, uShade: { value: TOD.cShade }, uRim: { value: TOD.cRim }, uHaze: { value: TOD.horizon }, uOpacity: { value: 1 } },
     vertexShader: /* glsl */`
       attribute vec4 aD; attribute float aR; varying vec2 vUv; varying vec4 vD; varying float vR;
       void main(){ vUv = uv; vD = aD; vR = aR; gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0); }`,
@@ -358,6 +366,7 @@ export function makeClouds(atlas) {
       // in rain the towering fair-weather cumulus melt into the low grey deck: under rain clouds you see one even grey
       // ceiling, not crisp white towers (they used to stay out, half-transparent, all through the rain)
       mat.uniforms.uOpacity.value = (1 - TOD.night * 0.35) * (1 - TOD.overcast * 0.55) * (1 - 0.85 * TOD.rain);
+      mat.uniforms.uLit.value.copy(TOD.cLit).multiplyScalar(1 + 0.35 * TOD.bright); // sunlit cumulus brighter than white
     },
   };
 }

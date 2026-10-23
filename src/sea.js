@@ -11,10 +11,11 @@ export function makeSea() {
       uNoiseTex: MU.uNoiseTex,
       uTime: { value: 0 }, uCam: { value: new THREE.Vector3() }, uSunDir: { value: TOD.lightDir }, uSunCol: { value: TOD.sunCol },
       uHorizon: { value: TOD.horizon }, uZenith: { value: TOD.zenith }, uFog: { value: TOD.fog }, uNight: { value: 0 }, uFogD: { value: 0.0016 }, uVis: { value: 1 }, uSpecK: { value: 1 },
+      uBright: { value: 0 },
     },
     vertexShader: 'varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
     fragmentShader: /* glsl */`
-      uniform float uTime, uNight, uFogD, uVis, uSpecK; uniform vec3 uCam, uSunDir, uSunCol, uHorizon, uZenith, uFog; varying vec3 vW;
+      uniform float uTime, uNight, uFogD, uVis, uSpecK, uBright; uniform vec3 uCam, uSunDir, uSunCol, uHorizon, uZenith, uFog; varying vec3 vW;
       ${GLSL_NOISE}
       float wh(vec2 p){ return vnoise(p * 0.18 + vec2(uTime * 0.05, uTime * 0.03)) * 0.6 + vnoise(p * 0.55 - vec2(uTime * 0.09, -uTime * 0.04)) * 0.4; }
       void main(){
@@ -24,9 +25,11 @@ export function makeSea() {
         vec3 N = normalize(vec3((h0 - wh(p + vec2(e, 0.0))) * 1.4, 1.0, (h0 - wh(p + vec2(0.0, e))) * 1.4));
         N = normalize(mix(N, vec3(0.0, 1.0, 0.0), smoothstep(80.0, 900.0, dist) * 0.8));
         float fres = pow(1.0 - max(dot(V, N), 0.0), 3.0);
-        vec3 deep = mix(vec3(0.010, 0.10, 0.26), vec3(0.03, 0.22, 0.40), 0.5 + 0.5 * vnoise(p * 0.02));
-        vec3 sky = mix(uHorizon, uZenith, 0.25);
-        vec3 col = mix(deep, sky, clamp(fres * 1.15 + 0.08, 0.0, 1.0));
+        // on a bright day the sea is painted a deep, saturated blue (the reference art): bluer water that mirrors more of
+        // the blue sky overhead and less of the pale horizon; dawn, dusk and night keep the old water and the horizon's glow
+        vec3 deep = mix(mix(vec3(0.010, 0.10, 0.26), vec3(0.004, 0.11, 0.40), uBright), mix(vec3(0.03, 0.22, 0.40), vec3(0.02, 0.25, 0.62), uBright), 0.5 + 0.5 * vnoise(p * 0.02));
+        vec3 sky = mix(uHorizon, uZenith, 0.25 + 0.45 * uBright);
+        vec3 col = mix(deep, sky, clamp(fres * (1.15 - 0.3 * uBright) + 0.08 - 0.03 * uBright, 0.0, 1.0));
         // painted wave crests: thin light streaks
         float crest = smoothstep(0.78, 0.86, vnoise(vec2(p.x * 0.08, p.y * 0.5) + uTime * 0.04)) * (1.0 - smoothstep(60.0, 400.0, dist));
         col = mix(col, sky * 1.15, crest * 0.35);
@@ -48,7 +51,7 @@ export function makeSea() {
     mesh,
     update(cam, time, fogD, vis = 1) {
       mesh.position.x = cam.x; mesh.position.z = cam.z;
-      mat.uniforms.uTime.value = time; mat.uniforms.uCam.value.copy(cam); mat.uniforms.uNight.value = TOD.night; mat.uniforms.uFogD.value = fogD; mat.uniforms.uVis.value = vis; mat.uniforms.uSpecK.value = 1 - TOD.overcast * 0.85;
+      mat.uniforms.uTime.value = time; mat.uniforms.uCam.value.copy(cam); mat.uniforms.uNight.value = TOD.night; mat.uniforms.uBright.value = TOD.bright; mat.uniforms.uFogD.value = fogD; mat.uniforms.uVis.value = vis; mat.uniforms.uSpecK.value = 1 - TOD.overcast * 0.85;
     },
   };
 }

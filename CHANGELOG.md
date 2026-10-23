@@ -2,6 +2,73 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-23 · 03:xx — Restyle 4: the colours of the reference art
+- **Daytime frames now have the reference paintings' palette.** A sampler measures the same patches in the four
+  reference images and in our frames at noon:
+  - the sky overhead and at the horizon;
+  - cloud light and shade;
+  - grass;
+  - sunlit asphalt and the car's shadow;
+  - the car.
+  The levers were tuned until the two matched. Over 28 patches the average colour difference from the references
+  (CIELAB ΔE) fell from 10.3 to 5.3. Live was pale, grey and washed out next to them. Now:
+  - **the sky is a deep azure overhead and pales to near-white at the horizon.** The sky overhead measures
+    (13,108,222) against the references' (0–2, 92–114, 206–233); live was a dull (30–47, 88–94, 198). It is a
+    painted gradient that turns deep from ~20° up, with red coming in last, so the band above the horizon is a clean
+    light blue instead of grey;
+  - **the cumulus are white in the sun** (238–242, against 239–249; live 202–220), with light-blue shading;
+  - **shadows are a deep, saturated blue**, as in every reference. The asphalt in the car's shadow measures (12,39,85)
+    / (6,33,79) / (16,41,83) against (10,47,88) / (7,43,89) / (24,45,86); live was a grey-blue (30,57,94) / (17,46,85)
+    / (34,59,91). The shaded pavement in the city measures (59,79,120) against (61,74,118). The skylight is a
+    saturated blue, and it is all the light a shadow gets;
+  - **the sun is a warm cream**, and with the blue skylight it lights a white wall white; the snow is a clean white;
+  - **greens are vivid**: fields, lawns and verges are greener and less yellow-grey, and sun-dried patches are rarer.
+    Sunlit grass in the country measures (118,181,47) against (122,182,45);
+  - **the asphalt is the references' warm mid-grey** (130,125,130 against 137,130,131; live was a cooler, lighter
+    138–149), and **pavements are pale beige stone**;
+  - **the sea is a deeper blue by day**: it mirrors more of the blue sky overhead and less of the now pale horizon;
+  - **the grade is punchier**: saturation 1.22 (was 1.1), an indigo lift in the shadows, and only a light vignette by
+    day (0.12, was 0.55; the paintings have none).
+- **Sunset, night, cloudy and rain keep their look; sunrise and golden hour take a little of the new one.** Every
+  change to the look is weighted by a new `TOD.bright`: 1 on a clear day, 0 at sunset, at night and under grey skies
+  (0.4 at golden hour). It drives the sky gradient, the exposure, the clouds' brightness, the sea, the shadow lift and
+  the vignette. The palette changed only in the three clear-day keys (t = 0.30, 0.45, 0.62). The extra saturation
+  is taken back under grey skies, so in rain the grade is exactly the old one.
+- How:
+  - **Exposure.** On a bright day the frame is exposed 25% higher, and the sun and sky lights are turned down by the
+    same factor. Lit surfaces keep their level, while the sky, the clouds, the haze and the sea (painted, not lit)
+    reach the near-white tones the tone curve used to cap at ~240.
+  - **Constants and uniforms only:** the clear-day keys of the time-of-day palette (sky.js), the ground's albedo
+    constants (materials.js) and the grade (post.js; the shadow tint became a uniform). The sky shader's gradient
+    gained a few instructions and the sea shader a few mixes. There are no new programs, textures or draws, and
+    nothing in the world's layout changed.
+- Cost: none measurable. The main agent re-measured independently on a quieter machine:
+  - **GPU averaged over drives** (interleaved runs):
+    - desktop country: 20.16 vs live 20.42 ms (−0.26);
+    - desktop city: 20.40 vs 20.03 (+0.37);
+    - phone country: 9.75 vs 9.77 (−0.02);
+    - phone city: 12.38 vs 12.55 (−0.17).
+  - **Interleaved A/B in the city:** desktop +0.17 ms (A/A −0.39). Phone per-load rounds swing both ways (±3.3 ms,
+    the profile's usual bimodal loads), and the drive average above settles it.
+  - The work was done by a subagent; its own measurements, taken on a busier machine, follow.
+  - **GPU, phone:**
+    - over a 1.2 km country drive: 10.03 ms against live's 9.83 / 10.23;
+    - in-page, flipping the new look on and off every 3 s (same programs): −0.23 / +0.23 ms, while a do-nothing
+      switch read −0.24;
+    - interleaved A/B against live: country +0.34 (8 rounds) and +1.54 (6 rounds), city +0.04, while live against
+      itself read −0.21 / +1.60.
+  - **GPU, desktop:**
+    - over a 1.2 km country drive (interleaved ABBA): 21.82 against 21.27 ms (+0.55);
+    - interleaved A/B: country −1.50 / city +0.20 / coast −1.11 (A/A −0.50 / −0.23 / −0.77), and in a second run on
+      the final build country +0.88 / city +0.28;
+    - in-page look flip: country +0.83 / +0.70 over 150 s and −1.75 / +1.61 over 60 s, while the do-nothing switch
+      read −0.27 / −1.33 / +0.79; city +0.01.
+    The code adds ~6 instructions per sky pixel and a few per sea pixel; nothing else changed but uniform values, so
+    no mechanism for a real cost was found.
+  - 54 programs at every quality level (55 on the coast, as on live), none compiled through sunset, night and rain.
+    No console errors. Embed mode starts on tap. World building is unchanged (no layout or random-number changes),
+    and so is the texture atlas.
+
 ## 2026-10-23 · 01:xx — Restyle 3: a street of shophouses, timber and plaster
 - **The shopping street is shophouses on both sides**, as in the reference art. The grey modern blocks along the
   frontage (pastel-concrete shops, flats, offices) gave way to 町家 shophouses, now 70% of the frontage (was 50%).

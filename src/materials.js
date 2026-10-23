@@ -220,7 +220,7 @@ const GROUND = /* glsl */`
 float crackLine(float d, float hw, float fw){ fw = max(fw, 1e-4); return clamp((hw - abs(d)) / fw + 0.5, 0.0, 1.0) * min(1.0, 2.0 * hw / fw); }
 vec3 roadCol(float s, float u, float rw){
   float a = abs(u); vec2 p = vec2(s, u);
-  vec3 c = L(vec3(0.63, 0.62, 0.61));
+  vec3 c = L(vec3(0.58, 0.57, 0.57));
   c *= 0.90 + 0.14*fbm2(p*0.45) + 0.10*(hash12(floor(p*22.0)) - 0.5);
   float d1 = (abs(u + 1.6) - 0.75) / 0.22, d2 = (abs(u - 1.6) - 0.75) / 0.22; // (pow() of a negative base is NaN on many mobile GPUs)
   float tr = exp(-d1 * d1) + exp(-d2 * d2);
@@ -343,7 +343,7 @@ vec3 snowGround(float s, float u, float rw){
 vec3 sidewalkCol(float s, float u, float rw){
   float d = abs(u) - rw;
   vec2 t = vec2(s, d) / 0.3, f = fract(t), id = floor(t);
-  vec3 base = mix(L(vec3(0.80, 0.77, 0.72)), L(vec3(0.72, 0.68, 0.64)), hash12(id));
+  vec3 base = mix(L(vec3(0.90, 0.85, 0.81)), L(vec3(0.82, 0.77, 0.73)), hash12(id));
   vec3 c = base * (1.0 - 0.2*clamp(step(f.x, 0.05) + step(f.y, 0.05), 0.0, 1.0));
   if (d > 0.45 && d < 0.75) { c = L(vec3(0.93, 0.78, 0.2)); vec2 q = fract(vec2(s, d)/0.075) - 0.5; c *= 1.0 - 0.18*(1.0 - smoothstep(0.18, 0.24, length(q))); }
   return c * (0.92 + 0.12*fbm2(vec2(s, u)*0.8));
@@ -358,19 +358,19 @@ vec3 cityGround(float s, float u, float rw){
 vec3 grassCol(vec2 p, vec3 lush, vec3 light){
   float broad = 0.6 * vnoise(p * 0.045) + 0.4 * vnoise(p * 0.11 + 3.1);
   vec3 g = mix(lush, light, smoothstep(0.3, 0.75, broad));
-  g = mix(g, L(vec3(0.68, 0.66, 0.40)), 0.4 * smoothstep(0.6, 0.85, vnoise(p * 0.02 + 7.3)));
+  g = mix(g, L(vec3(0.68, 0.66, 0.40)), 0.25 * smoothstep(0.6, 0.85, vnoise(p * 0.02 + 7.3)));
   g *= 0.8 + 0.28 * vnoise(p * vec2(0.5, 0.7) + 1.7);
   return g * (0.9 + 0.18 * vnoise(p * vec2(2.4, 9.0) + 5.9));
 }
 vec3 sakuraGround(float s, float u, float rw){
   vec2 p = vec2(s, u);
-  vec3 g = grassCol(p, L(vec3(0.38, 0.58, 0.27)), L(vec3(0.60, 0.74, 0.37)));
+  vec3 g = grassCol(p, L(vec3(0.36, 0.60, 0.28)), L(vec3(0.62, 0.78, 0.37)));
   float pet = smoothstep(0.7, 0.8, vnoise(p*3.3)) * (1.0 - 0.6*smoothstep(rw + 6.0, rw + 20.0, abs(u)));
   return mix(g, L(vec3(1.0, 0.83, 0.89)), pet*0.85);
 }
 vec3 coastGround(float s, float u, float rw){
   vec2 p = vec2(s, u); float a = abs(u);
-  if (u > 0.0) return grassCol(p, L(vec3(0.36, 0.55, 0.26)), L(vec3(0.58, 0.70, 0.36)));
+  if (u > 0.0) return grassCol(p, L(vec3(0.31, 0.60, 0.25)), L(vec3(0.52, 0.79, 0.32)));
   if (a < rw + 1.45) return L(vec3(0.73, 0.72, 0.69)) * (0.9 + 0.1*fbm2(p));
   if (a < rw + 2.08) return L(vec3(0.70, 0.70, 0.68)) * (0.82 + 0.12*vnoise(p*vec2(0.4, 5.0)));
   vec3 sand = mix(L(vec3(0.94, 0.87, 0.71)), L(vec3(0.85, 0.77, 0.62)), fbm2(p*0.2));
@@ -379,7 +379,7 @@ vec3 coastGround(float s, float u, float rw){
 vec3 countryGround(float s, float u, float rw){
   vec2 p = vec2(s, u); float a = abs(u);
   if (a < rw + 0.7) return L(vec3(0.63, 0.59, 0.51)) * (0.85 + 0.2*vnoise(p*3.0));
-  if (a < rw + 2.1) return mix(L(vec3(0.30, 0.48, 0.22)), L(vec3(0.44, 0.60, 0.27)), vnoise(p*1.5));
+  if (a < rw + 2.1) return mix(L(vec3(0.27, 0.50, 0.24)), L(vec3(0.41, 0.63, 0.29)), vnoise(p*1.5));
   if (a < 135.0) {
     float pu = a - (rw + 2.1);
     vec2 q = vec2(s/30.0, pu/17.0), id = floor(q), f = fract(q);
@@ -389,7 +389,7 @@ vec3 countryGround(float s, float u, float rw){
     vec2 cg = vec2(pu / 0.33, s / 0.16), cf = fract(cg) - 0.5;
     float aa = clamp(max(fwidth(cg.x), fwidth(cg.y)) * 1.6 - 0.3, 0.0, 1.0);
     float rows = mix(smoothstep(0.30, 0.48, abs(cf.x)), 0.4, aa);
-    vec3 field = mix(L(vec3(0.47, 0.66, 0.24)), L(vec3(0.62, 0.76, 0.32)), h) * (0.88 + 0.14*rows);
+    vec3 field = mix(L(vec3(0.44, 0.66, 0.29)), L(vec3(0.58, 0.77, 0.36)), h) * (0.88 + 0.14*rows);
     if (h < 0.28) {
       // a flooded paddy after planting (田植え後): seedlings standing in muddy water. This is the light coming up through
       // the water; MIRROR adds the sky's reflection by the Fresnel law — only ~20% looking down beside the road, a mirror
@@ -404,10 +404,10 @@ vec3 countryGround(float s, float u, float rw){
       field = mix(mud, L(vec3(0.50, 0.68, 0.24)) * (0.9 + 0.2 * fract(h * 13.7)), plant);
       gWater = 1.0 - plant;
     }
-    else if (h > 0.86) field = L(vec3(0.40, 0.52, 0.22)) * (0.88 + 0.16*rows);
+    else if (h > 0.86) field = L(vec3(0.36, 0.54, 0.25)) * (0.88 + 0.16*rows);
     float ridge = max(max(step(f.x, 0.025), step(0.975, f.x)), max(step(f.y, 0.04), step(0.96, f.y)));
     gWater *= 1.0 - ridge;
-    return mix(field, L(vec3(0.52, 0.63, 0.30)), ridge) * (0.94 + 0.1*fbm2(p*0.03));
+    return mix(field, L(vec3(0.48, 0.64, 0.32)), ridge) * (0.94 + 0.1*fbm2(p*0.03));
   }
   return mix(L(vec3(0.18, 0.34, 0.19)), L(vec3(0.30, 0.46, 0.24)), fbm2(p*0.04));
 }
@@ -435,7 +435,7 @@ vec3 sideStreet(float ds, float u){
 }
 vec3 riverBankCol(float s, float u){
   vec2 p = vec2(s, u);
-  vec3 g = mix(L(vec3(0.36, 0.56, 0.24)), L(vec3(0.56, 0.70, 0.30)), fbm2(p * 0.12)) * (0.88 + 0.16 * vnoise(p * 2.1));
+  vec3 g = mix(L(vec3(0.33, 0.58, 0.26)), L(vec3(0.51, 0.73, 0.32)), fbm2(p * 0.12)) * (0.88 + 0.16 * vnoise(p * 2.1));
   float fl = smoothstep(0.78, 0.84, vnoise(p * 4.3));            // little yellow and white wildflowers
   return mix(g, mix(L(vec3(0.98, 0.86, 0.3)), L(vec3(0.97, 0.97, 0.92)), step(0.5, vnoise(p * 1.7))), fl * 0.8);
 }

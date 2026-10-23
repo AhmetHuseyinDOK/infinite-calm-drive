@@ -170,10 +170,10 @@ export function groundOffset(zone, s, u, e, rw) {
     }
     case 'country':
     default:
-      if (a < rw + 0.7) return -0.08;
-      if (a < rw + 2.1) return -0.95;                       // irrigation ditch
-      if (a < 135) return -0.55;                            // paddies
-      return -0.55 + sstep(135, 215, a) * 36 * (0.4 + 0.6 * noise1(s / 210 + (u > 0 ? 9 : 0), 7));
+      if (a < rw + 2.0) return -0.08;                       // the verge: a bank of tall grass and wildflowers
+      if (a < rw + 2.6) return -0.08 - (a - rw - 2.0) * 0.62; // its slope down to the fields (there used to be a ditch)
+      if (a < 135) return -0.45;                            // paddies
+      return -0.45 + sstep(135, 215, a) * 36 * (0.4 + 0.6 * noise1(s / 210 + (u > 0 ? 9 : 0), 7));
   }
 }
 export function groundOffsetMix(s, u, e, rw) {

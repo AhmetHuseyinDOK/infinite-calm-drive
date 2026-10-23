@@ -2,6 +2,58 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-23 · 10:xx — Restyle 5: the country road between banks of wildflowers, through a meadow of real grass
+- **Banks of tall grass and wildflowers line the country road (土手の草むら), as in the reference art.** The verges were a
+  strip of grey gravel and a ditch with a scatter of small tufts. Now a continuous, knee-high bank of long grass runs
+  along both edges from the white line outwards:
+  - each clump is hundreds of curved blades, deep in their own shade at the root and arching out with sunlit
+    yellow-green tips;
+  - white daisies (姫女苑) and yellow flowers stand on stems among them;
+  - the ground beneath is dark grass right up to the asphalt, and the verge slopes gently down to the fields (the gravel
+    and the ditch are gone).
+- **The fields beside the road are a meadow of real blades of grass (草原).**
+  - A blade stands every 15 cm out to 18 m ahead (18 cm and 15 m on phones), and every other one on to 38 m, dotted with
+    white clover and yellow buttercups.
+  - The blades lean, sway in the breeze and take the colour of the plot they stand in, dark at the root and lit at the
+    tip, so they melt into the painted field beyond.
+  - The two plots beside the road are one even, vivid green with no flooded paddies, as in the reference. The fields
+    beyond keep their paddies, now with painted blade strokes.
+- Golden hour, sunset, night and rain keep their look. The banks and the meadow grow only in the countryside, and thin
+  out towards level crossings, rivers and the next zone instead of stopping at a line.
+- **Research** (the user widened this step to new rendering techniques): Ghost of Tsushima's GDC talk on procedural
+  grass, SimonDev's three.js grass, the hexaquo grass series, and BotW-style grass in three.js.
+  - The meadow is real geometry. It is opaque, so it has none of the alpha-test overdraw that made the reeds costly.
+  - The banks are painted clump cards: one card carries a whole painted clump and its flowers, which blades could only
+    match with many times the vertices.
+  - This step was built by a subagent and verified independently by the main agent.
+- How:
+  - **The meadow** (new `grass.js`, `grassMaterial`): each blade is built in the vertex shader from its instance number.
+    Its cell on a grid fixed to the road gives it a hashed place, height, lean and colour, and 48 road samples put it in
+    the world. Five instanced draws, each sized every frame to what the camera sees. One more shader program (compiled
+    at load), no shadow-map code, 0.03 ms of CPU a frame, no per-frame garbage.
+  - **The banks:** two new foliage-atlas cells in a new last row (1024×2560 → 1024×3072, +2.7 MB GPU memory), painted
+    at load with their own random numbers. One five-sided card per clump, every 0.9 m (1.25 m on phones), placed with
+    their own random numbers so the rest of the world's layout is unchanged.
+  - **The ground:** a dark grass verge instead of gravel and a ditch, and the near plots evened out and dry. One more
+    noise read for the field's strokes.
+  - **Colour:** over 15 verge and field patches, the colour difference from the reference (ΔE) fell from 16.2 to 11.3
+    at one spot and from 43.5 to 12.7 at another. The sunlit-grass patch went from 17.2 to 5.6.
+- Cost: none measurable. Main agent's independent check, interleaved with live:
+  - **GPU averaged over 0.9 km country drives:**
+    - desktop 20.2 vs 20.45 ms (one staging run's timer query came back corrupt and was dropped);
+    - phone 10.04 vs 9.99 ms.
+  - **Parked A/B at s=900:** −0.08 ms (A/A +0.51).
+  - **Same frame drawn with and without** (the subagent's figures): meadow +0.13–0.41 ms desktop and +0.15–0.30 phone;
+    banks +0.23/+0.30 and +0.14/+0.21; the dry near plots save 0.08–0.19.
+  - **World building:**
+    - desktop 589 vs 580 ms/km;
+    - phone ×4 swung with the machine's load (load average 8–12), with worst steps of 14–38 ms vs 13–32 on live;
+    - timed directly, chunk generation was unchanged (107–128 vs 104–122 ms per 20 chunks).
+  - **Programs:** 55 at every quality level (54 on live; the extra one is the meadow's, compiled at load). None
+    compiled through sunset, night, rain or a drive. No console errors. Embed mode starts on tap.
+  - **The foliage atlas:** the existing cells are unchanged apart from sub-pixel anti-aliasing noise (619 of 2.6 M
+    pixels). The painter isn't bit-identical even between two runs of the same code.
+
 ## 2026-10-23 · 03:xx — Restyle 4: the colours of the reference art
 - **Daytime frames now have the reference paintings' palette.** A sampler measures the same patches in the four
   reference images and in our frames at noon:

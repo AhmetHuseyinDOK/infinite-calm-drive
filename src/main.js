@@ -9,6 +9,7 @@ import { makeSky, paintClouds, makeClouds, makeMountains, updateTOD, applyWeathe
 import { makeWeather, makeRain, makeSnow, PLIGHT } from './weather.js';
 import { makeSpray } from './spray.js';
 import { makeMirage } from './mirage.js';
+import { makeGrass } from './grass.js';
 import { makeBirds } from './birds.js';
 import { makeSea, foamMaterial, riverMaterial } from './sea.js';
 import { makeCar } from './car.js';
@@ -100,7 +101,7 @@ async function main() {
   status('painting the town…');
   await new Promise(r => setTimeout(r, 10));
   const atlas = buildAtlas(); setAtlas(atlas);
-  const fol = buildFoliage(renderer); setFoliage(fol.cells); U.uTuftV.value.set(fol.tuftV[0], fol.tuftV[1]);
+  const fol = buildFoliage(renderer); setFoliage(fol.cells); U.uTuftV.value.set(...fol.tuftV);
   const M = makeMaterials(atlas.textures(renderer), fol.tex);
   const cloudMap = makeCloudMap(); cloudMap.update(renderer, 0, 0, 0, 0);
   status('painting the clouds…');
@@ -110,6 +111,8 @@ async function main() {
   const path = new Path();
   const foamMat = foamMaterial();
   const riverMat = riverMaterial();
+  // the country meadow's blades (before the world: its materials then sort ahead of the ground's, which they hide)
+  const grass = makeGrass(quality, QS.has('grass') ? QS.get('grass').split(',').map(Number) : null); for (const m of grass.meshes) scene.add(m);
   const world = new World(scene, path, M, foamMat, riverMat);
   const sky = makeSky(); scene.add(sky);
   const clouds = makeClouds(paintClouds(renderer)); scene.add(clouds.group);
@@ -138,7 +141,7 @@ async function main() {
   // speed: the zone's cruising speed × mult (0.4 … 5.5, so up to ~190–265 km/h); uHome: the lane the car settles back
   // into when nobody steers — wherever the player last steered it (it used to always drift back to the left lane)
   const MULT_MIN = 0.4, MULT_MAX = 5.5;
-  const st = { s: Math.max(100, parseFloat(QS.get('s')) || 140), u: -1.65, uHome: -1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, spray: QS.has('nospray') ? 0 : 1 /* test switch */, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
+  const st = { s: Math.max(100, parseFloat(QS.get('s')) || 140), u: -1.65, uHome: -1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, spray: QS.has('nospray') ? 0 : 1 /* test switch */, grass: 1 /* test switch: the meadow's blades */, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
   let started = false;
   status('building the road…');
   await new Promise(r => setTimeout(r, 10));
@@ -165,11 +168,13 @@ async function main() {
     sun.target.position.set(0, 0, 0); sun.position.set(0, 150, 60); // so the warm-up meshes sit inside the shadow camera
     const hidden = [rain.mesh, snowfall.mesh, spray.mesh, mirage.mesh, train.group, rig.group, sea.mesh].filter(o => !o.visible);
     for (const o of hidden) o.visible = true;
+    grass.warm(true);
     renderer.setRenderTarget(post.composer.readBuffer); // the game draws into the post-processing buffer (linear output)
     renderer.compile(scene, camera);
     renderer.render(scene, camera);              // also compiles the shadow-pass (depth) programs
     renderer.setRenderTarget(null);
     for (const o of hidden) o.visible = false;
+    grass.warm(false);
     scene.remove(warm); tri.dispose();
     // and the post passes: bloom is off by day, so its 8 programs used to compile all at once at the first sunset,
     // night or tunnel — a 160 ms freeze here, far longer on a phone
@@ -178,7 +183,7 @@ async function main() {
   // level crossing state
   const X = { k: Math.ceil((st.s - XOFF) / XING), phase: 'idle', raise: 1, decided: false, t2: 0 };
 
-  const f = {}, fc = {}, fl = {};
+  const f = {}, fc = {}, fl = {}, YAWQ = QS.has('yaw') || QS.get('cam') === 'top'; // (test views looking sideways or down: the meadow isn't culled by width)
   const camPos = new THREE.Vector3(), look = new THREE.Vector3(), tmp = new THREE.Vector3();
   let camInit = false;
   const fwd = new THREE.Vector3(), right = new THREE.Vector3();
@@ -462,6 +467,13 @@ async function main() {
     if (QS.has('yaw')) camera.rotateY((parseFloat(QS.get('yaw')) * Math.PI) / 180); // test hook: look sideways
     if (QS.has('pitch')) camera.rotateX((parseFloat(QS.get('pitch')) * Math.PI) / 180); // test hook: look up / down
     fwd.set(f.fx, 0, f.fz); right.set(f.rx, 0, f.rz);
+    { // the meadow follows the camera: where it is along and across the road, and how wide it sees (shots from the verge
+      // look sideways: no culling by width, and the blades start a little behind them)
+      const cp = car.group.position, dx = camera.position.x - cp.x, dz = camera.position.z - cp.z, side = st.cam === 4 && cine.type !== 'chase' && cine.type !== 'eye';
+      const camS = st.s + dx * f.fx + dz * f.fz - (side ? 10 : 0), latK = side || YAWQ ? 40 : Math.tan((camera.fov * Math.PI) / 360) * camera.aspect * 1.08;
+      grass.update(path, camS, st.u + dx * f.rx + dz * f.rz, world.origin.x, world.origin.z, zparam(st.s, 'rw'), latK);
+      if (!st.grass) grass.hide();
+    }
 
     // lighting & atmosphere
     const w = zoneW(st.s);
@@ -670,7 +682,7 @@ async function main() {
     if (started && frames > 150 && dt > 0.03) slowT += dt; else slowT = Math.max(0, slowT - dt * 0.5);
     if (slowT > 3 && !QS.has('q')) { slowT = 0; stepDown(); }
   }
-  window.__dbg = { renderer, st, scene, camera, world, TOD, KEYS, X, train, weather, U, birds, cine, post, car, sun, M, clouds, sky, mountains, shadowDir, CM, spray, get audio() { return audio; } };
+  window.__dbg = { renderer, st, scene, camera, world, TOD, KEYS, X, train, weather, U, birds, cine, post, car, sun, M, clouds, sky, mountains, shadowDir, CM, spray, grass, get audio() { return audio; } };
   status('');
   $start.classList.add('ready');
   if (QS.has('auto')) begin();

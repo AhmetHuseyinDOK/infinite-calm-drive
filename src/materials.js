@@ -78,7 +78,7 @@ export const U = {
   uOrigin: { value: new THREE.Vector2() },     // world-origin offset, so world-space patterns survive rebasing
   uSunDir: { value: new THREE.Vector3(0, 1, 0) },
   uSunCol: { value: new THREE.Color(1, 1, 1) },
-  uTuftV: { value: new THREE.Vector2(0, 0.333) }, // v-range of the grass-tuft row in the foliage atlas
+  uTuftV: { value: new THREE.Vector4(0.167, 0.333, 0.164, 0.165) }, // foliage atlas v: the tuft row's bottom and top, the verge banks' top, a split between them
   uTunA: { value: new THREE.Vector3(0, -1e4, 0) },  // the current tunnel's axis (portal to portal, at road level)
   uTunB: { value: new THREE.Vector3(0, -1e4, 0) },
   uTunR: { value: 4.6 },
@@ -378,19 +378,21 @@ vec3 coastGround(float s, float u, float rw){
 }
 vec3 countryGround(float s, float u, float rw){
   vec2 p = vec2(s, u); float a = abs(u);
-  if (a < rw + 0.7) return L(vec3(0.63, 0.59, 0.51)) * (0.85 + 0.2*vnoise(p*3.0));
-  if (a < rw + 2.1) return mix(L(vec3(0.27, 0.50, 0.24)), L(vec3(0.41, 0.63, 0.29)), vnoise(p*1.5));
+  // the verge under its bank of tall grass (the clump cards, chunks.js placeBanks): dense grass in its own shade right
+  // up to the asphalt, lighter towards the field (it used to be a gravel shoulder and a ditch)
+  if (a < rw + 2.3) return mix(L(vec3(0.1, 0.25, 0.08)), L(vec3(0.3, 0.54, 0.18)), smoothstep(rw + 0.9, rw + 2.3, a) * (0.55 + 0.45 * vnoise(vec2(s * 1.4, u * 12.0) + 3.1)));
   if (a < 135.0) {
     float pu = a - (rw + 2.1);
     vec2 q = vec2(s/30.0, pu/17.0), id = floor(q), f = fract(q);
-    float h = hash12(id + (u > 0.0 ? 31.0 : 0.0));
+    float h = hash12(id + (u > 0.0 ? 31.0 : 0.0)), hm = id.y > 1.5 ? h : 0.3 + 0.4 * h; // (the plots beside the road: one even meadow)
     // rows of rice 33 cm apart, hills 16 cm apart along them. Anti-aliased: once a row is narrower than ~2 pixels it
     // fades to its average (the bare smoothstep used to crawl in moiré bands across the far fields as we drove)
     vec2 cg = vec2(pu / 0.33, s / 0.16), cf = fract(cg) - 0.5;
     float aa = clamp(max(fwidth(cg.x), fwidth(cg.y)) * 1.6 - 0.3, 0.0, 1.0);
     float rows = mix(smoothstep(0.30, 0.48, abs(cf.x)), 0.4, aa);
-    vec3 field = mix(L(vec3(0.44, 0.66, 0.29)), L(vec3(0.58, 0.77, 0.36)), h) * (0.88 + 0.14*rows);
-    if (h < 0.28) {
+    // painted blade strokes up close (mip-filtered away in the distance), as in the reference art's meadow
+    vec3 field = mix(L(vec3(0.44, 0.66, 0.29)), L(vec3(0.58, 0.77, 0.36)), hm) * (0.88 + 0.14*rows) * (0.8 + 0.42 * vnoise(vec2(s * 2.6, pu * 9.0) + 7.7));
+    if (h < 0.28 && id.y > 1.5) { // (none in the first two plots beside the road: the reference art has green fields there)
       // a flooded paddy after planting (田植え後): seedlings standing in muddy water. This is the light coming up through
       // the water; MIRROR adds the sky's reflection by the Fresnel law — only ~20% looking down beside the road, a mirror
       // towards the horizon. (The water used to be painted sky-blue *and* reflect at least 40%: pale ice sheets up close)
@@ -404,7 +406,7 @@ vec3 countryGround(float s, float u, float rw){
       field = mix(mud, L(vec3(0.50, 0.68, 0.24)) * (0.9 + 0.2 * fract(h * 13.7)), plant);
       gWater = 1.0 - plant;
     }
-    else if (h > 0.86) field = L(vec3(0.36, 0.54, 0.25)) * (0.88 + 0.16*rows);
+    else if (h > 0.86 && id.y > 1.5) field = L(vec3(0.36, 0.54, 0.25)) * (0.88 + 0.16*rows);
     float ridge = max(max(step(f.x, 0.025), step(0.975, f.x)), max(step(f.y, 0.04), step(0.96, f.y)));
     gWater *= 1.0 - ridge;
     return mix(field, L(vec3(0.48, 0.64, 0.32)), ridge) * (0.94 + 0.1*fbm2(p*0.03));
@@ -668,6 +670,97 @@ export function withGloss(m, amt, f0 = 0.06, key = 'gloss', extra = null) {
   return m;
 }
 
+/** 草原: the meadow beside the country road (grass.js) — blades of grass made entirely in the vertex shader, one
+ *  instance each, with no buffers but a 5- or 3-vertex blade: each instance hashes its cell on a grid fixed to the road
+ *  (s, u), so blades stay put as the camera moves, and is placed with the road samples `uG` (x, y, z, heading every
+ *  GDS m from uGP.x). Blades turn their face to the camera, lean, sway in the breeze and are shaded like the ground under
+ *  them (rounded normals pointing up), dark at the root and sunlit at the tip, in the colour of the field plot they stand
+ *  in (countryGround). `ring` holds a sub-ring's uniforms (grass.js): its rows and its columns on each side. */
+export const GRASS_N = 48;
+export function grassMaterial(ring, shared) {
+  const m = new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: GRAD_SOFT });
+  m.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, shared, ring);
+    for (const k of ['uOrigin', 'uCloudSh', 'uTime', 'uNoiseTex', 'uCloudTex', 'uCloudOrg', 'uWind']) sh.uniforms[k] = U[k];
+    // (no shadow-map code at all: the meadow beyond the banks is hardly ever in a shadow, and three.js would still work
+    // out two shadow-map coordinates for every vertex of every blade)
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', `#undef USE_SHADOWMAP
+#include <common>
+${CLOUD_V}
+uniform vec4 uG[${GRASS_N}], uGM[${GRASS_N / 4}], uGP, uGQ, uRing, uRingC, uRingD; uniform float uWind;
+varying vec3 vBladeCol;
+float gHash(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+vec3 gL(vec3 c){ return pow(c, vec3(2.2)); }`)
+      .replace('#include <beginnormal_vertex>', /* glsl */`
+// which blade: rows × left columns, then rows × right columns of the sub-ring's grid (uRing: first row, rows, cell (m),
+// coarse; uRingC: columns left, right, the band's width in m). The coarse rings' blades are the even cells of the fine
+// grid, so blades keep their place as they pass from one ring to the next
+int gid = gl_InstanceID, nL = int(uRing.y) * int(uRingC.x);
+float side = gid < nL ? -1.0 : 1.0; int cols = gid < nL ? int(uRingC.x) : int(uRingC.y); gid = gid < nL ? gid : gid - nL;
+int row = gid / cols;
+float coarse = uRing.w, cf = uRing.z / (1.0 + coarse);
+vec2 cell = vec2(uRing.x + float(row), float(gid - row * cols)) * (1.0 + coarse);
+vec2 hc = cell + vec2(0.0, side > 0.0 ? 7919.0 : 0.0);
+float h1 = gHash(hc), h2 = gHash(hc + 17.31), h5 = gHash(hc + 63.7);
+float gs = (cell.x + h1) * cf, pu = (cell.y + h2) * cf, gd = gs - uGP.w;     // along the road; out from the field's edge
+// LOD: the fine rings keep every blade up to L1 (uRingD.x), all but the even cells fading out over the last 6 m; the
+// coarse rings carry the even ones from L1 and thin them out gradually by L2. Only where the road samples say there is
+// meadow, as densely as they say
+bool even = mod(cell.x, 2.0) < 0.5 && mod(cell.y, 2.0) < 0.5;
+float keep = coarse > 0.5 ? step(uRingD.x, gd) * (1.0 - smoothstep(uRingD.x + 2.0, uRingD.y, gd))
+                          : step(gd, uRingD.x) * (even ? 1.0 : 1.0 - smoothstep(uRingD.x - 6.0, uRingD.x, gd));
+float fi = (gs - uGP.x) * uGP.y; int i0 = clamp(int(floor(fi)), 0, ${GRASS_N - 2}); float ft = clamp(fi - float(i0), 0.0, 1.0);
+float gm = uGM[i0 >> 2][i0 & 3], gsd = mod(gm, 4.0);                         // its sides, and its density (gm / 4: 0…15)
+float gu = side * (uGP.z + 2.6 + pu);
+keep *= (side > 0.0 ? step(1.5, gsd) : mod(gsd, 2.0)) * floor(gm * 0.25) * (1.0 / 15.0)
+      * step(0.0, gd) * step(abs(gu - uGQ.x), uGQ.y * gd + uGQ.z) // (and within the view)
+      * (1.0 - smoothstep(0.55 * uRingC.z, uRingC.z, pu)); // (thinning out towards the band's outer edge: no line where it ends)
+bool gCull = h5 >= keep;
+vec3 gPos = vec3(0.0); vec3 objectNormal = vec3(0.0, 1.0, 0.0); vBladeCol = vec3(0.0); vCloud = 0.0;
+if (!gCull) {
+  float h3 = gHash(hc + 41.17), h4 = gHash(hc + 7.93), h6 = gHash(hc + 23.9);
+  vec4 A = uG[i0], B = uG[i0 + 1];
+  vec3 P = mix(A.xyz, B.xyz, ft); float hd = mix(A.w, B.w, ft);
+  vec3 base = vec3(P.x - cos(hd) * gu, P.y - 0.45, P.z + sin(hd) * gu);
+  // patches of taller and shorter grass (and the field's broad light and dark), from one noise read; the coarse rings'
+  // blades are wider, so the fewer blades still read
+  float nz = vnoiseV(vec2(gs, gu) * 0.35 + 3.0);
+  float H = (0.24 + 0.28 * h3) * (0.7 + 0.6 * nz) * smoothstep(0.0, 0.15, keep - h5);    // (blades grow in at a ring's edge)
+  float W = (0.03 + 0.02 * h4) * (1.0 + 0.7 * coarse) * (1.0 + gd * 0.012);
+  vec3 toC = cameraPosition - base; vec3 wdir = normalize(vec3(toC.z, 0.0, -toC.x)); // the blade's face to the camera (front-facing: wound anticlockwise as seen)
+  float a = h6 * 6.2832; vec2 lean = vec2(cos(a), sin(a)) * (0.15 + 0.3 * h1) * H;
+  float sw = sin(uTime * 1.7 + base.x * 0.23 + base.z * 0.19) * 0.6 + sin(uTime * 2.9 + base.x * 0.61 - base.z * 0.37) * 0.4;
+  lean += vec2(0.7, 0.5) * sw * 0.21 * uWind * H;
+  float t = position.y, sd = position.x;
+  gPos = base + vec3(lean.x * t * t, H * t * (1.0 - 0.12 * t * t), lean.y * t * t) + wdir * (W * (1.0 - t) * sd * 0.5);
+  objectNormal = normalize(vec3(wdir.x * sd * 0.35, 1.0, wdir.z * sd * 0.35)); // shaded like the ground, a little rounded
+  // one blade in ~70 of the fine rings is a wildflower instead (白詰草 white clover, 金鳳花 yellow buttercups): its five
+  // vertices laid out as a small round head facing the camera, held just above the grass
+  bool flower = coarse < 0.5 && h4 < 0.015;
+  if (flower) {
+    float r = 0.035 + 0.015 * h3, fx = sd * (t > 0.75 ? 0.0 : t > 0.25 ? 1.0 : 0.55), fy = t > 0.75 ? 1.0 : t > 0.25 ? 0.15 : -0.85;
+    gPos = base + vec3(lean.x, H * 0.95, lean.y) + wdir * (fx * r) + vec3(0.0, fy * r, 0.0);
+    objectNormal = vec3(0.0, 1.0, 0.0);
+  }
+  // the colour of the field plot it stands in (countryGround: the same hash of the same 30 × 17 m plot), dark at the
+  // root, sunlit at the tip
+  vec2 pid = floor(vec2(mod(gs, ${S_WRAP.toFixed(1)}) / 30.0, (abs(gu) - uGP.z - 2.1) / 17.0));
+  vec3 plot = mix(gL(vec3(0.44, 0.66, 0.29)), gL(vec3(0.58, 0.77, 0.36)), 0.3 + 0.4 * gHash(pid + (side > 0.0 ? 31.0 : 0.0))) * (0.9 + 0.2 * nz);
+  vBladeCol = flower ? (h6 < 0.75 ? vec3(0.92, 0.92, 0.86) : vec3(1.0, 0.68, 0.05)) : mix(plot * 0.5, plot * vec3(1.18, 1.16, 0.98), t) * (0.86 + 0.28 * h4);
+  vCloud = cloudShadowV(base.xz);
+}`)
+      .replace('#include <begin_vertex>', 'vec3 transformed = gPos;')
+      .replace('#include <project_vertex>', '#include <project_vertex>\nif (gCull) gl_Position = vec4(2.0, 2.0, 2.0, 1.0); // (culled: outside the clip volume)');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#undef USE_SHADOWMAP\n#include <common>\nvarying vec3 vBladeCol; varying float vCloud;')
+      .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= vBladeCol;')
+      .replace('#include <opaque_fragment>', `${SHADE_APPLY_V}\n#include <opaque_fragment>`);
+  };
+  m.customProgramCacheKey = () => 'grass-v4';
+  return m;
+}
+
 export function makeMaterials(atlasTex, folTex) {
   const M = {};
   M.ground = groundMaterial();
@@ -691,12 +784,13 @@ export function makeMaterials(atlasTex, folTex) {
       sh.uniforms.uTuftV = U.uTuftV; sh.uniforms.uWind = U.uWind;
       // a gentle breeze: whole crowns drift a few centimetres, grass tufts bend from the root
       sh.vertexShader = sh.vertexShader
-        .replace('#include <common>', '#include <common>\nuniform float uWind; uniform vec2 uTuftV;') // (uTime comes with the vertex cloud shadows)
+        .replace('#include <common>', '#include <common>\nuniform float uWind; uniform vec4 uTuftV;') // (uTime comes with the vertex cloud shadows)
         .replace('#include <begin_vertex>', `#include <begin_vertex>
 { vec4 wq = modelMatrix * vec4(transformed, 1.0);
   float sw = sin(uTime * 1.2 + wq.x * 0.31 + wq.z * 0.23) * 0.65 + sin(uTime * 2.3 + wq.x * 0.83 - wq.z * 0.47) * 0.35;
-  float tuft = step(uv.y, uTuftV.y);
-  float wgt = mix(0.03, 0.09 * clamp((uv.y - uTuftV.x) / (uTuftV.y - uTuftV.x), 0.0, 1.0), tuft) * uWind;
+  float tuft = step(uv.y, uTuftV.y); // (the two bottom rows: grass tufts, and the country's verge banks below them)
+  float bend = uv.y > uTuftV.w ? (uv.y - uTuftV.x) / (uTuftV.y - uTuftV.x) : uv.y / uTuftV.z;
+  float wgt = mix(0.03, 0.09 * clamp(bend, 0.0, 1.0), tuft) * uWind;
   transformed.x += sw * wgt; transformed.z += sw * wgt * 0.7; }`);
       // cards seen edge-on smear into streaks: fade them out (raises the alpha-test threshold as they turn away)
       sh.fragmentShader = sh.fragmentShader.replace('#include <alphatest_fragment>', `
@@ -704,7 +798,7 @@ export function makeMaterials(atlasTex, folTex) {
   diffuseColor.a *= smoothstep(0.07, 0.3, abs(dot(gN, normalize(vViewPosition)))); }
 #include <alphatest_fragment>`);
     };
-    M.leaf.customProgramCacheKey = () => 'leaf-v4';
+    M.leaf.customProgramCacheKey = () => 'leaf-v5';
   }
   M.wire = new THREE.MeshBasicMaterial({ color: 0x23242c });
   // soft light pools under street lamps at night (additive)

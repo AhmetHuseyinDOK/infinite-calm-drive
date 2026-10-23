@@ -210,6 +210,24 @@ export function tuft(G, M, r, kind = 'grass', s = 1) {
     G.leaf.card([[-cx, -0.05, -cz], [cx, -0.05, cz], [cx, h, cz], [-cx, h, -cz]], N, uvr, [lo, lo, hi, hi]);
   }
 }
+/** a clump of the country verge's bank of tall grass and wildflowers (土手の草むら): one wide card standing across the
+ *  verge, its low end at the road, so it faces the road ahead and behind (turned by up to ±23°). Shaded like
+ *  the ground and bending in the breeze, like the tufts. Overlapping along the verge, the clumps make one bank rising
+ *  from the road edge towards the field */
+const BANK_LO = [0.62, 0.68, 0.74]; // (the clump's own shade at its root: darker, cooler)
+// the card follows the clump's outline (x from the road end across, y up): the painting leaves the top corner over its
+// low road end empty, and every fragment there would only be shaded and thrown away (5% fewer fragments than a quad)
+const BANK_HULL = [[0, 0], [1, 0], [1, 1], [0.36, 1], [0, 0.7]], BANK_TRI = [0, 1, 2, 0, 2, 3, 0, 3, 4];
+const BANK_COL = BANK_HULL.map(([, y]) => mixC(BANK_LO, W1, y));
+export function bank(G, px, py, pz, dx, dz, r, s = 1) { // (base point, and the horizontal direction away from the road)
+  const c = FOL[r() < 0.5 ? 'bankA' : 'bankB'], h = 0.82 * s, w = (h + 0.06) * 2.03, g = G.leaf;
+  for (const k of BANK_TRI) {
+    const [x, y] = BANK_HULL[k], o = (x - 0.5) * w;
+    g.vtx(px + dx * o, py + y * (h + 0.06) - 0.06, pz + dz * o, 0, 1, 0, c.u0 + (c.u1 - c.u0) * x, c.v0 + (c.v1 - c.v0) * y, BANK_COL[k]);
+  }
+}
+/** how far apart the bank's clumps stand along the verge (m): fewer on phones (set with the foliage density) */
+export const bankStep = () => (LEAF_D > 0.7 ? 0.9 : 1.25);
 export function treeBroad(G, M, r, s = 1) {
   const h = r.range(5.5, 7.5) * s;
   G.color.setM(M); G.color.cyl(0, 0, 0, 0.2 * s, 0.13 * s, h * 0.55, 7, PAL.trunk);

@@ -680,7 +680,7 @@ export function buildAtlas() {
 
 // ---------------- foliage clump textures (leaves, sakura blossom, pine needles) ----------------
 export function buildFoliage(renderer) {
-  const S = 1024, SH = 2560, cv = canvas(S, SH), g = cv.getContext('2d'), r = rng(321), cells = {}, Y0 = 512; // (row 0: bare twigs)
+  const S = 1024, SH = 3072, cv = canvas(S, SH), g = cv.getContext('2d'), r = rng(321), cells = {}, Y0 = 512; // (row 0: bare twigs; the last row: verge banks)
   const PALS = {
     leafA: ['#2f6634', '#4a8a3e', '#6aa64a', '#94c460', '#c4e08a'],
     leafB: ['#476e2e', '#6a9238', '#8db44a', '#b4d066', '#e0ec9a'],
@@ -779,11 +779,88 @@ export function buildFoliage(renderer) {
     g.restore();
     cells[name] = { u0: ox / S, u1: (ox + 512) / S, v0: 1 - (oy + 512) / SH, v1: 1 - oy / SH };
   };
+  // 土手の草むら: the country verge's bank of tall grass, a whole clump on one card (as in the reference art). Low and
+  // sparse at its road end (x = 0), rising to full height towards the field: tufts of long blades fanning out of narrow
+  // roots, in their own shade low down, arching out with sunlit yellow-green tips, lighter towards the field; white
+  // daisies (姫女苑) and yellow flowers on stems among them. The cards are about twice as wide as tall, so it is painted
+  // in a 1024 × 504 frame squeezed into the 512² cell. The cell's top 8 px stay empty: the breeze tells the bank's tips
+  // from the root of the tuft row above by that gap. Its own random numbers, so every other cell paints as before.
+  const bank = (name, ox, oy, seed, daisy) => {
+    const br = rng(seed), W = 1024, H = 504;
+    g.save(); g.translate(ox, oy + 8); g.beginPath(); g.rect(0, 0, 512, H); g.clip(); g.scale(0.5, 1);
+    const pal = ['#09240f', '#113417', '#1b481f', '#29602c', '#3c7a3a', '#579442', '#7cb04c', '#a3cb5e', '#c8e27e'];
+    // height envelope: low at the road end, full from the middle on, tapering off at the field end
+    const env = x => { const t = x / W; return (0.5 + 0.5 * Math.min(1, t / 0.45) ** 0.8) * (1 - 0.4 * Math.max(0, (t - 0.9) / 0.1)); };
+    // a blade: a pointed, curving leaf from its root to its tip, added to the current path (the blades of one colour are
+    // filled together: one fill per colour and layer instead of one per blade keeps the painting quick, ~10 ms)
+    const blade = (bx, h, lean, wB) => {
+      h = Math.min(h, H * 0.985);
+      const tx = bx + lean, ty = H - h, mx = bx + lean * 0.25, my = H - h * 0.62 - Math.abs(lean) * 0.35;
+      g.moveTo(bx - wB / 2, H);
+      g.quadraticCurveTo(mx - wB * 0.42, my, tx, ty);
+      g.quadraticCurveTo(mx + wB * 0.42, my + wB * 0.5, bx + wB / 2, H); g.closePath();
+    };
+    // tufts along the card, fewer at the road end; each fans its blades out of a narrow root
+    const tufts = [];
+    for (let x = 24 + br() * 24; x < W - 20; x += (x < W * 0.25 ? 56 : 44) + br() * 26) tufts.push(x);
+    const tuftOf = () => tufts[Math.floor(br() * tufts.length)];
+    // a layer of blades: darker at the root (k0) than at the tip (a gradient up the layer's height, one per colour)
+    const grow = (n, hLo, hHi, spread, wLo, wHi, k0, kLo, kHi) => {
+      const byCol = pal.map(() => []);
+      for (let i = 0; i < n; i++) {
+        const tx = tuftOf(), bx = tx + (br() - 0.5) * 34, e = env(bx), lift = bx / W; // (lighter tips towards the field)
+        const h = H * (hLo + br() * (hHi - hLo)) * e * 1.12;
+        const lean = (br() - 0.5) * spread + (bx - W * 0.45) * 0.12;
+        byCol[Math.min(8, kLo + Math.floor(br() * (kHi - kLo + 1) + lift * 1.2))].push([bx, h, lean, wLo + br() * (wHi - wLo)]);
+      }
+      byCol.forEach((bl, k) => { // (darker first: the sunlit ones on top)
+        if (!bl.length) return;
+        const gr = g.createLinearGradient(0, H, 0, H * (1 - hHi * 0.8));
+        gr.addColorStop(0, pal[k0]); gr.addColorStop(0.55, pal[Math.round((k0 + k) / 2)]); gr.addColorStop(1, pal[k]);
+        g.fillStyle = gr; g.beginPath(); for (const b of bl) blade(b[0], b[1], b[2], b[3]); g.fill();
+      });
+    };
+    grow(360, 0.25, 0.55, 150, 12, 22, 0, 2, 3);   // the body: shorter blades, deep in the clump's own shade
+    grow(240, 0.4, 0.78, 260, 10, 17, 1, 4, 6);    // the middle: longer blades, lighter towards their tips
+    const flowers = [];
+    for (let i = 0; i < 4; i++) {
+      const fx = W * (0.14 + br() * 0.74), e = env(fx);
+      flowers.push({ fx, fy: Math.max(56, H - H * (0.56 + br() * 0.38) * e * 1.05), // (the head stays inside the cell)
+        kind: br() < daisy ? 0 : 1, sz: 0.85 + br() * 0.4, tilt: 0.72 + br() * 0.28, rot: br() * 6.28, sx: fx + (br() - 0.5) * 60 });
+    }
+    // their stems first, behind the sunlit blades
+    g.lineCap = 'round';
+    for (const f of flowers) { g.strokeStyle = '#2c6623'; g.lineWidth = 6; g.beginPath(); g.moveTo(f.sx, H); g.quadraticCurveTo((f.sx + f.fx) / 2 + (br() - 0.5) * 40, (H + f.fy) / 2, f.fx, f.fy + 8); g.stroke(); }
+    grow(150, 0.5, 0.92, 330, 9, 16, 2, 6, 7);     // the sunlit top: long blades arching out, bright at the tips
+    // the flowers: 姫女苑-like daisies (white rays round a yellow disc, seen a little from the side) and yellow
+    // five-petalled flowers (like 金鶏菊 / buttercups)
+    for (const f of flowers) {
+      g.save(); g.translate(f.fx, f.fy); g.scale(1, f.tilt);
+      if (f.kind === 0) {
+        const R = 38 * f.sz;
+        for (let p = 0; p < 16; p++) { const a = f.rot + (p / 16) * 6.283; g.fillStyle = Math.sin(a) > 0.4 ? '#e2e3ea' : '#fdfdf6'; g.beginPath(); g.ellipse(Math.cos(a) * R * 0.56, Math.sin(a) * R * 0.56, R * 0.48, R * 0.14, a, 0, 7); g.fill(); }
+        g.fillStyle = '#f2b51a'; g.beginPath(); g.arc(0, 0, R * 0.28, 0, 7); g.fill();
+        g.fillStyle = '#fbe060'; g.beginPath(); g.arc(-R * 0.07, -R * 0.07, R * 0.14, 0, 7); g.fill();
+      } else {
+        const R = 40 * f.sz;
+        for (let p = 0; p < 5; p++) { const a = f.rot + (p / 5) * 6.283; g.fillStyle = '#fccc1e'; g.beginPath(); g.ellipse(Math.cos(a) * R * 0.52, Math.sin(a) * R * 0.52, R * 0.52, R * 0.38, a, 0, 7); g.fill(); }
+        for (let p = 0; p < 5; p++) { const a = f.rot + (p / 5) * 6.283; g.fillStyle = '#ffe873'; g.beginPath(); g.ellipse(Math.cos(a) * R * 0.62, Math.sin(a) * R * 0.62 - 3, R * 0.26, R * 0.15, a, 0, 7); g.fill(); }
+        g.fillStyle = '#e39b14'; g.beginPath(); g.arc(0, 0, R * 0.2, 0, 7); g.fill();
+      }
+      g.restore();
+    }
+    grow(40, 0.42, 0.85, 280, 8, 14, 3, 6, 7);     // a few blades in front of the flowers, so they sit in the grass
+    g.restore();
+    cells[name] = { u0: ox / S, u1: (ox + 512) / S, v0: 1 - (oy + 512) / SH, v1: 1 - (oy + 8) / SH };
+  };
   twigs('twigs', 0, 0);
   paint('leafA', 0, Y0); paint('leafB', 512, Y0); paint('sakura', 0, Y0 + 512); paint('pine', 512, Y0 + 512);
   paint('momiji', 0, Y0 + 1024); paint('ginkgo', 512, Y0 + 1024);
-  tuft('grass', 0, Y0 + 1536, false); tuft('flowers', 512, Y0 + 1536, true); // tufts stay in the bottom row (the breeze shader keys on it)
+  tuft('grass', 0, Y0 + 1536, false); tuft('flowers', 512, Y0 + 1536, true); // tufts and banks stay in the two bottom rows (the breeze keys on them)
+  bank('bankA', 0, Y0 + 2048, 4111, 0.7); bank('bankB', 512, Y0 + 2048, 4127, 0.35);
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
-  return { tex, cells, tuftV: [0, 1 - (Y0 + 1536) / SH] };
+  // the breeze: v of the tuft row's bottom and top, the banks' top, and a split between the two rows
+  const tB = 1 - (Y0 + 2048) / SH, bT = 1 - (Y0 + 2056) / SH;
+  return { tex, cells, tuftV: [tB, 1 - (Y0 + 1536) / SH, bT, (tB + bT) / 2] };
 }

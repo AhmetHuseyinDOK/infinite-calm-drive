@@ -13,6 +13,7 @@ const NEAR = [0.7, 0.9, 1.45, 1.5, 1.9, 2.0, 2.1, 2.65, 3.05, 3.4]; // 1.45: jus
 const FAR = [7, 9, 11.5, 14.5, 18, 23, 29, 36, 45, 56, 70, 86, 104, 124, 140, 160, 185, 215];
 const POLE_SP = 32;
 const WIRE = [0.025, 0.026, 0.032], BIRD = [0.05, 0.05, 0.065];
+const IDENT = new THREE.Matrix4();
 const mod = (a, n) => ((a % n) + n) % n;
 /** true within m metres of a level crossing (keeps the track corridor clear) */
 const nearX = (s, m) => { const c = crossingNear(s); return !!c && Math.abs(s - c.s) < m; };
@@ -231,7 +232,7 @@ export class World {
     yield* this.placeCountry(G, r, s0, s1, matAt, onGround, road, rwAt, H);
     yield* this.placeMountain(G, r, s0, s1, matAt, onGround, road, rwAt, H);
     yield* this.placeSnow(G, r, s0, s1, matAt, onGround, road, rwAt, H);
-    yield* this.placeVerge(G, r, s0, s1, matAt, H, rwAt);
+    yield* this.placeVerge(G, r, s0, s1, matAt, H, rwAt, c, ox, oz);
     yield;
 
     // ---------- assemble ----------
@@ -711,14 +712,38 @@ export class World {
     }
   }
 
-  /** 雑草: tufts of grass and wildflowers along shoulders, ditch edges and verges (sparse weeds at the foot of city walls) */
-  *placeVerge(G, r, s0, s1, matAt, H, rwAt) {
+  /** 土手の草むら: the countryside's verges are banks of tall grass and wildflowers along both edges of the road, as in
+   *  the reference art — one clump card a metre or so apart (fewer on phones), with their own random numbers. Not in
+   *  front of the bus stop, the vending machine or a お地蔵さん. Written straight into chunk space (no matrix per clump) */
+  *placeBanks(G, c, s0, s1, ox, oz, rwAt) {
+    const path = this.path, f = {}, br = rng(Math.floor(hash2(c, 1789) * 4294967295)), step = P.bankStep();
+    const sb = Math.floor((s0 + CH / 2) / 600) * 600 + 300, sv = Math.floor((s0 + CH / 2) / 700) * 700 + 120;
+    const sj = Math.floor((s0 + CH / 2) / 380) * 380 + 190, jside = hash2(Math.round(sj), 5) < 0.5 ? -1 : 1;
+    for (const side of [-1, 1]) {
+      G.leaf.setM(IDENT);
+      for (let s = s0 + br() * step; s < s1; s += step * br.range(0.75, 1.25)) {
+        if (zoneAt(s) !== 'country' || nearX(s, 10) || nearR(s, 31)) continue;
+        if (side < 0 && (Math.abs(s - sb) < 2.9 || (s > sv - 1.3 && s < sv + 2.7))) continue;
+        if (side === jside && Math.abs(s - sj) < 1.6) continue;
+        path.at(s, f);
+        const rw = rwAt(s), u = side * (rw + 0.95 + (br() - 0.5) * 0.36), y = f.y + groundOffsetMix(s, u, f.y, rw);
+        // across the verge, away from the road (the clump's low end at the road), turned by up to ±23°
+        const a = (br() - 0.5) * 0.8, ca = Math.cos(a) * side, sa = Math.sin(a) * side;
+        P.bank(G, f.x + f.rx * u - ox, y, f.z + f.rz * u - oz, f.rx * ca + f.fx * sa, f.rz * ca + f.fz * sa, br, br.range(0.85, 1.15));
+      }
+      yield;
+    }
+  }
+
+  /** 雑草: tufts of grass and wildflowers along shoulders, field edges and verges (sparse weeds at the foot of city walls) */
+  *placeVerge(G, r, s0, s1, matAt, H, rwAt, c, ox, oz) {
+    yield* this.placeBanks(G, c, s0, s1, ox, oz, rwAt);
     for (const side of [-1, 1]) {
       for (let s = s0 + r() * 1.2; s < s1; s += r.range(0.55, 1.5)) {
         if (nearX(s, 10) || nearR(s, 31) || nearT(s, T_RIDGE + 4)) continue;
         const z = zoneAt(s), rw = rwAt(s);
         let u, dens, fl = 0.22, sc = 1;
-        if (z === 'country') { u = rw + (r() < 0.6 ? r.range(0.2, 0.62) : r.range(2.18, 2.75)); dens = 0.95; }
+        if (z === 'country') { u = rw + r.range(2.05, 2.8); dens = 0.25; fl = 0.35; } // (behind the bank, at the field's edge)
         else if (z === 'sakura') { u = rw + 2.68 + r() * 1.3; dens = 0.55; fl = 0.3; }
         else if (z === 'coast') { if (side < 0) continue; u = rw + 0.95 + r() * 1.7; dens = 0.75; fl = 0.18; }
         else if (z === 'snow') continue;

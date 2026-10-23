@@ -2,6 +2,44 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-24 · 02:xx — Restyle 10: a painted meadow over the country fields
+- **The fields are a painted meadow, as in the reference art.** The rice paddies beyond the verge (rows of seedlings,
+  flooded plots mirroring a grey sky, ridges between plots) gave way to one painted meadow out to the far hills:
+  - painted grass tufts and strokes up close, and fine painted streaks in the distance;
+  - a light lime in the sun, with lighter, yellower fields and deeper green ones in bands towards the horizon, and broad
+    sunlit patches; beside the road one even meadow, as in the painting;
+  - no water anywhere (the painting has none).
+- **The blades of grass beside the road take the meadow's colours,** a little warmer and darker, so the near field melts
+  into the painted one.
+- **Measured against the reference** (CIELAB ΔE of the median grass colour over a whole strip of the frame, at s = 300,
+  600 and 900): far fields 10.2 → 2.7 (phone 10.5 → 3.8); near field 4.5 → 3.7.
+- **Dusk, night and rain keep their look.** The lime is a bright-day look; at sunset, at night and under grey skies the
+  meadow takes the paddies' old, deeper green.
+- **If the texture can't be loaded** (missing, broken or truncated, or its index missing), the countryside keeps its
+  paddies. The main agent tested this with the files removed.
+- **Research:** a rectified patch of the painting (a radial blur, too little clean field), new Grok meadows (they came
+  out in perspective) and a different offset in each plot (seams from above) were tried and dropped. Quilez's
+  anti-tiling is the next step if the repeat ever shows from the crane camera. Built by a subagent; verified
+  independently by the main agent.
+- How:
+  - **The texture:** asset batch 1's meadow (Grok Imagine, anchored on country.png).
+    - Sizes: 1024² WebP (195 KB) where the frame is at least 900 px tall; 512² (71 KB) on phones, in the X card and in
+      smaller windows.
+    - Each tile covers 12 m across the road and 21 m along it.
+    - It downloads with the other painted assets. Mipmaps; 16× anisotropic filtering on desktops, 4× on phones.
+  - **The ground:** one texture read in the country's ground variants only (a new define, set once the texture is in),
+    in place of the paddies' five noise reads and the water's reflection. Plot tones (a hash) and sunlit patches (one
+    noise read) sit on top, and the plots' long edges are smoothed.
+  - **Programs:** none added (59), and none compiled through sunset, night, rain or a drive.
+- Cost: none measurable. Main agent's check on the desktop machine (GTX 1660 Super), interleaved with live:
+  - **GPU over 0.93 km country drives:** desktop 3.08 vs 3.10 ms, phone profile 4.15 vs 4.17 ms.
+  - **The subagent's same-frame flip:** −0.06 / −0.10 ms at 1080p (an A/A control reads ±0.04); phone profile +0.14 /
+    −0.04 ms.
+  - **Start-up:** the same (~1.08 vs ~1.07 s).
+  - **Memory:** +5.6 MB of GPU memory on desktops, +1.4 MB on phones.
+  - **Checks:** 0 shader errors in all six zones; every zone other than the country is unchanged; no console errors;
+    embed mode starts on tap.
+
 ## 2026-10-24 · 01:xx — Restyle 9: a tunnel of painted cherry blossom over a wet road
 - **The cherry trees have the sakura painting's crowns.** The speckled pink cards at random angles, purple in the
   shade, gave way to big old cherry trees:

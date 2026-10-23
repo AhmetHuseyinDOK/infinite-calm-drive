@@ -13,6 +13,7 @@
 import * as THREE from 'three';
 import { rng } from './util.js';
 import { TOD } from './sky.js';
+import { S_WRAP } from './materials.js';
 
 export const ASSETS = './assets/';
 
@@ -92,6 +93,24 @@ export async function loadCloudAtlas(tier, timeoutMs = 15000) {
     const { tex } = await paintedTexture(base, J, tier);
     return { tex, list, tier };
   })(), timeoutMs, 'painted clouds unavailable, keeping the procedural ones:');
+}
+
+/** Loads the painted meadow (assets/fields/, made by ~/cdtest/ft/scripts/field.py): a tileable top-down painting of the
+ *  country paintings' grass, 'hi' or 'lo' (phones, the embed). Resolves to null (never rejects) when the index or the
+ *  image is missing, broken, truncated or too slow: the countryside then keeps its procedural paddies. */
+export async function loadFieldTexture(tier, timeoutMs = 15000) {
+  const base = ASSETS + 'fields/';
+  return orNull((async () => {
+    const r = await fetch(base + 'fields.json');
+    if (!r.ok) throw new Error('fields.json ' + r.status);
+    const J = await r.json();
+    // (its length along the road must divide the shaders' wrapped road distance, S_WRAP, or it would jump there)
+    if (!(J.tile && J.tile[0] > 0 && J.tile[1] > 0 && Math.abs(S_WRAP / J.tile[1] - Math.round(S_WRAP / J.tile[1])) < 1e-6)) throw new Error('bad tile size');
+    if (!(J.mean && J.mean.length === 3)) throw new Error('no average colour listed');
+    const { tex, file } = await paintedTexture(base, J, tier);
+    tex.colorSpace = THREE.SRGBColorSpace; tex.wrapS = tex.wrapT = THREE.RepeatWrapping; // (albedo: decoded to linear)
+    return { tex, tile: J.tile, mean: J.mean, tier: file };
+  })(), timeoutMs, 'painted fields unavailable, keeping the procedural paddies:');
 }
 
 // The sky's composition, after the references: giant towers rising from just below the horizon up past the top of the

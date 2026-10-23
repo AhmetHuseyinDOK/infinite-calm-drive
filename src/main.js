@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Path, ZONES, zoneW, zoneWeight, zoneAt, zoneMix, zparam, ZINFO, setStartZone, crossingS, crossingValid, XING, XOFF, riverNear, RIV, ROFF, groundOffsetMix, tunnelNear, T_HALF, T_RIDGE } from './path.js';
 import { makeCrossingRig, makeTrain, xingPosts } from './crossing.js';
 import { buildAtlas, buildFoliage } from './textures.js';
-import { makeMaterials, U, groundMaterialFor, setShadowTaps, setGrazeFade, makeCloudMap, makeGhibliLeaf } from './materials.js';
+import { makeMaterials, U, groundMaterialFor, setShadowTaps, setGrazeFade, makeCloudMap, makeGhibliLeaf, FIELD } from './materials.js';
 import { setAtlas, setFoliage, warmTrees, setLeafDensity, GHIBLI } from './props.js';
 import { loadTreeAtlas } from './ghibli.js';
 import { World, CH } from './chunks.js';
@@ -18,7 +18,7 @@ import { makePost } from './post.js';
 import { makeAudio } from './audio.js';
 import { makeParticles } from './particles.js';
 import { clamp, lerp, sstep, setSeed, hash2 } from './util.js';
-import { loadCloudAtlas, makePaintedClouds, loadBandAtlas, makePaintedBand, updatePainted } from './painted.js';
+import { loadCloudAtlas, makePaintedClouds, loadBandAtlas, makePaintedBand, updatePainted, loadFieldTexture } from './painted.js';
 
 const QS = new URLSearchParams(location.search);
 // inside an X player card (or any iframe): lighter quality, compact UI, tap-only start
@@ -54,6 +54,8 @@ async function main() {
   // the painted crowns' clusters (ghibli.js): 256² clusters on desktops (a near crown fills a third of the frame, and its
   // flowers are a few texels wide), else 128² (phones, the embed)
   const treeLoad = loadTreeAtlas(quality === 'high' && innerHeight * DPR >= 560 ? 'hi' : 'lo');
+  // the painted meadow of the countryside's fields (painted.js), on the clouds' tiers
+  const fieldLoad = loadFieldTexture(TIER);
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0xc6ddf2, 0.0019, 700); // near = exp² density, far = draw distance (see materials.js)
@@ -132,6 +134,18 @@ async function main() {
     }
   }
   warmTrees();
+  // the painted meadow's tint (materials.js FIELD), from its painted colours to the albedo that shows as the reference
+  // art's fields at noon: a light lime (measured over the far fields: CIELAB ΔE 2.7 from the painting, 10.2 for the
+  // paddies). At dusk, at night and under grey skies it fades to the paddies' old, deeper green (by TOD.bright)
+  const FIELD_DAY = [2.1, 1.75, 3.2], FIELD_DIM = [1.42, 1.47, 1.74];
+  { // the fields: the painted meadow once its texture is in (the country's ground variants then read it), else the paddies
+    const fa = await fieldLoad;
+    if (fa) {
+      // (the fields are seen almost edge-on: 16× anisotropic filtering on desktops; on phones 4× looked the same)
+      fa.tex.anisotropy = Math.min(quality === 'high' ? 16 : 4, renderer.capabilities.getMaxAnisotropy()); FIELD.tex = fa.tex;
+      FIELD.uFieldK.value.set(1 / fa.tile[0], 1 / fa.tile[1]); FIELD.uFieldM.value.set(...fa.mean);
+    }
+  }
   const path = new Path();
   const foamMat = foamMaterial();
   const riverMat = riverMaterial();
@@ -619,6 +633,9 @@ async function main() {
     // the painted crowns' shade: the reference art's deep teal on a bright day, neutral at dusk, at night and under grey
     // skies (there it turned the shaded side of a crown cyan against a warm or grey scene)
     U.uGhShade.value.set(lerp(0.8, 0.3, TOD.bright), lerp(0.8, 0.85, TOD.bright), lerp(0.8, 1.7, TOD.bright));
+    // the painted meadow's tint: the reference art's light lime on a bright day; the paddies' old, deeper green at dusk,
+    // at night and under grey skies (the lime turned the fields ochre at sunset)
+    if (FIELD.tex) FIELD.uFieldC.value.set(lerp(FIELD_DIM[0], FIELD_DAY[0], TOD.bright), lerp(FIELD_DIM[1], FIELD_DAY[1], TOD.bright), lerp(FIELD_DIM[2], FIELD_DAY[2], TOD.bright));
     // the cherry blossom's: a bright rose-magenta on a bright day (thin petals glow in the shade); otherwise only enough
     // pink to keep the bluish skylight from turning the crowns' shade purple
     U.uBlShade.value.set(lerp(BL_SHADE_DIM[0], BL_SHADE_DAY[0], TOD.bright), lerp(BL_SHADE_DIM[1], BL_SHADE_DAY[1], TOD.bright), lerp(BL_SHADE_DIM[2], BL_SHADE_DAY[2], TOD.bright));

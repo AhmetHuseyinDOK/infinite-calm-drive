@@ -403,11 +403,34 @@ vec3 coastGround(float s, float u, float rw){
   vec3 sand = mix(L(vec3(0.94, 0.87, 0.71)), L(vec3(0.85, 0.77, 0.62)), fbm2(p*0.2));
   return mix(sand, L(vec3(0.6, 0.55, 0.46)), 0.6*(1.0 - smoothstep(0.0, 0.9, vWY)));
 }
+#ifdef F_PAINT
+// 草原: the painted meadow (painted.js loadFieldTexture), the country painting's grass seen from above, read once per
+// pixel. It runs along the road (s) and across it (u), its strokes 1.75× longer along the road (from the chase camera
+// they stand up more, like the painting's blades). Its coordinates and their screen footprint are taken at the top of
+// groundAlbedo, in uniform control flow, so the mip and anisotropic filtering stay right inside the branches
+uniform sampler2D uFieldTex; uniform vec2 uFieldK; uniform vec3 uFieldC; // 1 / the tile (m) across, along; tint
+vec2 fUV, fDX, fDY; float fPU;
+#endif
 vec3 countryGround(float s, float u, float rw){
   vec2 p = vec2(s, u); float a = abs(u);
   // the verge under its bank of tall grass (the clump cards, chunks.js placeBanks): dense grass in its own shade right
   // up to the asphalt, lighter towards the field (it used to be a gravel shoulder and a ditch)
   if (a < rw + 2.3) return mix(L(vec3(0.1, 0.25, 0.08)), L(vec3(0.3, 0.54, 0.18)), smoothstep(rw + 0.9, rw + 2.3, a) * (0.55 + 0.45 * vnoise(vec2(s * 1.4, u * 12.0) + 3.1)));
+#ifdef F_PAINT
+  if (a < 135.0) {
+    // plots 30 × 34 m in their own tones, the lighter ones yellower (the painting's far fields are bands of lime and of
+    // deeper green), evened out beside the road (one even meadow there, as in the painting), and broad sunlit patches
+    // over it all: a hash and one noise read (the painted meadow itself is evenly lit)
+    float pu = a - (rw + 2.1), sd = u > 0.0 ? 31.0 : 0.0;
+    vec2 q = vec2(s / 30.0, pu / 34.0), id = floor(q);
+    float du = (q.y - id.y - 0.5) * 34.0;
+    // (a plot's long sides run along the road and slant on screen: there it blends into the next plot's tone over ~1.5
+    // pixels; a hard step stair-stepped)
+    float hp = mix(hash12(id + sd), hash12(id + vec2(0.0, sign(du)) + sd), 0.5 - 0.5 * smoothstep(0.0, fPU, 17.0 - abs(du)));
+    float tone = 0.55 * (hp - 0.5) * smoothstep(9.0, 30.0, pu) + 0.4 * (vnoise(p * 0.018 + 5.3) - 0.5);
+    return textureGrad(uFieldTex, fUV, fDX, fDY).rgb * uFieldC * (1.0 + tone * vec3(1.8, 1.0, 0.2));
+  }
+#else
   if (a < 135.0) {
     float pu = a - (rw + 2.1);
     vec2 q = vec2(s/30.0, pu/17.0), id = floor(q), f = fract(q);
@@ -438,6 +461,7 @@ vec3 countryGround(float s, float u, float rw){
     gWater *= 1.0 - ridge;
     return mix(field, L(vec3(0.48, 0.64, 0.32)), ridge) * (0.94 + 0.1*fbm2(p*0.03));
   }
+#endif
   return mix(L(vec3(0.18, 0.34, 0.19)), L(vec3(0.30, 0.46, 0.24)), fbm2(p*0.04));
 }
 vec3 trackBed(float ds, float u){
@@ -470,6 +494,9 @@ vec3 riverBankCol(float s, float u){
 }
 vec3 groundAlbedo(){
   float s = vSU.x, u = vSU.y, rw = vRK.x, kind = vRK.y;
+#ifdef F_PAINT
+  fUV = vec2(u, s) * uFieldK; fDX = dFdx(fUV); fDY = dFdy(fUV); fPU = max(1.5 * (abs(fDX.x) + abs(fDY.x)) / uFieldK.x, 0.05); // (fPU: ~1.5 pixels across, in m)
+#endif
   if (kind > 0.5 && kind < 1.5) return roadCol(s, u, rw);
   if (kind > 1.5 && kind < 2.5) return sidewalkCol(s, u, rw);
   if (kind > 2.5 && kind < 3.5) return L(vec3(0.80, 0.80, 0.78)) * (0.9 + 0.12*fbm2(vec2(s, u)*2.0));
@@ -521,7 +548,7 @@ vec3 groundAlbedo(){
 
 // flooded paddies mirror the sky: gradient + soft cloud patches + sun glint, rippled by the wind
 const MIRROR = /* glsl */`
-#ifdef Z_COUNTRY
+#if defined(Z_COUNTRY) && !defined(F_PAINT)
 if (gWater > 0.01) {
   vec3 V = normalize(vWP - cameraPosition);
   vec3 R = reflect(V, vec3(0.0, 1.0, 0.0));
@@ -577,12 +604,21 @@ if (uWet > 0.01 || wetS > 0.01) {
 // zones → shader defines. Each chunk's ground uses a variant compiled with only the zones (and features) it contains:
 // one uber-shader with every zone's code ran ~4× slower even when the branches were skipped.
 const ZDEF = { city: 'Z_CITY', sakura: 'Z_SAKURA', coast: 'Z_COAST', country: 'Z_COUNTRY', mountain: 'Z_MTN', snow: 'Z_SNOW' };
+/** The painted meadow's texture (painted.js loadFieldTexture), once it has loaded: set it before the world is built, and
+ *  the country's ground variants take it (F_PAINT); without it they keep the procedural paddies. */
+export const FIELD = {
+  tex: null,
+  uFieldK: { value: new THREE.Vector2(1 / 12, 1 / 21) },   // 1 / the painted tile's size (m) across and along the road
+  uFieldC: { value: new THREE.Vector3(1, 1, 1) },          // its tint (main.js: lime on a bright day, deeper otherwise)
+  uFieldM: { value: new THREE.Vector3(0.16, 0.32, 0.05) }, // its average linear colour (the 3D blades take it)
+};
 export function groundDefines(zones) {
   const d = {};
   for (const z of zones) d[ZDEF[z]] = '';
   if (zones.includes('city') || zones.includes('country')) d.K_XING = '';
   if (zones.includes('country') || zones.includes('sakura')) d.K_RIVER = '';
   if (zones.includes('mountain') || zones.includes('coast')) d.K_RIDGE = '';
+  if (FIELD.tex && zones.includes('country')) d.F_PAINT = '';
   return d;
 }
 const GROUND_VARIANTS = new Map();
@@ -596,9 +632,11 @@ export const groundVariants = () => [...GROUND_VARIANTS.values()];
 export function groundMaterial(defines = groundDefines(Object.keys(ZDEF)), key = 'all') {
   const m = new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: GRAD });
   m.defines = defines;
+  const paint = defines.F_PAINT !== undefined;
   m.onBeforeCompile = sh => {
     sh.uniforms.uSkyHor = U.uSkyHor; sh.uniforms.uSkyZen = U.uSkyZen; sh.uniforms.uWet = U.uWet; sh.uniforms.uSakWet = U.uSakWet; sh.uniforms.uNight = U.uNight; sh.uniforms.uSunDir = U.uSunDir; sh.uniforms.uSunCol = U.uSunCol;
     for (const k of ['uReflTex', 'uReflOn', 'uReflRes', 'uHorizon', 'uReflK']) sh.uniforms[k] = U[k];
+    if (paint) { sh.uniforms.uFieldTex = { value: FIELD.tex }; sh.uniforms.uFieldK = FIELD.uFieldK; sh.uniforms.uFieldC = FIELD.uFieldC; }
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
 attribute vec2 su; attribute vec4 zw; attribute vec2 rk; attribute float rv; attribute float zs;
@@ -614,7 +652,7 @@ ${GROUND}`, WET + MIRROR, false);
     sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
 diffuseColor.rgb *= groundAlbedo();`);
   };
-  m.customProgramCacheKey = () => 'ground-v18-' + key;
+  m.customProgramCacheKey = () => 'ground-v19-' + key + (paint ? '-fp' : '');
   return m;
 }
 
@@ -720,16 +758,18 @@ export function withGloss(m, amt, f0 = 0.06, key = 'gloss', extra = null) {
 export const GRASS_N = 48;
 export function grassMaterial(ring, shared) {
   const m = new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: GRAD_SOFT });
+  const paint = !!FIELD.tex; // (the painted meadow: blades in its colours)
   m.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, shared, ring);
     for (const k of ['uOrigin', 'uCloudSh', 'uTime', 'uNoiseTex', 'uCloudTex', 'uCloudOrg', 'uWind']) sh.uniforms[k] = U[k];
+    if (paint) { sh.uniforms.uFieldC = FIELD.uFieldC; sh.uniforms.uFieldM = FIELD.uFieldM; }
     // (no shadow-map code at all: the meadow beyond the banks is hardly ever in a shadow, and three.js would still work
     // out two shadow-map coordinates for every vertex of every blade)
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#undef USE_SHADOWMAP
 #include <common>
 ${CLOUD_V}
-uniform vec4 uG[${GRASS_N}], uGM[${GRASS_N / 4}], uGP, uGQ, uRing, uRingC, uRingD; uniform float uWind;
+uniform vec4 uG[${GRASS_N}], uGM[${GRASS_N / 4}], uGP, uGQ, uRing, uRingC, uRingD; uniform float uWind;${paint ? '\nuniform vec3 uFieldC, uFieldM;' : ''}
 varying vec3 vBladeCol;
 float gHash(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 vec3 gL(vec3 c){ return pow(c, vec3(2.2)); }`)
@@ -784,10 +824,15 @@ if (!gCull) {
     gPos = base + vec3(lean.x, H * 0.95, lean.y) + wdir * (fx * r) + vec3(0.0, fy * r, 0.0);
     objectNormal = vec3(0.0, 1.0, 0.0);
   }
-  // the colour of the field plot it stands in (countryGround: the same hash of the same 30 × 17 m plot), dark at the
-  // root, sunlit at the tip
+  // the colour of the field plot it stands in (countryGround: the same hash of the same plot), dark at the root, sunlit
+  // at the tip${paint ? `. The painted meadow: its painting's average colour in the plot's tone and the broad sunlit
+  // patches, a little warmer and darker than the ground (the painting's blades are a deeper, yellower green than its fields)
+  float gsw = mod(gs, ${S_WRAP.toFixed(1)}), gpu = abs(gu) - uGP.z - 2.1;
+  float tone = 0.55 * (gHash(floor(vec2(gsw / 30.0, gpu / 34.0)) + (side > 0.0 ? 31.0 : 0.0)) - 0.5) * smoothstep(9.0, 30.0, gpu)
+             + 0.4 * (vnoiseV(vec2(gsw, gu) * 0.018 + 5.3) - 0.5);
+  vec3 plot = uFieldM * uFieldC * vec3(0.86, 0.87, 0.48) * (1.0 + tone * vec3(1.8, 1.0, 0.2)) * (0.9 + 0.2 * nz);` : `
   vec2 pid = floor(vec2(mod(gs, ${S_WRAP.toFixed(1)}) / 30.0, (abs(gu) - uGP.z - 2.1) / 17.0));
-  vec3 plot = mix(gL(vec3(0.44, 0.66, 0.29)), gL(vec3(0.58, 0.77, 0.36)), 0.3 + 0.4 * gHash(pid + (side > 0.0 ? 31.0 : 0.0))) * (0.9 + 0.2 * nz);
+  vec3 plot = mix(gL(vec3(0.44, 0.66, 0.29)), gL(vec3(0.58, 0.77, 0.36)), 0.3 + 0.4 * gHash(pid + (side > 0.0 ? 31.0 : 0.0))) * (0.9 + 0.2 * nz);`}
   vBladeCol = flower ? (h6 < 0.75 ? vec3(0.92, 0.92, 0.86) : vec3(1.0, 0.68, 0.05)) : mix(plot * 0.5, plot * vec3(1.18, 1.16, 0.98), t) * (0.86 + 0.28 * h4);
   vCloud = cloudShadowV(base.xz);
 }`)
@@ -798,7 +843,7 @@ if (!gCull) {
       .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= vBladeCol;')
       .replace('#include <opaque_fragment>', `${SHADE_APPLY_V}\n#include <opaque_fragment>`);
   };
-  m.customProgramCacheKey = () => 'grass-v4';
+  m.customProgramCacheKey = () => (paint ? 'grass-v5-fp' : 'grass-v5');
   return m;
 }
 

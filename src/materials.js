@@ -79,6 +79,7 @@ export const U = {
   uSunDir: { value: new THREE.Vector3(0, 1, 0) },
   uSunCol: { value: new THREE.Color(1, 1, 1) },
   uTuftV: { value: new THREE.Vector4(0.167, 0.333, 0.164, 0.165) }, // foliage atlas v: the tuft row's bottom and top, the verge banks' top, a split between them
+  uGhShade: { value: new THREE.Vector3(0.3, 0.85, 1.7) }, // the painted crowns' shade tint (makeGhibliLeaf): teal on a bright day, else neutral (main.js)
   uTunA: { value: new THREE.Vector3(0, -1e4, 0) },  // the current tunnel's axis (portal to portal, at road level)
   uTunB: { value: new THREE.Vector3(0, -1e4, 0) },
   uTunR: { value: 4.6 },
@@ -810,4 +811,73 @@ export function makeMaterials(atlasTex, folTex) {
   M.pool = new THREE.MeshBasicMaterial({ map: t, color: 0xffc77a, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
   M.glowTex = t;
   return M;
+}
+
+// ------------------------------------------------------------------ painted-cluster crowns (ghibli.js, props.js treeGhibli)
+// A painterly ramp over N·L: a deep shade, a quick soft terminator, then a broad sunlit cap (the paintings' crowns read as
+// lit caps over dark undersides). Linear filtering keeps the terminator soft at a distance.
+export const GRAD_GHIBLI = (() => {
+  const n = 64, v = new Uint8Array(n), lo = -0.05, hi = 0.5; // (N·L where the shade ends / the lit cap begins)
+  for (let i = 0; i < n; i++) { const x = ((i + 0.5) / n) * 2 - 1, t = Math.min(1, Math.max(0, (x - lo) / (hi - lo))), s = t * t * (3 - 2 * t); v[i] = Math.round(255 * (0.05 + 0.95 * s)); }
+  const t = new THREE.DataTexture(v, n, 1, THREE.RedFormat); t.minFilter = t.magFilter = THREE.LinearFilter; t.generateMipmaps = false; t.needsUpdate = true;
+  return t;
+})();
+// The clusters face the camera: each corner is spread along the view's right / up vectors (chunk meshes only translate, so
+// object space is world space up to an offset), with a slow sideways sway of the whole cluster. The shadow pass runs the
+// same code with the sun's view, so the clusters face the sun and the crown casts a lobed shadow.
+function billboard(sh, depth) {
+  sh.uniforms.uTime = U.uTime; sh.uniforms.uWind = U.uWind;
+  sh.vertexShader = sh.vertexShader
+    .replace('#include <common>', '#include <common>\nattribute vec2 aOff; uniform float uWind;' + (depth ? ' uniform float uTime;' : ''))
+    .replace('#include <begin_vertex>', `#include <begin_vertex>
+{ vec3 bbR = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]), bbU = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
+  vec4 wq = modelMatrix * vec4(transformed, 1.0);
+  float sw = (sin(uTime * 1.1 + wq.x * 0.31 + wq.z * 0.23) * 0.65 + sin(uTime * 2.1 + wq.x * 0.83 - wq.z * 0.47) * 0.35) * 0.04 * uWind;
+  transformed += bbR * (aOff.x + sw) + bbU * aOff.y; }`);
+  // the crown's core (marked by a straight-down normal) casts no shadow: its sun-facing twin would cut it in two
+  if (depth) sh.vertexShader = sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\nif (normal.y < -0.97) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);');
+}
+/** The crowns' material (`tex`: the cluster atlas, ghibli.js). Every cluster lights its own painted leaves: its normal is
+ *  the crown's (from the crown's centre, per vertex) mixed with the cluster's own from the atlas, so each lobe of the
+ *  crown gets its lit cap and its shade under the real sun. Returns { mat, depth } (depth: the shadow pass's twin). */
+export function makeGhibliLeaf(tex) {
+  // base leaf green (sRGB), a little yellower than the sunlit grass, as in the paintings; the atlas's albedo (~0.8 on
+  // average, darker in the crevices) and the per-cluster vertex colour (crown occlusion, per-tree tint) multiply it
+  const m = new THREE.MeshToonMaterial({ map: tex, vertexColors: true, color: new THREE.Color().setRGB(0.68, 0.85, 0.46, THREE.SRGBColorSpace), gradientMap: GRAD_GHIBLI, alphaTest: 0.5, side: THREE.FrontSide });
+  m.shadowSide = THREE.DoubleSide; // (three flips FrontSide to BackSide for shadows; the depth twins face the sun)
+  m.onBeforeCompile = sh => {
+    worldShade(sh); backlit(sh);
+    billboard(sh, false); // (uTime comes with the vertex cloud shadows)
+    sh.uniforms.uGhShade = U.uGhShade;
+    // the sun's shadow is looked up from the cluster's sunward surface (~1.1 × its half-width out), so a cluster never
+    // shadows itself (its sun-facing depth twin cuts through its middle) while the lobes above and toward the sun still
+    // shade the ones below. The crown's core (marked by a straight-down normal) looks it up 2.5 m deeper into the crown:
+    // it is in shade wherever any of the crown's clusters stands between it and the sun
+    sh.vertexShader = sh.vertexShader.replace('#include <shadowmap_vertex>', `#if defined( USE_SHADOWMAP )
+worldPosition.xyz += uSunDir * mix(-2.5, length(aOff) * 1.11, step(-0.97, objectNormal.y));
+#endif
+#include <shadowmap_vertex>`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec3 uGhShade;')
+      .replace('#include <map_fragment>', `
+vec4 gTx = texture2D(map, vMapUv);
+vec2 gN2 = gTx.rg * 2.0 - 1.0;
+vec3 gTexN = vec3(gN2, sqrt(max(0.0, 1.0 - dot(gN2, gN2))));
+diffuseColor.rgb *= gTx.b;
+diffuseColor.a *= gTx.a;`)
+      // the cluster's own normal (in card = view space) mixed with the crown's
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+normal = normalize(mix(normal, gTexN, 0.72));`)
+      // the crown's shade is lit by the sky alone, through a shade tint (a deep teal on a clear day), not by the warm ground
+      // bounce the open surfaces get from the hemisphere light: it turned shaded leaves olive
+      .replace('#include <aomap_fragment>', `#if NUM_HEMI_LIGHTS > 0
+reflectedLight.indirectDiffuse = hemisphereLights[0].skyColor * BRDF_Lambert(diffuseColor.rgb * uGhShade) * mix(0.7, 1.0, dot(normal, hemisphereLights[0].direction) * 0.5 + 0.5);
+#endif
+#include <aomap_fragment>`);
+  };
+  m.customProgramCacheKey = () => 'gleaf-v1';
+  const d = new THREE.MeshDepthMaterial();
+  d.onBeforeCompile = sh => billboard(sh, true);
+  d.customProgramCacheKey = () => 'gleaf-depth-v1';
+  return { mat: m, depth: d };
 }

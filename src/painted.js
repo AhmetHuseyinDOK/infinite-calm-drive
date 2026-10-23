@@ -71,7 +71,7 @@ async function paintedTexture(base, J, tier) {
   return { tex, file };
 }
 /** `work` (a promise), or null if it fails or takes longer than timeoutMs (never rejects) */
-async function orNull(work, timeoutMs, what) {
+export async function orNull(work, timeoutMs, what) {
   let timer;
   const late = new Promise(res => { timer = setTimeout(() => res(null), timeoutMs); });
   try { return await Promise.race([work, late]); }

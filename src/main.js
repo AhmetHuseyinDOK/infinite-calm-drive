@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import { Path, ZONES, zoneW, zoneAt, zoneMix, zparam, ZINFO, setStartZone, crossingS, crossingValid, XING, XOFF, riverNear, RIV, ROFF, groundOffsetMix, tunnelNear, T_HALF, T_RIDGE } from './path.js';
 import { makeCrossingRig, makeTrain, xingPosts } from './crossing.js';
 import { buildAtlas, buildFoliage } from './textures.js';
-import { makeMaterials, U, groundMaterialFor, setShadowTaps, setGrazeFade, makeCloudMap } from './materials.js';
-import { setAtlas, setFoliage, warmTrees, setLeafDensity } from './props.js';
+import { makeMaterials, U, groundMaterialFor, setShadowTaps, setGrazeFade, makeCloudMap, makeGhibliLeaf } from './materials.js';
+import { setAtlas, setFoliage, warmTrees, setLeafDensity, GHIBLI } from './props.js';
+import { loadTreeAtlas } from './ghibli.js';
 import { World, CH } from './chunks.js';
 import { makeSky, paintClouds, makeClouds, makeMountains, updateTOD, applyWeather, TOD, lightDirAt, KEYS } from './sky.js';
 import { makeWeather, makeRain, makeSnow, PLIGHT } from './weather.js';
@@ -50,6 +51,8 @@ async function main() {
   const pcLoad = CLOUDS === 'old' ? Promise.resolve(null) : loadCloudAtlas(TIER);
   // the painted horizon band (painted.js) on the same tiers: 32 px/° where the frame is tall enough, else 16 px/°
   const bandLoad = loadBandAtlas(TIER);
+  // the broadleaf crowns' painted leaf clusters (ghibli.js), on the same tiers: 256² clusters, else 128²
+  const treeLoad = loadTreeAtlas(TIER);
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0xc6ddf2, 0.0019, 700); // near = exp² density, far = draw distance (see materials.js)
@@ -116,6 +119,13 @@ async function main() {
   status('painting the clouds…');
   await new Promise(r => setTimeout(r, 10));
   setLeafDensity(QS.has('leafd') ? parseFloat(QS.get('leafd')) : quality === 'high' ? 0.72 : 0.62); // fewer, larger foliage cards
+  { // the broadleaf trees' crowns: painted leaf clusters once their atlas is in, else (if it failed) the old card crowns
+    const ta = await treeLoad;
+    if (ta) {
+      GHIBLI.cells = ta.cells.filter(c => c.kind === 'leaf'); ta.tex.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+      const g = makeGhibliLeaf(ta.tex); M.gleaf = g.mat; M.gleafDepth = g.depth;
+    }
+  }
   warmTrees();
   const path = new Path();
   const foamMat = foamMaterial();
@@ -178,9 +188,9 @@ async function main() {
     tri.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
     tri.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 0, 1], 2));
     tri.setAttribute('color', new THREE.Float32BufferAttribute([1, 1, 1, 1, 1, 1, 1, 1, 1], 3));
-    const mats = [M.color, M.atlas, M.foliage, M.leaf, M.lamp, M.sig, M.sodium, M.decal, M.pool, foamMat, riverMat];
+    const mats = [M.color, M.atlas, M.foliage, M.leaf, M.lamp, M.sig, M.sodium, M.decal, M.pool, foamMat, riverMat, ...(M.gleaf ? [M.gleaf] : [])];
     for (let i = 0; i < ZONES.length; i++) { mats.push(groundMaterialFor([ZONES[i]])); mats.push(groundMaterialFor([ZONES[i], ZONES[(i + 1) % ZONES.length]])); }
-    for (const m of mats) { const o = new THREE.Mesh(tri, m); o.castShadow = o.receiveShadow = true; o.frustumCulled = false; warm.add(o); }
+    for (const m of mats) { const o = new THREE.Mesh(tri, m); o.castShadow = o.receiveShadow = true; o.frustumCulled = false; if (m === M.gleaf) o.customDepthMaterial = M.gleafDepth; warm.add(o); }
     warm.position.set(0, 0, 0); scene.add(warm);
     sun.target.position.set(0, 0, 0); sun.position.set(0, 150, 60); // so the warm-up meshes sit inside the shadow camera
     const hidden = [rain.mesh, snowfall.mesh, spray.mesh, mirage.mesh, train.group, rig.group, sea.mesh].filter(o => !o.visible);
@@ -595,6 +605,9 @@ async function main() {
     M.atlas.emissiveIntensity = 0.1 + nightK * 1.05;
     // leaves and grass glow when a low sun shines through them (materials.js backlit()): only while it's low and out
     U.uBacklit.value = BACKLIT_K * 1.6 * (1 - ov) * (1 - TOD.night) * sstep(0.0, 0.08, TOD.sunEl) * (1 - sstep(0.25, 0.55, TOD.sunEl)) * (1 - tunS);
+    // the painted crowns' shade: the reference art's deep teal on a bright day, neutral at dusk, at night and under grey
+    // skies (there it turned the shaded side of a crown cyan against a warm or grey scene)
+    U.uGhShade.value.set(lerp(0.8, 0.3, TOD.bright), lerp(0.8, 0.85, TOD.bright), lerp(0.8, 1.7, TOD.bright));
     // home lights come on one by one over the two hours after sunset (18:00 → ~20:00 on the clock, ~40 s of driving) and
     // go off one by one at dawn; on a dark rainy day some are on in the daytime too
     U.uLightsOn.value = LIGHTS_ON >= 0 ? LIGHTS_ON : Math.max(sstep(0.02, 0.75, TOD.night), 0.3 * ov);

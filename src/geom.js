@@ -4,6 +4,15 @@ import * as THREE from 'three';
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3();
 const WHITE = [1, 1, 1];
+// camera-facing card shapes for GB.bill(): triangles, as corners in −1…1. The octagon cuts the square's corners, where a
+// round painted cluster leaves nothing to draw: 6 triangles instead of 2, but 17% fewer fragments for the same square
+// (a third fewer drawn just round the cluster's paint, as treeGhibli does with bill()'s inset)
+export const BILL_QUAD = [-1, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 1];
+export const BILL_OCT = (() => {
+  const t = Math.tan(Math.PI / 8), P = [[1, -t], [1, t], [t, 1], [-t, 1], [-1, t], [-1, -t], [-t, -1], [t, -1]], out = [];
+  for (let i = 1; i < 7; i++) out.push(...P[0], ...P[i], ...P[i + 1]); // a fan from the first corner (counter-clockwise, facing +z)
+  return out;
+})();
 
 export class GB {
   // Vertices go straight into growable typed arrays (no big JS-array → typed-array copy when a chunk finishes) in
@@ -11,9 +20,11 @@ export class GB {
   // ao: also store, per vertex, how close it is to the ground under the prop being built (one byte, `aoD`: 255 at the
   // ground … 0 at 2.55 m or more) — from the matrix's `groundY` (set where props are placed; no groundY → no AO)
   // lit: also store the current `litV` byte per vertex (`aLit`): when a lit window switches on at dusk (0 = always on)
-  constructor({ uv = false, color = true, ao = false, lit = false } = {}) {
-    this.hasUV = uv; this.hasColor = color; this.hasAO = ao; this.hasLit = lit; this.litV = 0; this.aoY0 = NaN; this.noShadow = false;
-    this.n = 0; this.cap = 0; this.P = null; this.N = null; this.U = null; this.Cl = null; this.A = null; this.Lt = null;
+  // off: also store a per-vertex billboard corner offset (`aOff`, metres): the vertex shader spreads each corner along the
+  // camera's right / up vectors, so the card always faces the viewer (the painted leaf clusters: ghibli.js, bill())
+  constructor({ uv = false, color = true, ao = false, lit = false, off = false } = {}) {
+    this.hasUV = uv; this.hasColor = color; this.hasAO = ao; this.hasLit = lit; this.hasOff = off; this.litV = 0; this.aoY0 = NaN; this.noShadow = false;
+    this.n = 0; this.cap = 0; this.P = null; this.N = null; this.U = null; this.Cl = null; this.A = null; this.Lt = null; this.O = null; this.offX = 0; this.offY = 0;
     this.bb = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
     this.m = new THREE.Matrix4(); this.nm = new THREE.Matrix3();
     this.e = this.m.elements; this.ne = this.nm.elements;
@@ -26,6 +37,7 @@ export class GB {
     if (this.hasColor) { const C = new Uint8Array(cap * 3); if (this.Cl) C.set(this.Cl.subarray(0, n * 3)); this.Cl = C; }
     if (this.hasAO) { const A = new Uint8Array(cap); if (this.A) A.set(this.A.subarray(0, n)); this.A = A; }
     if (this.hasLit) { const L = new Uint8Array(cap); if (this.Lt) L.set(this.Lt.subarray(0, n)); this.Lt = L; }
+    if (this.hasOff) { const O = new Float32Array(cap * 2); if (this.O) O.set(this.O.subarray(0, n * 2)); this.O = O; }
     this.cap = cap;
   }
   get count() { return this.n; }
@@ -44,6 +56,7 @@ export class GB {
     if (this.hasUV) { this.U[this.n * 2] = u; this.U[this.n * 2 + 1] = v; }
     if (this.hasAO) this.A[this.n] = this.noShadow ? 1 : this.aoByte(py); // (1 = "casts no shadow": see PROP_DEPTH)
     if (this.hasLit) this.Lt[this.n] = this.litV;
+    if (this.hasOff) { this.O[this.n * 2] = this.offX; this.O[this.n * 2 + 1] = this.offY; }
     if (this.hasColor) {
       const k = c || WHITE, C = this.Cl;
       C[i3] = k[0] >= 1 ? 255 : k[0] <= 0 ? 0 : k[0] * 255 + 0.5; C[i3 + 1] = k[1] >= 1 ? 255 : k[1] <= 0 ? 0 : k[1] * 255 + 0.5; C[i3 + 2] = k[2] >= 1 ? 255 : k[2] <= 0 ? 0 : k[2] * 255 + 0.5;
@@ -124,11 +137,23 @@ export class GB {
     const T = [[0, uv.u0, uv.v0], [1, uv.u1, uv.v0], [2, uv.u1, uv.v1], [0, uv.u0, uv.v0], [2, uv.u1, uv.v1], [3, uv.u0, uv.v1]];
     for (const [k, u, v] of T) this.vtx(P[k][0], P[k][1], P[k][2], N[k][0], N[k][1], N[k][2], u, v, Cc[k]);
   }
+  /** a camera-facing card (needs `off`): centre c, normal n (the crown's, for its light), half-width hx and half-height
+   *  hy, atlas cell uv, colour; `shape` lists the card's triangles as corners in −1…1 (BILL_QUAD, BILL_OCT). `inset`
+   *  (0…1) maps the card onto just the middle of the cell (u, v from 0.5 ∓ inset/2 … 0.5 ± inset/2). */
+  bill(cx, cy, cz, nx, ny, nz, hx, hy, uv, c, shape = BILL_QUAD, inset = 1) {
+    const du = (uv.u1 - uv.u0) * 0.5, dv = (uv.v1 - uv.v0) * 0.5, mu = uv.u0 + du, mv = uv.v0 + dv;
+    for (let i = 0; i < shape.length; i += 2) {
+      const ox = shape[i], oy = shape[i + 1]; this.offX = ox * hx; this.offY = oy * hy;
+      this.vtx(cx, cy, cz, nx, ny, nz, mu + ox * du * inset, mv + oy * dv * inset, c);
+    }
+    this.offX = this.offY = 0;
+  }
   /** freeze into typed arrays (used for prop templates) */
   toArrays() {
     const n = this.n;
     return { n, P: this.P ? this.P.slice(0, n * 3) : new Float32Array(0), N: this.N ? this.N.slice(0, n * 3) : new Int8Array(0),
-      C: this.hasColor && this.Cl ? this.Cl.slice(0, n * 3) : null, U: this.hasUV && this.U ? this.U.slice(0, n * 2) : null };
+      C: this.hasColor && this.Cl ? this.Cl.slice(0, n * 3) : null, U: this.hasUV && this.U ? this.U.slice(0, n * 2) : null,
+      O: this.hasOff && this.O ? this.O.slice(0, n * 2) : null };
   }
   /** append a pre-built template under matrix m (fast path for trees etc.) */
   stamp(T, m) {
@@ -150,6 +175,10 @@ export class GB {
     }
     if (this.hasColor) { if (Cc) this.Cl.set(Cc, o * 3); else this.Cl.fill(255, o * 3, (o + T.n) * 3); }
     if (this.hasUV) { if (U) this.U.set(U, o * 2); else this.U.fill(0, o * 2, (o + T.n) * 2); }
+    if (this.hasOff) { // card corners scale with the stamp (trees are stamped at scale s)
+      const sc = Math.hypot(e[0], e[1], e[2]), O = T.O;
+      if (O) for (let i = 0; i < T.n * 2; i++) this.O[o * 2 + i] = O[i] * sc; else this.O.fill(0, o * 2, (o + T.n) * 2);
+    }
     this.n += T.n;
   }
   build() {
@@ -160,8 +189,13 @@ export class GB {
     if (this.hasUV) g.setAttribute('uv', new THREE.BufferAttribute(this.U.slice(0, n * 2), 2));
     if (this.hasAO) g.setAttribute('aoD', new THREE.BufferAttribute(this.A.slice(0, n), 1, true));
     if (this.hasLit) g.setAttribute('aLit', new THREE.BufferAttribute(this.Lt.slice(0, n), 1, true));
+    if (this.hasOff) g.setAttribute('aOff', new THREE.BufferAttribute(this.O.slice(0, n * 2), 2));
     if (this.hasColor) g.setAttribute('color', new THREE.BufferAttribute(this.Cl.slice(0, n * 3), 3, true));
     g.boundingBox = new THREE.Box3(new THREE.Vector3(bb[0], bb[1], bb[2]), new THREE.Vector3(bb[3], bb[4], bb[5]));
+    if (this.hasOff) { // cards reach beyond their centres: pad the bounds, or a chunk's clusters vanish at the screen's edge
+      let m = 0; for (let i = 0; i < n * 2; i++) { const a = Math.abs(this.O[i]); if (a > m) m = a; }
+      g.boundingBox.expandByScalar(m * Math.SQRT2);
+    }
     g.boundingSphere = g.boundingBox.getBoundingSphere(new THREE.Sphere());
     return g;
   }

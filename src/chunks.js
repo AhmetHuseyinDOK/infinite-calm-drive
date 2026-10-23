@@ -125,7 +125,8 @@ export class World {
     const path = this.path, s0 = c * CH, s1 = s0 + CH;
     const O = path.at(s0), ox = O.x, oz = O.z;
     const r = rng(Math.floor(hash2(c, 777) * 4294967295));
-    const G = { atlas: new GB({ uv: true, ao: true, lit: true }), color: new GB({ ao: true }), foliage: new GB(), leaf: new GB({ uv: true }), lamp: new GB({ color: false }), sig: new GB({ color: false }), sodium: new GB({ color: false }), decal: new GB({ uv: true }), pool: new GB({ uv: true, color: false }) };
+    const G = { atlas: new GB({ uv: true, ao: true, lit: true }), color: new GB({ ao: true }), foliage: new GB(), leaf: new GB({ uv: true }), lamp: new GB({ color: false }), sig: new GB({ color: false }), sodium: new GB({ color: false }), decal: new GB({ uv: true }), pool: new GB({ uv: true, color: false }),
+      gleaf: new GB({ uv: true, off: true }) }; // (gleaf: the broadleaf crowns' painted clusters, camera-facing)
     const ground = new GroundB(), foam = [], river = [];
     G.lamps = []; // lights that can light the car: chunk-local x, y, z, power … (props.js lampAt)
     const f = {}, f2 = {};
@@ -244,7 +245,9 @@ export class World {
     add(G.atlas.build(), this.M.atlas, true, true); yield;
     { const m = add(G.color.build(), this.M.color, true, true); if (m) m.customDepthMaterial = PROP_DEPTH; } yield; // (wires cast no shadow)
     add(G.foliage.build(), this.M.foliage, true, true);
-    add(G.leaf.build(), this.M.leaf, true, true, 0, 'leaf'); yield;
+    add(G.leaf.build(), this.M.leaf, true, true, 0, 'leaf');
+    if (this.M.gleaf) { const m = add(G.gleaf.build(), this.M.gleaf, true, true, 0, 'leaf'); if (m) m.customDepthMaterial = this.M.gleafDepth; } // (clusters face the sun in the shadow pass)
+    yield;
     add(G.lamp.build(), this.M.lamp, false, false, 0, 'light');
     add(G.sig.build(), this.M.sig, false, false, 0, 'small');
     add(G.sodium.build(), this.M.sodium, false, false);

@@ -2,6 +2,48 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-23 · 20:xx — Restyle 8: round Ghibli trees of painted leaf clumps
+- **The broadleaf trees have the reference art's round, clumpy crowns.** The old crowns were flat speckled cards at
+  random angles, olive and lacy. Each crown is now a round mass of small leaf clumps, as the coast and country paintings
+  draw them:
+  - sunlit yellow-green tops on every clump and a deep teal shade under and between them, lit by the game's own sun, so
+    light and shade turn with the hour and the road;
+  - a few big lobes with deep shade, never sky, showing through the gaps;
+  - a stout trunk forking into limbs that reach up into the crown;
+  - the crowns still sway in the breeze and glow at the rim when a low sun is behind them.
+- **Measured against the reference tree** (coast.png): the crowns' shade, middle and sunlit tones are now ΔE 10.8 from
+  the painting on average (lit tops 5.9), against 19.4 for the old crowns.
+- **Dusk, night and rain keep their look.** The teal shade is a bright-day look: at sunset a crown's shaded side is a
+  dark olive in the warm light, at night a dark blue-green mass, in rain a deep green.
+- These are the trees round the country houses, along the rivers and on the far fields. Sakura (the next step), pines,
+  maples, ginkgo and cedars are unchanged. Few broadleaf trees stand right by the road yet; placing them as the
+  references do is a later step.
+- **If the tree atlas can't be loaded** (missing, broken or truncated), the trees keep their old crowns. The main agent
+  tested this with the files removed.
+- Research: R1's painted-cluster prototype, ported onto current main. Each cluster is now a rosette of 11 small clumps
+  instead of one dome, for the paintings' clump scale. Built by a subagent; verified independently by the main agent.
+- How:
+  - **Clusters:** camera-facing cards whose painted texels pack the leaves' normal, albedo and coverage, so one texture
+    read lights every clump with the real sun. Shade comes from the sky alone through a teal tint. A sun-facing twin in
+    the shadow pass casts the crown's lobed shadow.
+  - **Lighter for phones and everyone:** octagonal cards fitted round the paint (36% less area than squares), and one
+    big core cluster drawn first in each tree, which hides the clusters behind it.
+  - **The atlas:** baked offline (painting it at load took 3–9 s) into a PNG of 4 clusters: 1024×256 (263 KB) where
+    the frame is at least 900 px tall, 512×128 (78 KB) on phones, in the X card and in smaller windows. It is decoded
+    to raw bytes in JS (it is packed data, not colour), and its mips keep each cluster's coverage.
+  - **Programs:** two more (58; 59 on the coast), compiled at load.
+- Cost: small. Main agent's independent check, interleaved with live (L S S L L S) on a box loaded by other sessions
+  (load 9–29):
+  - **GPU averaged over 0.9 km country drives:** desktop 22.09 vs 21.87 ms (+0.22); phone 10.77 vs 10.67 (+0.10, within
+    noise). The subagent's same-page flip while driving: desktop −0.28 ms, phone −0.19 / −0.53.
+  - **World building:** about +10–17% CPU on the phone profile (×4 throttle 671–817 vs 621–648 ms/km; desktop the same
+    as live). Worst steps and spikes are unchanged: flat out on the phone profile, 0 and 3 world-build spikes against
+    live's 7 and 0, worst 13–27 ms against 13–33. The next trim, if needed, is indexed octagons (8 vertices a card
+    instead of 18).
+  - **Start-up:** the same as live (2.6–3.8 s vs 2.8–3.0 s).
+  - **Checks:** 58 programs at every quality level (56 on live), none compiled through sunset, night, rain or a drive.
+    No console errors. Embed mode starts on tap.
+
 ## 2026-10-23 · 17:xx — Restyle 7: a painted horizon in every zone
 - **The far horizon is painted, like the reference art's.** The three procedural mountain rings (flat, pale silhouettes
   2.3–4.3 km out) gave way to a painted 360° horizon in each zone:

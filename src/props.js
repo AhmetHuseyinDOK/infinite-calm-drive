@@ -3,7 +3,7 @@
 // x runs along the road, the front faces −Z (towards the road), depth goes to +Z.
 import * as THREE from 'three';
 import { C, mulC, mixC, rng } from './util.js';
-import { GB } from './geom.js';
+import { GB, BILL_OCT } from './geom.js';
 
 const W1 = [1, 1, 1];
 export const PAL = {
@@ -322,25 +322,66 @@ export function treeCedar(G, M, r, s = 1) {
   G.foliage.cyl(0, h * 0.5, 0, 1.45 * s, 0.05, h * 0.5, 9, PAL.cedar);
 }
 
+// ---- Ghibli-style broadleaf crowns from painted leaf clusters (ghibli.js; materials.js makeGhibliLeaf lights them) ----
+// GHIBLI.cells: the cluster atlas's leaf cells, once it has loaded (main.js); until then, and if it fails, the broadleaf
+// trees keep their card crowns (treeBroad)
+export const GHIBLI = { cells: null };
+/** a broadleaf tree with a crown of painted leaf clusters, like the reference art's: a stout bole forking into limbs
+ *  that reach up into the crown, and 26–32 camera-facing clusters on the crown's shell, pulled toward 5–7 lobe
+ *  directions so the crown reads as a few big masses with gaps between them. Through the gaps shows the crown's core:
+ *  one big cluster in the middle, in deep shade, drawn first, so it also hides every cluster behind it from the GPU.
+ *  The cards are octagons just round each painted cluster (a third fewer fragments than squares). */
+export function treeGhibli(G, M, r, s = 1) {
+  const big = r() < 0.3 ? 1.22 : 1, h = r.range(6.2, 8.0) * s * big;
+  const c = G.color; c.setM(M);
+  const bh = h * r.range(0.3, 0.38); // the bole, forking into limbs that reach up into the crown (seen through its gaps)
+  c.cyl(0, 0, 0, 0.27 * s * big, 0.2 * s * big, bh, 8, PAL.trunk);
+  const cy = h * 0.64, Rx = r.range(2.6, 3.2) * s * big, Ry = r.range(2.0, 2.5) * s * big, k3 = s * big;
+  const lobeDirs = [], nl = 5 + Math.floor(r() * 3);
+  for (let i = 0; i < nl; i++) { const a = (i / nl) * 6.283 + r() * 0.6, el = r.range(-0.15, 0.75), ce = Math.sqrt(1 - el * el); lobeDirs.push([Math.cos(a) * ce, el, Math.sin(a) * ce]); }
+  lobeDirs.push([0, 1, 0]);
+  const all = [[0, cy + 0.15 * Ry, 0, 1.76 * k3, 1]]; // the core
+  const nc = 26 + Math.floor(r() * 7);
+  for (let i = 0; i < nc; i++) { // the shell: smaller clusters pulled toward the lobe directions
+    let dx = r() * 2 - 1, dy = r.range(-0.55, 1), dz = r() * 2 - 1, l = Math.hypot(dx, dy, dz) || 1; dx /= l; dy /= l; dz /= l;
+    let best = lobeDirs[0], bd = -2; for (const L of lobeDirs) { const d = L[0] * dx + L[1] * dy + L[2] * dz; if (d > bd) { bd = d; best = L; } }
+    dx = dx * 0.45 + best[0] * 0.55; dy = dy * 0.45 + best[1] * 0.55; dz = dz * 0.45 + best[2] * 0.55; l = Math.hypot(dx, dy, dz) || 1; dx /= l; dy /= l; dz /= l;
+    const rr = r.range(0.78, 0.95);
+    all.push([dx * Rx * rr, cy + dy * Ry * rr, dz * Rx * rr, r.range(0.8, 1.1) * k3, 0]);
+  }
+  for (let i = 0; i < 4; i++) { const d = lobeDirs[i % nl]; c.rod([0, bh * 0.9, 0], [d[0] * Rx * 0.55, cy + Math.min(0, d[1]) * Ry * 0.4 - 0.3 * s, d[2] * Rx * 0.55], 0.15 * k3, 0.06 * s, 6, PAL.trunk); }
+  const hue = r(), tint = hue < 0.5 ? [1, 1, 0.92 + hue * 0.16] : [1.0 - (hue - 0.5) * 0.12, 1, 0.9];
+  const g = G.gleaf; g.setM(M);
+  for (const [x, y, z, rad, core] of all) {
+    let nx = x, ny = (y - cy) * (Rx / Ry) + 0.1 * Rx, nz = z; const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
+    if (core) { nx = nz = 0; ny = -1; } // (a straight-down normal marks the core for the shader: it casts no shadow, and takes the crown's)
+    // crown occlusion: the core and the underside get less light (a painter's darker core and underside)
+    const ht = Math.min(1, Math.max(0, (y - (cy - Ry)) / (2 * Ry))), k = core ? 0.55 : 0.72 + 0.28 * ht, hh = (rad / 0.8) * 0.88;
+    g.bill(x, y, z, nx, ny, nz, hh, hh, GHIBLI.cells[Math.floor(r() * GHIBLI.cells.length)], [tint[0] * k, tint[1] * k, tint[2] * k], BILL_OCT, 0.88);
+  }
+}
+
 // trees are built once per (kind, variant) and then stamped — much cheaper than rebuilding every tree
-const TREE_BUILDERS = { broad: treeBroad, sakura: treeSakura, pine: treePine, cedar: treeCedar, maple: treeMaple, ginkgo: treeGinkgo, birch: treeBirch, snowcedar: treeSnowCedar };
+const TREE_BUILDERS = { broad: (G, M, r, s) => (GHIBLI.cells ? treeGhibli : treeBroad)(G, M, r, s), sakura: treeSakura, pine: treePine, cedar: treeCedar, maple: treeMaple, ginkgo: treeGinkgo, birch: treeBirch, snowcedar: treeSnowCedar };
 const TCACHE = {};
 function treeTemplate(kind, v) {
   const key = kind + v;
   let t = TCACHE[key];
   if (!t) {
-    const g = { color: new GB(), foliage: new GB(), leaf: new GB({ uv: true }) };
+    const g = { color: new GB(), foliage: new GB(), leaf: new GB({ uv: true }), gleaf: new GB({ uv: true, off: true }) };
     TREE_BUILDERS[kind](g, new THREE.Matrix4(), rng(1000 + v * 77 + kind.length * 13), 1);
-    t = TCACHE[key] = { c: g.color.toArrays(), f: g.foliage.toArrays(), l: g.leaf.toArrays() };
+    t = TCACHE[key] = { c: g.color.toArrays(), f: g.foliage.toArrays(), l: g.leaf.toArrays(), g: g.gleaf.toArrays() };
   }
   return t;
 }
-/** build every tree template up front (during loading), so no chunk build ever pays for one mid-drive */
+/** build every tree template up front (during loading, once the cluster atlas has loaded or failed), so no chunk build
+ *  ever pays for one mid-drive */
 export function warmTrees() { for (const kind in TREE_BUILDERS) for (let v = 0; v < 4; v++) treeTemplate(kind, v); }
 export function tree(G, M, kind, r, s = 1) {
   const t = treeTemplate(kind, Math.floor(r() * 4));
   const m = M.clone().scale(new THREE.Vector3(s, s, s)); m.groundY = M.groundY;
   G.color.stamp(t.c, m); G.foliage.stamp(t.f, m); G.leaf.stamp(t.l, m);
+  if (t.g.n) G.gleaf.stamp(t.g, m);
 }
 
 // ------------------------------------------------------------------ buildings

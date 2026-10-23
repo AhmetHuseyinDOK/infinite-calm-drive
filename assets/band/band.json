@@ -1,0 +1,141 @@
+{
+ "period": 120.0,
+ "files": {
+  "hi": "band_hi.webp",
+  "lo": "band_lo.webp"
+ },
+ "bytes": {
+  "hi": 766488,
+  "lo": 250762
+ },
+ "size": {
+  "hi": [
+   3840,
+   1512
+  ],
+  "lo": [
+   1920,
+   780
+  ]
+ },
+ "zones": {
+  "hi": {
+   "country": {
+    "v0": 0.83994708994709,
+    "v1": 0.9920634920634921,
+    "e0": -0.55,
+    "e1": 6.6375,
+    "tiles": [
+     "pano_country_01.png (mirrored)",
+     "pano_country_02.png",
+     "pc6.png",
+     "pc4.png (mirrored)"
+    ]
+   },
+   "coast": {
+    "v0": 0.6990740740740741,
+    "v1": 0.8240740740740741,
+    "e0": 0.0,
+    "e1": 5.90625,
+    "tiles": [
+     "pano_coast_01.png",
+     "pk5.png (mirrored)",
+     "pano_coast_02.png (mirrored)",
+     "pk3.png (mirrored)"
+    ]
+   },
+   "sakura": {
+    "v0": 0.5125661375661376,
+    "v1": 0.6832010582010581,
+    "e0": -0.55,
+    "e1": 7.5125,
+    "tiles": [
+     "ps3.png (mirrored)",
+     "ps4.png",
+     "ps5.png"
+    ]
+   },
+   "mountain": {
+    "v0": 0.26190476190476186,
+    "v1": 0.49669312169312174,
+    "e0": -0.55,
+    "e1": 10.54375,
+    "tiles": [
+     "pm1.png",
+     "pm2.png (mirrored)",
+     "pm3.png (mirrored)"
+    ]
+   },
+   "snow": {
+    "v0": 0.008597883597883604,
+    "v1": 0.24603174603174605,
+    "e0": -0.55,
+    "e1": 10.66875,
+    "tiles": [
+     "pw1.png (mirrored)",
+     "pw2.png (mirrored)",
+     "pw3.png (mirrored)"
+    ]
+   }
+  },
+  "lo": {
+   "country": {
+    "v0": 0.8423076923076923,
+    "v1": 0.9897435897435898,
+    "e0": -0.55,
+    "e1": 6.6375,
+    "tiles": [
+     "pano_country_01.png (mirrored)",
+     "pano_country_02.png",
+     "pc6.png",
+     "pc4.png (mirrored)"
+    ]
+   },
+   "coast": {
+    "v0": 0.7,
+    "v1": 0.8217948717948718,
+    "e0": 0.0,
+    "e1": 5.9375,
+    "tiles": [
+     "pano_coast_01.png",
+     "pk5.png (mirrored)",
+     "pano_coast_02.png (mirrored)",
+     "pk3.png (mirrored)"
+    ]
+   },
+   "sakura": {
+    "v0": 0.514102564102564,
+    "v1": 0.6794871794871795,
+    "e0": -0.55,
+    "e1": 7.5125,
+    "tiles": [
+     "ps3.png (mirrored)",
+     "ps4.png",
+     "ps5.png"
+    ]
+   },
+   "mountain": {
+    "v0": 0.26538461538461533,
+    "v1": 0.4935897435897436,
+    "e0": -0.55,
+    "e1": 10.575,
+    "tiles": [
+     "pm1.png",
+     "pm2.png (mirrored)",
+     "pm3.png (mirrored)"
+    ]
+   },
+   "snow": {
+    "v0": 0.014102564102564052,
+    "v1": 0.2448717948717949,
+    "e0": -0.55,
+    "e1": 10.7,
+    "tiles": [
+     "pw1.png (mirrored)",
+     "pw2.png (mirrored)",
+     "pw3.png (mirrored)"
+    ]
+   }
+  }
+ }
+}

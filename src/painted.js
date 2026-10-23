@@ -54,35 +54,44 @@ export function gradeUniforms(post) {
   return { toneMappingExposure: g.toneMappingExposure, uSat: g.uSat, uVig: g.uVig, uDay: g.uDay, uLo: g.uLo, uGRes: PG_RES };
 }
 
+/** The image of one tier of a painted atlas, as a texture of the raw painted (display) values (ungrade() expects them).
+ *  It is fetched whole and checked against its listed size first: a browser decodes a truncated image without complaint,
+ *  which would leave an empty sky. Throws when it is missing or broken. */
+async function paintedTexture(base, J, tier) {
+  const file = J.files[tier] ? tier : 'hi', ri = await fetch(base + J.files[file]);
+  if (!ri.ok) throw new Error(J.files[file] + ' ' + ri.status);
+  const blob = await ri.blob();
+  if (J.bytes && J.bytes[file] && blob.size !== J.bytes[file]) throw new Error(J.files[file] + ' is ' + blob.size + ' bytes, not ' + J.bytes[file]);
+  const url = URL.createObjectURL(blob);
+  let tex;
+  try { tex = await new THREE.TextureLoader().loadAsync(url); } catch (e) { URL.revokeObjectURL(url); throw e; }
+  tex.onUpdate = () => { URL.revokeObjectURL(url); tex.onUpdate = null; }; // (once it is on the GPU)
+  tex.colorSpace = THREE.NoColorSpace;
+  tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter; tex.magFilter = THREE.LinearFilter;
+  return { tex, file };
+}
+/** `work` (a promise), or null if it fails or takes longer than timeoutMs (never rejects) */
+async function orNull(work, timeoutMs, what) {
+  let timer;
+  const late = new Promise(res => { timer = setTimeout(() => res(null), timeoutMs); });
+  try { return await Promise.race([work, late]); }
+  catch (e) { console.warn(what, e.message || e); return null; }
+  finally { clearTimeout(timer); }
+}
+
 /** Loads the cloud atlas: 'hi' (4096×2048) or 'lo' (2048×1024, phones). Resolves to null (never rejects) when the
  *  JSON or the image is missing, broken or too slow: the caller then keeps the procedural clouds. */
 export async function loadCloudAtlas(tier, timeoutMs = 15000) {
   const base = ASSETS + 'clouds/';
-  const work = (async () => {
+  return orNull((async () => {
     const r = await fetch(base + 'clouds.json');
     if (!r.ok) throw new Error('clouds.json ' + r.status);
     const J = await r.json();
     const list = (J.clouds || []).filter(c => c.u1 > c.u0 && c.v1 > c.v0 && c.w > 0 && c.h > 0 && c.lum && c.lum[1] > c.lum[0]);
     if (!list.length) throw new Error('no clouds listed');
-    // (fetched whole and checked against its listed size first: a browser decodes a truncated image without complaint,
-    // which would leave an empty sky)
-    const file = J.files[tier] ? tier : 'hi', ri = await fetch(base + J.files[file]);
-    if (!ri.ok) throw new Error(J.files[file] + ' ' + ri.status);
-    const blob = await ri.blob();
-    if (J.bytes && J.bytes[file] && blob.size !== J.bytes[file]) throw new Error(J.files[file] + ' is ' + blob.size + ' bytes, not ' + J.bytes[file]);
-    const url = URL.createObjectURL(blob);
-    let tex;
-    try { tex = await new THREE.TextureLoader().loadAsync(url); } catch (e) { URL.revokeObjectURL(url); throw e; }
-    tex.onUpdate = () => { URL.revokeObjectURL(url); tex.onUpdate = null; }; // (once it is on the GPU)
-    tex.colorSpace = THREE.NoColorSpace; // the raw painted (display) values: ungrade() expects them
-    tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter; tex.magFilter = THREE.LinearFilter;
+    const { tex } = await paintedTexture(base, J, tier);
     return { tex, list, tier };
-  })();
-  let timer;
-  const late = new Promise(res => { timer = setTimeout(() => res(null), timeoutMs); });
-  try { return await Promise.race([work, late]); }
-  catch (e) { console.warn('painted clouds unavailable, keeping the procedural ones:', e.message || e); return null; }
-  finally { clearTimeout(timer); }
+  })(), timeoutMs, 'painted clouds unavailable, keeping the procedural ones:');
 }
 
 // The sky's composition, after the references: giant towers rising from just below the horizon up past the top of the
@@ -242,4 +251,165 @@ export function makePaintedClouds(atlas, post, seed = 5) {
     },
   };
   return api;
+}
+
+// ------------------------------------------------------------------------------------------------ the horizon band
+// A painted 360° horizon per zone (assets/band/, made by ~/cdtest/hb/scripts/band.py): far mountain ranges, forested
+// hills, headlands across the bay, painted in the reference art's style (Grok Imagine panoramas, keyed, ordered and
+// joined into one seamless loop per zone with LaMa over every join). It replaces the procedural mountain rings
+// wherever a zone has one.
+//  - Geometry: one ring around the camera, 2.5 km out (in front of the cumulus feet: the towers stand 4.3–5 km away),
+//    from 8° below the horizon to the top of the tallest band. The painting's columns are mapped by angle, fixed in
+//    the world (the band stays put while the road turns); each zone's loop spans 120°, so it repeats three times around
+//    and never twice in one view. Its rows are mapped by elevation: the band's ground line sits just under the horizon
+//    of the 3D world, which hides the painting's near fields; below it the painting's last row carries on as far fields
+//    (seen only from a high camera, beyond the edge of the 3D world).
+//  - Drawn opaque, after the 3D world and the sea (which hide it) and before the sky: the sky dome then skips every
+//    pixel it covers (its cirrus noise is not cheap), and so do the cumulus behind it. Its ridges are cut out of the
+//    painting's alpha: with MSAA (desktop) the alpha sets each pixel's coverage, so they keep a soft edge and two zones'
+//    bands cross-fade smoothly; without it (phones) they are alpha-tested, and a cross-fade hides the moment one
+//    skyline gives way to the other in a passing haze.
+//  - Colour: on a bright clear day the painting itself (the inverse grade, as for the clouds). Otherwise it is relit:
+//    the painted colours times the ratio of the light now to the light at noon (warm at golden hour, dim and rosy at
+//    sunset, a cold blue at night), then hazed: more under grey skies and in rain. Below the horizon it takes the haze
+//    the 3D world's own fog puts on flat ground at that angle, so its foot melts into the fog colour the world fades
+//    into at its far edge: there is no seam where the two meet.
+//  - Between zones the two bands cross-fade (premultiplied, so ridges dissolve rather than smear).
+// If the atlas can't be loaded the game keeps the procedural mountain rings.
+
+/** Loads the band atlas: 'hi' (32 px/°) or 'lo' (16 px/°, phones). Resolves to null (never rejects) when the JSON or
+ *  the image is missing, broken or too slow: the caller then keeps the procedural mountain rings. */
+export async function loadBandAtlas(tier, timeoutMs = 15000) {
+  const base = ASSETS + 'band/';
+  return orNull((async () => {
+    const r = await fetch(base + 'band.json');
+    if (!r.ok) throw new Error('band.json ' + r.status);
+    const J = await r.json();
+    const { tex, file } = await paintedTexture(base, J, tier);
+    const zones = {};
+    for (const [z, m] of Object.entries((J.zones && J.zones[file]) || {})) {
+      if (m.v1 > m.v0 && m.e1 > m.e0) zones[z] = new THREE.Vector4(m.v0, m.v1, Math.tan((m.e0 * Math.PI) / 180), Math.tan((m.e1 * Math.PI) / 180));
+    }
+    if (!Object.keys(zones).length) throw new Error('no zones listed');
+    tex.wrapS = THREE.RepeatWrapping; // (each zone's row is one seamless loop)
+    return { tex, zones, period: J.period || 120, tier: file };
+  })(), timeoutMs, 'painted horizon unavailable, keeping the mountain rings:');
+}
+
+const BAND_R = 2500, BAND_LO = -8; // ring radius (m) and its bottom (degrees: far fields below the painting)
+// the light the paintings stand in: the clear noon's sun and twice its sky light (sky.js KEYS at t = 0.45)
+const _bc = new THREE.Vector3(), _bn = new THREE.Color(), NOON_SUN = new THREE.Color('#fff5dd').multiplyScalar(3.35), NOON_SKY = new THREE.Color('#8fb1ec').multiplyScalar(1.35 * 2);
+
+/** The painted horizon. `atlas` from loadBandAtlas; `post` for the grade's uniforms; `fog` the scene's fog colour (the
+ *  3D world fades into it at its far edge). update(camera, mix) each frame, with mix = { a, b, t } from path.zoneMix;
+ *  returns how much of the view's far horizon the band covers (0…1), for the procedural rings to give way. */
+export function makePaintedBand(atlas, post, fog) {
+  const Z = atlas.zones, top = Math.max(...Object.values(Z).map(v => v.w)), N = 192, per = 360 / atlas.period;
+  const pos = new Float32Array((N + 1) * 6), uv = new Float32Array((N + 1) * 4), idx = [];
+  const yLo = Math.tan((BAND_LO * Math.PI) / 180), yHi = top + 0.004;
+  for (let i = 0; i <= N; i++) {
+    const a = (i / N) * Math.PI * 2, x = Math.sin(a) * BAND_R, z = Math.cos(a) * BAND_R;
+    pos.set([x, yLo * BAND_R, z, x, yHi * BAND_R, z], i * 6);
+    // u runs the other way round from the angle: looking out from inside the ring, the painting reads left to right
+    uv.set([-(i / N) * per, yLo, -(i / N) * per, yHi], i * 4);
+    if (i < N) { const k = i * 2; idx.push(k, k + 2, k + 1, k + 1, k + 2, k + 3); }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); geo.setIndex(idx);
+  const D2 = Math.PI / 180, a2c = (post.composer.readBuffer.samples || 0) > 0;
+  const mat = new THREE.ShaderMaterial({
+    fog: false, side: THREE.DoubleSide, alphaToCoverage: a2c, defines: a2c ? { A2C: 1 } : {},
+    uniforms: {
+      map: { value: atlas.tex }, uRowA: { value: new THREE.Vector4() }, uRowB: { value: new THREE.Vector4() }, uMix: { value: 0 }, uAlpha: { value: 1 }, uRot: { value: 0 },
+      uLightC: { value: new THREE.Color(1, 1, 1) }, uPaint: { value: 1 }, uFogC: { value: fog }, uHaze: { value: 0 }, uHz: { value: Math.tan(0.8 * D2) },
+      uGnd: { value: new THREE.Vector3(2.8, 0.0014, 700) }, uSpan: { value: new THREE.Vector2(yLo, yHi) }, ...gradeUniforms(post),
+    },
+    // the ring is trimmed every frame to what can show (uSpan: tan of its bottom and top elevation): from just under the
+    // 3D world's horizon (lower from a high camera) to the top of the bands on show
+    vertexShader: /* glsl */`
+      uniform vec2 uSpan; varying vec2 vUv;
+      void main(){
+        float y = uv.y > 0.0 ? uSpan.y : uSpan.x; vUv = vec2(uv.x, y);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position.x, y * ${BAND_R.toFixed(1)}, position.z, 1.0);
+      }`,
+    fragmentShader: UNGRADE + /* glsl */`
+      uniform sampler2D map; uniform vec4 uRowA, uRowB; uniform float uMix, uAlpha, uRot, uHaze, uHz, uPaint; uniform vec3 uLightC, uFogC, uGnd;
+      varying vec2 vUv;
+      // a zone's row: x = v of its bottom edge, y = v of its top edge, z / w = tan(elevation) there. Above it, sky (the
+      // top rows fade out: coarse mips bleed the next row's fields into them); below it, its bottom row (opaque far
+      // fields, hazed into the fog: the skirt under the painting). Sampled in uniform control flow (mip selection)
+      vec4 band(vec4 r){
+        float t = (vUv.y - r.z) / (r.w - r.z);
+        return texture2D(map, vec2(vUv.x + uRot, mix(r.x, r.y, clamp(t, 0.0, 1.0)))) * (1.0 - smoothstep(0.96, 0.995, t));
+      }
+      void main(){
+        vec4 t = band(uRowA);
+        if (uMix > 0.001) { // the next zone's band (premultiplied: ridges dissolve into each other)
+          vec4 b = band(uRowB);
+          t = vec4(mix(t.rgb * t.a, b.rgb * b.a, uMix), mix(t.a, b.a, uMix));
+          t.rgb /= max(t.a, 1e-4);
+        }
+        float a = t.a * uAlpha;
+        #ifdef A2C
+        if (a < 0.02) discard; // (the rest: coverage from alpha, resolved by MSAA into a soft edge or a cross-fade)
+        #else
+        if (a < 0.5) discard;
+        #endif
+        // a bright day: the painting itself; otherwise its colours relit (a plain linear relight, bounded: the inverse grade
+        // would blow its pale peaks up past the bloom threshold at dusk)
+        vec3 c = pgSrgbToLin(t.rgb) * 0.8 * uLightC;
+        if (uPaint > 0.001) c = mix(c, ungrade(t.rgb), uPaint);
+        // haze: below the horizon as much as the 3D world's own fog puts on flat ground seen at that angle (uGnd: the
+        // camera's height above it, the fog density, the draw distance, where the world fades out completely), so the
+        // band's foot meets the world's far edge in its colour, and from a high camera the skirt reads as far fields;
+        // above it the mountains' feet stand in haze; and more haze all over at dusk, under grey skies and in rain
+        float e = vUv.y, hz = 1.0 - smoothstep(0.0, uHz, e);
+        if (e < 0.0) { float d = uGnd.x / max(-e, 1e-5), fd = d * uGnd.y; hz = max(1.0 - exp(-fd * fd), smoothstep(uGnd.z * 0.8, uGnd.z, d)); }
+        c = mix(c, uFogC, max(uHaze, hz));
+        #ifdef A2C
+        gl_FragColor = vec4(c, a);
+        #else
+        gl_FragColor = vec4(c, 1.0);
+        #endif
+      }`,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.frustumCulled = false; mesh.renderOrder = 999; // (with the sea and the mountain rings: after the world, before the sky)
+  const u = mat.uniforms, fw = new THREE.Vector3();
+  let first = true;
+  return {
+    mesh, zones: Z,
+    /** the opening view: where in its loop the band starts, straight ahead (0.125: the middle of its first painting) */
+    hero: 0.125,
+    /** m: { a, b, t } from path.zoneMix; camH: the camera's height above the ground; fogD / fogFar: the scene fog's
+     *  exp² density and draw distance */
+    update(camera, m, camH = 2.8, fogD = 0.0014, fogFar = 700) {
+      const A = Z[m.a], B = Z[m.b], t = m.t;
+      // how much band: a zone without one (the shopping street) fades it out and leaves the far horizon to the rings
+      let w = 0;
+      if (A && B) { u.uRowA.value.copy(A); u.uRowB.value.copy(B); u.uMix.value = A === B ? 0 : t; w = 1; }
+      else if (A || B) { u.uRowA.value.copy(A || B); u.uMix.value = 0; w = A ? 1 - t : t; }
+      u.uAlpha.value = w;
+      mesh.visible = w > 0.002;
+      if (!mesh.visible) return 0;
+      mesh.position.copy(camera.position); u.uGnd.value.set(camH, fogD, fogFar);
+      // the ring from just under the 3D world's horizon (the world hides everything below; from a high camera its edge is
+      // lower) to the top of the bands on show
+      u.uSpan.value.set(Math.max(yLo, -Math.tan(Math.atan(camH / 140) + 0.3 * D2)), Math.max(A ? A.w : 0, B ? B.w : 0) + 0.003);
+      if (first) { // the opening view: the loop's first painting straight ahead
+        camera.getWorldDirection(fw);
+        u.uRot.value = this.hero + (Math.atan2(fw.x, fw.z) / (Math.PI * 2)) * per; first = false;
+      }
+      // the light now against the light at noon (sun + sky), and the haze: none on a bright clear day, some at dusk and
+      // night, more under grey skies, most in rain; the painting itself on a bright day
+      _bn.copy(TOD.sunCol).multiplyScalar(TOD.sunI); _bc.set(_bn.r, _bn.g, _bn.b);
+      _bn.copy(TOD.hemiSky).multiplyScalar(TOD.hemiI * 2); _bc.x += _bn.r; _bc.y += _bn.g; _bc.z += _bn.b;
+      const k = Math.min(Math.max((TOD.bright - 0.55) / 0.4, 0), 1), paint = k * k * (3 - 2 * k);
+      u.uLightC.value.setRGB(_bc.x / (NOON_SUN.r + NOON_SKY.r), _bc.y / (NOON_SUN.g + NOON_SKY.g), _bc.z / (NOON_SUN.b + NOON_SKY.b)); u.uPaint.value = paint;
+      // (alpha-tested, without MSAA: a passing haze while one zone's skyline gives way to the next, or to the rings)
+      const k2 = Math.max(4 * u.uMix.value * (1 - u.uMix.value), Math.min(1, 2 * (1 - w))), fade = a2c ? 0 : 0.45 * k2 * k2 * k2;
+      u.uHaze.value = 1 - (1 - (1 - (1 - 0.12 * TOD.warm - 0.25 * TOD.night) * (1 - 0.55 * TOD.overcast) * (1 - 0.6 * TOD.rain)) * (1 - paint)) * (1 - fade);
+      return w;
+    },
+  };
 }

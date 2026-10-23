@@ -2,6 +2,75 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-23 · 17:xx — Restyle 7: a painted horizon in every zone
+- **The far horizon is painted, like the reference art's.** The three procedural mountain rings (flat, pale silhouettes
+  2.3–4.3 km out) gave way to a painted 360° horizon in each zone:
+  - **the countryside:** layered hazy blue ranges, green hills and dark conifer forest at their feet, a few tiny
+    farmhouses and round trees on the far fields;
+  - **the coast:** blue-green mountains and capes across the bay, wooded islands and rocky islets off the far shore;
+  - **the cherry-blossom avenue:** low rounded green hills with pink blossom at their foot and tiny navy-roofed villages
+    (it shows between the trees);
+  - **the mountain pass:** ridge after ridge of autumn forest fading to blue, seen down the valley;
+  - **snow country:** white peaks over snow-dusted cedar forest.
+  The shopping street keeps its rings: the reference shows no hills at the end of the street.
+- **Its colours are the reference art's.** Measured just above the horizon against the reference images (CIELAB ΔE of
+  the median colour):
+  - countryside: the far ranges 14.2 → 4.7 (now (135,189,231) against the reference's (134,197,234); live was a grey
+    (158,191,205)), the forested hills 10.3 → 9.1, the green hills 28.6 → 14.7;
+  - coast: the mountains across the bay 13.8 → 3.4, their wooded slopes 26.5 → 11.6.
+- **The cumulus rise from behind the mountains**, as in the references: the band stands 2.5 km out, in front of the
+  towers' feet (4.3–5 km).
+- **The countryside's far hills are low now.** The 14–36 m hills 135–215 m from the road stood in front of the far
+  ranges wherever the road ran straight, a green wall on both sides. They are a low wooded rise (3–7 m) with the same
+  cedars, so the painted mountains read across the whole horizon, as in the reference. Where the road climbs into the
+  mountain pass, its real 3D slopes still rise ahead.
+- **Every time of day and weather.** On a bright day the band is the painting itself (the inverse grade, as for the
+  clouds). Otherwise it is relit with the light of the hour against the light at noon: warm at golden hour, violet at
+  sunset, a dark navy silhouette at night, grey and hazy under cloud, almost gone in rain. Below the horizon it takes
+  the same haze the 3D world's fog puts on the ground there, so its foot melts into the world's far edge, and from the
+  high crane shot the gap beyond the world's edge reads as far fields.
+- **Zones cross-fade** as the next zone comes into view (200 m ahead of the car). With MSAA (desktop) the two skylines
+  blend smoothly; on phones the switch passes in a light haze.
+- **The band never repeats in one view:** each zone's loop is four (or three) paintings joined end to end, 120° long.
+  It is fixed in the world, so it stays put while the road turns.
+- **If the band can't be loaded** (missing, broken or truncated, or its index missing), the game keeps the mountain
+  rings. Tested with each.
+- **Assets and research:**
+  - 16 new panoramas generated with Grok Imagine, anchored on crops of the reference art (country.png and coast.png),
+    and 4 from asset batch 1. They were keyed, ordered and mirrored so neighbouring edges match, and joined with LaMa
+    over every seam (including the wrap).
+  - Their colours were matched to the references: the paintings' far ranges were a greyer, darker blue (value 0.71
+    against 0.93) and their hills a duller green (saturation 0.31 against 0.58).
+  - Pipeline: `~/cdtest/hb/scripts/band.py` (`strip`, `pack`).
+  - Built by a subagent; verified independently by the main agent.
+- How:
+  - **Drawing:** new `makePaintedBand` in `painted.js`: one ring of 192 segments around the camera, one draw call,
+    trimmed every frame to the rows that can show. It is drawn opaque after the 3D world and the sea and before the sky,
+    so the sky dome and the cumulus skip every pixel it covers. Its ridges take their coverage from the painting's
+    alpha with MSAA (alpha-to-coverage) and are alpha-tested without it.
+  - **The atlas:** one WebP with a row per zone: 3840×1512 (766 KB, 32 px/°) where the frame is at least 900 px tall,
+    1920×780 (251 KB, 16 px/°) on phones, in the X card and in smaller windows. It downloads alongside the clouds.
+  - **Programs:** one more (56; 57 on the coast), compiled at load. None compiled through sunset, night, rain or snow.
+  - **Memory:** +31 MB of GPU memory on desktop, +8 MB on phones (with mipmaps).
+  - **Terrain:** one constant in `path.js` (the countryside's far hills). No random numbers changed, so the world's
+    layout is the same.
+- Cost: none measurable. Main agent's independent check, interleaved with live (L S S L L S), with corrupt timer
+  samples dropped. The box was still heavily loaded by other sessions (load 23–33).
+  - **GPU averaged over 0.9 km drives:**
+    - desktop country 22.19 vs 22.43 ms (−0.24: the band hides sky the dome no longer shades);
+    - desktop coast 24.38 vs 24.29;
+    - phone country 11.10 vs 11.82.
+  - **The subagent's same-page flips, band against rings:** desktop +0.08 / +0.57 ms (country) and +0.51 (coast);
+    phone +0.14 / +0.16 and +0.30.
+  - **World building:** direct chunk generation is unchanged (medians ~400 ms per 20 chunks on both, spread by load).
+    The flat-out buildtime runs read +16%, but tracked the load (their frame counts were lower).
+  - **Start-up:** the same as live (8.1–8.9 s vs 8.3–9.0 s, all inflated by the load).
+  - **Checks:**
+    - 56 programs at every quality level (55 on live), 57 on the coast (56);
+    - none compiled through sunset, night, rain or driving;
+    - no console errors, and embed mode starts on tap;
+    - with the band's files removed, the game falls back to the mountain rings (55 programs, no errors).
+
 ## 2026-10-23 · 14:xx — Restyle 6: painted clouds from the reference art
 - **The cumulus are painted, like the reference art's.** The procedural towers (smooth, shaded blobs) gave way to
   painted cumulus with the paintings' cauliflower lobes and brushwork: white in the sun, with light, saturated blue

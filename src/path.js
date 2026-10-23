@@ -173,7 +173,9 @@ export function groundOffset(zone, s, u, e, rw) {
       if (a < rw + 2.0) return -0.08;                       // the verge: a bank of tall grass and wildflowers
       if (a < rw + 2.6) return -0.08 - (a - rw - 2.0) * 0.62; // its slope down to the fields (there used to be a ditch)
       if (a < 135) return -0.45;                            // paddies
-      return -0.45 + sstep(135, 215, a) * 36 * (0.4 + 0.6 * noise1(s / 210 + (u > 0 ? 9 : 0), 7));
+      // then a low wooded rise closing the fields (it was 14–36 m of hills: seen far ahead they stood in front of the
+      // painted mountains of the horizon band, painted.js)
+      return -0.45 + sstep(140, 215, a) * 7 * (0.4 + 0.6 * noise1(s / 210 + (u > 0 ? 9 : 0), 7));
   }
 }
 export function groundOffsetMix(s, u, e, rw) {

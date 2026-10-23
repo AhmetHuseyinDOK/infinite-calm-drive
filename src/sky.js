@@ -414,8 +414,10 @@ export function makeMountains() {
   });
   return {
     group,
-    update(cam, snow = 0) {
-      group.position.set(cam.x, 0, cam.z);
+    /** k: how much of them stands (1: all; they sink into the horizon where the painted band takes over) */
+    update(cam, snow = 0, k = 1) {
+      group.visible = k > 0.002; if (!group.visible) return;
+      group.position.set(cam.x, 0, cam.z); group.scale.y = Math.min(1, k);
       for (const m of group.children) m.material.uniforms.uSnow.value = snow;
       const light = (0.35 + 0.65 * (1 - TOD.night)) * (1 - 0.35 * TOD.overcast);
       for (const m of group.children) m.material.uniforms.uLight.value = light;

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Path, ZONES, zoneW, zoneWeight, zoneAt, zoneMix, zparam, ZINFO, setStartZone, crossingS, crossingValid, XING, XOFF, riverNear, RIV, ROFF, groundOffsetMix, tunnelNear, T_HALF, T_RIDGE } from './path.js';
 import { makeCrossingRig, makeTrain, xingPosts } from './crossing.js';
-import { buildAtlas, buildFoliage } from './textures.js';
+import { buildAtlas, buildFoliage, paintFronts } from './textures.js';
 import { makeMaterials, U, groundMaterialFor, setShadowTaps, setGrazeFade, makeCloudMap, makeGhibliLeaf, FIELD } from './materials.js';
 import { setAtlas, setFoliage, warmTrees, warmTetrapods, setLeafDensity, GHIBLI } from './props.js';
 import { loadTreeAtlas } from './ghibli.js';
@@ -19,7 +19,7 @@ import { makePost } from './post.js';
 import { makeAudio } from './audio.js';
 import { makeParticles } from './particles.js';
 import { clamp, lerp, sstep, setSeed, hash2 } from './util.js';
-import { loadCloudAtlas, makePaintedClouds, loadBandAtlas, makePaintedBand, updatePainted, loadFieldTexture } from './painted.js';
+import { loadCloudAtlas, makePaintedClouds, loadBandAtlas, makePaintedBand, updatePainted, loadFieldTexture, loadFrontAtlas } from './painted.js';
 
 const QS = new URLSearchParams(location.search);
 // inside an X player card (or any iframe): lighter quality, compact UI, tap-only start
@@ -57,6 +57,9 @@ async function main() {
   const treeLoad = loadTreeAtlas(quality === 'high' && innerHeight * DPR >= 560 ? 'hi' : 'lo');
   // the painted meadow of the countryside's fields (painted.js), on the clouds' tiers
   const fieldLoad = loadFieldTexture(TIER);
+  // the shopping street's painted shopfronts and upper floors (painted.js), on the crowns' tiers (a near shopfront fills
+  // a third of the frame): 360×432 px a bay on desktops, half that on phones and in the X card
+  const frontLoad = loadFrontAtlas(quality === 'high' && innerHeight * DPR >= 560 ? 'hi' : 'lo');
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0xc6ddf2, 0.0019, 700); // near = exp² density, far = draw distance (see materials.js)
@@ -117,6 +120,7 @@ async function main() {
   status('painting the town…');
   await new Promise(r => setTimeout(r, 10));
   const atlas = buildAtlas(); setAtlas(atlas);
+  { const fa = await frontLoad; if (fa) { paintFronts(atlas, fa); fa.img.close(); } } // (into the atlas before it is uploaded)
   const fol = buildFoliage(renderer); setFoliage(fol.cells); U.uTuftV.value.set(...fol.tuftV);
   const M = makeMaterials(atlas.textures(renderer), fol.tex);
   const cloudMap = makeCloudMap(); cloudMap.update(renderer, 0, 0, 0, 0);

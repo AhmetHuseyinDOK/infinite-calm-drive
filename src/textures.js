@@ -36,8 +36,15 @@ export class Atlas {
     draw(this.a, this.e, w, h);
     this.a.restore(); this.e.restore();
     const hp = 0.5;
-    this.cells[name] = { u0: (r.x + hp) / SW, u1: (r.x + w - hp) / SW, v0: 1 - (r.y + h - hp) / SH, v1: 1 - (r.y + hp) / SH, w, h };
+    this.cells[name] = { u0: (r.x + hp) / SW, u1: (r.x + w - hp) / SW, v0: 1 - (r.y + h - hp) / SH, v1: 1 - (r.y + hp) / SH, w, h, px: r.x, py: r.y };
     return this.cells[name];
+  }
+  /** repaint a cell from an image: the albedo from (sx, sy, sw, sh), the emissive from (sx, ey, sw, sh) of the same
+   *  image (the painted fronts). Before textures() is called: the canvases go to the GPU once. */
+  paintCell(name, img, sx, sy, sw, sh, ey) {
+    const c = this.cells[name]; if (!c) return;
+    this.a.drawImage(img, sx, sy, sw, sh, c.px, c.py, c.w, c.h);
+    this.e.drawImage(img, sx, ey, sw, sh, c.px / 2, c.py / 2, c.w / 2, c.h / 2);
   }
   uv(name) { const c = this.cells[name]; if (!c) throw new Error('no atlas cell ' + name); return c; }
   has(name) { return !!this.cells[name]; }
@@ -675,7 +682,32 @@ export function buildAtlas() {
     vgrad(a, 0, 0, w, h, [[0, 'rgba(255,240,220,0.06)'], [1, 'rgba(0,0,0,0.16)']]);
     grain(a, A, w, h, 0.2);
   });
+  // ---------------- the shopping street's painted fronts (painted.js loadFrontAtlas → paintFronts) ----------------
+  // 3 m × 3.6 m shopfront bays (a shop's window, a bookshop's, a noren'd entrance with a lantern, a café) and 3 m × 2.9 m
+  // upper-floor bays (cream plaster with a timber-framed window; dark boards with a shoji lattice; their 'L' twins glow at
+  // night), at 120 px/m. Painted here first in plain warm timber, each from its own rng, in case the paintings don't load
+  const warmBay = (a, e, w, h, seed, kind) => {
+    const q = rng(seed), door = kind === 2;
+    rect(a, 0, 0, w, h, '#4b3426'); vgrad(a, 0, 0, w, h, [[0, 'rgba(255,230,200,0.08)'], [1, 'rgba(0,0,0,0.2)']]);
+    const gx = w * 0.12, gy = h * (door ? 0.3 : 0.17), gw = w * 0.76, gh = h * (door ? 0.62 : 0.56);
+    for (const c of [a, e]) { rect(c, gx, gy, gw, gh, '#e9b56c'); vgrad(c, gx, gy, gw, gh, [[0, 'rgba(255,240,200,0.55)'], [1, 'rgba(110,60,25,0.4)']]); }
+    if (!door) for (let sy = gy + gh * 0.32; sy < gy + gh - 6; sy += gh * 0.22) {
+      for (let x = gx + 4; x < gx + gw - 10; x += 9 + q() * 12) { const hh = 10 + q() * 12; rect(a, x, sy - hh, 7, hh, ['#c0503a', '#3a6ab0', '#e8c050', '#5a9a50', '#d07a9a'][Math.floor(q() * 5)]); }
+      rect(a, gx, sy, gw, 5, '#6e4a30');
+    }
+    if (door) { rect(a, gx, gy - h * 0.12, gw, h * 0.16, '#28356a'); rect(e, gx, gy - h * 0.12, gw, h * 0.16, '#000'); }
+    rect(a, gx + gw / 2 - 4, gy, 8, gh, '#4b3426'); rect(e, gx + gw / 2 - 4, gy, 8, gh, '#000'); // the mullion
+    rect(a, 0, gy + gh, w, 6, '#3a281d');
+    grain(a, A, w, h, 0.15);
+  };
+  for (let i = 0; i < 4; i++) A.add('shop_p' + i, 360, 432, (a, e, w, h) => warmBay(a, e, w, h, 6100 + i, i));
+  for (const [n, k] of [['win7', 0], ['win8', 4]]) { A.add(n, 360, 348, (a, e, w, h) => resWindow(a, e, w, h, false, k)); A.add(n + 'L', 360, 348, (a, e, w, h) => resWindow(a, e, w, h, true, k)); }
   return A;
+}
+/** the painted fronts (painted.js loadFrontAtlas) over their cells' procedural paint */
+export function paintFronts(A, fa) {
+  const W = fa.img.width, H = fa.img.height;
+  for (const t of fa.tiles) A.paintCell(t.name, fa.img, t.x * W, t.y * H, t.w * W, t.h * H, t.ey * H);
 }
 
 // ---------------- foliage clump textures (leaves, sakura blossom, pine needles) ----------------

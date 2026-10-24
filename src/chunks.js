@@ -20,8 +20,17 @@ const IDENT = new THREE.Matrix4();
 const mod = (a, n) => ((a % n) + n) % n;
 /** true within m metres of a level crossing (keeps the track corridor clear) */
 const nearX = (s, m) => { const c = crossingNear(s); return !!c && Math.abs(s - c.s) < m; };
-/** true within m metres of a city side street (they open at every 150 m crosswalk) */
-const nearSide = (s, m) => Math.abs(s - Math.round(s / 150) * 150) < m;
+/** the city's openings, on a 150 m grid (k · 150): a signalised crossing with side streets at every 4th (s = 600, 1200 …,
+ *  never in the first view of the drive), a narrow alley (路地) halfway between (300, 900 …), and nothing at the odd
+ *  ones, so the shopping street runs on as two unbroken rows of shopfronts, as in the reference art. (They used to be
+ *  crossings with signals every 150 m, one 10 m ahead of the start. materials.js paints the crossings' road markings on
+ *  the same rule.) */
+const bigX = k => mod(k, 4) === 0, openX = k => mod(k, 2) === 0;
+const ALLEY = 1.4; // an alley's half-width (a side street's is 3.0)
+/** the stretch of frontage kept clear of buildings at opening k: s from k·150 − mouthA(k) to k·150 + mouthB(k) */
+const mouthA = k => (bigX(k) ? 4.4 : ALLEY + 0.9), mouthB = k => (bigX(k) ? 3.4 : ALLEY - 0.1);
+/** true within m metres of a city side street or alley (every 300 m) */
+const nearSide = (s, m) => Math.abs(s - Math.round(s / 300) * 300) < m;
 /** true within m metres of a tunnel's centre (keeps roadside things out of the ridge and the tube) */
 const nearT = (s, m) => { const t = tunnelNear(s); return !!t && Math.abs(s - t.s) < m; };
 /** true within m metres of a river (keeps houses, poles and trees out of the channel) */
@@ -332,17 +341,19 @@ export class World {
     }
   }
 
-  /** a city intersection: side streets lined with houses and wires, traffic signals, 止まれ markings, sometimes a 歩道橋 */
+  /** a city intersection (bigX): side streets lined with houses and wires, traffic signals, 止まれ markings, now and
+   *  then a 歩道橋. Elsewhere a narrow alley (路地) between the shopfronts, with houses and a pole or two down it. */
   *intersection(G, r, sc, k, matAt, road, rwAt, walkW, ground, ox, oz) {
     const f0 = this.path.at(sc, {}), e = road(sc), rw = rwAt(sc), sw = walkW(sc) || 3.0, cs = sc - 0.5, w = zoneW(sc), w4 = [w.city, w.sakura, w.coast, w.country];
     const xw = (ds, u, y) => [f0.x + f0.fx * (ds - 0.5) + f0.rx * u - ox, y, f0.z + f0.fz * (ds - 0.5) + f0.rz * u - oz];
-    const front = rw + sw + 0.15;
+    const front = rw + sw + 0.15, big = bigX(k), hw = big ? 3.0 : ALLEY;
     for (const side of [-1, 1]) {
-      // the side street itself (kind 10: its own asphalt + white edge lines), just above the lots (which sit at +0.14)
+      // the side street itself (kind 10: its own asphalt + white edge lines at ±2.62 m, which an alley is too narrow
+      // to have), just above the lots (which sit at +0.14)
       const ua = side * (rw + sw), ub = side * 80;
-      ground.grid(21, 2, (i, j) => { const u = ua + ((ub - ua) * i) / 20, ds = (j ? -3.0 : 3.0) * side, p = xw(ds, u, e + 0.165); return [p[0], p[1], p[2], 0, 1, 0, ds * side, u, w4[0], w4[1], w4[2], w4[3], rw, 10]; });
+      ground.grid(21, 2, (i, j) => { const u = ua + ((ub - ua) * i) / 20, ds = (j ? -hw : hw) * side, p = xw(ds, u, e + 0.165); return [p[0], p[1], p[2], 0, 1, 0, ds * side, u, w4[0], w4[1], w4[2], w4[3], rw, 10]; });
       // 止まれ painted in the lane that approaches the main road
-      {
+      if (big) {
         const cu = side * (rw + sw + 3.2), cds = -side * 1.35, hw = 1.15, hh = 0.42;
         const P0 = (rx, uy) => xw(cds + side * rx, cu - side * uy, e + 0.18);
         G.decal.setM(new THREE.Matrix4());
@@ -353,7 +364,7 @@ export class World {
         let u = front + 15 + r() * 3;
         while (u < 52) {
           const wd = r.range(5.5, 8.5), uc = side * (u + wd / 2), t = r();
-          const M = matAt(cs + bank * 3.3, uc, e + 0.14, bank > 0 ? Math.PI / 2 : -Math.PI / 2, false);
+          const M = matAt(cs + bank * (hw + 0.3), uc, e + 0.14, bank > 0 ? Math.PI / 2 : -Math.PI / 2, false);
           P.building(G, M, r, { type: t < 0.5 ? 'house' : 'shop', w: wd, d: r.range(7, 10), floors: t < 0.5 ? 2 : r.int(2, 3), tint: r.pick(P.TINTS), litP: 0.45, fence: 0 });
           u += wd + r.range(0.2, 1.2);
           yield;
@@ -361,16 +372,17 @@ export class World {
         yield;
       }
       // a couple of utility poles with wires running down the side street
-      const poles = [30, 54].map(uu => matAt(cs + 2.8, side * uu, e + 0.15, -Math.PI / 2, false));
+      const poles = [30, 54].map(uu => matAt(cs + hw - 0.2, side * uu, e + 0.15, -Math.PI / 2, false));
       const pr = rng(Math.floor(hash2(k, side > 0 ? 71 : 73) * 4294967295));
       const an = poles.map(Mp => P.utilityPole(G, Mp, pr, { trans: pr() < 0.4 }));
       G.color.setM(new THREE.Matrix4());
       for (let i = 0; i < 7; i++) { const a = an[0][i], b = an[1][i]; G.color.wire([a.x, a.y, a.z], [b.x, b.y, b.z], 0.3 + pr() * 0.4, 0.014, WIRE, 10); }
     }
+    if (!big) return;
     // traffic signals for both directions (青 lit — it's always a calm green wave)
     P.trafficSignal(G, matAt(sc - 9, -(rw + 0.55), e + 0.15, 0, true), 1, rw + 0.55 - 1.6);
     P.trafficSignal(G, matAt(sc + 8, rw + 0.55, e + 0.15, 0, true), 1, rw + 0.55 - 1.6);
-    if (k % 3 === 1) P.pedestrianBridge(G, matAt(sc + 15, 0, e, 0, false), rw + sw + 0.1, 'hodokyo' + (Math.abs(k) % 3));
+    if (k % 8 === 0) P.pedestrianBridge(G, matAt(sc + 15, 0, e, 0, false), rw + sw + 0.1, 'hodokyo' + (Math.abs(k / 8) % 3));
   }
 
   /** level crossing: gravel bed + sleepers (shader), rails, rubber crossing panels, catenary, alarm posts, signs */
@@ -820,27 +832,23 @@ export class World {
       while (s < s1 - 2) {
         { const wz = zoneW(s); if (wz.city < 0.62 || wz.mountain > 0.1) { s += 4; continue; } } // not into the mountain's rising slope
         { const cx = crossingNear(s + 6); if (cx && s < cx.s + 8.5 && s + 14 > cx.s - 8.5) { s = Math.max(s + 1, cx.s + 8.5); continue; } }
-        const cs = mod(s, 150);
-        if (cs > 145.6 || cs < 3.4) { s += 1; continue; }          // side street at each crosswalk (≈ sc−4.4 … sc+3.4)
+        const k0 = 2 * Math.round(s / 300), c0 = k0 * 150; // (the nearest opening)
+        if (s > c0 - mouthA(k0) && s < c0 + mouthB(k0)) { s = c0 + mouthB(k0) + 0.05; continue; } // a side street or an alley opens here
         const rw = rwAt(s), sw = walkW(s) || 3.0, front = rw + sw + 0.15;
         const t = r();
-        // a shopping street (商店街) first: mostly 町家 shophouses and shops, a few blocks of flats and offices between them
-        // (shophouses, timber or plastered, make the street as in the reference art; a few flats, offices and modern shops)
-        const type = t < 0.7 ? 'machiya' : t < 0.75 ? 'shop' : t < 0.81 ? 'apt' : t < 0.83 ? 'office' : t < 0.88 ? 'house' : t < 0.92 ? 'konbini' : t < 0.96 ? 'parking' : 'gap';
-        let w = type === 'shop' ? r.range(5, 9) : type === 'machiya' ? r.range(6, 9.5) : type === 'apt' ? r.range(10, 16) : type === 'office' ? r.range(10, 14) : type === 'house' ? r.range(7, 9.5)
-          : type === 'konbini' ? r.range(12, 14) : type === 'parking' ? r.range(7, 11) : r.range(2, 3.5);
+        // a shopping street (商店街): an unbroken row of 町家 shophouses, timber or plastered, as in the reference art, with
+        // now and then a modern shop, a block of flats, a konbini or a house between them (no empty lots or gaps: the
+        // offices and the taller flats stand in the row behind). The first stretch of the drive is shophouses only.
+        const type = s < 420 || t < 0.84 ? 'machiya' : t < 0.89 ? 'shop' : t < 0.93 ? 'apt' : t < 0.96 ? 'konbini' : 'house';
+        let w = type === 'shop' ? r.range(5, 9) : type === 'machiya' ? r.range(6, 9.5) : type === 'apt' ? r.range(10, 16) : type === 'house' ? r.range(7, 9.5) : r.range(12, 14);
         if (s + w > s1) { if (s1 - s < 5 || type === 'konbini') break; w = s1 - s - 0.2; }
-        { const gap = Math.ceil((s + 4.4) / 150) * 150 - 4.4; // never build into the side-street mouth
-          if (s + w > gap - 0.1) { if (gap - 0.1 - s < 4) { s = gap + 7.9; continue; } w = gap - 0.1 - s; } }
-        const sm = s + w / 2, e = road(sm), tint = r.pick(P.TINTS), litP = 0.42, plaster = type === 'machiya' && r() < 0.42;
-        if (type === 'parking') {
-          const M = matAt(sm, side * (front + 3), e + 0.15);
-          if (r() < 0.8) P.parkedCar(G, P.sub(M, 0, 0, 0.5, (r() - 0.5) * 0.1), r);
-          G.color.setM(M); G.color.box(-w / 2, 0, 5.5, w / 2, 1.6, 5.7, P.PAL.concrete);
-        } else if (type !== 'gap') {
+        { const k1 = s < c0 ? k0 : k0 + 2, gap = k1 * 150 - mouthA(k1); // never build into the next opening
+          if (s + w > gap - 0.1) { if (gap - 0.1 - s < 4) { s = k1 * 150 + mouthB(k1) + 0.05; continue; } w = gap - 0.1 - s; } }
+        const sm = s + w / 2, e = road(sm), tint = r.pick(P.TINTS), litP = 0.42, plaster = type === 'machiya' && r() < 0.6;
+        {
           const M = matAt(sm, side * front, e + 0.15);
-          const spec = { type, w, d: type === 'apt' || type === 'office' ? r.range(10, 14) : r.range(8, 12),
-            floors: type === 'shop' ? r.int(2, 4) : type === 'machiya' ? (r() < 0.7 ? 2 : 3) : type === 'apt' ? r.int(4, 9) : type === 'office' ? r.int(4, 8) : 2, tint: plaster ? P.PLASTER[Math.floor(r() * P.PLASTER.length)] : tint, litP, plaster, fence: type === 'house' && r() < 0.5 ? 1.2 : 0 };
+          const spec = { type, w, d: type === 'apt' ? r.range(10, 14) : r.range(8, 12),
+            floors: type === 'shop' ? r.int(2, 4) : type === 'machiya' ? (r() < 0.7 ? 2 : 3) : type === 'apt' ? r.int(4, 9) : 2, tint: plaster ? P.PLASTER[Math.floor(r() * P.PLASTER.length)] : tint, litP, plaster, fence: type === 'house' && r() < 0.5 ? 1.2 : 0 };
           P.building(G, M, r, spec);
           if (type !== 'house' && r() < 0.28) P.vendingMachine(G, matAt(sm + (r() - 0.5) * (w - 1.2), side * (front - 0.42), e + 0.15), r);
           if ((type === 'shop' || type === 'konbini' || type === 'machiya') && r() < 0.3) for (let b = 0; b < 1 + r() * 3; b++) P.bicycle(G, matAt(sm - w / 2 + 0.8 + b * 0.55, side * (front - 0.75), e + 0.15, Math.PI / 2 + 0.1), r);
@@ -850,7 +858,8 @@ export class World {
         s += w + r.range(0.05, 0.5);
         yield;
       }
-      // second row: taller buildings peeking over the street
+      // second row: taller buildings peeking over the street (a denser row right behind the shophouses closed the far end
+      // of the street as in the city painting, but cost ~1.9 ms a frame over a city drive on the Vega iGPU)
       for (let s2 = s0 + r() * 10; s2 < s1 - 8; s2 += r.range(14, 26)) {
         if (zoneW(s2).city < 0.7 || zoneW(s2).mountain > 0.1 || r() < 0.3 || nearX(s2, 18) || nearSide(s2, 15)) continue;
         const rw = rwAt(s2), M = matAt(s2, side * (rw + 3.2 + r.range(14, 20)), road(s2) + 0.1);
@@ -863,16 +872,17 @@ export class World {
         P.building(G, M, r, { type: 'tower', w: r.range(16, 26), d: r.range(16, 22), floors: r.int(12, 26), tint: r.pick(P.TINTS), litP: 0.45 });
       }
     }
-    // signs & mirrors at crossings
+    // side streets and alleys; signs and mirrors at the crossings
     const k0 = Math.ceil(s0 / 150), k1 = Math.floor((s1 - 0.01) / 150);
     for (let k = k0; k <= k1; k++) {
-      const sc = k * 150; if (zoneAt(sc) !== 'city' || zoneW(sc).mountain > 0.1) continue;
+      const sc = k * 150; if (!openX(k) || zoneAt(sc) !== 'city' || zoneW(sc).mountain > 0.1) continue;
       const rw = rwAt(sc);
       yield* this.intersection(G, r, sc, k, matAt, road, rwAt, walkW, ground, ox, oz);
+      if (!bigX(k)) continue; // (an alley has no signs)
       P.signPost(G, matAt(sc - 1, -(rw + 0.4), road(sc) + 0.15), 'sign_blue', 1);
       P.signPost(G, matAt(sc - 6, -(rw + 0.4), road(sc) + 0.15), 'sign_stop', 1, 2.1, 0.75);
       P.curveMirror(G, matAt(sc + 7, rw + 0.4, road(sc) + 0.15), -1);
-      if (k % 3 === 0) P.signPost(G, matAt(sc + 20, -(rw + 0.4), road(sc) + 0.15), 'sign_speed', 1);
+      if (k % 8 === 4) P.signPost(G, matAt(sc + 20, -(rw + 0.4), road(sc) + 0.15), 'sign_speed', 1);
     }
   }
 

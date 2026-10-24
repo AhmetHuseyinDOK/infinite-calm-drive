@@ -2,6 +2,63 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-24 · 06:xx — Restyle 12: the reference art's shopping street, painted shopfronts in unbroken rows
+- **The drive starts in the reference art's 商店街.** From the first frame both sides are unbroken rows of two- and
+  three-storey shophouses running to the vanishing point. The opening view used to have a signalised crossing 10 m
+  ahead of the car (signal arm, 止まれ, sign posts, a curve mirror, a 歩道橋 down the road), an empty lot with a parked
+  car, a konbini's glass box and big blank side walls.
+  - **Side streets:** a signalised crossing every 600 m, and a narrow alley (路地, 2.8 m, no signals or markings)
+    halfway between. They were full crossings every 150 m. The 歩道橋 stands at every other crossing (every 1.2 km),
+    and the zebra crossings, stop lines and ◇ marks are painted only at the crossings.
+  - **The rows:** 84% shophouses (was 70%), only shophouses for the first 420 m; now and then a modern shop, a block of
+    flats, a konbini or a house. No car parks, gaps or offices.
+- **Painted shopfronts:** a general store's window of goods, a bookshop's of magazines, a café's of cakes, an entrance
+  under an indigo noren with a paper lantern. All timber-framed and warm-lit by day, glowing at night, painted from the
+  city painting. They replace cream walls with windows of konbini shelves.
+- **Painted upper floors:** cream plaster between timber posts with a timber-framed window of blue sky and white
+  curtains, or dark boards with a shoji lattice. Windows still light up one by one at dusk, and plastered side walls
+  take the same bays.
+- **Tiled canopies (庇) you can see:** the canopy is steeper (33°, was 22°), so its blue-grey tiles show above the board
+  from the street. Boards are at most 4.4 m long (they were stretched up to 8.5 m).
+- **More of the painting:**
+  - awnings in its red, royal blue, purple, magenta and navy;
+  - 6 in 10 shophouses plastered (was 4 in 10);
+  - a magazine rack in front of each bookshop;
+  - darker violet-grey asphalt and a dashed white centre line.
+- **Measured against the reference** (CIELAB ΔE of region medians, start frame, noon):
+  - sunlit asphalt 11.3 → 1.9;
+  - shopfronts left 30.8 → 12.7, right 37.4 → 18.7;
+  - the whole frame (16 × 9 grid) 29.6 → 28.2;
+  - worse: the far end 4.3 → 14.2 (the painting closes it with pale towers) and the right upper floors 11.7 → 26.0 (a
+    big lit sign in the painting).
+- **Dusk, night and rain keep their look,** and the street glows at night. **If the paintings can't be loaded**
+  (missing or truncated; the main agent tested both), the bays fall back to a procedural warm timber shopfront.
+- **Research:** Grok Imagine `image_edit` anchored on crops of city.png, asked for flat head-on elevations of one bay;
+  all six came out straight-on at the first try. A denser row of flats behind the shophouses closed the far end but cost
+  1.9 ms a frame on desktop, so it was dropped. Built by a subagent; verified independently by the main agent.
+- How:
+  - **Assets:** `assets/fronts/` (new) is one sheet of 8 tiles plus their emissive row: 225 KB WebP on desktops from
+    560 px tall, 68 KB on phones and in the X card.
+  - **No new texture, material, program or draw:** the tiles are drawn into 8 new atlas cells, added last, before
+    upload (`painted.js loadFrontAtlas`, `textures.js paintFronts` / `Atlas.paintCell`). The other 118 cells are
+    pixel-identical (per-cell diff).
+  - **World** (`chunks.js` `bigX` / `openX`, `props.js machiya`, `magazineRack`): the street's random layout is
+    reshuffled.
+  - **Ground shader:** a few operations in the city variants only.
+- Cost: the same on desktops; phones pay about a millisecond in the city. Everything ran on the shared box's Vega iGPU
+  (the desktop machine was offline), interleaved with live (L S S L L S):
+  - **Main agent's check, GPU over 0.78 km city drives:** desktop 18.22 vs 19.06 ms (pairs +1.39 / +1.94 / −0.81);
+    phone profile 10.49 vs 11.77 ms (+1.28; every pair higher).
+  - **The subagent's, over 0.89 km:** desktop 18.28 vs 17.81 ms (−0.47); phone profile +1.07 ms in one set, +0.10 in
+    another.
+  - **Draws / triangles at the start:** desktop 116 / 405k against 124 / 460k; phone 116 / 432k against 122 / 390k.
+  - **World building:** unchanged (desktop medians 342.5 / 279.5 vs 288.5 / 313.5 ms per 20 city chunks). Flat out on
+    the phone profile (×4 CPU), world-build spikes 7 and 5 (worst 22 / 23 ms) against live's 8 and 12 (43 / 33 ms).
+  - **Start-up:** +0.1–0.2 s (2.85 vs 2.62 s on a busy box; the subagent: 2.38 vs 2.25 s).
+  - **Programs:** 60, none compiled through sunset, night, rain or a drive.
+  - **Checks:** 0 shader errors in all six zones; the other zones' starts match live; no console errors at any quality;
+    embed starts on tap.
+
 ## 2026-10-24 · 04:xx — Restyle 11: the coast road along its sea wall, tetrapods in the surf
 - **The sea comes right up to the sea wall, as in the reference art.** The 26 m sand beach between the guardrail and the
   water is gone: the road runs low along a sea wall, about a metre above the water (it was 4–7 m up), and the wall drops

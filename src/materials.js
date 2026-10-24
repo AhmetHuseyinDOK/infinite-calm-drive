@@ -260,11 +260,15 @@ vec3 roadCol(float s, float u, float rw){
   }
   c *= 1.0 - 0.32 * clamp(crk, 0.0, 1.0);
   float city = vZW.x, paint = 0.0, mtn = clamp(1.0 - dot(vZW, vec4(1.0)) - vZS, 0.0, 1.0);
+#ifdef Z_CITY
+  c *= mix(vec3(1.0), vec3(0.70, 0.68, 0.80), city); // the shopping street's asphalt: darker, a violet grey, as in the city painting
+#endif
   paint += step(abs(a - (rw - 0.28)), 0.07);
-  paint += (1.0 - step(0.5, city)) * (1.0 - step(0.5, mtn)) * step(a, 0.07) * step(fract(s/10.0), 0.55);
+  paint += (1.0 - step(0.5, mtn)) * step(a, 0.07) * step(fract(s/10.0), 0.55); // (the dashed centre line: in the city too, as in its painting)
   float cs = mod(s, 150.0);
 #ifdef Z_CITY
-  if (city > 0.5) {
+  // (only at the signalised crossings, every 4th opening: chunks.js bigX. The alleys between have no markings)
+  if (city > 0.5 && mod(floor((s + 36.0) / 150.0), 4.0) < 0.5) {
     if (cs < 4.0 && a < rw - 0.45) paint += step(0.5, fract(u/0.9 + 0.25));
     if (cs > 147.2 && cs < 147.65 && u < -0.1 && u > -rw + 0.4) paint += 1.0;
     vec2 dm = vec2((cs - 118.0)/3.2, (u + 1.55)/0.62); float dd = abs(dm.x) + abs(dm.y);

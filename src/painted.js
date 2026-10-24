@@ -117,6 +117,30 @@ export async function loadCloudAtlas(tier, timeoutMs = 15000) {
   })(), timeoutMs, 'painted clouds unavailable, keeping the procedural ones:');
 }
 
+/** Loads the shopping street's painted fronts (assets/fronts/, made by ~/cdtest/cf/scripts/pack.py from Grok Imagine
+ *  edits anchored on the city painting): warm-lit shopfront bays and upper-floor bays, flat-on, with what glows in them
+ *  (a row of emissive tiles under the albedo ones). They are drawn into their cells of the texture atlas (textures.js
+ *  paintFronts) before it goes to the GPU, so the shophouses take them with no new texture, material or draw.
+ *  'hi' (360×432 px a bay) or 'lo' (half that: phones, the embed). Resolves to null (never rejects) when the index or the
+ *  image is missing, broken, truncated or too slow: the cells then keep their procedural paint. */
+export async function loadFrontAtlas(tier, timeoutMs = 15000) {
+  const base = ASSETS + 'fronts/';
+  return orNull((async () => {
+    const r = await fetch(base + 'fronts.json');
+    if (!r.ok) throw new Error('fronts.json ' + r.status);
+    const J = await r.json();
+    const tiles = (J.tiles || []).filter(t => t.name && t.w > 0 && t.h > 0 && t.x >= 0 && t.x + t.w <= 1 && t.ey + t.h <= 1);
+    if (!tiles.length) throw new Error('no fronts listed');
+    const file = J.files && J.files[tier] ? tier : 'hi', ri = await fetch(base + J.files[file]);
+    if (!ri.ok) throw new Error(J.files[file] + ' ' + ri.status);
+    const blob = await ri.blob(); // (checked whole: a truncated image decodes without complaint)
+    if (J.bytes && J.bytes[file] && blob.size !== J.bytes[file]) throw new Error(J.files[file] + ' is ' + blob.size + ' bytes, not ' + J.bytes[file]);
+    const img = await createImageBitmap(blob);
+    if (J.size && J.size[file] && (img.width !== J.size[file][0] || img.height !== J.size[file][1])) throw new Error(J.files[file] + ' has the wrong size');
+    return { img, tiles, tier: file };
+  })(), timeoutMs, 'painted fronts unavailable, keeping the procedural shopfronts:');
+}
+
 /** Loads the painted meadow (assets/fields/, made by ~/cdtest/ft/scripts/field.py): a tileable top-down painting of the
  *  country paintings' grass, 'hi' or 'lo' (phones, the embed). Resolves to null (never rejects) when the index or the
  *  image is missing, broken, truncated or too slow: the countryside then keeps its procedural paddies. */

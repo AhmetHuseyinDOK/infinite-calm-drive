@@ -1,17 +1,20 @@
 // The world is built in 60 m chunks along the infinite road; each chunk merges its contents into a handful of meshes.
 import * as THREE from 'three';
-import { zoneMix, zoneW, zoneAt, zparam, groundOffsetMix, SEA, crossingS, crossingValid, crossingNear, XING, XOFF, riverS, riverValid, riverNear, riverBank, RIV, ROFF, RIVER_DROP, tunnelNear, T_HALF, T_RIDGE, RAISE, ridgeHr, tubeHalf } from './path.js';
+import { zoneMix, zoneW, zoneAt, zparam, groundOffsetMix, SEA, WALL_U, crossingS, crossingValid, crossingNear, XING, XOFF, riverS, riverValid, riverNear, riverBank, RIV, ROFF, RIVER_DROP, tunnelNear, T_HALF, T_RIDGE, RAISE, ridgeHr, tubeHalf } from './path.js';
 import { xingPosts } from './crossing.js';
 import { GB } from './geom.js';
 import * as P from './props.js';
 import { rng, hash2, clamp, sstep } from './util.js';
 import { S_WRAP, groundMaterialFor, PROP_DEPTH } from './materials.js';
+import { SURF, surfGeometry } from './surf.js';
 
 export const CH = 60;
 const WBEAM = [[0.5, 0.055], [0.6, 0.075], [0.67, 0.025], [0.74, 0.075], [0.84, 0.055]]; // guardrail profile (m up, m out)
 const NEAR = [0.7, 0.9, 1.45, 1.5, 1.9, 2.0, 2.1, 2.65, 3.05, 3.4]; // 1.45: just outside a tunnel tube's wall
 const FAR = [7, 9, 11.5, 14.5, 18, 23, 29, 36, 45, 56, 70, 86, 104, 124, 140, 160, 185, 215];
 const POLE_SP = 32;
+// the coast's water along its sea wall (placeCoast): how far out from the wall each column of the strip lies (m)
+const SHORE_D = [-0.2, 2.2, 5.5, 10, 17, 27, 38];
 const WIRE = [0.025, 0.026, 0.032], BIRD = [0.05, 0.05, 0.065];
 const IDENT = new THREE.Matrix4();
 const mod = (a, n) => ((a % n) + n) % n;
@@ -68,8 +71,8 @@ class GroundB {
 }
 
 export class World {
-  constructor(scene, path, M, foamMat, riverMat) {
-    this.path = path; this.M = M; this.foamMat = foamMat; this.riverMat = riverMat;
+  constructor(scene, path, M, riverMat) {
+    this.path = path; this.M = M; this.riverMat = riverMat; this.heapCache = new Map(); // (M.shore, M.surf: the coast's water along its wall, and its surf)
     this.group = new THREE.Group(); scene.add(this.group);
     this.chunks = new Map(); this.origin = { x: 0, z: 0 }; this.reveal = [];
     this.ahead = 760; this.behind = 40;
@@ -127,7 +130,7 @@ export class World {
     const r = rng(Math.floor(hash2(c, 777) * 4294967295));
     const G = { atlas: new GB({ uv: true, ao: true, lit: true }), color: new GB({ ao: true }), foliage: new GB(), leaf: new GB({ uv: true }), lamp: new GB({ color: false }), sig: new GB({ color: false }), sodium: new GB({ color: false }), decal: new GB({ uv: true }), pool: new GB({ uv: true, color: false }),
       gleaf: new GB({ uv: true, off: true }), gblossom: new GB({ uv: true, off: true }) }; // (the broadleaf and cherry crowns' painted clusters, camera-facing)
-    const ground = new GroundB(), foam = [], river = [];
+    const ground = new GroundB(), shore = { rows: [], puffs: [] }, river = [];
     G.lamps = []; // lights that can light the car: chunk-local x, y, z, power … (props.js lampAt)
     const f = {}, f2 = {};
 
@@ -164,7 +167,10 @@ export class World {
       // quarters, so no single build step is long; they share a column and use ghost columns for seamless normals
       for (const [j0, j1, gl, gr] of [[0, qtr, 0, 1], [qtr - 1, half, 1, 0], [half, half + qtr + 1, 0, 1], [half + qtr, nc, 1, 0]]) {
         ground.gridN(rowS.length, j1 - j0, (i, jj) => {
-          const R = rowS[i], F = R.f, j = j0 + jj, o = offs[j], u = o < 0 || (o === 0 && j < half) ? o - R.rw : o + R.rw;
+          // (on the coast the ground's edge tucks 15 cm under the road's: the low road leaves the bright sea plane just
+          // below the 6 cm step between them, and from the side it showed through that slit as a blue line)
+          const R = rowS[i], F = R.f, j = j0 + jj, o = offs[j], tk = o === 0 && R.w[2] > 0 ? 0.15 : 0;
+          const u = o < 0 || (o === 0 && j < half) ? o - R.rw + tk : o + R.rw - tk;
           // the ridge look (slope-protection grid) belongs on the cutting face only — it starts 1 m beyond the road edge — at full
           // weight once the face stands 0.5 m proud of the natural ground. (It used to be RAISE / 1.5 everywhere: the bottom ~2 m
           // of every face blended into the beach sand / verge — a white fog smear on the coast's sea side — and the flat verge
@@ -228,7 +234,7 @@ export class World {
     }
     yield* this.placeCity(G, r, s0, s1, matAt, onGround, road, rwAt, walkW, H, ground, ox, oz);
     yield* this.placeSakura(G, r, s0, s1, matAt, onGround, road, rwAt, H);
-    this.placeCoast(G, r, s0, s1, matAt, onGround, road, rwAt, H, foam, world);
+    yield* this.placeCoast(G, r, c, s0, s1, matAt, onGround, rwAt, shore, world);
     yield;
     yield* this.placeCountry(G, r, s0, s1, matAt, onGround, road, rwAt, H);
     yield* this.placeMountain(G, r, s0, s1, matAt, onGround, road, rwAt, H);
@@ -256,12 +262,18 @@ export class World {
     add(G.sodium.build(), this.M.sodium, false, false);
     add(G.decal.build(), this.M.decal, false, true, 1, 'small');
     add(G.pool.build(), this.M.pool, false, false, 2, 'light');
-    if (foam.length) {
-      const g = new THREE.BufferGeometry(), pos = [], su = [], idx = [];
-      foam.forEach((row, i) => { for (const v of row) { pos.push(v[0], v[1], v[2]); su.push(v[3], v[4]); } if (i > 0) { const a = (i - 1) * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); } });
-      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('su', new THREE.Float32BufferAttribute(su, 2)); g.setIndex(idx); g.computeBoundingSphere();
-      add(g, this.foamMat, false, false, 1);
+    if (shore.rows.length > 1) { // the water along the sea wall: a strip of rows across it (SHORE_D), drawn just before the sea
+      const R = shore.rows, nc = SHORE_D.length, n = R.length * nc, pos = new Float32Array(n * 3), su = new Float32Array(n * 2), hf = new Float32Array(n * 2), idx = [];
+      R.forEach((row, i) => {
+        for (let j = 0; j < nc; j++) { const v = i * nc + j, o = j * 7; pos.set(row.subarray(o, o + 3), v * 3); su[v * 2] = row[o + 3]; su[v * 2 + 1] = row[o + 4]; hf[v * 2] = row[o + 5]; hf[v * 2 + 1] = row[o + 6]; }
+        if (i > 0) for (let j = 0; j < nc - 1; j++) { const a = (i - 1) * nc + j, b = a + nc; idx.push(a, b, a + 1, a + 1, b, b + 1); } // (facing up)
+      });
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('su', new THREE.BufferAttribute(su, 2)); g.setAttribute('hf', new THREE.BufferAttribute(hf, 2));
+      g.setIndex(idx); g.computeBoundingSphere();
+      add(g, this.M.shore, false, false, 997); // (opaque, before the sea plane (998): the plane is skipped under it)
     }
+    if (shore.puffs.length) add(surfGeometry(shore.puffs), this.M.surf, false, false, 2, 'small'); // (the surf over the tetrapods)
     for (const g of river) add(g, this.riverMat, false, true);
     grp.position.set(ox - this.origin.x, 0, oz - this.origin.z);
     return { group: grp, ox, oz, s0, lamps: new Float32Array(G.lamps) };
@@ -891,33 +903,105 @@ export class World {
     if (st >= s0 && st < s1 && zoneAt(st) === 'sakura' && !nearR(st, 60)) P.torii(G, matAt(st, 0, road(st), 0, false), rwAt(st) + 1.6, 6.4);
   }
 
-  placeCoast(G, r, s0, s1, matAt, onGround, road, rwAt, H, foam, world) {
-    // foam where the beach meets the sea
-    for (let i = 0; i <= 20; i++) {
-      const s = s0 + (i / 20) * CH, w = zoneW(s).coast;
-      if (w < 0.85 || nearT(s, T_RIDGE * 1.25)) { if (foam.length && foam[foam.length - 1] !== null) foam.push(null); continue; }
-      const rw = rwAt(s), a0 = rw + 11.0, a1 = rw + 19;
-      const A = world(s, -a0, SEA + 0.06), B = world(s, -a1, SEA + 0.06);
-      foam.push([[A[0], A[1], A[2], mod(s, S_WRAP), 0], [B[0], B[1], B[2], mod(s, S_WRAP), 1]]);
+  /** where the coast's sea wall stands in the sea with its surf: from 70% of the way into the coast in its transitions,
+   *  and not where a tunnel's headland runs out into the sea (its spur stands above the water to ~T_RIDGE + 7 m from the
+   *  tunnel's middle) */
+  coastWall(s) { return zoneW(s).coast >= 0.7 && !nearT(s, T_RIDGE + 14); }
+  /** 消波ブロック: chunk c's heaps of tetrapods at the foot of the sea wall (their own random numbers, so the rest of the
+   *  layout is unchanged): every 12–26 m, 4.5–11 m long, two or three rows deep. Cached: the water strip's foam gathers
+   *  round the heaps of the chunks either side as well */
+  coastHeaps(c) {
+    let hs = this.heapCache.get(c); if (hs) return hs;
+    hs = [];
+    const hr = rng(Math.floor(hash2(c, 5501) * 4294967295)), s0 = c * CH, s1 = s0 + CH;
+    for (let s = s0 + 1 + hr() * 12; s < s1 - 3; s += hr.range(12, 26)) {
+      const L = hr.range(1.25, 1.5), len = hr.range(4.5, 11), rows = hr() < 0.4 ? 3 : 2, sb = Math.min(s + len, s1 - 0.5);
+      if (!this.coastWall(s) || !this.coastWall(sb)) continue;
+      hs.push({ sa: s, sb, L, rows, dOut: (0.8 + (rows - 1) * 1.45 + 0.95) * L }); // (dOut: its face to the sea, from the wall)
     }
-    // keep only the first contiguous run (rows are contiguous inside a coast chunk)
-    const firstNull = foam.indexOf(null); if (firstNull >= 0) foam.length = firstNull;
-    if (foam.length < 2) foam.length = 0;
-
+    if (this.heapCache.size > 48) this.heapCache.clear();
+    this.heapCache.set(c, hs);
+    return hs;
+  }
+  /** 海沿いの道 (the reference art's coast road): the sea right against the sea wall (path.js), tetrapods heaped at its
+   *  foot with the surf breaking over them, and the water along the wall with its foam; on the land side big round
+   *  broadleaf trees on the green slope (a few pines), houses and lamps; boats and a lighthouse out at sea */
+  *placeCoast(G, r, c, s0, s1, matAt, onGround, rwAt, shore, world) {
+    const path = this.path, f = {};
+    // the tetrapods: piled two or three deep against the wall, the first row standing half out of the water (their legs
+    // in the surf), the rows further out lower, a few more wedged on top; contact shading darkens them at the water line
+    const heaps = this.coastHeaps(c), tr = rng(Math.floor(hash2(c, 5507) * 4294967295));
+    for (const h of heaps) {
+      const L = h.L;
+      for (let k = 0; k < h.rows; k++) {
+        const dm = 0.8 * L + k * 1.45 * L, y0 = (k === 0 ? 0.28 : k === 1 ? 0.0 : -0.3) * L;
+        for (let ss = h.sa + tr() * 0.7 * L; ss < h.sb; ss += 1.5 * L * tr.range(0.88, 1.12)) {
+          const rw = rwAt(ss), p = world(ss, -(rw + WALL_U + dm + (tr() - 0.5) * 0.45 * L), 0);
+          P.tetrapod(G, p[0], SEA + y0 + (tr() - 0.5) * 0.3 * L, p[2], tr, L * tr.range(0.92, 1.08), SEA - 0.7, k === 0 ? 0.8 : 0.45);
+          if (k === 0 && h.rows > 1 && tr() < 0.4) {
+            const q = world(ss + 0.7 * L, -(rw + WALL_U + dm + 0.72 * L), 0);
+            P.tetrapod(G, q[0], SEA + 1.05 * L, q[2], tr, L * tr.range(0.9, 1.0), SEA - 0.7);
+          }
+        }
+      }
+      // the surf: puffs leaving the water along the heap's face to the sea (surf.js flies them)
+      const n = Math.max(3, Math.round((SURF.n * (h.sb - h.sa + 2)) / 7)), sw = mod(s0, S_WRAP) - s0;
+      for (let i = 0; i < n; i++) {
+        const ss = h.sa + ((h.sb - h.sa) * (i + 0.5)) / n + (tr() - 0.5) * 1.4, rw = rwAt(ss);
+        path.at(ss, f);
+        const p = world(ss, -(rw + WALL_U + h.dOut * (0.45 + 0.55 * tr()) - 0.3), SEA + 0.35); // (from its face to the sea, and among its blocks)
+        shore.puffs.push(p[0], p[1], p[2], -f.rx, -f.rz, h.dOut, tr(), ss + sw);
+      }
+    }
+    if (heaps.length) yield;
+    // the water along the wall, out to 38 m (SHORE_D), with how close a tetrapod heap is (its foam) and how far the
+    // nearest break in the strip is (its waves fade out over 6 m there). s runs on from the chunk's start without wrapping,
+    // so nothing jumps inside a chunk (the shader's patterns repeat with S_WRAP: the next chunk's start matches)
+    const near = [...this.coastHeaps(c - 1), ...heaps, ...this.coastHeaps(c + 1)], sw0 = mod(s0, S_WRAP);
+    // rows every 6 m (big triangles: small ones cost the GPU every pixel quad along their edges again, and this shader is
+    // the sea's plus its waves), and rows where a heap's foam starts and ends, so it keeps its shape
+    const rs = []; for (let i = 0; i <= 10; i++) rs.push(s0 + i * 6);
+    for (const h of near) for (const q of [h.sa - 3.2, h.sa - 0.4, h.sb + 0.4, h.sb + 3.2]) if (q > s0 + 0.5 && q < s1 - 0.5) rs.push(q);
+    rs.sort((p, q) => p - q);
+    for (let i = 0; i < rs.length; i++) {
+      const s = rs[i]; if (i > 0 && s - rs[i - 1] < 0.6) continue;
+      if (!this.coastWall(s)) { if (shore.rows.length) break; continue; } // (one run: a gap only comes with a tunnel or a zone's end)
+      let ef = 1; for (let k = 1; k <= 3; k++) if (!this.coastWall(s - 2 * k) || !this.coastWall(s + 2 * k)) { ef = (k - 1) / 3; break; }
+      const rw = rwAt(s), row = new Float32Array(SHORE_D.length * 7);
+      SHORE_D.forEach((d, j) => {
+        const p = world(s, -(rw + WALL_U + d), SEA + 0.03);
+        let hf = 0;
+        for (const h of near) hf = Math.max(hf, (1 - sstep(0.4, 3.2, Math.max(h.sa - s, s - h.sb, 0))) * (1 - sstep(0.2, 3.4, d - h.dOut)));
+        row.set([p[0], p[1], p[2], sw0 + (s - s0), d, hf, ef], j * 7);
+      });
+      shore.rows.push(row);
+    }
+    if (shore.rows.length) yield;
+    // the land side: big round broadleaf trees on the green slope, as in the reference art (it was mostly pines), and a
+    // few pines; nothing on the sea side any more (it is water). (The chunk's shared random numbers are drawn as before
+    // outside the coast, walks and all, so every other zone's layout is unchanged; the coast's new things have their own)
     for (let s = s0 + r() * 6; s < s1; s += r.range(5, 9)) {
       if (zoneAt(s) !== 'coast' || nearT(s, T_RIDGE + 6)) continue;
-      const rw = rwAt(s);
-      if (r() < 0.7) P.tree(G, onGround(s, rw + r.range(3.5, 26), 0, r() * 6, false), 'pine', r, r.range(0.9, 1.3));
-      if (r() < 0.2) P.tree(G, onGround(s + 2, -(rw + r.range(3.5, 7)), 0, r() * 6, false), 'pine', r, r.range(0.8, 1.1));
+      const rw = rwAt(s), k = r();
+      if (k < 0.58) P.tree(G, onGround(s, rw + r.range(4.5, 30), 0, r() * 6, false), k < 0.48 ? 'broad' : 'pine', r, r.range(1.0, 1.4));
     }
-    for (let s = s0 + 4; s < s1; s += r.range(18, 30)) {
-      if (zoneAt(s) !== 'coast' || r() < 0.4 || nearT(s, T_RIDGE * 1.4)) continue;
-      const rw = rwAt(s), n = 3 + Math.floor(r() * 5);
-      for (let i = 0; i < n; i++) { const u = -(rw + r.range(12, 17)), ss = s + r.range(-3, 3); P.tetrapod(G, matAt(ss, u, Math.max(H(ss, u), SEA - 0.4) + r.range(-0.2, 0.4), r() * 6), r, r.range(0.9, 1.2)); }
-    }
+    for (let s = s0 + 4; s < s1; ) s += r.range(18, 30); // (the old beach tetrapods' walk: its draws, as above)
     for (let s = s0 + 12; s < s1; s += 48) {
       if (zoneAt(s) !== 'coast' || nearT(s, T_RIDGE + 4)) continue;
       const rw = rwAt(s); P.streetLamp(G, onGround(s, rw + 1.0), r);
+    }
+    // 白い花の茂み: low round bushes in white flower along the verge, in ones, twos and threes, as in the reference art
+    // (their own random numbers; clear of the poles and lamps)
+    const fb = rng(Math.floor(hash2(c, 5519) * 4294967295));
+    for (let s = s0 + fb() * 6; s < s1; s += fb.range(6, 14)) {
+      if (zoneW(s).coast < 0.6 || nearT(s, T_RIDGE + 6)) continue;
+      const n = 1 + Math.floor(fb() * 2.4);
+      for (let k = 0; k < n; k++) {
+        const ss = s + k * fb.range(0.9, 1.6), u = rwAt(ss) + fb.range(1.25, 2.4), a = fb() * 6.28, sc = fb.range(0.85, 1.25);
+        const dp = ss - 6 - Math.round((ss - 6) / POLE_SP) * POLE_SP, dl = ss - 12 - Math.round((ss - 12) / 48) * 48;
+        if (Math.abs(dp) < 1.4 || Math.abs(dl) < 1.2) continue;
+        P.flowerBush(G, onGround(ss, u, 0, a, false), fb, sc);
+      }
     }
     if (zoneAt(s0 + 30) === 'coast' && r() < 0.5) {
       const s = s0 + r() * CH, rw = rwAt(s);

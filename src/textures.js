@@ -853,7 +853,40 @@ export function buildFoliage(renderer) {
     g.restore();
     cells[name] = { u0: ox / S, u1: (ox + 512) / S, v0: 1 - (oy + 512) / SH, v1: 1 - (oy + 8) / SH };
   };
+  // 白い花の茂み: a low round bush in white flower, as along the reference art's coast road: a mound of small leaves in
+  // its own shade low down and lit yellow-green on top, dotted with five-petalled white flowers (a few blush pink) where
+  // the light falls. Its own random numbers, in the cell beside the twigs (free until now), so every other cell paints
+  // exactly as before
+  const flowerBush = (name, ox, oy, seed) => {
+    const br = rng(seed), pal = ['#173d1d', '#21512a', '#2f6a33', '#46853c', '#64a048', '#8dbd58', '#b6d872'];
+    g.save(); g.translate(ox, oy); g.beginPath(); g.rect(0, 0, 512, 512); g.clip();
+    // the mound: lobes along a low dome, wider than tall, sitting on the cell's bottom edge
+    const lobes = [];
+    for (let i = 0; i < 15; i++) {
+      const t = (i + br() * 0.6) / 15, x = 40 + t * 432, top = 500 - 300 * Math.sqrt(Math.max(0, 1 - ((x - 256) / 232) ** 2));
+      lobes.push([x, top + 60 + br() * 50, 54 + br() * 46]);
+    }
+    for (let i = 0; i < 2600; i++) {
+      const L = lobes[Math.floor(br() * lobes.length)], a = br() * 6.283, d = Math.sqrt(br()) * L[2];
+      const x = L[0] + Math.cos(a) * d, y = Math.min(505, L[1] + Math.sin(a) * d * 0.85), up = Math.sin(a) < -0.2 ? 1 : 0;
+      // (darker low down and inside, lighter on the lobes' upper rims)
+      const k = Math.max(0, Math.min(6, Math.floor(br() * 2.4 + (1 - y / 512) * 3.2 + up * 1.3 + (d / L[2]) * 0.8)));
+      g.fillStyle = pal[k]; g.beginPath(); g.ellipse(x, y, 7 + br() * 7, 4 + br() * 4, br() * 6.28, 0, 7); g.fill();
+    }
+    // the flowers, on the mound's upper half, more of them towards its top
+    for (let i = 0; i < 130; i++) {
+      const L = lobes[Math.floor(br() * lobes.length)], a = -Math.PI * (0.1 + br() * 0.8), d = (0.35 + br() * 0.6) * L[2];
+      const x = L[0] + Math.cos(a) * d, y = L[1] + Math.sin(a) * d * 0.85; if (y > 470) continue;
+      const R = 6 + br() * 5, rot = br() * 6.28, pink = br() < 0.12;
+      g.fillStyle = pink ? '#f3d2dc' : '#fbfbf6';
+      for (let p = 0; p < 5; p++) { const pa = rot + (p / 5) * 6.283; g.beginPath(); g.ellipse(x + Math.cos(pa) * R * 0.55, y + Math.sin(pa) * R * 0.5, R * 0.5, R * 0.36, pa, 0, 7); g.fill(); }
+      g.fillStyle = '#d9b628'; g.beginPath(); g.arc(x, y, R * 0.22, 0, 7); g.fill();
+    }
+    g.restore();
+    cells[name] = { u0: ox / S, u1: (ox + 512) / S, v0: 1 - (oy + 512) / SH, v1: 1 - oy / SH };
+  };
   twigs('twigs', 0, 0);
+  flowerBush('flowerbush', 512, 0, 6151);
   paint('leafA', 0, Y0); paint('leafB', 512, Y0); paint('sakura', 0, Y0 + 512); paint('pine', 512, Y0 + 512);
   paint('momiji', 0, Y0 + 1024); paint('ginkgo', 512, Y0 + 1024);
   tuft('grass', 0, Y0 + 1536, false); tuft('flowers', 512, Y0 + 1536, true); // tufts and banks stay in the two bottom rows (the breeze keys on them)

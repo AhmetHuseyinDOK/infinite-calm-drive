@@ -46,6 +46,28 @@ vec3 ungrade(vec3 p){
   vec3 c = l + (c2 - l) / uSat;
   return pgInvNeutral(pgSrgbToLin(clamp(c, 0.0, 1.0)));
 }`;
+/** ungrade() on the CPU, for a few flat colours a frame (the painted sea, sea.js): the linear scene colour that the grade
+ *  pass turns into the display colour (r, g, b) (0…255), at the middle of the frame (no vignette). `g`: the grade's
+ *  uniforms (post.grade.uniforms); writes `out` (a THREE.Color) and returns it. */
+const UG_LW = [0.299, 0.587, 0.114], UG_WARM = [0.03, 0.014, -0.018];
+const ugLin = c => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+const _ug = [0, 0, 0];
+const ugCh = (p, lv, w, l, day, sat) => { const c2 = p - lv * (1 - l) - w * l * day; return Math.min(0.985, Math.max(0, ugLin(Math.min(1, Math.max(0, l + (c2 - l) / sat))))); };
+export function ungradeRGB(g, r, gr, b, out) {
+  const exp = g.toneMappingExposure.value, sat = g.uSat.value, lo = g.uLo.value, day = g.uDay.value;
+  const p0 = r / 255, p1 = gr / 255, p2 = b / 255;
+  const loL = lo.x * UG_LW[0] + lo.y * UG_LW[1] + lo.z * UG_LW[2], wl = (UG_WARM[0] * UG_LW[0] + UG_WARM[1] * UG_LW[1] + UG_WARM[2] * UG_LW[2]) * day;
+  const l = (p0 * UG_LW[0] + p1 * UG_LW[1] + p2 * UG_LW[2] - loL) / (1 - loL + wl);
+  _ug[0] = ugCh(p0, lo.x, UG_WARM[0], l, day, sat); _ug[1] = ugCh(p1, lo.y, UG_WARM[1], l, day, sat); _ug[2] = ugCh(p2, lo.z, UG_WARM[2], l, day, sat);
+  // the inverse of three's Neutral tone mapping (as pgInvNeutral)
+  const SC = 0.76, D = 0.24, np = Math.max(_ug[0], _ug[1], _ug[2]);
+  if (np >= SC) {
+    const peak = (D * D) / (1 - np) - D + SC, gg = 1 - 1 / (0.15 * (peak - np) + 1), k = peak / np;
+    for (let i = 0; i < 3; i++) _ug[i] = ((_ug[i] - gg * np) / Math.max(1 - gg, 1e-3)) * k;
+  }
+  const m = Math.min(_ug[0], _ug[1], _ug[2]), off = m < 0.04 ? Math.sqrt(Math.max(m, 0) / 6.25) - m : 0.04;
+  return out.setRGB((_ug[0] + off) / exp, (_ug[1] + off) / exp, (_ug[2] + off) / exp);
+}
 /** the drawing buffer's size (the vignette of ungrade); set on resize */
 export const PG_RES = { value: new THREE.Vector2(1280, 720) };
 export function updatePainted(renderer) { renderer.getDrawingBufferSize(PG_RES.value); }

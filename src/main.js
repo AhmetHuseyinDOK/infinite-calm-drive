@@ -3,7 +3,7 @@ import { Path, ZONES, zoneW, zoneWeight, zoneAt, zoneMix, zparam, ZINFO, setStar
 import { makeCrossingRig, makeTrain, xingPosts } from './crossing.js';
 import { buildAtlas, buildFoliage } from './textures.js';
 import { makeMaterials, U, groundMaterialFor, setShadowTaps, setGrazeFade, makeCloudMap, makeGhibliLeaf, FIELD } from './materials.js';
-import { setAtlas, setFoliage, warmTrees, setLeafDensity, GHIBLI } from './props.js';
+import { setAtlas, setFoliage, warmTrees, warmTetrapods, setLeafDensity, GHIBLI } from './props.js';
 import { loadTreeAtlas } from './ghibli.js';
 import { World, CH } from './chunks.js';
 import { makeSky, paintClouds, makeClouds, makeMountains, updateTOD, applyWeather, TOD, lightDirAt, KEYS } from './sky.js';
@@ -12,7 +12,8 @@ import { makeSpray } from './spray.js';
 import { makeMirage } from './mirage.js';
 import { makeGrass } from './grass.js';
 import { makeBirds } from './birds.js';
-import { makeSea, foamMaterial, riverMaterial } from './sea.js';
+import { makeSea, shoreMaterial, riverMaterial } from './sea.js';
+import { surfMaterial, SURF } from './surf.js';
 import { makeCar } from './car.js';
 import { makePost } from './post.js';
 import { makeAudio } from './audio.js';
@@ -133,7 +134,7 @@ async function main() {
       if (bc.length) { GHIBLI.bcells = bc; M.gblossom = makeGhibliLeaf(ta.tex, { blossom: true }).mat; }
     }
   }
-  warmTrees();
+  warmTrees(); warmTetrapods();
   // the painted meadow's tint (materials.js FIELD), from its painted colours to the albedo that shows as the reference
   // art's fields at noon: a light lime (measured over the far fields: CIELAB ΔE 2.7 from the painting, 10.2 for the
   // paddies). At dusk, at night and under grey skies it fades to the paddies' old, deeper green (by TOD.bright)
@@ -147,11 +148,13 @@ async function main() {
     }
   }
   const path = new Path();
-  const foamMat = foamMaterial();
+  // the coast's water along its sea wall (its waves and foam) and the surf over the tetrapods: a lighter lace and fewer
+  // spray puffs on phones
+  M.shore = shoreMaterial(quality !== 'high'); M.surf = surfMaterial(); SURF.n = quality === 'high' ? 8 : 4;
   const riverMat = riverMaterial();
   // the country meadow's blades (before the world: its materials then sort ahead of the ground's, which they hide)
   const grass = makeGrass(quality, QS.has('grass') ? QS.get('grass').split(',').map(Number) : null); for (const m of grass.meshes) scene.add(m);
-  const world = new World(scene, path, M, foamMat, riverMat);
+  const world = new World(scene, path, M, riverMat);
   const sky = makeSky(); scene.add(sky);
   const mountains = makeMountains(); scene.add(mountains.group);
   const sea = makeSea(); scene.add(sea.mesh);
@@ -210,9 +213,13 @@ async function main() {
     tri.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
     tri.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 0, 1], 2));
     tri.setAttribute('color', new THREE.Float32BufferAttribute([1, 1, 1, 1, 1, 1, 1, 1, 1], 3));
-    const mats = [M.color, M.atlas, M.foliage, M.leaf, M.lamp, M.sig, M.sodium, M.decal, M.pool, foamMat, riverMat, ...(M.gleaf ? [M.gleaf] : []), ...(M.gblossom ? [M.gblossom] : [])];
+    // (the water's meshes have no normals, and three compiles a different program without them: they are warmed up on a
+    // triangle without normals too, or the coast's water and surf and the rivers compiled when they first came into view)
+    const tri0 = new THREE.BufferGeometry(); tri0.setAttribute('position', tri.attributes.position);
+    const bare = new Set([M.shore, M.surf, riverMat]);
+    const mats = [M.color, M.atlas, M.foliage, M.leaf, M.lamp, M.sig, M.sodium, M.decal, M.pool, M.shore, M.surf, riverMat, ...(M.gleaf ? [M.gleaf] : []), ...(M.gblossom ? [M.gblossom] : [])];
     for (let i = 0; i < ZONES.length; i++) { mats.push(groundMaterialFor([ZONES[i]])); mats.push(groundMaterialFor([ZONES[i], ZONES[(i + 1) % ZONES.length]])); }
-    for (const m of mats) { const o = new THREE.Mesh(tri, m); o.castShadow = o.receiveShadow = true; o.frustumCulled = false; if (m === M.gleaf || m === M.gblossom) o.customDepthMaterial = M.gleafDepth; warm.add(o); }
+    for (const m of mats) { const o = new THREE.Mesh(bare.has(m) ? tri0 : tri, m); o.castShadow = o.receiveShadow = !bare.has(m); o.frustumCulled = false; if (m === M.gleaf || m === M.gblossom) o.customDepthMaterial = M.gleafDepth; warm.add(o); }
     warm.position.set(0, 0, 0); scene.add(warm);
     sun.target.position.set(0, 0, 0); sun.position.set(0, 150, 60); // so the warm-up meshes sit inside the shadow camera
     const hidden = [rain.mesh, snowfall.mesh, spray.mesh, mirage.mesh, train.group, rig.group, sea.mesh].filter(o => !o.visible);
@@ -224,7 +231,7 @@ async function main() {
     renderer.setRenderTarget(null);
     for (const o of hidden) o.visible = false;
     grass.warm(false);
-    scene.remove(warm); tri.dispose();
+    scene.remove(warm); tri.dispose(); tri0.dispose();
     // and the post passes: bloom is off by day, so its 8 programs used to compile all at once at the first sunset,
     // night or tunnel — a 160 ms freeze here, far longer on a phone
     post.bloom.enabled = post.refl.enabled = true; post.composer.render(0); post.bloom.enabled = post.refl.enabled = false; // (+ the wet-road copy pass)
@@ -622,10 +629,9 @@ async function main() {
     mountains.update(camera.position, Math.max(w.snow, zoneW(st.s + 600).snow * 0.7), 1 - bandW);
     let seaW = 0; for (const d of [-150, 0, 250, 500, 800]) seaW = Math.max(seaW, zoneW(st.s + d).coast);
     sea.mesh.visible = seaW > 0.001;
-    sea.update(camera.position, t, fogD * 0.8, sstep(0.0, 0.35, seaW));
+    sea.update(camera.position, t, fogD * 0.8, sstep(0.0, 0.35, seaW), post.grade.uniforms); // (and the shore's foam and surf)
     riverMat.uniforms.uTime.value = t; riverMat.uniforms.uFogD.value = scene.fog.near; riverMat.uniforms.uNight.value = TOD.night; riverMat.uniforms.uSpecK.value = 1 - TOD.overcast * 0.85;
     U.uSunDir.value.copy(TOD.lightDir); U.uSunCol.value.copy(TOD.sunCol);
-    foamMat.uniforms.uTime.value = t; foamMat.uniforms.uLight.value.setRGB(1, 1, 1).multiplyScalar(0.35 + 0.65 * day());
     const nightK = sstep(0.15, 0.8, TOD.night);
     M.atlas.emissiveIntensity = 0.1 + nightK * 1.05;
     // leaves and grass glow when a low sun shines through them (materials.js backlit()): only while it's low and out

@@ -5,12 +5,16 @@ export const ZONES = ['city', 'sakura', 'coast', 'country', 'mountain', 'snow'];
 export const ZINFO = {
   city:    { jp: '街の灯',     en: 'City Streets',          curv: 1 / 1500, hill: 1.2, base: 4.0, rw: 3.1, speed: 10.5 },
   sakura:  { jp: '桜並木',     en: 'Cherry Blossom Avenue', curv: 1 / 520,  hill: 2.5, base: 4.5, rw: 3.3, speed: 11.5 },
-  coast:   { jp: '海沿いの道', en: 'Coastal Road',          curv: 1 / 300,  hill: 1.6, base: 5.2, rw: 3.4, speed: 13.5 },
+  // (the coast road runs low along its sea wall, about a metre above the water, as in the reference art, where the
+  // tetrapods at its foot stand higher than the guardrail: it was 4–7 m up, over a beach)
+  coast:   { jp: '海沿いの道', en: 'Coastal Road',          curv: 1 / 300,  hill: 0.25, base: 1.05, rw: 3.4, speed: 13.5 },
   country: { jp: '田舎道',     en: 'Country Road',          curv: 1 / 260,  hill: 7.0, base: 6.0, rw: 3.1, speed: 12.5 },
   mountain: { jp: '紅葉の峠',   en: 'Autumn Mountain Pass',  curv: 1 / 150,  hill: 11,  base: 14,  rw: 3.0, speed: 10 },
   snow:     { jp: '雪国',       en: 'Snow Country',          curv: 1 / 380,  hill: 3.5, base: 9,   rw: 3.0, speed: 9.5 },
 };
 export const ZONE_LEN = 1500, TRANS = 260, SEA = 0;
+/** the coast: the sea wall's face stands WALL_U past the road's edge; its foot is SEA_FOOT under the water */
+export const WALL_U = 2.0, SEA_FOOT = -2.2;
 
 let START = 0;
 export function setStartZone(key) { START = Math.max(0, ZONES.indexOf(key)); }
@@ -146,11 +150,10 @@ export function groundOffset(zone, s, u, e, rw) {
         return -0.15 + sstep(rw + 1.5, 80, a) * 24 * (0.5 + 0.5 * noise1(s / 170, 5)) + sstep(80, 200, a) * 30;
       }
       if (a < rw + 1.5) return -0.06;                       // shoulder + guardrail
-      if (a < rw + 1.9) return -0.04;                       // top of the sea wall
-      // beach in absolute heights (sea level = 0)
-      const b = a - (rw + 2.0);
-      const abs = b < 26 ? lerp(1.25, -1.6, b / 26) : lerp(-1.6, -7, clamp((b - 26) / 20, 0, 1));
-      return abs - e;
+      if (a < rw + 1.95) return -0.04;                      // top of the sea wall
+      // the wall drops straight into the sea, as in the reference art (there used to be a 26 m beach): its foot is under
+      // the water among the tetrapods (SEA_FOOT), and the sea floor shelves off from there (absolute heights: sea level 0)
+      return SEA_FOOT - Math.min(a - (rw + 2.0), 40) * 0.13 - e;
     }
     case 'mountain': {
       if (u > 0) { // uphill: gutter, then a concrete-framed slope face (法面), then the forest slope
@@ -186,7 +189,12 @@ export function groundOffset(zone, s, u, e, rw) {
 export function groundOffsetMix(s, u, e, rw) {
   const m = zoneMix(s);
   const a = groundOffset(m.a, s, u, e, rw);
-  const base = m.t > 0 ? lerp(a, groundOffset(m.b, s, u, e, rw), m.t) : a;
+  // (the coast's sea side lies deep under the water right from its wall: blended in linearly it drowned the neighbouring
+  // zone's land half-way through the transition, its trees and houses standing in the sea. There the land holds on, and
+  // gives way to the sea over the coast's half of the blend)
+  let tm = m.t;
+  if (u < 0 && tm > 0) { if (m.b === 'coast') tm = sstep(0.25, 0.9, tm); else if (m.a === 'coast') tm = sstep(0.1, 0.75, tm); }
+  const base = m.t > 0 ? lerp(a, groundOffset(m.b, s, u, e, rw), tm) : a;
   RAISE = 0;
   const r = riverNear(s);
   if (r) {

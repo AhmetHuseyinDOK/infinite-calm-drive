@@ -2,6 +2,84 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-24 · 04:xx — Restyle 11: the coast road along its sea wall, tetrapods in the surf
+- **The sea comes right up to the sea wall, as in the reference art.** The 26 m sand beach between the guardrail and the
+  water is gone: the road runs low along a sea wall, about a metre above the water (it was 4–7 m up), and the wall drops
+  straight into the sea. Its top is the painting's warm sand-coloured concrete.
+- **Tetrapods (消波ブロック) are heaped at the wall's foot all along the coast:** a heap every 12–26 m, 4.5–11 m long, two
+  or three rows deep; the first row stands half out of the water, taller than the guardrail, with a few more wedged on
+  top. Grey concrete legs with flat ends, darker where the water wets them.
+- **The surf breaks against the wall and over the tetrapods.** The waves come in as long crests, one every 6.5 s, at a
+  slant, so each one breaks along the wall:
+  - over the last ~30 m they break white: a bright line along the crest with lace trailing out to sea behind it, along
+    stretches of the wall that change from wave to wave;
+  - foam boils round the tetrapod heaps and surges along the wall as each wave hits it;
+  - spray bursts up over the heaps as the wave reaches them, harder for some waves than others, and falls back.
+- **The sea is the reference art's deep, saturated blue,** painted in flat tones: navy troughs and lighter faces on the
+  waves along the shore, white caps further out, paling to a light azure at the painted far shore (the white haze strip
+  under the far shore is gone).
+- **The land side:** big round broadleaf trees on the green slope (it was mostly pines), and low round bushes in white
+  flower along the verge.
+- **Measured against the reference** (CIELAB ΔE of the median water colour in strips below the horizon, left third of
+  the frame, s = 900 and 1100): far sea 23.4 → 2.1–2.4, mid 16.8–17.6 → 3.0–3.3, near the wall 13.0–14.2 → 7.3–7.7.
+  Foam covers 10–20% of the near strip through a wave cycle (the painting: 9%).
+- **Dusk, night and rain keep their look.** The painted sea is a bright-day look, as the painted horizon's; at golden
+  hour, sunset, night and under grey skies the sea mirrors the sky as before. The foam and spray are lit like any white
+  surface: pink-orange at sunset, dim blue by moonlight (they don't glow), grey in rain.
+- **Zone ends:** the neighbouring zone's land holds on through the first half of a transition instead of sinking into
+  the sea, so the cherry avenue's trees and the country's houses don't stand in the water.
+- **Also:** the water's materials (the coast's strip and spray, the rivers) are warmed up at load on a mesh without
+  normals, as they are drawn: three compiles a different program for a mesh without normals, and on live the coast
+  start compiled one program more than the city start (the old foam strip's).
+- **Research:** shoreline foam as in toon-water shaders (Roystan's: noise thresholded by how much foam there is, the
+  depth difference replaced by the distance from the wall, which the geometry knows) and shore waves as a phase on that
+  distance; the spray as stylised-VFX lace with stepped alpha erosion. Built by a subagent; verified independently by
+  the main agent.
+- How:
+  - **Terrain** (`path.js`): the coast's road base 5.2 → 1.05 m, hills 1.6 → 0.25; on the sea side the shoulder and the
+    wall's top, then its foot 2.2 m under the water and the sea floor shelving to −7.4 m. In a transition the sea side's
+    blend is eased. On the coast the ground's edge tucks 15 cm under the road's: the low road left a slit at the 6 cm
+    step, through which the bright sea showed as a blue line in side shots.
+  - **Tetrapods** (`props.js`): one template per shade and tier (8 sides a leg on desktops, 6 on phones), stamped, with
+    flat end faces (they have their own legs: GB.rod's sides face inwards). Heaps, tetrapods, spray and bushes each draw
+    their own random numbers, and the chunk's shared ones are drawn as before, so every other zone's layout is
+    unchanged.
+  - **The water along the wall** (`sea.js shoreMaterial`): a strip out to 38 m, built with each chunk, that knows its
+    distance from the wall and from the heaps (rows every 6 m and where a heap's foam starts and ends: big triangles,
+    as small ones shade their edges twice). It is drawn opaque just before the sea plane, which the depth test then
+    skips under it: it paints the open sea's own colour (`seaColour`, shared with the plane) with the waves and foam on
+    it, so it meets the open sea seamlessly. The foam's lace is read only where there is foam; phones read one lace
+    noise instead of two.
+  - **The spray** (`surf.js`, new): camera-facing cards whose flight is worked out in the vertex shader from the time and
+    the waves' phase: no CPU work and no buffer updates. One mesh per chunk, hidden with the other small details beyond
+    380 m; 8 puffs per 7 m of heap on desktops, 4 on phones; they shrink and thin out right by the camera.
+  - **The painted sea:** the painting's water tones, ungraded on the CPU each frame (`painted.js ungradeRGB`, the exact
+    inverse of the grade, as the painted clouds run on the GPU), written straight into the uniforms (no allocation). It
+    is a uniform branch: on a bright day the old model's noise is skipped.
+  - **The bushes:** a new cell in the foliage atlas's free slot (beside the twigs), painted at load with its own random
+    numbers; the other cells are unchanged.
+  - **Assets:** none added or changed.
+- Cost: none measurable on the GPU; coast chunks take more CPU to build, without worse spikes. The desktop machine was
+  offline, so everything ran on the shared box's Vega iGPU, always interleaved with live (L S S L L S):
+  - **Main agent's check, GPU over 1 km coast drives:** desktop 21.17 vs 19.67 ms (−1.5); phone profile 10.04 vs 9.88
+    ms (−0.15; every pair equal or lower).
+  - **The subagent's check, over 1.15 km:** desktop 20.34 vs 20.07 ms (−0.27); phone profile 9.92 vs 10.41 ms (+0.50).
+    The two runs disagree on phones; to re-measure on the desktop GPU when it is back.
+  - **The same frame with and without the water strip and the spray** (parked at s = 1100, subagent): desktop +1.0 ms
+    (an A/A control reads ±0.5 on this GPU); phone profile +0.02 (A/A ±0.14). The painted sea against the old one:
+    −0.35 ± 0.5 (no cost).
+  - **World building:** coast chunks take ~30% more CPU (desktop medians 118.6 / 138.0 vs 105.4 / 84.6 ms per 20
+    chunks): tetrapods, the strip's rows, broadleaf trees and bushes. Flat out on the phone profile (×4 CPU, 2 km), the
+    world-build spikes are no worse: 4 and 1 (worst 18 / 22 ms) against live's 1 and 4 (17 / 31 ms).
+  - **Draw calls / triangles at s = 1100:** 133 / 183k against 120 / 161k (desktop); 133 / 176k against 120 / 161k
+    (phone).
+  - **Start-up:** the same (2.54 vs 2.51 s on a busy box).
+  - **Programs:** 60 everywhere (live: 59 at the city start, 60 on the coast), none compiled through sunset, night, rain
+    or a drive into the coast or across a river.
+  - **Checks:** 0 shader errors in all six zones; the other zones' starts match live; no console errors at q = low /
+    medium / high / ultra; embed mode starts on tap. The foliage atlas: only the new cell differs beyond the painter's
+    own run-to-run noise.
+
 ## 2026-10-24 · 02:xx — Restyle 10: a painted meadow over the country fields
 - **The fields are a painted meadow, as in the reference art.** The rice paddies beyond the verge (rows of seedlings,
   flooded plots mirroring a grey sky, ridges between plots) gave way to one painted meadow out to the far hills:

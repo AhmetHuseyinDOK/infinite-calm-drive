@@ -228,6 +228,18 @@ export function tuft(G, M, r, kind = 'grass', s = 1) {
     G.leaf.card([[-cx, -0.05, -cz], [cx, -0.05, cz], [cx, h, cz], [-cx, h, -cz]], N, uvr, [lo, lo, hi, hi]);
   }
 }
+/** a low round bush in white flower (白い花の茂み) on the coast road's verge, as in the reference art: two crossed cards of
+ *  the foliage atlas's flowering bush, shaded like the ground (it stands still in the breeze: woody) */
+export function flowerBush(G, M, r, s = 1) {
+  const uvr = FOL.flowerbush; if (!uvr) return;
+  const h = (0.8 + r() * 0.35) * s, w = h * 1.7, a0 = r() * Math.PI;
+  const UP = [0, 1, 0], N = [UP, UP, UP, UP], lo = [0.6, 0.64, 0.6], hi = [1, 1, 1];
+  G.leaf.setM(M);
+  for (const a of [a0, a0 + Math.PI / 2]) {
+    const cx = (Math.cos(a) * w) / 2, cz = (Math.sin(a) * w) / 2;
+    G.leaf.card([[-cx, -0.06, -cz], [cx, -0.06, cz], [cx, h, cz], [-cx, h, -cz]], N, uvr, [lo, lo, hi, hi]);
+  }
+}
 /** a clump of the country verge's bank of tall grass and wildflowers (土手の草むら): one wide card standing across the
  *  verge, its low end at the road, so it faces the road ahead and behind (turned by up to ±23°). Shaded like
  *  the ground and bending in the breeze, like the tufts. Overlapping along the verge, the clumps make one bank rising
@@ -948,13 +960,50 @@ export function busStop(G, M, r) {
   c.cyl(2.3, 0, -0.2, 0.04, 0.04, 2.3, 6, PAL.metal);
   G.atlas.setM(M); nxq(G.atlas, 2.25, -0.55, 0.15, 2.0, 2.7, 'busstop'); pxq(G.atlas, 2.35, -0.55, 0.15, 2.0, 2.7, 'busstop');
 }
-export function tetrapod(G, M, r, s = 1) {
-  const c = G.color; c.setM(M);
-  const col = mulC(PAL.concrete, 0.85 + r() * 0.15);
-  const dirs = [[0, 1, 0], [0.943, -0.333, 0], [-0.471, -0.333, 0.816], [-0.471, -0.333, -0.816]];
-  const y0 = 0.55 * s;
-  for (const d of dirs) c.rod([0, y0, 0], [d[0] * 0.95 * s, y0 + d[1] * 0.95 * s, d[2] * 0.95 * s], 0.42 * s, 0.26 * s, 7, col);
+// ---- 消波ブロック: tetrapods, piled in heaps at the foot of the coast's sea wall (chunks.js placeCoast) ----
+// A tetrapod is four chunky legs, truncated cones from its middle out to flat end faces, as the reference art paints
+// them. Built once per shade (and per tier: 8 sides a leg on desktops, 6 on phones) and stamped: a heap is many of
+// them. Its origin is its middle; legs 1.0 long at scale 1 (the up leg along +y, the other three splayed below).
+const TETRA_DIRS = [[0, 1, 0], [0.943, -0.333, 0], [-0.471, -0.333, 0.816], [-0.471, -0.333, -0.816]];
+const TETRA_GREY = C('#a7a7aa'), TETRA_SHADES = [1, 0.94, 0.87], TCACHE_T = {}; // (the reference's grey concrete)
+function tetraTemplate(k, seg) {
+  const key = k * 16 + seg;
+  let t = TCACHE_T[key];
+  if (!t) {
+    const g = new GB(), col = mulC(TETRA_GREY, TETRA_SHADES[k]), r0 = 0.4, r1 = 0.25;
+    for (const d of TETRA_DIRS) {
+      // (wound outwards: GB.rod's sides face inwards, which only matters on a FrontSide material at this size)
+      let ux = 0, uy = 1, uz = 0; if (Math.abs(d[1]) > 0.99) { ux = 1; uy = 0; }
+      let ax = d[1] * uz - d[2] * uy, ay = d[2] * ux - d[0] * uz, az = d[0] * uy - d[1] * ux; const al = Math.hypot(ax, ay, az); ax /= al; ay /= al; az /= al;
+      const bx = ay * d[2] - az * d[1], by = az * d[0] - ax * d[2], bz = ax * d[1] - ay * d[0];
+      const ring = [];
+      for (let i = 0; i <= seg; i++) { const a = (i / seg) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a); ring.push([ax * c + bx * s, ay * c + by * s, az * c + bz * s]); }
+      const sl = (r0 - r1) / 1.0; // (the cone's normals lean out along the leg by its taper)
+      for (let i = 0; i < seg; i++) {
+        const n0 = ring[i], n1 = ring[i + 1];
+        const A = [n0[0] * r0, n0[1] * r0, n0[2] * r0], B = [n1[0] * r0, n1[1] * r0, n1[2] * r0];
+        const Cc = [d[0] + n1[0] * r1, d[1] + n1[1] * r1, d[2] + n1[2] * r1], D = [d[0] + n0[0] * r1, d[1] + n0[1] * r1, d[2] + n0[2] * r1];
+        const m0 = [n0[0] + d[0] * sl, n0[1] + d[1] * sl, n0[2] + d[2] * sl], m1 = [n1[0] + d[0] * sl, n1[1] + d[1] * sl, n1[2] + d[2] * sl];
+        g.vtx(A[0], A[1], A[2], m0[0], m0[1], m0[2], 0, 0, col); g.vtx(Cc[0], Cc[1], Cc[2], m1[0], m1[1], m1[2], 0, 0, col); g.vtx(B[0], B[1], B[2], m1[0], m1[1], m1[2], 0, 0, col);
+        g.vtx(A[0], A[1], A[2], m0[0], m0[1], m0[2], 0, 0, col); g.vtx(D[0], D[1], D[2], m0[0], m0[1], m0[2], 0, 0, col); g.vtx(Cc[0], Cc[1], Cc[2], m1[0], m1[1], m1[2], 0, 0, col);
+        // the flat end face (a fan from its middle)
+        g.vtx(d[0], d[1], d[2], d[0], d[1], d[2], 0, 0, col); g.vtx(Cc[0], Cc[1], Cc[2], d[0], d[1], d[2], 0, 0, col); g.vtx(D[0], D[1], D[2], d[0], d[1], d[2], 0, 0, col);
+      }
+    }
+    t = TCACHE_T[key] = g.toArrays();
+  }
+  return t;
 }
+const _tq = new THREE.Quaternion(), _te = new THREE.Euler(), _tv = new THREE.Vector3(), _ts = new THREE.Vector3();
+/** one tetrapod, its middle at (x, y, z) in the chunk's frame, `s` its leg length (m). Standing on three legs (one up,
+ *  as most of the reference art's do, leaning a little) or tumbled (stand: how likely it stands); `wet`: the water
+ *  line (its contact shading) */
+export function tetrapod(G, x, y, z, r, s, wet = 0, stand = 0.6) {
+  if (r() < stand) _te.set((r() - 0.5) * 0.4, r() * 6.283, (r() - 0.5) * 0.4); else _te.set(r() * 6.283, r() * 6.283, r() * 6.283);
+  const m = new THREE.Matrix4().compose(_tv.set(x, y, z), _tq.setFromEuler(_te), _ts.set(s, s, s)); m.groundY = wet;
+  G.color.stamp(tetraTemplate(Math.floor(r() * 3), LEAF_D > 0.7 ? 8 : 6), m);
+}
+export function warmTetrapods() { for (let k = 0; k < 3; k++) for (const seg of [6, 8]) tetraTemplate(k, seg); }
 export function lighthouse(G, M) {
   const c = G.color; c.setM(M);
   G.foliage.setM(M); G.foliage.blob(0, 0.5, 0, 6, C('#8f8a80'), C('#55524c'), 1, 0.5);

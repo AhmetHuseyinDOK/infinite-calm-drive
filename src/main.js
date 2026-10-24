@@ -147,6 +147,10 @@ async function main() {
   // art's fields at noon: a light lime (measured over the far fields: CIELAB ΔE 2.7 from the painting, 10.2 for the
   // paddies). At dusk, at night and under grey skies it fades to the paddies' old, deeper green (by TOD.bright)
   const FIELD_DAY = [2.1, 1.75, 3.2], FIELD_DIM = [1.42, 1.47, 1.74];
+  // the same painting on the coast's green slope and the cherry avenue's lawns, in their paintings' colours on a bright day
+  // (CIELAB ΔE of the median grass at noon: the coast's slope 2.7–9.5, was 8.6–15.7; the avenue's lawns in the sun
+  // 1.5–5.1, were 9.6–18.4); otherwise about the old procedural grass's colours
+  const COAST_DAY = [0.95, 1.05, 1.8], COAST_DIM = [0.91, 1.34, 1.2], SAK_DAY = [1.88, 1.28, 2.0], SAK_DIM = [1.97, 1.54, 1.62];
   { // the fields: the painted meadow once its texture is in (the country's ground variants then read it), else the paddies
     const fa = await fieldLoad;
     if (fa) {
@@ -649,7 +653,12 @@ async function main() {
     U.uGhShade.value.set(lerp(0.8, 0.3, TOD.bright), lerp(0.8, 0.85, TOD.bright), lerp(0.8, 1.7, TOD.bright));
     // the painted meadow's tint: the reference art's light lime on a bright day; the paddies' old, deeper green at dusk,
     // at night and under grey skies (the lime turned the fields ochre at sunset)
-    if (FIELD.tex) FIELD.uFieldC.value.set(lerp(FIELD_DIM[0], FIELD_DAY[0], TOD.bright), lerp(FIELD_DIM[1], FIELD_DAY[1], TOD.bright), lerp(FIELD_DIM[2], FIELD_DAY[2], TOD.bright));
+    if (FIELD.tex) {
+      const b = TOD.bright;
+      FIELD.uFieldC.value.set(lerp(FIELD_DIM[0], FIELD_DAY[0], b), lerp(FIELD_DIM[1], FIELD_DAY[1], b), lerp(FIELD_DIM[2], FIELD_DAY[2], b));
+      FIELD.uFieldCo.value.set(lerp(COAST_DIM[0], COAST_DAY[0], b), lerp(COAST_DIM[1], COAST_DAY[1], b), lerp(COAST_DIM[2], COAST_DAY[2], b));
+      FIELD.uFieldSa.value.set(lerp(SAK_DIM[0], SAK_DAY[0], b), lerp(SAK_DIM[1], SAK_DAY[1], b), lerp(SAK_DIM[2], SAK_DAY[2], b));
+    }
     // the cherry blossom's: a bright rose-magenta on a bright day (thin petals glow in the shade); otherwise only enough
     // pink to keep the bluish skylight from turning the crowns' shade purple
     U.uBlShade.value.set(lerp(BL_SHADE_DIM[0], BL_SHADE_DAY[0], TOD.bright), lerp(BL_SHADE_DIM[1], BL_SHADE_DAY[1], TOD.bright), lerp(BL_SHADE_DIM[2], BL_SHADE_DAY[2], TOD.bright));

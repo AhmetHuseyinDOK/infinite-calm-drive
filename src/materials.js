@@ -388,12 +388,29 @@ vec3 grassCol(vec2 p, vec3 lush, vec3 light){
   g *= 0.8 + 0.28 * vnoise(p * vec2(0.5, 0.7) + 1.7);
   return g * (0.9 + 0.18 * vnoise(p * vec2(2.4, 9.0) + 5.9));
 }
+#ifdef F_PAINT
+// 草原: the painted meadow (painted.js loadFieldTexture), the country painting's grass seen from above, read once per
+// pixel. It runs along the road (s) and across it (u), its strokes 1.75× longer along the road (from the chase camera
+// they stand up more, like the painting's blades). Its coordinates and their screen footprint are taken at the top of
+// groundAlbedo, in uniform control flow, so the mip and anisotropic filtering stay right inside the branches. The coast's
+// green slope and the cherry avenue's lawns take the same painting in their own paintings' colours
+uniform sampler2D uFieldTex; uniform vec2 uFieldK; uniform vec3 uFieldC, uFieldCo, uFieldSa, uFieldM; // 1 / the tile (m) across, along; tints: the country's, the coast's, the avenue's; its average colour
+vec2 fUV, fDX, fDY; float fPU;
+// the painting at k× its size (k: a tile's length along the road, 21 m / k, must divide S_WRAP)
+vec3 fieldTex(float k){ return textureGrad(uFieldTex, fUV * k, fDX * k, fDY * k).rgb; }
+#endif
 #ifdef Z_SAKURA
 // (only in the variants with the avenue: it needs petalsAt, and nothing else calls it)
 vec3 sakuraGround(float s, float u, float rw){
   vec2 p = vec2(s, u);
+#ifdef F_PAINT
+  // the lawns: the painted meadow's strokes at 1.75× and at 60% of their contrast (a mown lawn's finer, even grass) in
+  // the sakura painting's light, warm green, a little lighter and yellower here and there (one broad noise read)
+  vec3 g = mix(uFieldM, fieldTex(1.75), 0.6) * uFieldSa * (1.0 + 0.3 * (vnoise(p * 0.04 + 2.3) - 0.5) * vec3(1.4, 1.0, 0.3));
+#else
   // (the painting's lawns are a light, warm green in the sun: (167, 193, 70) against our (117, 172, 47))
   vec3 g = grassCol(p, L(vec3(0.44, 0.64, 0.27)), L(vec3(0.74, 0.84, 0.38)));
+#endif
   // a few petals on the lawn, most under the avenue's trees (the painting's lawns are a clean green: they used to be
   // splashed with pink blotches)
   return mix(g, PETAL, petalsAt(p, 0.12 * (1.0 - 0.8 * smoothstep(rw + 5.0, rw + 12.0, abs(u)))));
@@ -401,7 +418,19 @@ vec3 sakuraGround(float s, float u, float rw){
 #endif
 vec3 coastGround(float s, float u, float rw){
   vec2 p = vec2(s, u); float a = abs(u);
+#ifdef F_PAINT
+  if (u > 0.0) {
+    // the green slope above the road: the painted meadow in the coast painting's colours, broad patches lighter and
+    // yellower or a deeper green (one noise read; the folds' shade comes from the light), and along the road's edge a
+    // strip of bare soil, then the verge's long grass in its own shade (its clump cards stand on it: chunks.js)
+    float tone = 0.55 * (vnoise(p * 0.035 + 9.1) - 0.5);
+    vec3 g = fieldTex(1.25) * uFieldCo * (1.0 + tone * vec3(1.8, 1.0, 0.2));
+    g *= mix(0.5, 1.0, smoothstep(rw + 0.35, rw + 2.6, a));
+    return mix(L(vec3(0.42, 0.34, 0.24)) * (0.85 + 0.3 * vnoise(p * vec2(1.5, 9.0))), g, smoothstep(rw + 0.12, rw + 0.32, a));
+  }
+#else
   if (u > 0.0) return grassCol(p, L(vec3(0.31, 0.60, 0.25)), L(vec3(0.52, 0.79, 0.32)));
+#endif
   if (a < rw + 1.45) return L(vec3(0.73, 0.72, 0.69)) * (0.9 + 0.1*fbm2(p));
   // the sea wall: its top a warm sand-coloured concrete, as in the reference art; its face grey, dark and wet low down
   if (a < rw + 1.97) return L(vec3(0.86, 0.76, 0.6)) * (0.86 + 0.14*vnoise(p*vec2(0.4, 5.0)));
@@ -409,14 +438,6 @@ vec3 coastGround(float s, float u, float rw){
   vec3 sand = mix(L(vec3(0.94, 0.87, 0.71)), L(vec3(0.85, 0.77, 0.62)), fbm2(p*0.2));
   return mix(sand, L(vec3(0.6, 0.55, 0.46)), 0.6*(1.0 - smoothstep(0.0, 0.9, vWY)));
 }
-#ifdef F_PAINT
-// 草原: the painted meadow (painted.js loadFieldTexture), the country painting's grass seen from above, read once per
-// pixel. It runs along the road (s) and across it (u), its strokes 1.75× longer along the road (from the chase camera
-// they stand up more, like the painting's blades). Its coordinates and their screen footprint are taken at the top of
-// groundAlbedo, in uniform control flow, so the mip and anisotropic filtering stay right inside the branches
-uniform sampler2D uFieldTex; uniform vec2 uFieldK; uniform vec3 uFieldC; // 1 / the tile (m) across, along; tint
-vec2 fUV, fDX, fDY; float fPU;
-#endif
 vec3 countryGround(float s, float u, float rw){
   vec2 p = vec2(s, u); float a = abs(u);
   // the verge under its bank of tall grass (the clump cards, chunks.js placeBanks): dense grass in its own shade right
@@ -434,7 +455,7 @@ vec3 countryGround(float s, float u, float rw){
     // pixels; a hard step stair-stepped)
     float hp = mix(hash12(id + sd), hash12(id + vec2(0.0, sign(du)) + sd), 0.5 - 0.5 * smoothstep(0.0, fPU, 17.0 - abs(du)));
     float tone = 0.55 * (hp - 0.5) * smoothstep(9.0, 30.0, pu) + 0.4 * (vnoise(p * 0.018 + 5.3) - 0.5);
-    return textureGrad(uFieldTex, fUV, fDX, fDY).rgb * uFieldC * (1.0 + tone * vec3(1.8, 1.0, 0.2));
+    return fieldTex(1.0) * uFieldC * (1.0 + tone * vec3(1.8, 1.0, 0.2));
   }
 #else
   if (a < 135.0) {
@@ -611,11 +632,14 @@ if (uWet > 0.01 || wetS > 0.01) {
 // one uber-shader with every zone's code ran ~4× slower even when the branches were skipped.
 const ZDEF = { city: 'Z_CITY', sakura: 'Z_SAKURA', coast: 'Z_COAST', country: 'Z_COUNTRY', mountain: 'Z_MTN', snow: 'Z_SNOW' };
 /** The painted meadow's texture (painted.js loadFieldTexture), once it has loaded: set it before the world is built, and
- *  the country's ground variants take it (F_PAINT); without it they keep the procedural paddies. */
+ *  the ground variants with the country, the coast or the cherry avenue take it (F_PAINT); without it the country keeps
+ *  its procedural paddies, and the coast's slope and the avenue's lawns their procedural grass. */
 export const FIELD = {
   tex: null,
   uFieldK: { value: new THREE.Vector2(1 / 12, 1 / 21) },   // 1 / the painted tile's size (m) across and along the road
   uFieldC: { value: new THREE.Vector3(1, 1, 1) },          // its tint (main.js: lime on a bright day, deeper otherwise)
+  uFieldCo: { value: new THREE.Vector3(1, 1, 1) },         // …on the coast's green slope (main.js)
+  uFieldSa: { value: new THREE.Vector3(1, 1, 1) },         // …on the cherry avenue's lawns (main.js)
   uFieldM: { value: new THREE.Vector3(0.16, 0.32, 0.05) }, // its average linear colour (the 3D blades take it)
 };
 export function groundDefines(zones) {
@@ -624,7 +648,7 @@ export function groundDefines(zones) {
   if (zones.includes('city') || zones.includes('country')) d.K_XING = '';
   if (zones.includes('country') || zones.includes('sakura')) d.K_RIVER = '';
   if (zones.includes('mountain') || zones.includes('coast')) d.K_RIDGE = '';
-  if (FIELD.tex && zones.includes('country')) d.F_PAINT = '';
+  if (FIELD.tex && (zones.includes('country') || zones.includes('coast') || zones.includes('sakura'))) d.F_PAINT = '';
   return d;
 }
 const GROUND_VARIANTS = new Map();
@@ -642,7 +666,7 @@ export function groundMaterial(defines = groundDefines(Object.keys(ZDEF)), key =
   m.onBeforeCompile = sh => {
     sh.uniforms.uSkyHor = U.uSkyHor; sh.uniforms.uSkyZen = U.uSkyZen; sh.uniforms.uWet = U.uWet; sh.uniforms.uSakWet = U.uSakWet; sh.uniforms.uNight = U.uNight; sh.uniforms.uSunDir = U.uSunDir; sh.uniforms.uSunCol = U.uSunCol;
     for (const k of ['uReflTex', 'uReflOn', 'uReflRes', 'uHorizon', 'uReflK']) sh.uniforms[k] = U[k];
-    if (paint) { sh.uniforms.uFieldTex = { value: FIELD.tex }; sh.uniforms.uFieldK = FIELD.uFieldK; sh.uniforms.uFieldC = FIELD.uFieldC; }
+    if (paint) { sh.uniforms.uFieldTex = { value: FIELD.tex }; for (const k of ['uFieldK', 'uFieldC', 'uFieldCo', 'uFieldSa', 'uFieldM']) sh.uniforms[k] = FIELD[k]; }
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
 attribute vec2 su; attribute vec4 zw; attribute vec2 rk; attribute float rv; attribute float zs;
@@ -658,7 +682,7 @@ ${GROUND}`, WET + MIRROR, false);
     sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
 diffuseColor.rgb *= groundAlbedo();`);
   };
-  m.customProgramCacheKey = () => 'ground-v19-' + key + (paint ? '-fp' : '');
+  m.customProgramCacheKey = () => 'ground-v20-' + key + (paint ? '-fp' : '');
   return m;
 }
 

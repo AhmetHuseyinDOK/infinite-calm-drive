@@ -256,6 +256,19 @@ export function flowerBush(G, M, r, s = 1) {
     G.leaf.card([[-cx, -0.06, -cz], [cx, -0.06, cz], [cx, h, cz], [-cx, h, -cz]], N, uvr, [lo, lo, hi, hi]);
   }
 }
+/** 花壇: a clump of a flower bed in pink and violet among white (round the cherry avenue's trees, along its pavements and
+ *  on the coast's verge): two crossed cards of the foliage atlas's flower bed, twice as wide as tall, shaded like the
+ *  ground (white beds are the flowering bush, smaller: flowerBush) */
+export function flowerBed(G, M, r, s = 1) {
+  const uvr = FOL.bedA; if (!uvr) return;
+  const h = (0.36 + r() * 0.16) * s, w = h * 2, a0 = r() * Math.PI;
+  const UP = [0, 1, 0], N = [UP, UP, UP, UP], lo = [0.6, 0.64, 0.6], hi = [1, 1, 1];
+  G.leaf.setM(M);
+  for (const a of [a0, a0 + Math.PI / 2]) {
+    const cx = (Math.cos(a) * w) / 2, cz = (Math.sin(a) * w) / 2;
+    G.leaf.card([[-cx, -0.04, -cz], [cx, -0.04, cz], [cx, h, cz], [-cx, h, -cz]], N, uvr, [lo, lo, hi, hi]);
+  }
+}
 /** a clump of the country verge's bank of tall grass and wildflowers (土手の草むら): one wide card standing across the
  *  verge, its low end at the road, so it faces the road ahead and behind (turned by up to ±23°). Shaded like
  *  the ground and bending in the breeze, like the tufts. Overlapping along the verge, the clumps make one bank rising
@@ -265,8 +278,8 @@ const BANK_LO = [0.62, 0.68, 0.74]; // (the clump's own shade at its root: darke
 // low road end empty, and every fragment there would only be shaded and thrown away (5% fewer fragments than a quad)
 const BANK_HULL = [[0, 0], [1, 0], [1, 1], [0.36, 1], [0, 0.7]], BANK_TRI = [0, 1, 2, 0, 2, 3, 0, 3, 4];
 const BANK_COL = BANK_HULL.map(([, y]) => mixC(BANK_LO, W1, y));
-export function bank(G, px, py, pz, dx, dz, r, s = 1) { // (base point, and the horizontal direction away from the road)
-  const c = FOL[r() < 0.5 ? 'bankA' : 'bankB'], h = 0.82 * s, w = (h + 0.06) * 2.03, g = G.leaf;
+export function bank(G, px, py, pz, dx, dz, r, s = 1, cell = null) { // (base point, and the horizontal direction away from the road; cell: bankA, bankB, or bankC (the coast's, without flowers, which stands still in the breeze); else A or B at random)
+  const c = FOL[cell || (r() < 0.5 ? 'bankA' : 'bankB')], h = 0.82 * s, w = (h + 0.06) * 2.03, g = G.leaf;
   for (const k of BANK_TRI) {
     const [x, y] = BANK_HULL[k], o = (x - 0.5) * w;
     g.vtx(px + dx * o, py + y * (h + 0.06) - 0.06, pz + dz * o, 0, 1, 0, c.u0 + (c.u1 - c.u0) * x, c.v0 + (c.v1 - c.v0) * y, BANK_COL[k]);

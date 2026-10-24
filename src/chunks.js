@@ -763,18 +763,43 @@ export class World {
       }
       yield;
     }
-    // 花壇: low flower beds along the cherry avenue's lawns, a few clumps of daisies and wildflowers between the trees, as
-    // in the painting (their own random numbers: the rest of the layout is unchanged)
+    // 海沿いの草むら: the coast's verge on the land side is a bank of long grass along the road's edge, as in the coast
+    // painting: the country's clump cards, clear of the poles and the lamp, with a clump of a flower bed in pink and
+    // violet now and then among the white-flowering bushes (their own random numbers: the rest of the layout is unchanged)
+    // (on phones, where the foliage is thinner, the clumps stand a third further apart again: from the chase camera they
+    // still overlap into one band, and the band cost ~0.4 ms a frame on the phone profile)
+    const cb = rng(Math.floor(hash2(c, 1811) * 4294967295)), cstep = step > 1 ? step * 1.35 : step;
+    G.leaf.setM(IDENT);
+    for (let s = s0 + cb() * cstep; s < s1; s += cstep * cb.range(0.75, 1.25)) {
+      if (zoneW(s).coast < 0.6 || nearT(s, T_RIDGE + 6)) continue;
+      const dp = s - 6 - Math.round((s - 6) / POLE_SP) * POLE_SP; // (the poles stand at rw + 1.35, the lamp at rw + 1.0)
+      if (Math.abs(dp) < 0.9 || Math.abs(s - (s0 + 12)) < 0.8) continue;
+      path.at(s, f);
+      const rw = rwAt(s), u = rw + 0.95 + (cb() - 0.5) * 0.3, y = f.y + groundOffsetMix(s, u, f.y, rw);
+      const a = (cb() - 0.5) * 0.8, ca = Math.cos(a), sa = Math.sin(a);
+      P.bank(G, f.x + f.rx * u - ox, y, f.z + f.rz * u - oz, f.rx * ca + f.fx * sa, f.rz * ca + f.fz * sa, cb, cb.range(0.62, 0.85), 'bankC'); // (lower than the country's: the bushes stand out of it)
+    }
+    for (let s = s0 + cb() * 14; s < s1; s += cb.range(14, 30)) {
+      if (zoneW(s).coast < 0.6 || nearT(s, T_RIDGE + 6)) continue;
+      const dp = s - 6 - Math.round((s - 6) / POLE_SP) * POLE_SP;
+      if (Math.abs(dp) < 1.4 || Math.abs(s - (s0 + 12)) < 1.2) continue;
+      path.at(s, f);
+      const rw = rwAt(s), u = rw + cb.range(1.3, 2.3), y = f.y + groundOffsetMix(s, u, f.y, rw);
+      const m = new THREE.Matrix4().makeRotationY(cb() * 6.28); m.setPosition(f.x + f.rx * u - ox, y, f.z + f.rz * u - oz);
+      P.flowerBed(G, m, cb, cb.range(1.1, 1.4));
+    }
+    // 花壇: low flower beds along the cherry avenue's lawns between the trees, clumps of white, pink and violet flowers,
+    // as in the painting (their own random numbers: the rest of the layout is unchanged)
     const fb = rng(Math.floor(hash2(c, 2417) * 4294967295));
     for (const side of [-1, 1]) {
-      G.leaf.setM(IDENT);
       for (let s = s0 + fb() * 8; s < s1; s += fb.range(8, 14)) {
         if (zoneW(s).sakura < 0.6 || nearR(s, 31)) continue;
-        const n = 2 + Math.floor(fb() * 4), u0 = side * (rwAt(s) + 2.85 + fb() * 0.5);
+        const n = 1 + Math.floor(fb() * 3), u0 = side * (rwAt(s) + 2.95 + fb() * 0.4);
         path.at(s, f); const y = f.y + groundOffsetMix(s, u0, f.y, rwAt(s)); // (one ground height for the bed: it is 1–2.5 m long)
         for (let k = 0; k < n; k++) {
-          const d = k * 0.5 + fb() * 0.2, u = u0 + side * (fb() - 0.5) * 0.35, a = (fb() - 0.5) * 1.2, ca = Math.cos(a) * side, sa = Math.sin(a) * side;
-          P.bank(G, f.x + f.fx * d + f.rx * u - ox, y, f.z + f.fz * d + f.rz * u - oz, f.rx * ca + f.fx * sa, f.rz * ca + f.fz * sa, fb, fb.range(0.42, 0.58));
+          const d = k * 0.75 + fb() * 0.25, u = u0 + side * (fb() - 0.5) * 0.3;
+          const m = new THREE.Matrix4().makeRotationY(fb() * 6.28); m.setPosition(f.x + f.fx * d + f.rx * u - ox, y, f.z + f.fz * d + f.rz * u - oz);
+          if (fb() < 0.5) P.flowerBed(G, m, fb, fb.range(1.05, 1.35)); else P.flowerBush(G, m, fb, fb.range(0.45, 0.6));
         }
       }
     }
@@ -903,12 +928,22 @@ export class World {
     for (let k = 0; k < behind; k++) P.tree(G, onGround(s + r.range(-hw - 2, hw + 2), u + side * (T.wd + r.range(3.5, 7)), 0, r() * 6), 'broad', r, r.range(0.95, 1.3));
   }
   *placeSakura(G, r, s0, s1, matAt, onGround, road, rwAt, H) {
+    // (the flower beds round the trees' feet draw their own random numbers: the rest of the layout is unchanged)
+    const tb = rng(Math.floor(hash2(Math.round(s0 / CH), 2423) * 4294967295));
     for (const side of [-1, 1]) {
       for (let s = s0 + r() * 4; s < s1; s += r.range(7.5, 10)) {
         if (zoneW(s).sakura < 0.45 || nearR(s, 30)) continue;
         const rw = rwAt(s);
         // the avenue's trees face the road (a little turned, at random), so their crowns arch out over it
         P.tree(G, onGround(s, side * (rw + 3.7), 0, P.GHIBLI.bcells ? (r() - 0.5) * 0.6 : r() * 6), 'sakuraAve', r, r.range(1.05, 1.3));
+        // 花壇 round most of their feet, as in the painting: two or three clumps of flowers on the lawn about the trunk
+        if (zoneW(s).sakura > 0.6 && tb() < 0.65) {
+          for (let k = 0, n = 2 + (tb() < 0.4 ? 1 : 0), a0 = tb() * 6.28; k < n; k++) {
+            const a = a0 + (k / n) * 6.28 + (tb() - 0.5) * 1.2, d = tb.range(0.75, 1.15), uu = Math.max(rw + 2.9, rw + 3.7 + Math.sin(a) * d * 0.8);
+            const m = onGround(s + Math.cos(a) * d, side * uu, 0, tb() * 6.28, false);
+            if (tb() < 0.6) P.flowerBed(G, m, tb, tb.range(1.2, 1.55)); else P.flowerBush(G, m, tb, tb.range(0.5, 0.65));
+          }
+        }
         if (r() < 0.45) P.tree(G, onGround(s + 3, side * (rw + r.range(9, 18)), 0, r() * 6), 'sakura', r, r.range(0.9, 1.25));
       }
       yield;
@@ -1033,11 +1068,11 @@ export class World {
     // 白い花の茂み: low round bushes in white flower along the verge, in ones, twos and threes, as in the reference art
     // (their own random numbers; clear of the poles and lamps)
     const fb = rng(Math.floor(hash2(c, 5519) * 4294967295));
-    for (let s = s0 + fb() * 6; s < s1; s += fb.range(6, 14)) {
+    for (let s = s0 + fb() * 5; s < s1; s += fb.range(5, 11)) {
       if (zoneW(s).coast < 0.6 || nearT(s, T_RIDGE + 6)) continue;
       const n = 1 + Math.floor(fb() * 2.4);
-      for (let k = 0; k < n; k++) {
-        const ss = s + k * fb.range(0.9, 1.6), u = rwAt(ss) + fb.range(1.25, 2.4), a = fb() * 6.28, sc = fb.range(0.85, 1.25);
+      for (let k = 0; k < n; k++) { // (standing out of the verge's long grass, as in the painting)
+        const ss = s + k * fb.range(1.1, 1.8), u = rwAt(ss) + fb.range(1.4, 2.5), a = fb() * 6.28, sc = fb.range(1.05, 1.45);
         const dp = ss - 6 - Math.round((ss - 6) / POLE_SP) * POLE_SP, dl = ss - 12 - Math.round((ss - 12) / 48) * 48;
         if (Math.abs(dp) < 1.4 || Math.abs(dl) < 1.2) continue;
         P.flowerBush(G, onGround(ss, u, 0, a, false), fb, sc);

@@ -734,7 +734,10 @@ export function paintHouses(A, ha) {
 
 // ---------------- foliage clump textures (leaves, sakura blossom, pine needles) ----------------
 export function buildFoliage(renderer) {
-  const S = 1024, SH = 3072, cv = canvas(S, SH), g = cv.getContext('2d'), r = rng(321), cells = {}, Y0 = 512; // (row 0: bare twigs; the last row: verge banks)
+  // rows: bare twigs and the flowering bush; leaves (Y0); blossom and pine; autumn leaves; flower beds (YB, 256 px tall);
+  // grass tufts (YT); the verge banks (YK, the last row). The tufts and banks stay in the two bottom rows (the breeze)
+  const Y0 = 512, YB = Y0 + 1536, YT = YB + 256, YK = YT + 512;
+  const S = 1024, SH = YK + 512, cv = canvas(S, SH), g = cv.getContext('2d'), r = rng(321), cells = {};
   const PALS = {
     leafA: ['#2f6634', '#4a8a3e', '#6aa64a', '#94c460', '#c4e08a'],
     leafB: ['#476e2e', '#6a9238', '#8db44a', '#b4d066', '#e0ec9a'],
@@ -839,9 +842,11 @@ export function buildFoliage(renderer) {
   // daisies (姫女苑) and yellow flowers on stems among them. The cards are about twice as wide as tall, so it is painted
   // in a 1024 × 504 frame squeezed into the 512² cell. The cell's top 8 px stay empty: the breeze tells the bank's tips
   // from the root of the tuft row above by that gap. Its own random numbers, so every other cell paints as before.
-  const bank = (name, ox, oy, seed, daisy) => {
-    const br = rng(seed), W = 1024, H = 504;
-    g.save(); g.translate(ox, oy + 8); g.beginPath(); g.rect(0, 0, 512, H); g.clip(); g.scale(0.5, 1);
+  // (nf: how many flowers; half: painted at a little under half height into a 512 × 256 cell, its bottom 6 px left empty
+  // so the tuft row's tips under it pick up nothing from its roots in the mipmaps)
+  const bank = (name, ox, oy, seed, daisy, nf = 4, half = false) => {
+    const br = rng(seed), W = 1024, H = 504, k = half ? 246 / 504 : 1;
+    g.save(); g.translate(ox, oy + 8 * k); g.beginPath(); g.rect(0, 0, 512, H * k); g.clip(); g.scale(0.5, k);
     const pal = ['#09240f', '#113417', '#1b481f', '#29602c', '#3c7a3a', '#579442', '#7cb04c', '#a3cb5e', '#c8e27e'];
     // height envelope: low at the road end, full from the middle on, tapering off at the field end
     const env = x => { const t = x / W; return (0.5 + 0.5 * Math.min(1, t / 0.45) ** 0.8) * (1 - 0.4 * Math.max(0, (t - 0.9) / 0.1)); };
@@ -877,7 +882,7 @@ export function buildFoliage(renderer) {
     grow(360, 0.25, 0.55, 150, 12, 22, 0, 2, 3);   // the body: shorter blades, deep in the clump's own shade
     grow(240, 0.4, 0.78, 260, 10, 17, 1, 4, 6);    // the middle: longer blades, lighter towards their tips
     const flowers = [];
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < nf; i++) {
       const fx = W * (0.14 + br() * 0.74), e = env(fx);
       flowers.push({ fx, fy: Math.max(56, H - H * (0.56 + br() * 0.38) * e * 1.05), // (the head stays inside the cell)
         kind: br() < daisy ? 0 : 1, sz: 0.85 + br() * 0.4, tilt: 0.72 + br() * 0.28, rot: br() * 6.28, sx: fx + (br() - 0.5) * 60 });
@@ -905,7 +910,7 @@ export function buildFoliage(renderer) {
     }
     grow(40, 0.42, 0.85, 280, 8, 14, 3, 6, 7);     // a few blades in front of the flowers, so they sit in the grass
     g.restore();
-    cells[name] = { u0: ox / S, u1: (ox + 512) / S, v0: 1 - (oy + 512) / SH, v1: 1 - (oy + 8) / SH };
+    cells[name] = { u0: ox / S, u1: (ox + 512) / S, v0: 1 - (oy + 512 * k) / SH, v1: 1 - (oy + 8 * k) / SH };
   };
   // 白い花の茂み: a low round bush in white flower, as along the reference art's coast road: a mound of small leaves in
   // its own shade low down and lit yellow-green on top, dotted with five-petalled white flowers (a few blush pink) where
@@ -939,15 +944,59 @@ export function buildFoliage(renderer) {
     g.restore();
     cells[name] = { u0: ox / S, u1: (ox + 512) / S, v0: 1 - (oy + 512) / SH, v1: 1 - oy / SH };
   };
+  // 花壇: a clump of a flower bed, as round the sakura painting's trees and along its pavements: a low mound of broad
+  // leaves arching out of the ground, in their own shade low down and lit on top, with five-petalled flowers over it,
+  // pink and violet (petunias, azaleas) among white ones. Painted in a 1024 × 512 frame into the top 250 px of a 512 × 256
+  // cell (the cards are twice as wide as tall; the bottom 6 px stay empty, as under bankC). Its own random numbers, so
+  // every other cell paints as before
+  const bed = (name, ox, oy, seed) => {
+    const br = rng(seed), W = 1024, H = 512;
+    g.save(); g.translate(ox, oy); g.beginPath(); g.rect(0, 0, 512, 250); g.clip(); g.scale(0.5, 250 / 512);
+    const pal = ['#0c2a12', '#143a19', '#1f4f23', '#2e682f', '#46843a', '#66a047', '#8ebd58', '#b6d874'];
+    const env = x => Math.max(0, 1 - ((x - W / 2) / (W * 0.47)) ** 2) ** 0.6; // (a low dome)
+    const leaf = (bx, h, lean, wB) => {
+      const tx = bx + lean, ty = H - h, mx = bx + lean * 0.3, my = H - h * 0.6;
+      g.moveTo(bx - wB / 2, H); g.quadraticCurveTo(mx - wB * 0.5, my, tx, ty); g.quadraticCurveTo(mx + wB * 0.5, my + wB * 0.4, bx + wB / 2, H); g.closePath();
+    };
+    const grow = (n, hLo, hHi, wLo, wHi, kLo, kHi) => { // (one fill per colour: the darker ones first)
+      const byCol = pal.map(() => []);
+      for (let i = 0; i < n; i++) {
+        const bx = W / 2 + (br() - 0.5) * W * 0.8 * Math.sqrt(br()), e = env(bx), h = H * 0.9 * e * (hLo + br() * (hHi - hLo));
+        const lean = (bx - W / 2) * 0.22 + (br() - 0.5) * 120, k = Math.min(7, kLo + Math.floor(br() * (kHi - kLo + 1)));
+        if (e > 0.03) byCol[k].push([bx, h, lean, wLo + br() * (wHi - wLo)]);
+      }
+      byCol.forEach((bl, k) => {
+        if (!bl.length) return;
+        const gr = g.createLinearGradient(0, H, 0, H * 0.1); gr.addColorStop(0, pal[Math.max(0, k - 3)]); gr.addColorStop(1, pal[k]);
+        g.fillStyle = gr; g.beginPath(); for (const b of bl) leaf(b[0], b[1], b[2], b[3]); g.fill();
+      });
+    };
+    grow(150, 0.35, 0.7, 26, 46, 1, 3); grow(110, 0.5, 0.92, 22, 38, 3, 5);
+    const FL = [['#d27ac4', '#f4bce6'], ['#9f74da', '#d2b6f4'], ['#fbfbf6', '#ffffff'], ['#ea88b2', '#fcc8de']];
+    for (let i = 0; i < 48; i++) {
+      const fx = W / 2 + (br() - 0.5) * W * 0.84, e = env(fx);
+      const fy = H - H * 0.9 * e * (0.55 + br() * 0.42), [c0, c1] = FL[Math.floor(br() * FL.length)], R = 22 + br() * 12, rot = br() * 6.28;
+      if (e < 0.15) continue;
+      g.fillStyle = c0; for (let p = 0; p < 5; p++) { const a = rot + p * 1.2566; g.beginPath(); g.ellipse(fx + Math.cos(a) * R * 0.55, fy + Math.sin(a) * R * 0.45, R * 0.52, R * 0.36, a, 0, 7); g.fill(); }
+      g.fillStyle = c1; for (let p = 0; p < 5; p++) { const a = rot + p * 1.2566; g.beginPath(); g.ellipse(fx + Math.cos(a) * R * 0.45, fy + Math.sin(a) * R * 0.35 - 3, R * 0.25, R * 0.16, a, 0, 7); g.fill(); }
+      g.fillStyle = c0 === '#fbfbf6' ? '#f2b51a' : '#6e2f62'; g.beginPath(); g.arc(fx, fy, R * 0.18, 0, 7); g.fill();
+    }
+    grow(34, 0.4, 0.75, 20, 34, 4, 6); // (a few leaves in front of the flowers, so they sit in the clump)
+    g.restore();
+    cells[name] = { u0: ox / S, u1: (ox + 512) / S, v0: 1 - (oy + 250) / SH, v1: 1 - oy / SH };
+  };
   twigs('twigs', 0, 0);
   flowerBush('flowerbush', 512, 0, 6151);
   paint('leafA', 0, Y0); paint('leafB', 512, Y0); paint('sakura', 0, Y0 + 512); paint('pine', 512, Y0 + 512);
   paint('momiji', 0, Y0 + 1024); paint('ginkgo', 512, Y0 + 1024);
-  tuft('grass', 0, Y0 + 1536, false); tuft('flowers', 512, Y0 + 1536, true); // tufts and banks stay in the two bottom rows (the breeze keys on them)
-  bank('bankA', 0, Y0 + 2048, 4111, 0.7); bank('bankB', 512, Y0 + 2048, 4127, 0.35);
+  tuft('grass', 0, YT, false); tuft('flowers', 512, YT, true); // tufts and banks stay in the two bottom rows (the breeze keys on them)
+  bank('bankA', 0, YK, 4111, 0.7); bank('bankB', 512, YK, 4127, 0.35);
+  // (painted last, with their own random numbers): the flower bed, and beside it the coast verge's bank of long grass,
+  // without the country's flowers (the coast painting's verge is plain grass; its flowers are on the bushes)
+  bed('bedA', 0, YB, 7741); bank('bankC', 512, YB, 4133, 0, 0, true);
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
   // the breeze: v of the tuft row's bottom and top, the banks' top, and a split between the two rows
-  const tB = 1 - (Y0 + 2048) / SH, bT = 1 - (Y0 + 2056) / SH;
-  return { tex, cells, tuftV: [tB, 1 - (Y0 + 1536) / SH, bT, (tB + bT) / 2] };
+  const tB = 1 - YK / SH, bT = 1 - (YK + 8) / SH;
+  return { tex, cells, tuftV: [tB, 1 - YT / SH, bT, (tB + bT) / 2] };
 }

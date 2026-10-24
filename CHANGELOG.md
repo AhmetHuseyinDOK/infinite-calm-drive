@@ -2,6 +2,49 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-24 · 10:xx — Restyle 14: painted grass on the coast's slope and the cherry avenue's lawns, long grass by the sea, flower beds under the cherries
+- **The coast's green slope and the cherry avenue's lawns are painted grass, as in the reference art.** They were a
+  flat lime with a scatter of tufts. Now they carry the country's painted meadow in each painting's own colours:
+  - the coast: a warm yellow-lime in the sun, a deeper green in the shade, broad lighter and darker patches, and a thin
+    strip of bare soil along the road's edge;
+  - the avenue: a lighter, warmer green with finer, softer strokes, like a mown lawn, and fallen petals as before.
+- **A verge of long grass by the sea.** A continuous band of knee-high grass runs along the road's land side, without
+  the country's flowers: the coast painting's flowers are on its bushes. The round bushes in white flower stand out of
+  it, bigger and closer together, with a clump of pink and violet flowers here and there.
+- **Flower beds under the cherries.** Clumps of pink, violet and white flowers round most of the avenue's tree feet and
+  along the lawns by the pavement, among small white-flowering bushes. They were a few clumps of yellow-and-white
+  verge grass.
+- **Measured against the reference** (CIELAB ΔE of the median grass, noon): the coast's slope 8.6 → 2.7 and
+  15.7 → 9.5; its verge 19.2 → 3.6 and 27.8 → 4.3; the avenue's lawns in the sun 18.4 → 2.1, 9.6 → 1.5, 15.5 → 3.4
+  and 15.7 → 5.1. Worse: one lawn's overall median, which is mostly tree shadow (8.4 → 18.8): the painting's shadow on
+  the grass is a lighter green than ours.
+- **Dusk, night and rain keep their look:** the painted colours are a bright-day look. **If the meadow's texture
+  can't be loaded** (the main agent tested it), the coast and the avenue keep their procedural grass. The other zones
+  are unchanged.
+- **Research:** Quilez's and Mikkelsen's anti-tiling were looked at and kept in reserve (no repeat shows from the chase
+  or crane cameras). Built by a subagent; verified independently by the main agent.
+- How:
+  - **Ground:** the coast's and the avenue's ground variants read the painted meadow too: one texture read and one
+    noise read in place of the procedural grass's five noise reads. The coast takes it at 1.25× its size, the avenue at
+    1.75× and 60% of its contrast, with tints fitted to the paintings (`FIELD.uFieldCo`, `uFieldSa`).
+  - **Foliage atlas:** a new 256 px row (1024 × 3072 → 3328, +1.4 MB of GPU memory) with a painted flower bed and the
+    coast's plain bank, painted at load with their own random numbers, above the tufts so the breeze still bends
+    those. The moved cells are byte-identical.
+  - **World:** the coast's bank, beds and bushes and the avenue's beds draw their own random numbers, so the rest of
+    the layout is unchanged. On phones the coast's bank clumps stand a third further apart.
+  - No new download, material, program or draw call.
+- Cost: none clearly measurable. Everything ran on the shared box's Vega iGPU (the desktop machine was offline),
+  interleaved with live, four pairs each:
+  - **Main agent's check, GPU over drives:** desktop coast 19.91 vs 20.77 ms (pairs −1.13 / +0.63 / +2.16 / +1.79),
+    avenue 19.92 vs 19.39; phone profile coast 9.90 vs 10.16, avenue 10.40 vs 11.13 (one 12.1 ms load).
+  - **The subagent's:** desktop coast 19.69 vs 19.82, avenue 19.21 vs 19.41; phone avenue 10.97 vs 10.53, coast +0.45
+    in one set and −0.44 in another. The same frame with the painted grass on and off: within the A/A control.
+  - **World building:** about the same; flat out on the phone profile (×4 CPU), world-build spikes no worse (coast 2 and
+    1 against live's 7 and 5; avenue 1 and 0 against 1 and 2).
+  - **Start-up:** about the same (3.00 vs 2.85 s on a busy box).
+  - **Programs:** 60, none compiled through night, rain or a drive.
+  - **Checks:** 0 shader errors in all six zones; no console errors at any quality; embed starts on tap.
+
 ## 2026-10-24 · 08:xx — Restyle 13: the reference art's houses in the country, on the coast and along the cherry avenue
 - **The houses are painted, as in the reference art.** The brown timber boxes and beige boxes with flat navy roofs gave
   way to:

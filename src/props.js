@@ -1076,33 +1076,40 @@ export function busStop(G, M, r) {
   G.atlas.setM(M); nxq(G.atlas, 2.25, -0.55, 0.15, 2.0, 2.7, 'busstop'); pxq(G.atlas, 2.35, -0.55, 0.15, 2.0, 2.7, 'busstop');
 }
 // ---- 消波ブロック: tetrapods, piled in heaps at the foot of the coast's sea wall (chunks.js placeCoast) ----
-// A tetrapod is four chunky legs, truncated cones from its middle out to flat end faces, as the reference art paints
-// them. Built once per shade (and per tier: 8 sides a leg on desktops, 6 on phones) and stamped: a heap is many of
-// them. Its origin is its middle; legs 1.0 long at scale 1 (the up leg along +y, the other three splayed below).
+// A tetrapod is four chunky legs, truncated cones from its middle out to end faces with a rounded rim, as the reference
+// art paints them: smooth round concrete (12 sides a leg on desktops, 6 on phones; the rim a bevel whose normals turn
+// from the leg's side to its end, so it shades round). Built once per shade and tier and stamped: a heap is many of them.
+// Its origin is its middle; legs 1.0 long at scale 1 (the up leg along +y, the other three splayed below). Drawn with
+// their own soft concrete (materials.js M.tetra), which takes from uv: x how far out along its leg a point is (the creases
+// where the legs meet, ~0.27 out, are shaded), y the road distance s (set per block: its foam rises with the big waves)
 const TETRA_DIRS = [[0, 1, 0], [0.943, -0.333, 0], [-0.471, -0.333, 0.816], [-0.471, -0.333, -0.816]];
-const TETRA_GREY = C('#a7a7aa'), TETRA_SHADES = [1, 0.94, 0.87], TCACHE_T = {}; // (the reference's grey concrete)
+const TETRA_GREY = C('#a7a7aa'), TETRA_SHADES = [1, 0.95, 0.9], TCACHE_T = {}; // (the reference's grey concrete)
+const tetraSeg = () => (LEAF_D > 0.7 ? 12 : 6);
 function tetraTemplate(k, seg) {
   const key = k * 16 + seg;
   let t = TCACHE_T[key];
   if (!t) {
-    const g = new GB(), col = mulC(TETRA_GREY, TETRA_SHADES[k]), r0 = 0.4, r1 = 0.25;
+    const g = new GB({ uv: true }), col = mulC(TETRA_GREY, TETRA_SHADES[k]), r0 = 0.42, r1 = 0.25, bv = 0.075;
+    const sl = r0 - r1, tb = 1 - bv, rb = r0 + (r1 - r0) * tb, rc = rb - bv; // (the cone's taper; where the rim starts, its radius; the end face's)
+    const V = (p, n, u) => g.vtx(p[0], p[1], p[2], n[0], n[1], n[2], u, 0, col);
     for (const d of TETRA_DIRS) {
-      // (wound outwards: GB.rod's sides face inwards, which only matters on a FrontSide material at this size)
+      // (wound outwards: GB.rod's sides face inwards)
       let ux = 0, uy = 1, uz = 0; if (Math.abs(d[1]) > 0.99) { ux = 1; uy = 0; }
       let ax = d[1] * uz - d[2] * uy, ay = d[2] * ux - d[0] * uz, az = d[0] * uy - d[1] * ux; const al = Math.hypot(ax, ay, az); ax /= al; ay /= al; az /= al;
       const bx = ay * d[2] - az * d[1], by = az * d[0] - ax * d[2], bz = ax * d[1] - ay * d[0];
       const ring = [];
       for (let i = 0; i <= seg; i++) { const a = (i / seg) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a); ring.push([ax * c + bx * s, ay * c + by * s, az * c + bz * s]); }
-      const sl = (r0 - r1) / 1.0; // (the cone's normals lean out along the leg by its taper)
+      const at = (n, r, t) => [d[0] * t + n[0] * r, d[1] * t + n[1] * r, d[2] * t + n[2] * r];
       for (let i = 0; i < seg; i++) {
         const n0 = ring[i], n1 = ring[i + 1];
-        const A = [n0[0] * r0, n0[1] * r0, n0[2] * r0], B = [n1[0] * r0, n1[1] * r0, n1[2] * r0];
-        const Cc = [d[0] + n1[0] * r1, d[1] + n1[1] * r1, d[2] + n1[2] * r1], D = [d[0] + n0[0] * r1, d[1] + n0[1] * r1, d[2] + n0[2] * r1];
-        const m0 = [n0[0] + d[0] * sl, n0[1] + d[1] * sl, n0[2] + d[2] * sl], m1 = [n1[0] + d[0] * sl, n1[1] + d[1] * sl, n1[2] + d[2] * sl];
-        g.vtx(A[0], A[1], A[2], m0[0], m0[1], m0[2], 0, 0, col); g.vtx(Cc[0], Cc[1], Cc[2], m1[0], m1[1], m1[2], 0, 0, col); g.vtx(B[0], B[1], B[2], m1[0], m1[1], m1[2], 0, 0, col);
-        g.vtx(A[0], A[1], A[2], m0[0], m0[1], m0[2], 0, 0, col); g.vtx(D[0], D[1], D[2], m0[0], m0[1], m0[2], 0, 0, col); g.vtx(Cc[0], Cc[1], Cc[2], m1[0], m1[1], m1[2], 0, 0, col);
-        // the flat end face (a fan from its middle)
-        g.vtx(d[0], d[1], d[2], d[0], d[1], d[2], 0, 0, col); g.vtx(Cc[0], Cc[1], Cc[2], d[0], d[1], d[2], 0, 0, col); g.vtx(D[0], D[1], D[2], d[0], d[1], d[2], 0, 0, col);
+        const m0 = [n0[0] + d[0] * sl, n0[1] + d[1] * sl, n0[2] + d[2] * sl], m1 = [n1[0] + d[0] * sl, n1[1] + d[1] * sl, n1[2] + d[2] * sl]; // (the cone's normals lean out along the leg by its taper)
+        const A = at(n0, r0, 0), B = at(n1, r0, 0), Cc = at(n1, rb, tb), D = at(n0, rb, tb), E = at(n1, rc, 1), F = at(n0, rc, 1);
+        // the leg's side, from the middle out to where the rim starts
+        V(A, m0, 0); V(Cc, m1, tb); V(B, m1, 0); V(A, m0, 0); V(D, m0, tb); V(Cc, m1, tb);
+        // the rounded rim: its normals turn from the side's to the end's
+        V(D, m0, tb); V(E, d, 1); V(Cc, m1, tb); V(D, m0, tb); V(F, d, 1); V(E, d, 1);
+        // the end face (a fan from its middle)
+        V(d, d, 1); V(E, d, 1); V(F, d, 1);
       }
     }
     t = TCACHE_T[key] = g.toArrays();
@@ -1112,13 +1119,16 @@ function tetraTemplate(k, seg) {
 const _tq = new THREE.Quaternion(), _te = new THREE.Euler(), _tv = new THREE.Vector3(), _ts = new THREE.Vector3();
 /** one tetrapod, its middle at (x, y, z) in the chunk's frame, `s` its leg length (m). Standing on three legs (one up,
  *  as most of the reference art's do, leaning a little) or tumbled (stand: how likely it stands); `wet`: the water
- *  line (its contact shading) */
-export function tetrapod(G, x, y, z, r, s, wet = 0, stand = 0.6) {
+ *  line (its contact shading); `rs`: its road distance, wrapped as the shaders' (its foam keeps time with the waves).
+ *  Into G.tetra (its own soft concrete) */
+export function tetrapod(G, x, y, z, r, s, wet = 0, stand = 0.6, rs = 0) {
   if (r() < stand) _te.set((r() - 0.5) * 0.4, r() * 6.283, (r() - 0.5) * 0.4); else _te.set(r() * 6.283, r() * 6.283, r() * 6.283);
   const m = new THREE.Matrix4().compose(_tv.set(x, y, z), _tq.setFromEuler(_te), _ts.set(s, s, s)); m.groundY = wet;
-  G.color.stamp(tetraTemplate(Math.floor(r() * 3), LEAF_D > 0.7 ? 8 : 6), m);
+  const g = G.tetra, o = g.n;
+  g.stamp(tetraTemplate(Math.floor(r() * 3), tetraSeg()), m);
+  for (let i = o * 2 + 1; i < g.n * 2; i += 2) g.U[i] = rs;
 }
-export function warmTetrapods() { for (let k = 0; k < 3; k++) for (const seg of [6, 8]) tetraTemplate(k, seg); }
+export function warmTetrapods() { for (let k = 0; k < 3; k++) for (const seg of [6, 12]) tetraTemplate(k, seg); }
 export function lighthouse(G, M) {
   const c = G.color; c.setM(M);
   G.foliage.setM(M); G.foliage.blob(0, 0.5, 0, 6, C('#8f8a80'), C('#55524c'), 1, 0.5);

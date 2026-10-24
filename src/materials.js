@@ -81,6 +81,10 @@ export const U = {
   uSunCol: { value: new THREE.Color(1, 1, 1) },
   uTuftV: { value: new THREE.Vector4(0.167, 0.333, 0.164, 0.165) }, // foliage atlas v: the tuft row's bottom and top, the verge banks' top, a split between them
   uGhShade: { value: new THREE.Vector3(0.3, 0.85, 1.7) }, // the painted crowns' shade tint (makeGhibliLeaf): teal on a bright day, else neutral (main.js)
+  // the tetrapods' painted tones (tetraMaterial; main.js, ungraded each frame): how much of them (a bright day), and the
+  // painting's deep blue, blue-grey shade, neutral middle and warm light grey, and its foam lit and in shade
+  uTpK: { value: 0 }, uTpD: { value: new THREE.Color() }, uTpS: { value: new THREE.Color() }, uTpM: { value: new THREE.Color() }, uTpL: { value: new THREE.Color() },
+  uTpFL: { value: new THREE.Color() }, uTpFS: { value: new THREE.Color() },
   uBlShade: { value: new THREE.Vector3(7.5, 3, 2.3) },    // …and the cherry blossom's: a bright rose-magenta on a bright day
   uTunA: { value: new THREE.Vector3(0, -1e4, 0) },  // the current tunnel's axis (portal to portal, at road level)
   uTunB: { value: new THREE.Vector3(0, -1e4, 0) },
@@ -743,6 +747,69 @@ function contactAO(sh) {
   float up = dot(normal, normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz));
   ao = mix(1.0, ao, 1.0 - smoothstep(0.5, 0.85, abs(up)));
   reflectedLight.indirectDiffuse *= ao; reflectedLight.directDiffuse *= mix(1.0, ao, 0.5); }`);
+}
+
+/** 消波ブロック: the tetrapods' own concrete (chunks.js G.tetra, props.js tetrapod), softly shaded as the reference art
+ *  paints them instead of in the props' hard toon steps:
+ *  - a soft ramp over N·L: the sun wraps round each round leg, a wide soft terminator;
+ *  - on a bright day the painting's own tones (U.uTpK …, ungraded each frame in main.js, as the painted sea's), from its
+ *    blue-grey shade through a neutral middle to its warm light grey by how much sun reaches a point (the ramp and the
+ *    shadows): lit by the real sun, in the painting's colours (the sky's blue and the sun's warmth mixed into a lavender);
+ *  - the creases where the legs meet in soft shade (uv.x: how far out along its leg; they meet ~0.27 out), a little darker
+ *    towards the water;
+ *  - a dark wet band where the surf washes them, and white foam clinging to their feet that surges up as each big wave
+ *    hits (SHORE_PHASE at the block's road distance, uv.y: in time with the surf.js spray);
+ *  - a little painted mottling. Dusk, night and rain: the same shapes under the scene's light.
+ *  phase: sea.js SHORE_PHASE (GLSL; materials.js can't import sea.js) */
+export function tetraMaterial(phase, lite = false) {
+  const m = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: gradGhibli(-0.15, 0.3, 0.0) });
+  if (lite) m.defines = { TP_LITE: '' }; // (phones: one noise read for the mottling)
+  m.onBeforeCompile = sh => {
+    for (const k of ['uTpK', 'uTpD', 'uTpS', 'uTpM', 'uTpL', 'uTpFL', 'uTpFS']) sh.uniforms[k] = U[k];
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aoD; varying float vAoD; varying vec2 vTp;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvAoD = aoD; vTp = uv;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+uniform float uTpK; uniform vec3 uTpD, uTpS, uTpM, uTpL, uTpFL, uTpFS; varying float vAoD; varying vec2 vTp;
+${phase}`)
+      .replace('#include <color_fragment>', /* glsl */`#include <color_fragment>
+// painted mottling: broad soft patches and finer strokes
+#ifdef TP_LITE
+float tpN = vnoise(vWP.xz * 1.7 + vWP.y * 1.2), tpMot = 0.93 + 0.14 * tpN;
+#else
+float tpN = vnoise(vWP.xz * 1.3 + vWP.y * 0.9) * 0.55 + vnoise(vec2(vWP.x - vWP.z, vWP.y) * 4.1) * 0.45, tpMot = 0.92 + 0.16 * tpN;
+#endif
+// how high the water reaches up the block: a low swell, surging up as each wave hits it (as the spray bursts), its edge
+// ragged; below it white foam (lace: thinning upwards), above it the wet band it leaves (darker and bluer, drying upwards)
+float tpP2 = (shorePhase(vTp.y, 4.0) - 0.04) * 2.0, tpPh = fract(tpP2), tpHit = smoothstep(0.0, 0.08, tpPh) * (1.0 - smoothstep(0.12, 0.6, tpPh)) * (1.0 - 0.45 * mod(floor(tpP2), 2.0));
+float tpLc = vnoise(vec2(vWP.x + vWP.z, vWP.y * 0.6) * 6.0 + vec2(0.0, uTime * 0.5));
+float tpW = 0.08 + 0.06 * sin(uTime * 1.3 + vWP.x * 0.7 + vWP.z * 0.5) + 0.45 * tpHit;
+float tpWet = 1.0 - smoothstep(0.35, 0.95, vWP.y - 0.3 * tpN);
+float tpFoam = smoothstep(-0.06, 0.06, tpW - vWP.y + 0.35 * (tpLc - 0.5) - 0.25 * max(vWP.y - 0.05, 0.0));
+diffuseColor.rgb *= tpMot * mix(vec3(1.0), vec3(0.6, 0.66, 0.76), tpWet);
+diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93), tpFoam);`)
+      .replace('#include <aomap_fragment>', /* glsl */`#include <aomap_fragment>
+{ // the creases where the legs meet in soft shade, a little darker towards the water (vAoD: 255 at 0.7 m under it … 0 from
+  // 1.85 m over it); not the foam
+  float tpAO = mix(0.55, 1.0, smoothstep(0.24, 0.6, vTp.x)) * mix(0.8, 1.0, smoothstep(0.0, 1.0, (1.0 - vAoD) * 2.55));
+  tpAO = mix(tpAO, 1.0, tpFoam * 0.7);
+  vec3 tpDD = reflectedLight.directDiffuse * mix(1.0, tpAO, 0.5), tpID = reflectedLight.indirectDiffuse * tpAO;
+  #if NUM_DIR_LIGHTS > 0
+  if (uTpK > 0.001) {
+    vec3 tpW3 = vec3(0.2126, 0.7152, 0.0722);
+    float lf = clamp(dot(reflectedLight.directDiffuse, tpW3) / max(dot(directionalLights[0].color * BRDF_Lambert(diffuseColor.rgb), tpW3), 1e-6), 0.0, 1.0);
+    vec3 pc = (lf < 0.5 ? mix(uTpS, uTpM, lf * 2.0) : mix(uTpM, uTpL, lf * 2.0 - 1.0)) * tpMot;
+    pc = mix(uTpD, pc, tpAO * (1.0 - 0.55 * tpWet));
+    pc = mix(pc, mix(uTpFS, uTpFL, lf), tpFoam);
+    tpDD = mix(tpDD, pc, uTpK); tpID *= 1.0 - uTpK;
+  }
+  #endif
+  reflectedLight.directDiffuse = tpDD; reflectedLight.indirectDiffuse = tpID; }`);
+    worldShade(sh); // (last: its declarations go first, ahead of shorePhase's use of uTime)
+  };
+  m.customProgramCacheKey = () => (lite ? 'tetra-v1-lite' : 'tetra-v1');
+  return m;
 }
 
 /** give any built-in material the drifting cloud shadows (car, train …) so everything darkens together */

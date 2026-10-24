@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Path, ZONES, zoneW, zoneWeight, zoneAt, zoneMix, zparam, ZINFO, setStartZone, crossingS, crossingValid, XING, XOFF, riverNear, RIV, ROFF, groundOffsetMix, tunnelNear, T_HALF, T_RIDGE } from './path.js';
 import { makeCrossingRig, makeTrain, xingPosts } from './crossing.js';
 import { buildAtlas, buildFoliage, buildPaintedAtlas } from './textures.js';
-import { makeMaterials, U, groundMaterialFor, setShadowTaps, setGrazeFade, makeCloudMap, makeGhibliLeaf, FIELD } from './materials.js';
+import { makeMaterials, U, groundMaterialFor, setShadowTaps, setGrazeFade, makeCloudMap, makeGhibliLeaf, FIELD, tetraMaterial } from './materials.js';
 import { setAtlas, setFoliage, warmTrees, warmTetrapods, setLeafDensity, GHIBLI, setHouses } from './props.js';
 import { loadTreeAtlas } from './ghibli.js';
 import { World, CH } from './chunks.js';
@@ -12,14 +12,14 @@ import { makeSpray } from './spray.js';
 import { makeMirage } from './mirage.js';
 import { makeGrass } from './grass.js';
 import { makeBirds } from './birds.js';
-import { makeSea, shoreMaterial, riverMaterial } from './sea.js';
+import { makeSea, shoreMaterial, riverMaterial, SHORE_PHASE } from './sea.js';
 import { surfMaterial, SURF } from './surf.js';
 import { makeCar } from './car.js';
 import { makePost } from './post.js';
 import { makeAudio } from './audio.js';
 import { makeParticles } from './particles.js';
 import { clamp, lerp, sstep, setSeed, hash2 } from './util.js';
-import { loadCloudAtlas, makePaintedClouds, loadBandAtlas, makePaintedBand, updatePainted, loadFieldTexture, loadFrontAtlas, loadHouseAtlas } from './painted.js';
+import { loadCloudAtlas, makePaintedClouds, loadBandAtlas, makePaintedBand, updatePainted, loadFieldTexture, loadFrontAtlas, loadHouseAtlas, ungradeRGB } from './painted.js';
 
 const QS = new URLSearchParams(location.search);
 // inside an X player card (or any iframe): lighter quality, compact UI, tap-only start
@@ -164,9 +164,10 @@ async function main() {
     }
   }
   const path = new Path();
-  // the coast's water along its sea wall (its waves and foam) and the surf over the tetrapods: a lighter lace and fewer
-  // spray puffs on phones
-  M.shore = shoreMaterial(quality !== 'high'); M.surf = surfMaterial(); SURF.n = quality === 'high' ? 8 : 4;
+  // the coast's water along its sea wall (its waves and foam) and the surf over the tetrapods: a lighter lace, and fewer
+  // spray bursts and droplets, on phones
+  M.shore = shoreMaterial(quality !== 'high'); M.surf = surfMaterial(); SURF.n = quality === 'high' ? 8 : 4; SURF.drops = quality === 'high' ? 4 : 2;
+  M.tetra = tetraMaterial(SHORE_PHASE, quality !== 'high'); // (the tetrapods' soft concrete, its foam in time with the waves; lighter on phones)
   const riverMat = riverMaterial();
   // the country meadow's blades (before the world: its materials then sort ahead of the ground's, which they hide)
   const grass = makeGrass(quality, QS.has('grass') ? QS.get('grass').split(',').map(Number) : null); for (const m of grass.meshes) scene.add(m);
@@ -195,6 +196,10 @@ async function main() {
   // the cherry blossom's shade tint (materials.js makeGhibliLeaf): a bright rose-magenta on a bright day (the shaded
   // undersides of the crowns stay a glowing pink, as in the painting), and a little pink otherwise; the avenue's wet road
   const BL_SHADE_DAY = [7.5, 3, 2.3], BL_SHADE_DIM = [1.7, 1.15, 1.0], SAK_WET = 0.7;
+  // the tetrapods' tones in coast.png (sRGB, by lightness): its deep blue (creases, the wet band), blue-grey shade, neutral
+  // middle and warm light grey, and the white of its foam lit and in its light-blue shade
+  const TP_TONES = [57, 76, 94, 82, 96, 114, 156, 151, 148, 207, 197, 189, 246, 251, 254, 160, 205, 240];
+  const TP_U = [U.uTpD.value, U.uTpS.value, U.uTpM.value, U.uTpL.value, U.uTpFL.value, U.uTpFS.value];
   const LIGHTS_ON = QS.has('lightson') ? parseFloat(QS.get('lightson')) : -1; // (test hook)
   const glowV = new THREE.Vector3(), HAZE_GLOW = QS.has('haze') ? parseFloat(QS.get('haze')) : 1; // (test hook: ?haze=0 off)
   const rig = makeCrossingRig(); scene.add(rig.group);
@@ -208,7 +213,7 @@ async function main() {
   // speed: the zone's cruising speed × mult (0.4 … 5.5, so up to ~190–265 km/h); uHome: the lane the car settles back
   // into when nobody steers — wherever the player last steered it (it used to always drift back to the left lane)
   const MULT_MIN = 0.4, MULT_MAX = 5.5;
-  const st = { s: Math.max(100, parseFloat(QS.get('s')) || 140), u: -1.65, uHome: -1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, spray: QS.has('nospray') ? 0 : 1 /* test switch */, grass: 1 /* test switch: the meadow's blades */, pclouds: 1 /* test switch: painted clouds (0: the procedural ones, with ?clouds=both) */, band: 1 /* test switch: the painted horizon (0: the mountain rings) */, waves: 1 /* test switch: the painted sea's waves (0: its flat tones) */, shore: 1 /* test switch: the waves and foam along the sea wall (0: the open sea's colour there) */, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
+  const st = { s: Math.max(100, parseFloat(QS.get('s')) || 140), u: -1.65, uHome: -1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, spray: QS.has('nospray') ? 0 : 1 /* test switch */, grass: 1 /* test switch: the meadow's blades */, pclouds: 1 /* test switch: painted clouds (0: the procedural ones, with ?clouds=both) */, band: 1 /* test switch: the painted horizon (0: the mountain rings) */, waves: 1 /* test switch: the painted sea's waves (0: its flat tones) */, shore: 1 /* test switch: the waves and foam along the sea wall (0: the open sea's colour there) */, surf: 1 /* test switch: the spray over the tetrapods */, tetra: 1 /* test switch: the tetrapods */, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
   let started = false;
   if (pclouds) pclouds.opening = ['sakura', 'city'].includes(zoneAt(st.s)) ? 'center' : 'flank'; // (a narrow sky over the road: one tower over it)
   status('building the road…');
@@ -233,7 +238,7 @@ async function main() {
     // triangle without normals too, or the coast's water and surf and the rivers compiled when they first came into view)
     const tri0 = new THREE.BufferGeometry(); tri0.setAttribute('position', tri.attributes.position);
     const bare = new Set([M.shore, M.surf, riverMat]);
-    const mats = [M.color, M.atlas, M.foliage, M.leaf, M.lamp, M.sig, M.sodium, M.decal, M.pool, M.shore, M.surf, riverMat, ...(M.gleaf ? [M.gleaf] : []), ...(M.gblossom ? [M.gblossom] : [])];
+    const mats = [M.color, M.atlas, M.foliage, M.leaf, M.lamp, M.sig, M.sodium, M.decal, M.pool, M.shore, M.surf, riverMat, M.tetra, ...(M.gleaf ? [M.gleaf] : []), ...(M.gblossom ? [M.gblossom] : [])];
     for (let i = 0; i < ZONES.length; i++) { mats.push(groundMaterialFor([ZONES[i]])); mats.push(groundMaterialFor([ZONES[i], ZONES[(i + 1) % ZONES.length]])); }
     for (const m of mats) { const o = new THREE.Mesh(bare.has(m) ? tri0 : tri, m); o.castShadow = o.receiveShadow = !bare.has(m); o.frustumCulled = false; if (m === M.gleaf || m === M.gblossom) o.customDepthMaterial = M.gleafDepth; if (m === M.atlas) o.customDepthMaterial = M.atlasDepth; warm.add(o); }
     warm.position.set(0, 0, 0); scene.add(warm);
@@ -645,7 +650,7 @@ async function main() {
     mountains.update(camera.position, Math.max(w.snow, zoneW(st.s + 600).snow * 0.7), 1 - bandW);
     let seaW = 0; for (const d of [-150, 0, 250, 500, 800]) seaW = Math.max(seaW, zoneW(st.s + d).coast);
     sea.mesh.visible = seaW > 0.001;
-    sea.u.uWaves.value = st.waves; sea.u.uShoreW.value = st.shore; sea.update(camera.position, t, fogD * 0.8, sstep(0.0, 0.35, seaW), post.grade.uniforms, path, st.s); // (and the shore's foam and surf)
+    sea.u.uWaves.value = st.waves; sea.u.uShoreW.value = st.shore; M.surf.visible = st.surf > 0; M.tetra.visible = st.tetra > 0; sea.update(camera.position, t, fogD * 0.8, sstep(0.0, 0.35, seaW), post.grade.uniforms, path, st.s); // (and the shore's foam and surf)
     riverMat.uniforms.uTime.value = t; riverMat.uniforms.uFogD.value = scene.fog.near; riverMat.uniforms.uNight.value = TOD.night; riverMat.uniforms.uSpecK.value = 1 - TOD.overcast * 0.85;
     U.uSunDir.value.copy(TOD.lightDir); U.uSunCol.value.copy(TOD.sunCol);
     const nightK = sstep(0.15, 0.8, TOD.night);
@@ -655,6 +660,10 @@ async function main() {
     // the painted crowns' shade: the reference art's deep teal on a bright day, neutral at dusk, at night and under grey
     // skies (there it turned the shaded side of a crown cyan against a warm or grey scene)
     U.uGhShade.value.set(lerp(0.8, 0.3, TOD.bright), lerp(0.8, 0.85, TOD.bright), lerp(0.8, 1.7, TOD.bright));
+    { // the tetrapods' painted tones on a bright day (as the painted sea's), ungraded: they show as the painting's colours
+      const k = clamp((TOD.bright - 0.55) / 0.4, 0, 1), g = post.grade.uniforms, T = TP_TONES; U.uTpK.value = k * k * (3 - 2 * k);
+      if (U.uTpK.value > 0) for (let i = 0; i < 6; i++) ungradeRGB(g, T[i * 3], T[i * 3 + 1], T[i * 3 + 2], TP_U[i]);
+    }
     // the painted meadow's tint: the reference art's light lime on a bright day; the paddies' old, deeper green at dusk,
     // at night and under grey skies (the lime turned the fields ochre at sunset)
     if (FIELD.tex) {

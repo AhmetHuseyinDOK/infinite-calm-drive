@@ -138,7 +138,8 @@ export class World {
     const O = path.at(s0), ox = O.x, oz = O.z;
     const r = rng(Math.floor(hash2(c, 777) * 4294967295));
     const G = { atlas: new GB({ uv: true, ao: true, lit: true }), color: new GB({ ao: true }), foliage: new GB(), leaf: new GB({ uv: true }), lamp: new GB({ color: false }), sig: new GB({ color: false }), sodium: new GB({ color: false }), decal: new GB({ uv: true }), pool: new GB({ uv: true, color: false }),
-      gleaf: new GB({ uv: true, off: true }), gblossom: new GB({ uv: true, off: true }) }; // (the broadleaf and cherry crowns' painted clusters, camera-facing)
+      gleaf: new GB({ uv: true, off: true }), gblossom: new GB({ uv: true, off: true }), // (the broadleaf and cherry crowns' painted clusters, camera-facing)
+      tetra: new GB({ uv: true, ao: true }) }; // (the coast's tetrapods, in their own soft concrete)
     const ground = new GroundB(), shore = { rows: [], puffs: [] }, river = [];
     G.lamps = []; // lights that can light the car: chunk-local x, y, z, power … (props.js lampAt)
     const f = {}, f2 = {};
@@ -259,6 +260,7 @@ export class World {
     add(ground.build(), groundMaterialFor([...zset]), false, true); yield;
     { const m = add(G.atlas.build(), this.M.atlas, true, true); if (m) m.customDepthMaterial = this.M.atlasDepth; } yield; // (the painted cells' outlines in the shadow pass too)
     { const m = add(G.color.build(), this.M.color, true, true); if (m) m.customDepthMaterial = PROP_DEPTH; } yield; // (wires cast no shadow)
+    add(G.tetra.build(), this.M.tetra, true, true); // (the tetrapods: their shadows from the plain depth material)
     add(G.foliage.build(), this.M.foliage, true, true);
     add(G.leaf.build(), this.M.leaf, true, true, 0, 'leaf');
     if (this.M.gleaf) { const m = add(G.gleaf.build(), this.M.gleaf, true, true, 0, 'leaf'); if (m) m.customDepthMaterial = this.M.gleafDepth; } // (clusters face the sun in the shadow pass)
@@ -995,30 +997,30 @@ export class World {
     const path = this.path, f = {};
     // the tetrapods: piled two or three deep against the wall, the first row standing half out of the water (their legs
     // in the surf), the rows further out lower, a few more wedged on top; contact shading darkens them at the water line
-    const heaps = this.coastHeaps(c), tr = rng(Math.floor(hash2(c, 5507) * 4294967295));
+    const heaps = this.coastHeaps(c), tr = rng(Math.floor(hash2(c, 5507) * 4294967295)), sw = mod(s0, S_WRAP) - s0;
     for (const h of heaps) {
       const L = h.L;
       for (let k = 0; k < h.rows; k++) {
         const dm = 0.8 * L + k * 1.45 * L, y0 = (k === 0 ? 0.28 : k === 1 ? 0.0 : -0.3) * L;
         for (let ss = h.sa + tr() * 0.7 * L; ss < h.sb; ss += 1.5 * L * tr.range(0.88, 1.12)) {
           const rw = rwAt(ss), p = world(ss, -(rw + WALL_U + dm + (tr() - 0.5) * 0.45 * L), 0);
-          P.tetrapod(G, p[0], SEA + y0 + (tr() - 0.5) * 0.3 * L, p[2], tr, L * tr.range(0.92, 1.08), SEA - 0.7, k === 0 ? 0.8 : 0.45);
+          P.tetrapod(G, p[0], SEA + y0 + (tr() - 0.5) * 0.3 * L, p[2], tr, L * tr.range(0.92, 1.08), SEA - 0.7, k === 0 ? 0.8 : 0.45, ss + sw);
           if (k === 0 && h.rows > 1 && tr() < 0.4) {
             const q = world(ss + 0.7 * L, -(rw + WALL_U + dm + 0.72 * L), 0);
-            P.tetrapod(G, q[0], SEA + 1.05 * L, q[2], tr, L * tr.range(0.9, 1.0), SEA - 0.7);
+            P.tetrapod(G, q[0], SEA + 1.05 * L, q[2], tr, L * tr.range(0.9, 1.0), SEA - 0.7, 0.6, ss + sw);
           }
         }
       }
-      // the surf: puffs leaving the water along the heap's face to the sea (surf.js flies them)
-      const n = Math.max(3, Math.round((SURF.n * (h.sb - h.sa + 2)) / 7)), sw = mod(s0, S_WRAP) - s0;
+      // the surf: burst points along the heap's face to the sea, where the waves hit it (surf.js throws up the spray)
+      const n = Math.max(3, Math.round((SURF.n * (h.sb - h.sa + 2)) / 7));
       for (let i = 0; i < n; i++) {
         const ss = h.sa + ((h.sb - h.sa) * (i + 0.5)) / n + (tr() - 0.5) * 1.4, rw = rwAt(ss);
         path.at(ss, f);
-        const p = world(ss, -(rw + WALL_U + h.dOut * (0.45 + 0.55 * tr()) - 0.3), SEA + 0.35); // (from its face to the sea, and among its blocks)
+        const p = world(ss, -(rw + WALL_U + h.dOut * (0.8 + 0.3 * tr()) - 0.2), SEA + 0.35); // (at its face to the sea, a little either side)
         shore.puffs.push(p[0], p[1], p[2], -f.rx, -f.rz, h.dOut, tr(), ss + sw);
       }
+      yield; // (a heap at a time: a chunk's blocks all at once made a long world-build step on phones)
     }
-    if (heaps.length) yield;
     // the water along the wall, out to 38 m (SHORE_D), with how close a tetrapod heap is (its foam) and how far the
     // nearest break in the strip is (its waves fade out over 6 m there). s runs on from the chunk's start without wrapping,
     // so nothing jumps inside a chunk (the shader's patterns repeat with S_WRAP: the next chunk's start matches)

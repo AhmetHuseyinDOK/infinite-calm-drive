@@ -2,7 +2,49 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
-## 2026-10-24 · 17:xx — Restyle 17: the water along the sea wall, as painted
+## 2026-10-24 · 19:xx — Restyle 18: the tetrapods and the spray, as painted
+- **The tetrapods are smooth, rounded concrete, softly shaded, as in the reference art.** They were blocky legs with
+  flat ends in the props' hard toon steps and read as angular grey crates. Now: round legs with a rounded rim at every
+  end; on a bright day the painting's own colours (a warm light grey where the sun reaches, a cool blue-grey in shade
+  with a soft edge between, deep blue in the creases where the legs meet); a dark wet band where the surf washes them,
+  and white foam at their feet that surges up as each wave hits.
+- **The spray is the painting's white lace and droplets.** The big soft puffs (up to ~6 m across, flying ~4 m up) gave
+  way to bursts at each heap's face to the sea: a fan of white lace with spiky tips, light blue at its foot, 0.5–2.4 m
+  tall, breaking into holes and drops as it falls back, with round droplets flung up and out. In time with the waves:
+  a burst with each big wave and a smaller one halfway to the next, running along each heap.
+- **Dusk, night and rain keep their look:** the painted tones are a bright day's; the spray and foam are lit as any
+  white surface.
+- **Measured against the reference** (CIELAB ΔE of the blocks' colours, noon, s = 140 / 250 / 900 / 1100): lit
+  11.1 / 11.2 / 9.0 / 10.0 → 2.3 / 2.3 / 1.6 / 1.4; shade 12.1 / 11.5 / 12.7 / 12.9 → 3.3 / 2.1 / 4.9 / 5.5;
+  lightness spread 29–40 → 39–41 (painting 45). Worse: the median at s = 140 and 900 (2.8 / 4.0 → 6.2 / 5.4): those
+  blocks are darker overall than the painting's.
+- **Research:** how anime background painters paint splashes (a needle-burst whose strokes thin and round off at the
+  tips, white with light-blue shading, droplets as dots); stylised alpha erosion; splash sheets plus droplet particles;
+  soft ramp (half-Lambert / wrap) lighting. Built by a subagent; verified independently by the main agent (on the
+  shared box: the desktop machine is off limits while its crashes are investigated).
+- How:
+  - **`props.js tetraTemplate`:** truncated-cone legs with a bevelled rim (12 sides on desktops, 6 on phones); uv
+    carries the position along the leg (creases) and the road distance (foam timing). Their own per-chunk mesh
+    `G.tetra` (one more draw per coast chunk).
+  - **`materials.js tetraMaterial`:** a soft ramp; on a bright day the painting's tones ungraded each frame (`U.uTpK …`,
+    as the painted sea's), chosen by sun × shadow; phones one noise read (`TP_LITE`). Warmed up at load (61 programs,
+    one more). Test switch `st.tetra`.
+  - **`surf.js`:** a lace sheet plus droplets (4 on desktops, 2 on phones) per burst point, all on the GPU; burst points
+    at the heap's face (the same random numbers). Test switch `st.surf`.
+  - **World:** the layout is unchanged; coast chunks place their blocks a heap at a time. **Assets:** none.
+- Cost: on the shared box's Vega iGPU (the desktop machine was offline), interleaved with live:
+  - **Main agent's check, GPU over 1.13 km coast drives (four pairs):** desktop profile 20.67 vs 21.48 ms (+0.81;
+    pairs +0.71 / +0.83 / +0.87 / +0.82), phone profile 10.51 vs 10.77 ms (+0.26).
+  - **The subagent's:** desktop +0.32 / −0.42 ms (two sets), phone +0.31 (pairs −0.06 / −0.05 / +1.08 / +0.27); the
+    in-page toggles within their noise.
+  - **World building:** coast chunks take ~20–26% more CPU on desktops (medians 163.6 / 161.4 vs 135.9 ms per 20); the
+    blocks are ~100k vertices at s = 1100 on desktops (was ~30k). Flat out on the phone profile (×4 CPU), world-build
+    spikes 6 and 3 (worst 27 / 21 ms) against live's 3 and 4 (47 / 20 ms).
+  - **Start-up:** the same (2.94 vs 2.99 s).
+  - **Programs:** 61 (one more, warmed at load), none compiled through sunset, night, rain or a drive. 0 shader errors
+    in all six zones; no console errors at any quality; embed starts on tap; the other zones' starts match live.
+
+## 2026-10-24 · 16:xx — Restyle 17: the water along the sea wall, as painted
 - **Rows of breaking waves along the sea wall, as in the reference art.** Within ~35 m of the wall the water was the
   open sea's blue with big flat white foam swirls running along the wall and a slanted crest line every 6.5 s. Now it
   is the painting's choppy sea:

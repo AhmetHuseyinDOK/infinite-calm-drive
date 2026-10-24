@@ -2,7 +2,51 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
-## 2026-10-24 · 15:xx — Restyle 16: the open sea, as painted
+## 2026-10-24 · 17:xx — Restyle 17: the water along the sea wall, as painted
+- **Rows of breaking waves along the sea wall, as in the reference art.** Within ~35 m of the wall the water was the
+  open sea's blue with big flat white foam swirls running along the wall and a slanted crest line every 6.5 s. Now it
+  is the painting's choppy sea:
+  - short, bowed waves in rows across the view, rolling in at a slant;
+  - each with its line of white foam: beads and dashes, and where it breaks a white crest with a torn top and streaks
+    of foam falling from it;
+  - the water just beyond the foam a bright clear cyan, the troughs between the rows a deep navy;
+  - as in the painting, the rows keep about the same size on screen: small beside the car, bigger further off.
+- **Lace** runs back from the breaking crests, churns along the wall as each big wave hits it and boils round the
+  tetrapod heaps.
+- **The spray keeps time with the new waves:** the big ones (one every 6.5 s) run in across the view, so a heap's
+  spray now runs along it from its far end.
+- **Dusk, night and rain keep their look:** the cyan and navy are a bright day's tones; the crests' foam stays at any
+  hour, lit as any white surface.
+- **Measured against the reference** (near strip, noon, CIELAB ΔE of the median water): s = 900 7.2 → 4.6, s = 1100
+  5.6 → 3.0, s = 250 6.0 → 1.3, start 6.2 → 2.0. The strip beyond it (30–100 m) is a little worse: 2.3–2.9 → 3.9–4.3.
+  Cyan water (by hue) 8% → 15–17% (painting 20%); foam share 7–30% → 10–19% (painting 9%).
+- **Research:** stylised shoreline and crest foam (toon-water foam thresholds, Voronoi and noise lace, painted distance
+  fields thresholded over time, crest foam as a band at the top of a wave), and the painting pixel by pixel: a
+  short-crested chop whose rows keep their size on screen. Long straight crests read as stripes and solid white bands
+  as road markings; both were dropped. Built by a subagent; verified independently by the main agent (screenshots,
+  checks and a recorded drive on the shared box, the desktop machine having dropped offline mid-run).
+- How:
+  - **`SHORE_PHASE`:** the waves come back along the road, slanting 43° in to the wall (they were nearly parallel to
+    it); one big one every 6.5 s, 400 to the shaders' wrapped road distance, so `surf.js` follows unchanged.
+  - **`shoreMaterial`:** four smaller waves to each big one, doubling in size with each doubling of distance from 8 m,
+    every other crest fading out in between. One pattern per crest (two reads from the top mip). The crest's noise is
+    read only within its reach, the lace only where there is foam. Every pattern repeats with the wrapped road
+    distance (no seam), and the strip reaches the open sea's colour by 36 m (its 38 m edge stays seamless).
+  - **Tones:** four painted tones, ungraded on the CPU each frame as offsets from the open sea's (`ugD`: three's
+    `Color.sub` clamps at zero, which wiped the navy).
+  - **Test switch:** `st.shore`. **Assets:** none. **World:** unchanged.
+- Cost: small on desktops, none on phones.
+  - **The subagent's, desktop machine's GTX 1660 Super, 1.15 km coast drives interleaved with live:** desktop profile
+    3.31 vs 3.35 ms (+0.04; pairs +0.16 / −0.08 / −0.09 / +0.17; final build +0.16 over two pairs); phone profile 3.99
+    vs 4.08 ms (+0.09). In-page toggle: phone within ±0.07 ms; desktop within that GPU's ±0.4 ms noise.
+  - **Main agent's, shared box's Vega iGPU (the desktop machine went offline mid-run), four pairs:** desktop profile
+    20.33 vs 20.99 ms (+0.66; pairs +1.03 / +0.82 / +1.04 / −0.24); phone profile 10.54 vs 10.12 ms (−0.42).
+  - **A recorded drive:** the rows move with the water from frame to frame, with no crawling or flicker.
+  - **Start-up:** the same (medians 3.06 vs 2.99 s on a busy box).
+  - **Programs:** 60, as live; none compiled through sunset, night, rain or a coast drive. 0 shader errors in all six
+    zones; no console errors at any quality; embed starts on tap.
+
+## 2026-10-24 · 14:xx — Restyle 16: the open sea, as painted
 - **The open sea is covered in painted wavelets, as in the reference art.** Beyond the surf it was a smooth, flat blue
   with a few long white streaks. Now, right out to the far shore, it is the painting's ripple: horizontal lenses of
   deep navy (little waves' faces turned towards us), light cyan streaks along their backs and white glints on the

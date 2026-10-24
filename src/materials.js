@@ -85,6 +85,10 @@ export const U = {
   // painting's deep blue, blue-grey shade, neutral middle and warm light grey, and its foam lit and in shade
   uTpK: { value: 0 }, uTpD: { value: new THREE.Color() }, uTpS: { value: new THREE.Color() }, uTpM: { value: new THREE.Color() }, uTpL: { value: new THREE.Color() },
   uTpFL: { value: new THREE.Color() }, uTpFS: { value: new THREE.Color() },
+  // the bark's painted tones (barkMaterial; main.js, ungraded each frame): how much of them (a bright day), and the cherries'
+  // shade, body and lit edge, then the broadleaf trees'
+  uBkK: { value: 0 }, uBkS: { value: new THREE.Color() }, uBkM: { value: new THREE.Color() }, uBkL: { value: new THREE.Color() },
+  uBkS2: { value: new THREE.Color() }, uBkM2: { value: new THREE.Color() }, uBkL2: { value: new THREE.Color() },
   uBlShade: { value: new THREE.Vector3(7.5, 3, 2.3) },    // …and the cherry blossom's: a bright rose-magenta on a bright day
   uTunA: { value: new THREE.Vector3(0, -1e4, 0) },  // the current tunnel's axis (portal to portal, at road level)
   uTunB: { value: new THREE.Vector3(0, -1e4, 0) },
@@ -809,6 +813,61 @@ diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93), tpFoam);`)
     worldShade(sh); // (last: its declarations go first, ahead of shorePhase's use of uTime)
   };
   m.customProgramCacheKey = () => (lite ? 'tetra-v1-lite' : 'tetra-v1');
+  return m;
+}
+
+/** 樹皮: the painted trees' bark (props.js trunkTube / GB.tube: smooth tapered tubes), as the reference art paints it
+ *  instead of in the props' hard toon steps:
+ *  - a soft ramp over N·L (the sun wraps round a trunk, a soft terminator: a painter's lit edge, halftone, core shadow);
+ *  - on a bright day the painting's own tones (U.uBk…, ungraded each frame in main.js, as the tetrapods'), by how much sun
+ *    reaches a point (the ramp and the shadows): the cherries' dark brown-black body with its warm lit edge and deep
+ *    shade, the broadleaf trees' lighter warm brown (vColor.r: which bark; vColor.g: darker deep in a crown);
+ *  - painted strokes, periodic round each tube (uv.x: the angle, so its seam never shows; uv.y: metres along it):
+ *    furrows wandering up the trunk, a soft mottling and (desktops) a few horizontal lenticels, fading out with distance.
+ *  Dusk, night and rain: the same shapes in the old bark colours under the scene's light. */
+const BK_A0 = '#7a6556', BK_A1 = '#6a5444'; // (the old bark and trunk colours: PAL.bark, PAL.trunk)
+const glslC = h => { const c = new THREE.Color(h); return `vec3(${c.r.toFixed(4)}, ${c.g.toFixed(4)}, ${c.b.toFixed(4)})`; };
+export function barkMaterial(lite = false) {
+  const m = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: gradGhibli(-0.35, 0.42, 0.0) });
+  if (lite) m.defines = { BK_LITE: '' }; // (phones: no lenticels)
+  m.onBeforeCompile = sh => {
+    for (const k of ['uBkK', 'uBkS', 'uBkM', 'uBkL', 'uBkS2', 'uBkM2', 'uBkL2']) sh.uniforms[k] = U[k];
+    contactAO(sh);
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vBk;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBk = uv;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+uniform float uBkK; uniform vec3 uBkS, uBkM, uBkL, uBkS2, uBkM2, uBkL2; varying vec2 vBk;`)
+      .replace('#include <color_fragment>', /* glsl */`
+// the bark: furrows wandering up it (9 round any tube), a soft mottling, fading to their average once under a pixel or two
+float bkW = vnoise(vec2(vBk.y * 0.9, 7.0 + 5.0 * vColor.r)), bkPh = vBk.x * 9.0 + bkW * 5.0 + sin(vBk.x * 2.0) * 1.5;
+float bkFw = fwidth(bkPh), bkFur = (0.5 + 0.5 * sin(bkPh)) * (1.0 - smoothstep(0.6, 1.6, bkFw));
+float bkMot = vnoise(vec2(cos(vBk.x), sin(vBk.x)) * 2.2 + vec2(vBk.y * 1.6, -vBk.y * 0.9));
+float bk = 0.88 + 0.24 * bkMot - 0.3 * smoothstep(0.55, 0.95, bkFur);
+#ifndef BK_LITE
+{ // lenticels (皮目): a few short horizontal marks, lighter (7 cells round, 11 cm apart up the trunk)
+  vec2 lq = vec2(vBk.x * 1.1141, vBk.y * 9.0), li = floor(lq), lf = fract(lq) - 0.5;
+  float on = step(0.66, hash12(li + 17.0 * vColor.r)) * (1.0 - smoothstep(0.05, 0.11, abs(lf.y))) * (1.0 - smoothstep(0.22, 0.4, abs(lf.x)));
+  bk = mix(bk, 1.3, on * 0.55 * (1.0 - smoothstep(0.2, 0.5, fwidth(lq.y)))); }
+#endif
+diffuseColor.rgb = mix(${glslC(BK_A0)}, ${glslC(BK_A1)}, vColor.r) * vColor.g * bk;`)
+      .replace('#include <aomap_fragment>', /* glsl */`#include <aomap_fragment>
+#if NUM_DIR_LIGHTS > 0
+if (uBkK > 0.001) { // a bright day: the painting's tones by how much sun reaches here (the soft ramp and the shadows)
+  vec3 bkW3 = vec3(0.2126, 0.7152, 0.0722);
+  float lf = clamp(dot(reflectedLight.directDiffuse, bkW3) / max(dot(directionalLights[0].color * BRDF_Lambert(diffuseColor.rgb), bkW3), 1e-6), 0.0, 1.0);
+  // in a crown's shadow a painter still paints the trunk's body and a softer lit edge: the shadow takes at most 28% of the
+  // light the ramp gives (the ramp without the shadow: the gradient map read again)
+  lf = max(lf, 0.72 * texture2D(gradientMap, vec2(dot(normal, directionalLights[0].direction) * 0.5 + 0.5, 0.0)).r);
+  vec3 pc = mix(mix(uBkS, uBkS2, vColor.r), mix(uBkM, uBkM2, vColor.r), smoothstep(0.0, 0.35, lf));
+  pc = mix(pc, mix(uBkL, uBkL2, vColor.r), smoothstep(0.55, 0.92, lf)) * bk * vColor.g;
+  reflectedLight.directDiffuse = mix(reflectedLight.directDiffuse, pc, uBkK); reflectedLight.indirectDiffuse *= 1.0 - uBkK;
+}
+#endif`);
+    worldShade(sh); // (last: its declarations, vnoise and hash12 among them, go first)
+  };
+  m.customProgramCacheKey = () => (lite ? 'bark-v1-lite' : 'bark-v1');
   return m;
 }
 

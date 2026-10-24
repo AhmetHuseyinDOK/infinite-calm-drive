@@ -31,8 +31,11 @@ export class GB {
   // lit: also store the current `litV` byte per vertex (`aLit`): when a lit window switches on at dusk (0 = always on)
   // off: also store a per-vertex billboard corner offset (`aOff`, metres): the vertex shader spreads each corner along the
   // camera's right / up vectors, so the card always faces the viewer (the painted leaf clusters: ghibli.js, bill())
-  constructor({ uv = false, color = true, ao = false, lit = false, off = false } = {}) {
+  // idx: an indexed mesh (the trees' bark: smooth tubes share each ring's vertices, ~4× fewer than separate triangles).
+  // Only tube() and stamp() write its triangles; the other builders don't
+  constructor({ uv = false, color = true, ao = false, lit = false, off = false, idx = false } = {}) {
     this.hasUV = uv; this.hasColor = color; this.hasAO = ao; this.hasLit = lit; this.hasOff = off; this.litV = 0; this.aoY0 = NaN; this.noShadow = false;
+    this.hasIdx = idx; this.I = null; this.ni = 0; this.icap = 0;
     this.n = 0; this.cap = 0; this.P = null; this.N = null; this.U = null; this.Cl = null; this.A = null; this.Lt = null; this.O = null; this.offX = 0; this.offY = 0;
     this.bb = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
     this.m = new THREE.Matrix4(); this.nm = new THREE.Matrix3();
@@ -49,6 +52,7 @@ export class GB {
     if (this.hasOff) { const O = new Float32Array(cap * 2); if (this.O) O.set(this.O.subarray(0, n * 2)); this.O = O; }
     this.cap = cap;
   }
+  growI(need) { const cap = Math.max(this.icap * 2, need, 1024), I = new Uint32Array(cap); if (this.I) I.set(this.I.subarray(0, this.ni)); this.I = I; this.icap = cap; }
   get count() { return this.n; }
   setM(m) { this.m.copy(m); this.nm.getNormalMatrix(m); this.aoY0 = m.groundY ?? NaN; return this; }
   aoByte(py) { const h = py - this.aoY0; return h === h ? 255 - (h <= 0 ? 0 : h >= 2.55 ? 255 : Math.round(h * 100)) : 0; }
@@ -141,6 +145,43 @@ export class GB {
     }
     this.noShadow = false;
   }
+  /** A smooth tube (needs `idx`) along the points P (≥ 2, each [x, y, z]) with radii R: a ring of `sides` vertices at each
+   *  point (plus a seam twin), swept with a parallel-transport frame so it never twists, its normals smooth and leaning
+   *  with the taper, wound outward (GB.rod winds inward). `seam`: the direction (roughly) where the ring's seam lies (the
+   *  side least seen). uv: x the angle round the tube (0…2π; patterns periodic in it hide the seam), y the length along
+   *  it in metres from v0. Returns that length (for a tube continuing this one). */
+  tube(P, R, sides, c, seam = null, v0 = 0) {
+    const K = P.length, base = this.n, w = sides + 1;
+    let nx = 0, ny = 0, nz = 0, v = v0;
+    for (let i = 0; i < K; i++) {
+      const a = P[i > 0 ? i - 1 : 0], b = P[i < K - 1 ? i + 1 : K - 1];
+      let tx = b[0] - a[0], ty = b[1] - a[1], tz = b[2] - a[2]; const tl = Math.hypot(tx, ty, tz) || 1; tx /= tl; ty /= tl; tz /= tl;
+      if (i === 0) { // the first ring's frame: the seam direction (else any) made square to the tangent
+        const sd = seam || (Math.abs(ty) < 0.9 ? [0, 1, 0] : [1, 0, 0]);
+        nx = sd[0]; ny = sd[1]; nz = sd[2];
+      } else v += Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1], P[i][2] - P[i - 1][2]);
+      // transport: the last ring's normal, made square to this tangent (the tangent turns gently from ring to ring)
+      let d = nx * tx + ny * ty + nz * tz; nx -= d * tx; ny -= d * ty; nz -= d * tz;
+      let nl = Math.hypot(nx, ny, nz);
+      if (nl < 1e-4) { nx = Math.abs(tx) < 0.9 ? 0 : 1; ny = Math.abs(tx) < 0.9 ? 1 : 0; nz = 0; d = nx * tx + ny * ty + nz * tz; nx -= d * tx; ny -= d * ty; nz -= d * tz; nl = Math.hypot(nx, ny, nz); }
+      nx /= nl; ny /= nl; nz /= nl;
+      const bx = ty * nz - tz * ny, by = tz * nx - tx * nz, bz = tx * ny - ty * nx; // B = T × N: (ring i, i, i+1) runs counter-clockwise seen from outside
+      const sl = (R[i < K - 1 ? i + 1 : K - 1] - R[i > 0 ? i - 1 : 0]) / (tl || 1), p = P[i], r = R[i]; // (the taper's slope: the normals lean towards the tip)
+      for (let j = 0; j <= sides; j++) {
+        const th = (j / sides) * Math.PI * 2, co = Math.cos(th), si = Math.sin(th);
+        const dx = nx * co + bx * si, dy = ny * co + by * si, dz = nz * co + bz * si;
+        this.vtx(p[0] + dx * r, p[1] + dy * r, p[2] + dz * r, dx - sl * tx, dy - sl * ty, dz - sl * tz, th, v, c);
+      }
+    }
+    const nt = (K - 1) * sides * 6;
+    if (this.ni + nt > this.icap) this.growI(this.ni + nt);
+    const I = this.I;
+    for (let i = 0; i < K - 1; i++) for (let j = 0; j < sides; j++) {
+      const a = base + i * w + j, b = a + 1, cc = a + w, dd = cc + 1, o = this.ni;
+      I[o] = a; I[o + 1] = b; I[o + 2] = dd; I[o + 3] = a; I[o + 4] = dd; I[o + 5] = cc; this.ni += 6;
+    }
+    return v;
+  }
   /** a quad with explicit per-vertex normals and colours (foliage cards) */
   card(P, N, uv, Cc) {
     const T = [[0, uv.u0, uv.v0], [1, uv.u1, uv.v0], [2, uv.u1, uv.v1], [0, uv.u0, uv.v0], [2, uv.u1, uv.v1], [3, uv.u0, uv.v1]];
@@ -162,7 +203,7 @@ export class GB {
     const n = this.n;
     return { n, P: this.P ? this.P.slice(0, n * 3) : new Float32Array(0), N: this.N ? this.N.slice(0, n * 3) : new Int8Array(0),
       C: this.hasColor && this.Cl ? this.Cl.slice(0, n * 3) : null, U: this.hasUV && this.U ? this.U.slice(0, n * 2) : null,
-      O: this.hasOff && this.O ? this.O.slice(0, n * 2) : null };
+      O: this.hasOff && this.O ? this.O.slice(0, n * 2) : null, I: this.hasIdx && this.I ? this.I.slice(0, this.ni) : null };
   }
   /** append a pre-built template under matrix m (fast path for trees etc.) */
   stamp(T, m) {
@@ -184,6 +225,11 @@ export class GB {
     }
     if (this.hasColor) { if (Cc) this.Cl.set(Cc, o * 3); else this.Cl.fill(255, o * 3, (o + T.n) * 3); }
     if (this.hasUV) { if (U) this.U.set(U, o * 2); else this.U.fill(0, o * 2, (o + T.n) * 2); }
+    if (this.hasIdx && T.I) { // (an indexed template: its triangles, moved to where its vertices now start)
+      const TI = T.I, b = this.ni; if (b + TI.length > this.icap) this.growI(b + TI.length);
+      for (let k = 0; k < TI.length; k++) this.I[b + k] = TI[k] + o;
+      this.ni += TI.length;
+    }
     if (this.hasOff) { // card corners scale with the stamp (trees are stamped at scale s)
       const sc = Math.hypot(e[0], e[1], e[2]), O = T.O;
       if (O) for (let i = 0; i < T.n * 2; i++) this.O[o * 2 + i] = O[i] * sc; else this.O.fill(0, o * 2, (o + T.n) * 2);
@@ -200,6 +246,7 @@ export class GB {
     if (this.hasLit) g.setAttribute('aLit', new THREE.BufferAttribute(this.Lt.slice(0, n), 1, true));
     if (this.hasOff) g.setAttribute('aOff', new THREE.BufferAttribute(this.O.slice(0, n * 2), 2));
     if (this.hasColor) g.setAttribute('color', new THREE.BufferAttribute(this.Cl.slice(0, n * 3), 3, true));
+    if (this.hasIdx) g.setIndex(new THREE.BufferAttribute(n > 65535 ? this.I.slice(0, this.ni) : new Uint16Array(this.I.subarray(0, this.ni)), 1));
     g.boundingBox = new THREE.Box3(new THREE.Vector3(bb[0], bb[1], bb[2]), new THREE.Vector3(bb[3], bb[4], bb[5]));
     if (this.hasOff) { // cards reach beyond their centres: pad the bounds, or a chunk's clusters vanish at the screen's edge
       let m = 0; for (let i = 0; i < n * 2; i++) { const a = Math.abs(this.O[i]); if (a > m) m = a; }

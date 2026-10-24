@@ -2,6 +2,54 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-24 · 21:xx — Restyle 19: smooth painted trunks and branches
+- **The cherry trees' trunks and limbs are smooth and round, as in the reference art.** They were faceted boxes (5–7
+  flat sides, straight pieces kinked at each bend) in the props' hard toon steps: a light tan with bright and dark
+  facets. Now each trunk rises from a flared root with a slight bow into a rounded fork; three or four limbs curve out
+  of it in a wide V, thinning as they go; branches bow up into the crown, with a thin twig off each into its underside.
+- **Painted bark.** On a bright day the painting's own colours: a dark brown-black body, a warm brown lit edge on the
+  sun's side behind a soft terminator, a deep brown shade; faint furrows up the trunk, a soft mottling and a few short
+  horizontal lenticels, fading with distance. In a crown's shadow a trunk keeps its body colour and a softer lit edge,
+  as painted.
+- **The round broadleaf trees too** (the coast's slope, the country, gardens, the mountain's): a smooth flared bole
+  forking into four limbs that curve up to the crown's lobes, a branch or two off each, in the coast painting's warm
+  brown.
+- **Dusk, night and rain keep their look:** the old bark colours under the scene's light, on the new shapes.
+- **Measured against the reference** (CIELAB ΔE of the trunks' lit / median / shade colours, noon): the avenue at
+  s = 120 12.5 / 12.0 / 7.2 → 3.6 / 2.7 / 1.8, at s = 500 13.1 / 11.3 / 6.8 → 2.9 / 2.2 / 1.2; the coast's slope trees
+  (s = 1100) 38.8 / 37.8 / 20.6 → 9.1 / 1.4 / 19.5; the country's (s = 150, against the coast painting's tree) 21.0 /
+  23.1 / 18.5 → 4.2 / 5.9 / 1.5. Still off: the coast trees' shade (the sun is behind the camera there).
+- **Research:** three.js r186's TreeGenerator (parallel-transport sweeps, a taper that keeps the bole full, a flared
+  root); painting tutorials' cylinder light (lit edge, halftone, core shadow, softly blended; bark as a few marks); wrap
+  (half-Lambert) ramps. Built by a subagent; verified independently by the main agent, both on the shared box (the
+  desktop machine is off limits while its crashes are investigated).
+- How:
+  - **`geom.js GB.tube()`:** a tapered tube along points, rings swept with a parallel-transport frame, smooth normals
+    leaning with the taper, wound outward (`GB.rod` unchanged); uv the angle round it and metres along it. **Indexed
+    GBs** (`idx`): a ring's vertices are shared.
+  - **`props.js`:** `trunkTube`, `curve`, `taper`, `barkSides` (desktops 12 / 9 / 6 / 4 sides, 5 steps a limb; phones
+    8 / 6 / 4 / 3, 4). The trees keep every random number they drew (layouts and crowns unchanged); the new detail draws
+    its own. Templates carry a `bark` part, stamped into the chunk's `G.bark`.
+  - **`materials.js barkMaterial`:** a soft wrap ramp; on a bright day six painted tones (`U.uBk…`, cherry and
+    broadleaf, ungraded each frame as the tetrapods') picked by sun × shadow, the shadow taking at most 28%; strokes
+    periodic round each tube (no seam); contact AO at the foot; phones skip the lenticels. Test switches `st.bark`,
+    `st.trunks`.
+  - **World:** one more draw per chunk with trees, hidden with the crowns beyond 540 m. **Assets:** none.
+- Cost: small, within this box's noise. On the shared box's Vega iGPU, interleaved with live (L S S L …):
+  - **Main agent's, GPU over ~1 km drives:** avenue desktop profile 20.92 vs 21.10 ms (+0.17; pairs +1.12 / −1.15 /
+    +0.30 / +0.42), phone 10.59 vs 11.18 (+0.60; pairs −0.64 / −0.03 / +1.33 / +1.73); coast desktop 22.19 vs 21.72
+    (−0.47), phone over six pairs 10.27 vs 10.48 (+0.21; pairs −0.86 / −0.26 / −0.09 / +0.65 / +1.06 / +0.79).
+  - **The subagent's:** avenue desktop +0.33, phone −0.21; coast desktop +0.67, phone +0.91 (pairs +1.67 / +0.48 /
+    +0.61 / +0.87). In-page, all the bark on vs hidden (an upper bound): avenue desktop +1.78 ms, phone +0.73; coast
+    desktop +0.52, phone +0.25.
+  - **Geometry:** the avenue's trunks 148k vertices / 49k triangles → 177k / 246k (desktops), 119k / 152k (phones).
+  - **World building:** no slower (a CPU profile of 60 avenue chunks 559 vs 568 ms; genbench within its noise). Flat
+    out on the phone profile (×4 CPU): world-build spikes avenue 2 and 2 (worst 31 / 23 ms) against live's 3 and 0
+    (53 / 16), coast 4 and 3 (18 / 18) against 3 and 6 (20 / 51).
+  - **Start-up:** the same (median 2.88 vs 2.89 s).
+  - **Programs:** 62 (one more, warmed at load), none compiled through sunset, night, rain or a drive. 0 shader errors
+    in all six zones; no console errors at any quality; embed starts on tap; the other zones' starts match live.
+
 ## 2026-10-24 · 19:xx — Restyle 18: the tetrapods and the spray, as painted
 - **The tetrapods are smooth, rounded concrete, softly shaded, as in the reference art.** They were blocky legs with
   flat ends in the props' hard toon steps and read as angular grey crates. Now: round legs with a rounded rim at every

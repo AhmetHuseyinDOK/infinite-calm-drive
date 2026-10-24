@@ -381,6 +381,33 @@ export function treeCedar(G, M, r, s = 1) {
   G.foliage.cyl(0, h * 0.5, 0, 1.45 * s, 0.05, h * 0.5, 9, PAL.cedar);
 }
 
+// ---- smooth bark: the painted trees' trunks, limbs and branches as tapered tubes along gentle curves (GB.tube), drawn in
+// their own soft bark material (materials.js barkMaterial) instead of the props' faceted rods in hard toon steps ----
+// sides round a trunk, a limb, a branch and a twig, and the steps along a limb: more on desktops (a near cherry trunk is
+// ~100 px wide), fewer on phones
+const barkSides = () => (LEAF_D > 0.7 ? [12, 9, 6, 4, 5] : [8, 6, 4, 3, 4]);
+// the vertex colour is a key, not a colour: r the kind of bark (0 cherry, 1 broadleaf), g light (1 open … deep in a crown)
+const BARK_SAK = [0, 1, 1], BARK_BROAD = [1, 1, 1], BARK_SAK_IN = [0, 0.82, 1], BARK_BROAD_IN = [1, 0.8, 1];
+const SEAM_UP = [0, 1, 0], SEAM_BACK = [0, 0, 1];
+// the parameters 0…1 of n equal steps
+const steps = n => { const T = []; for (let i = 0; i <= n; i++) T.push(i / n); return T; };
+/** points along a quadratic Bézier from p0 to p2 that passes through m halfway (at the parameters T) */
+function curve(p0, m, p2, T) {
+  const cx = 2 * m[0] - (p0[0] + p2[0]) / 2, cy = 2 * m[1] - (p0[1] + p2[1]) / 2, cz = 2 * m[2] - (p0[2] + p2[2]) / 2;
+  return T.map(t => { const u = 1 - t, a = u * u, b = 2 * u * t, d = t * t; return [a * p0[0] + b * cx + d * p2[0], a * p0[1] + b * cy + d * p2[1], a * p0[2] + b * cz + d * p2[2]]; });
+}
+/** radii from r0 to r1: the wood stays full a while, then thins (the curve of three's TreeGenerator) */
+const taper = (T, r0, r1) => T.map(t => r1 + (r0 - r1) * Math.pow(1 - t, 0.7));
+/** a trunk from under the ground (y −0.25) to `top`, bowing a little through its middle (bow: x, z offsets), with a root
+ *  flare and a rounded crotch over the fork, out of which the limbs rise (they start inside it) */
+function trunkTube(k, top, rb, rt, bow, sides, col) {
+  const T = [0, 0.06, 0.15, 0.4, 0.7, 1], y0 = -0.25, y1 = top[1] + 0.1;
+  const P = curve([0, y0, 0], [top[0] * 0.5 + bow[0], (y0 + y1) / 2, top[2] * 0.5 + bow[1]], [top[0], y1, top[2]], T);
+  const R = T.map((t, i) => { const fl = Math.max(0, 1 - (P[i][1] - y0) / 0.75); return (rb + (rt - rb) * Math.pow(t, 1.3)) * (1 + 0.62 * Math.pow(fl, 2.5)); });
+  P.push([top[0], y1 + rt * 0.5, top[2]]); R.push(rt * 0.1);
+  k.tube(P, R, sides, col, SEAM_BACK);
+}
+
 // ---- Ghibli-style broadleaf crowns from painted leaf clusters (ghibli.js; materials.js makeGhibliLeaf lights them) ----
 // GHIBLI.cells: the cluster atlas's leaf cells, once it has loaded (main.js); until then, and if it fails, the broadleaf
 // trees keep their card crowns (treeBroad)
@@ -392,9 +419,11 @@ export const GHIBLI = { cells: null, bcells: null };
  *  The cards are octagons just round each painted cluster (a third fewer fragments than squares). */
 export function treeGhibli(G, M, r, s = 1) {
   const big = r() < 0.3 ? 1.22 : 1, h = r.range(6.2, 8.0) * s * big;
-  const c = G.color; c.setM(M);
+  const k = G.bark; k.setM(M);
   const bh = h * r.range(0.3, 0.38); // the bole, forking into limbs that reach up into the crown (seen through its gaps)
-  c.cyl(0, 0, 0, 0.27 * s * big, 0.2 * s * big, bh, 8, PAL.trunk);
+  // (the smooth bark's own random numbers: the layout and the crown keep theirs)
+  const q = rng(Math.floor(h * 7919 + bh * 104729)), [nT, nL, nB, , nS] = barkSides();
+  trunkTube(k, [0, bh, 0], 0.27 * s * big, 0.2 * s * big, [q.range(-0.05, 0.05) * s, q.range(-0.05, 0.05) * s], nT, BARK_BROAD);
   const cy = h * 0.64, Rx = r.range(2.6, 3.2) * s * big, Ry = r.range(2.0, 2.5) * s * big, k3 = s * big;
   const lobeDirs = [], nl = 5 + Math.floor(r() * 3);
   for (let i = 0; i < nl; i++) { const a = (i / nl) * 6.283 + r() * 0.6, el = r.range(-0.15, 0.75), ce = Math.sqrt(1 - el * el); lobeDirs.push([Math.cos(a) * ce, el, Math.sin(a) * ce]); }
@@ -408,7 +437,21 @@ export function treeGhibli(G, M, r, s = 1) {
     const rr = r.range(0.78, 0.95);
     all.push([dx * Rx * rr, cy + dy * Ry * rr, dz * Rx * rr, r.range(0.8, 1.1) * k3, 0]);
   }
-  for (let i = 0; i < 4; i++) { const d = lobeDirs[i % nl]; c.rod([0, bh * 0.9, 0], [d[0] * Rx * 0.55, cy + Math.min(0, d[1]) * Ry * 0.4 - 0.3 * s, d[2] * Rx * 0.55], 0.15 * k3, 0.06 * s, 6, PAL.trunk); }
+  // the limbs: out of the crotch, rising steeply and curving out towards four of the crown's lobes, each with a branch or
+  // two reaching on up into the crown
+  for (let i = 0; i < 4; i++) {
+    const d = lobeDirs[i % nl], dh = Math.hypot(d[0], d[2]) || 1, ox = d[0] / dh, oz = d[2] / dh;
+    const b0 = [ox * 0.06 * k3, bh * 0.86, oz * 0.06 * k3], e = [d[0] * Rx * 0.55, cy + Math.min(0, d[1]) * Ry * 0.4 - 0.3 * s, d[2] * Rx * 0.55];
+    const m = [(b0[0] + e[0]) * 0.5 - ox * 0.12 * k3, (b0[1] + e[1]) * 0.5 + 0.18 * k3, (b0[2] + e[2]) * 0.5 - oz * 0.12 * k3];
+    const T = steps(nS), P = curve(b0, m, e, T);
+    k.tube(P, taper(T, 0.16 * k3, 0.06 * s), nL, BARK_BROAD, SEAM_UP);
+    for (let j = 0, nb = 1 + (q() < 0.5 ? 1 : 0); j < nb; j++) {
+      const p = P[nS - 2 + j], a = Math.atan2(oz, ox) + (j ? 1 : -1) * q.range(0.35, 0.8), L = q.range(0.9, 1.4) * k3;
+      const e2 = [p[0] + Math.cos(a) * L * 0.8, p[1] + L * q.range(0.6, 0.9), p[2] + Math.sin(a) * L * 0.8];
+      const T2 = steps(3);
+      k.tube(curve(p, [(p[0] + e2[0]) / 2, (p[1] + e2[1]) / 2 + 0.1 * L, (p[2] + e2[2]) / 2], e2, T2), taper(T2, 0.07 * k3, 0.025 * s), nB, BARK_BROAD_IN, SEAM_UP);
+    }
+  }
   const hue = r(), tint = hue < 0.5 ? [1, 1, 0.92 + hue * 0.16] : [1.0 - (hue - 0.5) * 0.12, 1, 0.9];
   const g = G.gleaf; g.setM(M);
   for (const [x, y, z, rad, core] of all) {
@@ -429,11 +472,12 @@ export function treeGhibli(G, M, r, s = 1) {
  *  crown's core (two big clusters in its shade) is drawn first and hides the clusters behind it. 23–26 hexagonal cards
  *  in all (the old card crown had ~46 square ones, at random angles) */
 export function treeGhibliSakura(G, M, r, s = 1, ave = false) {
-  const c = G.color; c.setM(M);
+  const k = G.bark; k.setM(M);
   const lean = ave ? 1 : 0, h0 = r.range(2.2, 2.7) * s, r0 = r.range(0.3, 0.35) * s;
   const top = [r.range(-0.15, 0.15) * s, h0, lean * 0.3 * s];
-  c.rod([0, 0, 0], top, r0, r0 * 0.8, 7, PAL.bark);
-  c.cyl(0, 0, 0, r0 * 1.25, r0, 0.35 * s, 7, PAL.bark, false); // (the root flare)
+  // (the smooth bark's own random numbers: the layout and the crown keep theirs)
+  const q = rng(Math.floor(h0 * 7919 + r0 * 104729) + (ave ? 17 : 0)), [nT, nLs, nB, nW, nS] = barkSides();
+  trunkTube(k, top, r0, r0 * 0.8, [q.range(-0.07, 0.07) * s, q.range(-0.07, 0.07) * s], nT, BARK_SAK);
   // the crown: a broad dome high over the fork, pushed out over the road on an avenue
   const cy = r.range(6.3, 6.9) * s, cz = -lean * 0.5 * s, Rx = r.range(4.0, 4.5) * s, Rz = r.range(3.6, 4.0) * s, Ry = r.range(1.7, 2.0) * s;
   // the limbs: three or four rising steeply in a wide V from the fork (one of them toward the road on an avenue), each
@@ -443,13 +487,19 @@ export function treeGhibliSakura(G, M, r, s = 1, ave = false) {
     const a = a0 + (i / nL) * 6.283 + r.range(-0.3, 0.3), ca = Math.cos(a), sa = Math.sin(a), out = r.range(0.32, 0.46);
     const tip = [top[0] + ca * Rx * out, cy - Ry * r.range(0.35, 0.55), top[2] * 0.5 + cz * 0.4 + sa * Rz * out];
     const mid = [top[0] + (tip[0] - top[0]) * 0.45 + ca * 0.25 * s, h0 + (tip[1] - h0) * 0.55, top[2] + (tip[2] - top[2]) * 0.45 + sa * 0.25 * s];
-    // (each piece starts a little back inside the one before it, so no gap opens at the bend)
-    const back = (p, q, d) => { const l = Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]) || 1; return [q[0] - ((q[0] - p[0]) / l) * d, q[1] - ((q[1] - p[1]) / l) * d, q[2] - ((q[2] - p[2]) / l) * d]; };
-    c.rod(top, mid, r0 * 0.62, r0 * 0.46, 6, PAL.bark); c.rod(back(top, mid, r0 * 0.5), tip, r0 * 0.47, r0 * 0.3, 5, PAL.bark);
-    const tb = back(mid, tip, r0 * 0.35), nb = i % 2 ? 1 : 2; // (branches up into the crown: two on every other limb)
+    // one smooth limb out of the trunk's crotch (it starts inside it), curving out through mid to tip as it thins
+    const b0 = [top[0] + ca * r0 * 0.3, h0 - r0 * 0.45, top[2] + sa * r0 * 0.3], T = steps(nS), P = curve(b0, mid, tip, T);
+    k.tube(P, taper(T, r0 * 0.64, r0 * 0.3), nLs, BARK_SAK, SEAM_UP);
+    const tb = P[nS - 1], nb = i % 2 ? 1 : 2; // (branches up into the crown: two on every other limb)
     for (let j = 0; j < nb; j++) {
       const b = (j ? 1 : -1) * r.range(0.3, 0.9), L = r.range(1.2, 1.9) * s;
-      c.rod(tb, [tip[0] + Math.cos(a + b) * L, tip[1] + r.range(0.7, 1.2) * s, tip[2] + Math.sin(a + b) * L], r0 * 0.27, 0.04 * s, 4, PAL.bark);
+      const e = [tip[0] + Math.cos(a + b) * L, tip[1] + r.range(0.7, 1.2) * s, tip[2] + Math.sin(a + b) * L];
+      // bowing up a little on its way out, and a thinner twig off it on towards the crown's underside
+      const T2 = steps(3), P2 = curve(tb, [(tb[0] + e[0]) / 2, (tb[1] + e[1]) / 2 + L * 0.1, (tb[2] + e[2]) / 2], e, T2);
+      k.tube(P2, taper(T2, r0 * 0.27, 0.035 * s), nB, BARK_SAK_IN, SEAM_UP);
+      const p = P2[1], a2 = a + b + (q() < 0.5 ? -1 : 1) * q.range(0.5, 1.0), L2 = q.range(0.8, 1.3) * s;
+      const e2 = [p[0] + Math.cos(a2) * L2, p[1] + L2 * q.range(0.15, 0.45), p[2] + Math.sin(a2) * L2];
+      k.tube([p, [(p[0] + e2[0]) / 2, (p[1] + e2[1]) / 2 + 0.06 * L2, (p[2] + e2[2]) / 2], e2], [0.05 * s, 0.032 * s, 0.014 * s], nW, BARK_SAK_IN);
     }
   }
   // 6–7 lobe directions, as on the broadleaf crowns: the clusters gather toward them, so the crown reads as a few big
@@ -487,9 +537,9 @@ function treeTemplate(kind, v) {
   const key = kind + v;
   let t = TCACHE[key];
   if (!t) {
-    const g = { color: new GB(), foliage: new GB(), leaf: new GB({ uv: true }), gleaf: new GB({ uv: true, off: true }), gblossom: new GB({ uv: true, off: true }) };
+    const g = { color: new GB(), foliage: new GB(), leaf: new GB({ uv: true }), gleaf: new GB({ uv: true, off: true }), gblossom: new GB({ uv: true, off: true }), bark: new GB({ uv: true, idx: true }) };
     TREE_BUILDERS[kind](g, new THREE.Matrix4(), rng(1000 + v * 77 + kind.length * 13), 1);
-    t = TCACHE[key] = { c: g.color.toArrays(), f: g.foliage.toArrays(), l: g.leaf.toArrays(), g: g.gleaf.toArrays(), b: g.gblossom.toArrays() };
+    t = TCACHE[key] = { c: g.color.toArrays(), f: g.foliage.toArrays(), l: g.leaf.toArrays(), g: g.gleaf.toArrays(), b: g.gblossom.toArrays(), k: g.bark.toArrays() };
   }
   return t;
 }
@@ -502,6 +552,7 @@ export function tree(G, M, kind, r, s = 1) {
   G.color.stamp(t.c, m); G.foliage.stamp(t.f, m); G.leaf.stamp(t.l, m);
   if (t.g.n) G.gleaf.stamp(t.g, m);
   if (t.b.n) G.gblossom.stamp(t.b, m);
+  if (t.k.n) G.bark.stamp(t.k, m);
 }
 
 // ------------------------------------------------------------------ buildings

@@ -1136,34 +1136,39 @@ export function busStop(G, M, r) {
 const TETRA_DIRS = [[0, 1, 0], [0.943, -0.333, 0], [-0.471, -0.333, 0.816], [-0.471, -0.333, -0.816]];
 const TETRA_GREY = C('#a7a7aa'), TETRA_SHADES = [1, 0.95, 0.9], TCACHE_T = {}; // (the reference's grey concrete)
 const tetraSeg = () => (LEAF_D > 0.7 ? 12 : 6);
+// (indexed: each leg's three rings (its middle, where the rim starts, the end face's edge) and the end face's middle are
+// shared by the triangles round them, 148 vertices a block on desktops instead of 720: the same triangles, in the same
+// order, with the same vertices, for a fifth of the vertex work in the main and the shadow pass)
 function tetraTemplate(k, seg) {
   const key = k * 16 + seg;
   let t = TCACHE_T[key];
   if (!t) {
-    const g = new GB({ uv: true }), col = mulC(TETRA_GREY, TETRA_SHADES[k]), r0 = 0.42, r1 = 0.25, bv = 0.075;
+    const g = new GB({ uv: true, idx: true }), col = mulC(TETRA_GREY, TETRA_SHADES[k]), r0 = 0.42, r1 = 0.25, bv = 0.075;
     const sl = r0 - r1, tb = 1 - bv, rb = r0 + (r1 - r0) * tb, rc = rb - bv; // (the cone's taper; where the rim starts, its radius; the end face's)
-    const V = (p, n, u) => g.vtx(p[0], p[1], p[2], n[0], n[1], n[2], u, 0, col);
+    const V = (p, n, u) => g.vtx(p[0], p[1], p[2], n[0], n[1], n[2], u, 0, col), I = [];
     for (const d of TETRA_DIRS) {
       // (wound outwards: GB.rod's sides face inwards)
       let ux = 0, uy = 1, uz = 0; if (Math.abs(d[1]) > 0.99) { ux = 1; uy = 0; }
       let ax = d[1] * uz - d[2] * uy, ay = d[2] * ux - d[0] * uz, az = d[0] * uy - d[1] * ux; const al = Math.hypot(ax, ay, az); ax /= al; ay /= al; az /= al;
       const bx = ay * d[2] - az * d[1], by = az * d[0] - ax * d[2], bz = ax * d[1] - ay * d[0];
       const ring = [];
-      for (let i = 0; i <= seg; i++) { const a = (i / seg) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a); ring.push([ax * c + bx * s, ay * c + by * s, az * c + bz * s]); }
+      for (let i = 0; i < seg; i++) { const a = (i / seg) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a); ring.push([ax * c + bx * s, ay * c + by * s, az * c + bz * s]); }
       const at = (n, r, t) => [d[0] * t + n[0] * r, d[1] * t + n[1] * r, d[2] * t + n[2] * r];
+      // the rings: A round the middle and D where the rim starts (the side's normals, leaning out along the leg by the cone's
+      // taper), E round the end face (its normal); then the end face's middle
+      const a0 = g.n, d0 = a0 + seg, e0 = d0 + seg, c0 = e0 + seg;
+      for (const n of ring) V(at(n, r0, 0), [n[0] + d[0] * sl, n[1] + d[1] * sl, n[2] + d[2] * sl], 0);
+      for (const n of ring) V(at(n, rb, tb), [n[0] + d[0] * sl, n[1] + d[1] * sl, n[2] + d[2] * sl], tb);
+      for (const n of ring) V(at(n, rc, 1), d, 1);
+      V(d, d, 1);
       for (let i = 0; i < seg; i++) {
-        const n0 = ring[i], n1 = ring[i + 1];
-        const m0 = [n0[0] + d[0] * sl, n0[1] + d[1] * sl, n0[2] + d[2] * sl], m1 = [n1[0] + d[0] * sl, n1[1] + d[1] * sl, n1[2] + d[2] * sl]; // (the cone's normals lean out along the leg by its taper)
-        const A = at(n0, r0, 0), B = at(n1, r0, 0), Cc = at(n1, rb, tb), D = at(n0, rb, tb), E = at(n1, rc, 1), F = at(n0, rc, 1);
-        // the leg's side, from the middle out to where the rim starts
-        V(A, m0, 0); V(Cc, m1, tb); V(B, m1, 0); V(A, m0, 0); V(D, m0, tb); V(Cc, m1, tb);
-        // the rounded rim: its normals turn from the side's to the end's
-        V(D, m0, tb); V(E, d, 1); V(Cc, m1, tb); V(D, m0, tb); V(F, d, 1); V(E, d, 1);
-        // the end face (a fan from its middle)
-        V(d, d, 1); V(E, d, 1); V(F, d, 1);
+        const j = (i + 1) % seg;
+        I.push(a0 + i, d0 + j, a0 + j, a0 + i, d0 + i, d0 + j); // the leg's side, from the middle out to where the rim starts
+        I.push(d0 + i, e0 + j, d0 + j, d0 + i, e0 + i, e0 + j); // the rounded rim: its normals turn from the side's to the end's
+        I.push(c0, e0 + j, e0 + i);                             // the end face (a fan from its middle)
       }
     }
-    t = TCACHE_T[key] = g.toArrays();
+    t = TCACHE_T[key] = g.toArrays(); t.I = Uint16Array.from(I);
   }
   return t;
 }

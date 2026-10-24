@@ -139,7 +139,7 @@ export class World {
     const r = rng(Math.floor(hash2(c, 777) * 4294967295));
     const G = { atlas: new GB({ uv: true, ao: true, lit: true }), color: new GB({ ao: true }), foliage: new GB(), leaf: new GB({ uv: true }), lamp: new GB({ color: false }), sig: new GB({ color: false }), sodium: new GB({ color: false }), decal: new GB({ uv: true }), pool: new GB({ uv: true, color: false }),
       gleaf: new GB({ uv: true, off: true }), gblossom: new GB({ uv: true, off: true }), // (the broadleaf and cherry crowns' painted clusters, camera-facing)
-      tetra: new GB({ uv: true, ao: true }), // (the coast's tetrapods, in their own soft concrete)
+      tetra: new GB({ uv: true, ao: true, idx: true }), // (the coast's tetrapods, in their own soft concrete; indexed)
       bark: new GB({ uv: true, ao: true, idx: true }) }; // (the painted trees' trunks and limbs: smooth tubes in their own soft bark)
     const ground = new GroundB(), shore = { rows: [], puffs: [] }, river = [];
     G.lamps = []; // lights that can light the car: chunk-local x, y, z, power … (props.js lampAt)

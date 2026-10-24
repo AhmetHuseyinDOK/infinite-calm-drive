@@ -344,8 +344,9 @@ export function shoreMaterial(lite = false) {
           // a short-crested sea, as the painting's: each crest a few of its wavelengths long, bowed, bigger and smaller
           // along it, breaking where it is biggest (more of it near the wall), each its own: one pattern per crest, riding
           // with it, at its size (E0 for the crests of this size, E1 for the next size's)
-          vec4 E0 = vnoise4L(vec2(a * ${g7(EA)} / P + n0 * P * ${g7(W1)}, n0 * P * ${g7(W2)}));
-          vec4 E1 = vnoise4L(vec2(a * ${g7(EA)} * 0.5 / P + n1 * 2.0 * P * ${g7(W1)}, n1 * 2.0 * P * ${g7(W2)}));
+          vec4 E0 = vnoise4L(vec2(a * ${g7(EA)} / P + n0 * P * ${g7(W1)}, n0 * P * ${g7(W2)})), E1 = vec4(0.5);
+          // (the next size's only between two sizes: inside 8 m and beyond 64 m every use of it is weighted by fr = 0)
+          if (fr > 0.0) E1 = vnoise4L(vec2(a * ${g7(EA)} * 0.5 / P + n1 * 2.0 * P * ${g7(W1)}, n1 * 2.0 * P * ${g7(W2)}));
           float e = q - n0 + (E0.y - 0.5) * 0.45, e1 = 0.5 * q - n1 + (E1.y - 0.5) * 0.45, bz = 0.12 + 0.1 * nw;
           float A0 = smoothstep(0.26, 0.5, E0.x + bz), A1 = smoothstep(0.26, 0.5, E1.x + bz);
           float B0 = smoothstep(0.46, 0.66, E0.x + bz + 0.08 * nw), B1 = smoothstep(0.46, 0.66, E1.x + bz + 0.08 * nw);

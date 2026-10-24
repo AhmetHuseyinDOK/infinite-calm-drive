@@ -2,6 +2,32 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-25 · 02:xx — Finish 1: the coast's tetrapods at a quarter less GPU time, the night city checked
+- **Nothing changes on screen.** A new deterministic capture (a fixed virtual clock and seeded randomness: two loads of
+  one build give the same pixels) shows the frames identical to live: the subagent's 18 pairs (noon, sunset and night in
+  every zone, desktop and phone) and the main agent's 8 (the coast at noon, sunset and night, the avenue, the country at
+  sunset, a phone portrait) with 0 pixels different, apart from 19 of 921,600 pixels by one level in the city at night
+  (rounding in the band's new branch).
+- **The tetrapods' legs share their rings' vertices** (indexed: the same triangles in the same order, 148 vertices a
+  block on desktops instead of 720, 76 instead of 360 on phones). Their draws over a coast drive (GPU timers around each
+  draw, three interleaved pairs on the shared box's Vega iGPU): main pass 1.96 → 1.44 ms, shadow pass 0.48 → 0.29 ms
+  (the untouched sky's draw read 1.49 vs 1.50 as the control). Coast chunks build ~15–20% faster.
+- **The water along the sea wall reads its next wave size only between 8 and 64 m** (elsewhere every use of it is
+  weighted by zero), and **the far city's night windows** are worked out only on the towers' light pixels.
+- **The city at night costs what it did before Restyle 20:** its +1.18 ms was the integrated GPU's clock state, not the
+  painted night (Restyle 20's band work measures 0.05–0.15 ms; its draws, triangles and programs are unchanged; the
+  subagent read +0.27 ms against Restyle 19, the main agent +0.16 against live, both within noise).
+- **Research:** per-draw GPU timing mapped the coast's frame (shore 1.5 ms, crowns 1.6 + 0.45 shadow, sky 1.3, clouds
+  0.8, bark 0.65 + 0.2). On phones the bloom pass is 3.6–4.4 ms of every sunset and night: the next trim. A far-bark tier
+  (0.12 ms) was left out because it changes far pixels. Built by a subagent; verified independently by the main agent,
+  both on the shared box (the desktop machine is off limits).
+- How: `props.js tetraTemplate` (indexed), `chunks.js` (`G.tetra` indexed), `sea.js shoreMaterial`, `painted.js` (the
+  band's windows). Assets: none. World: the same layout. Programs: 62.
+- Cost: less. On the Vega iGPU, coast drives interleaved with live (four pairs each): phone profile 10.92 vs 10.11 ms
+  (−0.81; every pair lower); desktop profile 20.94 vs 21.70 (+0.76; every pair higher: this iGPU steps its clock down for
+  a lighter frame, the subagent's set read −3.22). Start-up the same (medians 3.32 vs 3.18 s). 0 shader errors in all six
+  zones; no console errors at any quality; none compiled through sunset, night, rain or a drive; embed starts on tap.
+
 ## 2026-10-24 · 23:xx — Restyle 20: golden hour, sunset and night, as painted
 - **The painted world stays painted when the sun goes down.** The four reference paintings are bright days, and every
   painted piece (the sea, the clouds, the far horizon, the tetrapods, the bark, the lawns) fell back to the old

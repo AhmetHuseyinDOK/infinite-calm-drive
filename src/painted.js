@@ -537,11 +537,17 @@ export function makePaintedBand(atlas, post, fog) {
         // painting's own opaque, light pixels), some lit, warm or cool white, coming on as the town's do
         float win = mix(uWin.x, uWin.y, uMix);
         if (win > 0.003) {
-          vec2 wq = vec2((vUv.x + uRot) * 720.0, vUv.y * 400.0), wi = floor(wq), wf = fract(wq) - 0.5, ww = fwidth(wq);
-          vec3 h3 = fract(vec3(wi.xyx) * 0.1031); h3 += dot(h3, h3.yzx + 33.33); float h = fract((h3.x + h3.y) * h3.z), h2 = fract(h * 13.7);
-          float on = step(h, 0.2 * uLightsOn) * step(0.42, dot(t.rgb, vec3(0.299, 0.587, 0.114))) * step(0.97, t.a);
-          float box = (1.0 - smoothstep(0.26 - ww.x * 0.5, 0.26 + ww.x * 0.5, abs(wf.x))) * (1.0 - smoothstep(0.22 - ww.y * 0.5, 0.22 + ww.y * 0.5, abs(wf.y)));
-          c += mix(vec3(1.25, 0.8, 0.36), vec3(0.85, 0.8, 0.68), step(0.75, h2)) * (0.45 + 0.4 * h2) * on * box * win;
+          vec2 wq = vec2((vUv.x + uRot) * 720.0, vUv.y * 400.0), ww = fwidth(wq); // (derivatives first, while every pixel is here)
+          // (only the towers' opaque light pixels hold a window, and only a fifth of those windows are lit: the rest skip it)
+          if (t.a >= 0.97 && dot(t.rgb, vec3(0.299, 0.587, 0.114)) >= 0.42) {
+            vec2 wi = floor(wq), wf = fract(wq) - 0.5;
+            vec3 h3 = fract(vec3(wi.xyx) * 0.1031); h3 += dot(h3, h3.yzx + 33.33); float h = fract((h3.x + h3.y) * h3.z);
+            if (h <= 0.2 * uLightsOn) {
+              float h2 = fract(h * 13.7);
+              float box = (1.0 - smoothstep(0.26 - ww.x * 0.5, 0.26 + ww.x * 0.5, abs(wf.x))) * (1.0 - smoothstep(0.22 - ww.y * 0.5, 0.22 + ww.y * 0.5, abs(wf.y)));
+              c += mix(vec3(1.25, 0.8, 0.36), vec3(0.85, 0.8, 0.68), step(0.75, h2)) * (0.45 + 0.4 * h2) * box * win;
+            }
+          }
         }
         // haze: below the horizon as much as the 3D world's own fog puts on flat ground seen at that angle (uGnd: the
         // camera's height above it, the fog density, the draw distance, where the world fades out completely), so the

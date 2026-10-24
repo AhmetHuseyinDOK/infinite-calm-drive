@@ -257,7 +257,7 @@ export class World {
     const zset = new Set();
     for (const sq of [s0, s0 + 20, s0 + 40, s1]) { const m = zoneMix(sq); zset.add(m.a); if (m.t > 0) zset.add(m.b); }
     add(ground.build(), groundMaterialFor([...zset]), false, true); yield;
-    add(G.atlas.build(), this.M.atlas, true, true); yield;
+    { const m = add(G.atlas.build(), this.M.atlas, true, true); if (m) m.customDepthMaterial = this.M.atlasDepth; } yield; // (the painted cells' outlines in the shadow pass too)
     { const m = add(G.color.build(), this.M.color, true, true); if (m) m.customDepthMaterial = PROP_DEPTH; } yield; // (wires cast no shadow)
     add(G.foliage.build(), this.M.foliage, true, true);
     add(G.leaf.build(), this.M.leaf, true, true, 0, 'leaf');
@@ -872,7 +872,7 @@ export class World {
         const sm = s + w / 2, e = road(sm), tint = r.pick(P.TINTS), litP = 0.42, plaster = type === 'machiya' && r() < 0.6;
         {
           const M = matAt(sm, side * front, e + 0.15);
-          const spec = { type, w, d: type === 'apt' ? r.range(10, 14) : r.range(8, 12),
+          const spec = { type, w, at: sm, side, d: type === 'apt' ? r.range(10, 14) : r.range(8, 12), // (at, side: where it stands, for the opening view)
             floors: type === 'shop' ? r.int(2, 4) : type === 'machiya' ? (r() < 0.7 ? 2 : 3) : type === 'apt' ? r.int(4, 9) : 2, tint: plaster ? P.PLASTER[Math.floor(r() * P.PLASTER.length)] : tint, litP, plaster, fence: type === 'house' && r() < 0.5 ? 1.2 : 0 };
           P.building(G, M, r, spec);
           if (type !== 'house' && r() < 0.28) P.vendingMachine(G, matAt(sm + (r() - 0.5) * (w - 1.2), side * (front - 0.42), e + 0.15), r);

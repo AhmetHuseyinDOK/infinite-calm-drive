@@ -2,6 +2,55 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-24 · 13:xx — Restyle 15: the shopping street's big lit signs, eleven painted shopfronts, a far city in haze
+- **Big lit signs, as in the reference art.** The shophouses' signs standing off the first floor are light boxes up to
+  1.15 m wide and 2.7 m tall (were 0.76 × 2.1 m): a white panel lit from inside with a neon tube round its edge and the
+  name in strong ink (焼き鳥, 居酒屋, そば, 喫茶, 焼肉), or a coloured panel with white or neon letters (洋品店, 中華料理,
+  ラーメン, カラオケ, スナック). They glow by day and light up at dusk and night.
+- **The opening view is the painting's.** Beside the car on the left: a bookshop with its magazine racks out on the
+  pavement under a red awning and a violet 焼き鳥 sign; on the right: a clothes shop under the painting's navy 洋品店
+  board with gold letters, a red awning and a pink 焼き鳥 sign. (Whatever the seed; only that first stretch's layout
+  changes.)
+- **Eleven painted shopfronts and five painted upper floors** (were four and two): a bakery, a florist, a clothes shop,
+  a ramen shop, a tea shop, a sweets shop and an izakaya with red lanterns join the general store, the bookshop, the
+  noren'd entrance and the café; upstairs, flower boxes, a hanging basket, timber boards with curtains. The board over
+  a shop mostly says what it sells. The street's layout is unchanged.
+- **Canopies of lighter blue slate,** rows of round tiles catching the light, their round ends along the eave (were
+  dark navy).
+- **The street ends in a far city of pale high-rise flats in haze,** as in the painting (was a grey mountain).
+- **Measured against the reference** (CIELAB ΔE of region medians, start frame, noon): right fronts 19.5 → 14.6, right
+  upper floors 25.7 → 21.5, left upper floors 23.3 → 18.4, far street 14.6 → 13.6, left fronts 12.7 → 12.3; the whole
+  frame (16 × 9 grid) 28.1 → 27.5.
+- **If the paintings can't be loaded** (missing or truncated; the main agent tested the fronts, the band and the houses
+  on the desktop machine's staging copy), the fronts keep a procedural timber look, the far end the mountain rings and
+  the houses their procedural look.
+- **Research:** Grok Imagine `image_edit` anchored on crops of city.png: all ten new bays came out flat and head-on at
+  the first try; the far city from three Grok panoramas through the band pipeline. Built by a subagent; verified
+  independently by the main agent, on the desktop machine's GTX 1660 again.
+- How:
+  - **A second texture, the painted atlas** (`textures.js buildPaintedAtlas`): the painted fronts, the signs, the canopy
+    tiles and the painted houses, 2048 × 3512 on desktops and ~1224 rows on phones; the procedural atlas is back to
+    2048 × 4096 (was 5248 / 4608), its 118 cells pixel-identical, so a device limited to 4096-pixel textures no longer
+    gets it scaled down. The atlas material reads the painted atlas for every cell whose u is 2 or more (one read, in a
+    branch every pixel of a triangle takes the same way); a shadow-pass twin (`M.atlasDepth`) cuts the houses' outlines
+    from it. No new material program or draw call.
+  - **Assets:** `assets/fronts/fronts2.*` (16 painted bays and their glow: 539 KB desktops, 157 KB phones) and
+    `assets/band/band2.*` (the five bands plus the city's: 943 / 308 KB); they replace `fronts.*` and `band.*`.
+  - **World:** each shophouse picks its paintings with its own random numbers; only the opening chunk is reshuffled.
+- Cost: small. On the desktop machine's GTX 1660 Super, interleaved with live, four pairs each:
+  - **GPU over 0.78 km city drives:** desktop profile 3.40 vs 3.55 ms (+0.15; pairs +0.02 / +0.03 / +0.42 / +0.11),
+    phone profile 4.34 vs 4.15 (−0.19). Country (the painted houses' new texture): 1.49 vs 1.59 and 0.95 vs 1.10, each
+    from one slow run (medians the same).
+  - **The subagent's, on the shared box's Vega iGPU:** desktop +0.28 ms, phone −0.91 (an earlier build +0.44 / +0.65);
+    the band in the city +0.18 / +0.16 (same-page toggle).
+  - **World building:** city chunks +5–10% CPU (medians 164.8 / 172.2 vs 156.8 / 157.4 ms per 20); flat out on the
+    phone profile (×4 CPU), world-build spikes 0 and 1 against 0 and 0 (worst 16 ms).
+  - **Memory:** about +32 MB of GPU memory on desktops, +10 MB on phones; download +0.4–0.5 MB desktops, +0.15 MB phones.
+  - **Start-up:** the same (2.10 vs 2.12 s).
+  - **Programs:** 60, none compiled through sunset, night, rain or a drive.
+  - **Checks:** 0 shader errors in all six zones; the other zones' starts and the painted houses match live; no console
+    errors at any quality; embed starts on tap.
+
 ## 2026-10-24 · 10:xx — Restyle 14: painted grass on the coast's slope and the cherry avenue's lawns, long grass by the sea, flower beds under the cherries
 - **The coast's green slope and the cherry avenue's lawns are painted grass, as in the reference art.** They were a
   flat lime with a scatter of tufts. Now they carry the country's painted meadow in each painting's own colours:

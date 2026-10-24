@@ -877,13 +877,40 @@ if (!gCull) {
   return m;
 }
 
-export function makeMaterials(atlasTex, folTex) {
+/** The painted atlas (textures.js buildPaintedAtlas) in the atlas material: a cell whose u is 2 or more is one of its cells,
+ *  so the albedo and the glow are read from its textures instead: one read each, in a branch that every pixel of a
+ *  triangle takes the same way (a cell lies in one atlas or the other), so the reads keep their mip level and anisotropy
+ *  (explicit gradients would cost more on phones). `alpha`: the shadow pass, albedo only. */
+function paintedAtlas(sh, P, alpha = false) {
+  sh.uniforms.uPMap = { value: P.map };
+  if (!alpha) sh.uniforms.uPEm = { value: P.emissive };
+  sh.fragmentShader = sh.fragmentShader
+    .replace('#include <common>', `#include <common>\nuniform sampler2D uPMap;${alpha ? '' : ' uniform sampler2D uPEm;'}`)
+    .replace('#include <map_fragment>', /* glsl */`
+bool pgP = vMapUv.x > 1.5;
+vec4 sampledDiffuseColor;
+if (pgP) sampledDiffuseColor = texture2D(uPMap, vMapUv - vec2(2.0, 0.0));
+else sampledDiffuseColor = texture2D(map, vMapUv);
+diffuseColor *= sampledDiffuseColor;`);
+  if (!alpha) sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', /* glsl */`
+vec4 emissiveColor;
+if (pgP) emissiveColor = texture2D(uPEm, vEmissiveMapUv - vec2(2.0, 0.0));
+else emissiveColor = texture2D(emissiveMap, vEmissiveMapUv);
+totalEmissiveRadiance *= emissiveColor.rgb;`);
+}
+export function makeMaterials(atlasTex, folTex, paintTex) {
   const M = {};
   M.ground = groundMaterial();
   M.color = painterly(new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: GRAD }), 1.6, 0.1, 'color-v3', contactAO);
   M.atlas = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: GRAD, map: atlasTex.map, emissiveMap: atlasTex.emissive, emissive: 0xffffff, emissiveIntensity: 0.1, alphaTest: 0.5 });
-  M.atlas.onBeforeCompile = sh => { contactAO(sh); windowLights(sh); worldShade(sh); };
-  M.atlas.customProgramCacheKey = () => 'atlas-v5';
+  M.atlas.onBeforeCompile = sh => { contactAO(sh); windowLights(sh); worldShade(sh); paintedAtlas(sh, paintTex); };
+  M.atlas.customProgramCacheKey = () => 'atlas-v7';
+  // its shadow-pass twin (the atlas's meshes take it as their customDepthMaterial; three gives it the atlas's map and
+  // alpha test): the painted cells cut their outlines (the houses' gables and roofs) out of the painted atlas's alpha
+  M.atlasDepth = new THREE.MeshDepthMaterial();
+  M.atlasDepth.onBeforeCompile = sh => paintedAtlas(sh, paintTex, true);
+  M.atlasDepth.customProgramCacheKey = () => 'atlasdepth-v2';
+  M.ptex = paintTex;
   M.foliage = painterly(new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: GRAD_SOFT }), 2.6, 0.24, 'foliage-v2');
   M.lamp = new THREE.MeshBasicMaterial({ color: 0xf0eee6 });
   M.sig = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.15, 1.7, 1.1) }); // a lit 青 signal lamp

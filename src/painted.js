@@ -117,19 +117,20 @@ export async function loadCloudAtlas(tier, timeoutMs = 15000) {
   })(), timeoutMs, 'painted clouds unavailable, keeping the procedural ones:');
 }
 
-/** Loads the shopping street's painted fronts (assets/fronts/, made by ~/cdtest/cf/scripts/pack.py from Grok Imagine
- *  edits anchored on the city painting): warm-lit shopfront bays and upper-floor bays, flat-on, with what glows in them
- *  (a row of emissive tiles under the albedo ones). They are drawn into their cells of the texture atlas (textures.js
- *  paintFronts) before it goes to the GPU, so the shophouses take them with no new texture, material or draw.
- *  'hi' (360×432 px a bay) or 'lo' (half that: phones, the embed). Resolves to null (never rejects) when the index or the
- *  image is missing, broken, truncated or too slow: the cells then keep their procedural paint. */
+/** Loads the shopping street's painted fronts (assets/fronts/fronts2.*, made by ~/cdtest/cf2/scripts/pack2.py from Grok
+ *  Imagine edits anchored on the city painting): eleven warm-lit shopfront bays (a general store, a bookshop, a noren'd
+ *  entrance, a café, a bakery, a florist, a clothes shop, a ramen shop, a tea shop, a sweets shop, an izakaya) and five
+ *  upper-floor bays, flat-on, with what glows in them (rows of emissive tiles under the albedo ones; an unlit window has
+ *  none, ey −1). They are drawn into their cells of the painted atlas (textures.js buildPaintedAtlas) before it goes to the
+ *  GPU. 'hi' (360×432 px a bay) or 'lo' (half that: phones, the embed). Resolves to null (never rejects) when the index or
+ *  the image is missing, broken, truncated or too slow: the cells then keep their procedural paint. */
 export async function loadFrontAtlas(tier, timeoutMs = 15000) {
   const base = ASSETS + 'fronts/';
   return orNull((async () => {
-    const r = await fetch(base + 'fronts.json');
-    if (!r.ok) throw new Error('fronts.json ' + r.status);
+    const r = await fetch(base + 'fronts2.json');
+    if (!r.ok) throw new Error('fronts2.json ' + r.status);
     const J = await r.json();
-    const tiles = (J.tiles || []).filter(t => t.name && t.w > 0 && t.h > 0 && t.x >= 0 && t.x + t.w <= 1 && t.ey + t.h <= 1);
+    const tiles = (J.tiles || []).filter(t => t.name && t.w > 0 && t.h > 0 && t.x >= 0 && t.x + t.w <= 1 && t.y >= 0 && t.y + t.h <= 1 && t.ey + t.h <= 1);
     if (!tiles.length) throw new Error('no fronts listed');
     const file = J.files && J.files[tier] ? tier : 'hi', ri = await fetch(base + J.files[file]);
     if (!ri.ok) throw new Error(J.files[file] + ' ' + ri.status);
@@ -144,8 +145,8 @@ export async function loadFrontAtlas(tier, timeoutMs = 15000) {
 /** Loads the painted houses of the country, the coast and the cherry avenue (assets/houses/, made by
  *  ~/cdtest/hs/scripts/pack.py from asset batch 1's elevations and Grok Imagine gable ends, anchored on the reference
  *  art): a sheet of flat elevations (front = eave side, gable end) cut out on their alpha, the lit windows' emissive tiles
- *  under them, and each house type's 3D pieces. The tiles are drawn into atlas cells of their own (textures.js
- *  paintHouses), so the houses take them with no new texture, material or draw. 'hi' (48 px/m) or 'lo' (32 px/m: phones,
+ *  under them, and each house type's 3D pieces. The tiles are drawn into cells of their own in the painted atlas
+ *  (textures.js buildPaintedAtlas, paintHouses), so the houses take them with no new material or draw. 'hi' (48 px/m) or 'lo' (32 px/m: phones,
  *  the embed). Resolves to null (never rejects) when the index or the image is missing, broken, truncated or too slow:
  *  the houses then keep their procedural look (props.js woodHouse). */
 export async function loadHouseAtlas(tier, timeoutMs = 15000) {
@@ -369,13 +370,15 @@ export function makePaintedClouds(atlas, post, seed = 5) {
 //  - Between zones the two bands cross-fade (premultiplied, so ridges dissolve rather than smear).
 // If the atlas can't be loaded the game keeps the procedural mountain rings.
 
-/** Loads the band atlas: 'hi' (32 px/°) or 'lo' (16 px/°, phones). Resolves to null (never rejects) when the JSON or
- *  the image is missing, broken or too slow: the caller then keeps the procedural mountain rings. */
+/** Loads the band atlas (assets/band/band2.*: the five zones' bands and, since Restyle 15, the shopping street's far city
+ *  of pale high-rise flats in haze, ~/cdtest/hb2/scripts/band2.py): 'hi' (32 px/°) or 'lo' (16 px/°, phones). Resolves to
+ *  null (never rejects) when the JSON or the image is missing, broken or too slow: the caller then keeps the procedural
+ *  mountain rings. */
 export async function loadBandAtlas(tier, timeoutMs = 15000) {
   const base = ASSETS + 'band/';
   return orNull((async () => {
-    const r = await fetch(base + 'band.json');
-    if (!r.ok) throw new Error('band.json ' + r.status);
+    const r = await fetch(base + 'band2.json');
+    if (!r.ok) throw new Error('band2.json ' + r.status);
     const J = await r.json();
     const { tex, file } = await paintedTexture(base, J, tier);
     const zones = {};
@@ -477,7 +480,7 @@ export function makePaintedBand(atlas, post, fog) {
      *  exp² density and draw distance */
     update(camera, m, camH = 2.8, fogD = 0.0014, fogFar = 700) {
       const A = Z[m.a], B = Z[m.b], t = m.t;
-      // how much band: a zone without one (the shopping street) fades it out and leaves the far horizon to the rings
+      // how much band: a zone without one fades it out and leaves the far horizon to the rings
       let w = 0;
       if (A && B) { u.uRowA.value.copy(A); u.uRowB.value.copy(B); u.uMix.value = A === B ? 0 : t; w = 1; }
       else if (A || B) { u.uRowA.value.copy(A || B); u.uMix.value = 0; w = A ? 1 - t : t; }

@@ -17,14 +17,16 @@ const grainC = canvas(256, 256);
 }
 
 export class Atlas {
-  /** extra: rows added under the 4096 of the procedural cells, for the painted houses (paintHouses) */
-  constructor(extra = 0) {
-    const H = (this.H = SH + extra);
+  /** h: its rows (the procedural atlas: 4096). uOff: added to its cells' u (the painted atlas: 2, so the atlas material
+   *  can tell its cells from the procedural ones by their uv alone, materials.js); cells: the map its cells are listed in
+   *  (the painted atlas lists its cells in the procedural atlas's: one namespace, one uv() for both) */
+  constructor(h = SH, uOff = 0, cells = {}) {
+    const H = (this.H = h);
     this.cA = canvas(SW, H); this.cE = canvas(SW / 2, H / 2);
     this.a = this.cA.getContext('2d'); this.e = this.cE.getContext('2d');
     this.e.fillStyle = '#000'; this.e.fillRect(0, 0, SW / 2, H / 2);
     this.a.fillStyle = '#8a8a8a'; this.a.fillRect(0, 0, SW, H); // opaque padding so alpha-test only cuts the railing cell
-    this.x = 0; this.y = 0; this.rowH = 0; this.cells = {};
+    this.x = 0; this.y = 0; this.rowH = 0; this.cells = cells; this.uOff = uOff;
     this.grain = this.a.createPattern(grainC, 'repeat');
   }
   /** allocate a w×h cell and paint it; draw(a, e, w, h) is called with both contexts translated to the cell */
@@ -37,16 +39,17 @@ export class Atlas {
     for (const c of [this.a, this.e]) { c.save(); if (c === this.e) c.scale(0.5, 0.5); c.translate(r.x, r.y); c.beginPath(); c.rect(0, 0, w, h); c.clip(); }
     draw(this.a, this.e, w, h);
     this.a.restore(); this.e.restore();
-    const hp = 0.5, H = this.H;
-    this.cells[name] = { u0: (r.x + hp) / SW, u1: (r.x + w - hp) / SW, v0: 1 - (r.y + h - hp) / H, v1: 1 - (r.y + hp) / H, w, h, px: r.x, py: r.y };
+    const hp = 0.5, H = this.H, o = this.uOff;
+    this.cells[name] = { u0: o + (r.x + hp) / SW, u1: o + (r.x + w - hp) / SW, v0: 1 - (r.y + h - hp) / H, v1: 1 - (r.y + hp) / H, w, h, px: r.x, py: r.y };
     return this.cells[name];
   }
   /** repaint a cell from an image: the albedo from (sx, sy, sw, sh), the emissive from (sx, ey, sw, sh) of the same
-   *  image (the painted fronts). Before textures() is called: the canvases go to the GPU once. */
+   *  image (the painted fronts; ey < 0: nothing glows). Before textures() is called: the canvases go to the GPU once. */
   paintCell(name, img, sx, sy, sw, sh, ey) {
-    const c = this.cells[name]; if (!c) return;
+    const c = this.cells[name]; if (!c || c.u0 > 1.5 !== this.uOff > 1.5) return; // (one of this atlas's cells)
     this.a.drawImage(img, sx, sy, sw, sh, c.px, c.py, c.w, c.h);
-    this.e.drawImage(img, sx, ey, sw, sh, c.px / 2, c.py / 2, c.w / 2, c.h / 2);
+    if (ey >= 0) this.e.drawImage(img, sx, ey, sw, sh, c.px / 2, c.py / 2, c.w / 2, c.h / 2);
+    else { this.e.fillStyle = '#000'; this.e.fillRect(c.px / 2, c.py / 2, c.w / 2, c.h / 2); }
   }
   uv(name) { const c = this.cells[name]; if (!c) throw new Error('no atlas cell ' + name); return c; }
   has(name) { return !!this.cells[name]; }
@@ -155,8 +158,8 @@ const SIGN_COLS = [['#d8352a', '#fff'], ['#fff', '#c8241c'], ['#1f4e9c', '#fff']
 const VSIGNS = ['居酒屋', 'カラオケ', '整骨院', '歯科医院', '学習塾', 'スナック', '焼き鳥', '中華料理', 'そろばん', '貸事務所', '理髪', 'ギャラリー'];
 const NOREN = ['うどん', 'そば', '寿司', 'らーめん', '天ぷら', 'おでん', 'とんかつ', '甘味'];
 
-export function buildAtlas(extra = 0) {
-  const A = new Atlas(extra), R = rng(2024);
+export function buildAtlas() {
+  const A = new Atlas(), R = rng(2024);
 
   // ---------------- upper-floor bays (3 m × 3 m → 240 px) ----------------
   const B = 240;
@@ -684,42 +687,157 @@ export function buildAtlas(extra = 0) {
     vgrad(a, 0, 0, w, h, [[0, 'rgba(255,240,220,0.06)'], [1, 'rgba(0,0,0,0.16)']]);
     grain(a, A, w, h, 0.2);
   });
-  // ---------------- the shopping street's painted fronts (painted.js loadFrontAtlas → paintFronts) ----------------
-  // 3 m × 3.6 m shopfront bays (a shop's window, a bookshop's, a noren'd entrance with a lantern, a café) and 3 m × 2.9 m
-  // upper-floor bays (cream plaster with a timber-framed window; dark boards with a shoji lattice; their 'L' twins glow at
-  // night), at 120 px/m. Painted here first in plain warm timber, each from its own rng, in case the paintings don't load
-  const warmBay = (a, e, w, h, seed, kind) => {
-    const q = rng(seed), door = kind === 2;
-    rect(a, 0, 0, w, h, '#4b3426'); vgrad(a, 0, 0, w, h, [[0, 'rgba(255,230,200,0.08)'], [1, 'rgba(0,0,0,0.2)']]);
-    const gx = w * 0.12, gy = h * (door ? 0.3 : 0.17), gw = w * 0.76, gh = h * (door ? 0.62 : 0.56);
-    for (const c of [a, e]) { rect(c, gx, gy, gw, gh, '#e9b56c'); vgrad(c, gx, gy, gw, gh, [[0, 'rgba(255,240,200,0.55)'], [1, 'rgba(110,60,25,0.4)']]); }
-    if (!door) for (let sy = gy + gh * 0.32; sy < gy + gh - 6; sy += gh * 0.22) {
-      for (let x = gx + 4; x < gx + gw - 10; x += 9 + q() * 12) { const hh = 10 + q() * 12; rect(a, x, sy - hh, 7, hh, ['#c0503a', '#3a6ab0', '#e8c050', '#5a9a50', '#d07a9a'][Math.floor(q() * 5)]); }
-      rect(a, gx, sy, gw, 5, '#6e4a30');
-    }
-    if (door) { rect(a, gx, gy - h * 0.12, gw, h * 0.16, '#28356a'); rect(e, gx, gy - h * 0.12, gw, h * 0.16, '#000'); }
-    rect(a, gx + gw / 2 - 4, gy, 8, gh, '#4b3426'); rect(e, gx + gw / 2 - 4, gy, 8, gh, '#000'); // the mullion
-    rect(a, 0, gy + gh, w, 6, '#3a281d');
-    grain(a, A, w, h, 0.15);
-  };
-  for (let i = 0; i < 4; i++) A.add('shop_p' + i, 360, 432, (a, e, w, h) => warmBay(a, e, w, h, 6100 + i, i));
-  for (const [n, k] of [['win7', 0], ['win8', 4]]) { A.add(n, 360, 348, (a, e, w, h) => resWindow(a, e, w, h, false, k)); A.add(n + 'L', 360, 348, (a, e, w, h) => resWindow(a, e, w, h, true, k)); }
   return A;
 }
-/** the painted fronts (painted.js loadFrontAtlas) over their cells' procedural paint */
-export function paintFronts(A, fa) {
-  const W = fa.img.width, H = fa.img.height;
-  for (const t of fa.tiles) A.paintCell(t.name, fa.img, t.x * W, t.y * H, t.w * W, t.h * H, t.ey * H);
+// ================================================================================ the painted atlas
+// A second texture pair (albedo + half-size emissive) for the painted cells: the shopping street's painted fronts, its big
+// lit signs and the painted houses. The atlas material reads it for every cell whose u is 2 or more (materials.js
+// paintedAtlas), so it costs no new material, program or draw. Its cells are listed with the procedural ones (one
+// namespace: props.js finds both with uv()). Sized per tier to what it holds: on desktops the fronts at 120 px/m and the
+// houses at 48 px/m; on phones and in the X card half that and 32 px/m.
+const FRONT_SHOPS = 11, FRONT_UPPERS = [7, 8, 9, 10, 11]; // shop_p0…p10; win7…win11 and their lit 'L' twins
+/** The big vertical signs (袖看板) standing off the shophouses at the first floor, after the city painting's: light boxes
+ *  (a white panel lit from inside, a neon tube bent round its edge, the name in strong ink) and coloured panels with white
+ *  lettering. They glow by day too (their names start 'vs': props.js gives them the neon light code).
+ *  [text, panel, ink, neon tube (or null), panel lit from inside]  */
+export const BIG_SIGNS = [
+  ['焼き鳥', '#fbf6f2', '#c8102e', '#ff4fd8', 1],
+  ['居酒屋', '#fdf8ee', '#c41e2a', null, 1],
+  ['そば', '#fbf7ef', '#1f2a6e', '#3fd8ff', 1],
+  ['洋品店', '#2a8a5a', '#ffffff', null, 0],
+  ['スナック', '#2a1f4a', '#ff8ae8', '#b45cff', 0],
+  ['カラオケ', '#c8287a', '#ffffff', '#ffd0f0', 0],
+  ['中華料理', '#1f4fa8', '#ffffff', null, 0],
+  ['ラーメン', '#c8241c', '#fff6d8', '#ffc94a', 0],
+  ['喫茶', '#fdf4e4', '#6a3a1e', '#ffb84a', 1],
+  ['焼肉', '#fbf6f2', '#b8186a', '#b45cff', 1],
+  ['焼き鳥', '#fbf4fb', '#a0128a', '#b45cff', 1], // (the painting's other 焼き鳥, violet: only in the opening view, props.js)
+];
+const rrect = (g, x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
+function bigSign(A, a, e, w, h, [text, panel, ink, neon, box]) {
+  const k = w / 160, m = 6 * k, r = 12 * k; // (sized for 160 × 384 px; phones paint it at half that)
+  // the albedo: a dark metal rim, the panel (a little lighter in the middle, as a lit box is), the tube and its halo
+  rect(a, 0, 0, w, h, '#2a2b30'); rrect(a, m * 0.5, m * 0.5, w - m, h - m, r); a.fillStyle = panel; a.fill();
+  a.save(); rrect(a, m * 0.5, m * 0.5, w - m, h - m, r); a.clip();
+  const g = a.createRadialGradient(w / 2, h / 2, w * 0.1, w / 2, h / 2, h * 0.62);
+  g.addColorStop(0, box ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.12)'); g.addColorStop(1, 'rgba(0,0,0,0.14)');
+  a.fillStyle = g; a.fillRect(0, 0, w, h); a.restore();
+  const tube = (c, col, glow, core) => {
+    c.save(); rrect(c, m + 5 * k, m + 5 * k, w - 2 * m - 10 * k, h - 2 * m - 10 * k, r * 0.8);
+    c.shadowColor = col; c.shadowBlur = glow * k; c.strokeStyle = col; c.lineWidth = 6 * k; c.stroke();
+    c.shadowBlur = 0; c.strokeStyle = core; c.lineWidth = 2.2 * k; c.stroke(); c.restore();
+  };
+  if (neon) tube(a, neon, 10, '#fff4fb');
+  else { a.save(); rrect(a, m + 5 * k, m + 5 * k, w - 2 * m - 10 * k, h - 2 * m - 10 * k, r * 0.8); a.strokeStyle = ink; a.globalAlpha = 0.7; a.lineWidth = 3 * k; a.stroke(); a.restore(); }
+  const y0 = m + 20 * k, y1 = h - m - 20 * k, size = Math.min(w * 0.62, (y1 - y0) / [...text].length);
+  vText(a, text, w / 2, y0, y1, size, ink, 900, box ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.25)');
+  grain(a, A, w, h, 0.05);
+  // the glow: a lit box's whole panel, softer than its tube; a coloured panel in its own colour, its letters bright
+  rect(e, 0, 0, w, h, '#000'); rrect(e, m * 0.5, m * 0.5, w - m, h - m, r);
+  e.fillStyle = box ? '#b4aea4' : neon && panel === '#2a1f4a' ? '#100c1c' : panel; e.globalAlpha = box ? 1 : 0.55; e.fill(); e.globalAlpha = 1;
+  if (neon) tube(e, neon, 12, '#ffffff');
+  vText(e, text, w / 2, y0, y1, size, box ? ink : panel === '#2a1f4a' ? ink : '#ffffff', 900);
+  if (box) { e.save(); e.globalCompositeOperation = 'multiply'; vText(e, text, w / 2, y0, y1, size, '#8a8a8a', 900); e.restore(); } // (ink on a lit box: glowing, but darker than the panel)
 }
-/** the atlas rows the painted houses need under the procedural cells (assets/houses/houses.json lists its own: pack.py),
- *  per tier: a cell's px are its tile's (48 px/m on desktops, 32 on phones and in the X card) */
+/** The shophouses' canopy tiles (庇) as in the city painting: a lighter blue slate than the roofs, every row of round
+ *  tiles (丸瓦) a rounded ridge catching the light, and along the eave (the cell's bottom edge) their round ends (軒丸瓦),
+ *  scalloped (the gaps between them transparent: the atlas alpha-tests). The cell spans ~3 m of eave and the 1.26 m slope,
+ *  so it is painted in a frame squeezed to those proportions (a tile end comes out round on the canopy) */
+function canopyTiles(A, a, e, w, h) {
+  const q = rng(7331), sy = (h / 1.26) / (w / 3); // (v px per u px for round shapes)
+  a.clearRect(0, 0, w, h);
+  const n = 11, tw = w / n, endH = 0.15 * (h / 1.26); // rolls across the 3 m; the round ends' height in px
+  rect(a, 0, 0, w, h - endH * 0.5, '#4d5f92');
+  for (let i = 0; i < n; i++) { // the round tiles: a ridge lit along its top, dark gutters between
+    const x = i * tw;
+    const g = a.createLinearGradient(x, 0, x + tw, 0);
+    g.addColorStop(0, '#2c3760'); g.addColorStop(0.18, '#5a70a8'); g.addColorStop(0.45, '#9fb4e0'); g.addColorStop(0.7, '#6a80b8'); g.addColorStop(1, '#33416e');
+    a.fillStyle = g; a.fillRect(x, 0, tw, h - endH * 0.5);
+  }
+  for (let y = h - endH * 0.5 - 52; y > 0; y -= 52) { // the courses: each row of tiles overlapping the next, a shadow under its lip
+    vgrad(a, 0, y, w, 10, [[0, 'rgba(20,26,50,0.45)'], [1, 'rgba(20,26,50,0)']]); rect(a, 0, y - 2, w, 2, 'rgba(200,215,240,0.35)');
+  }
+  for (let i = 0; i < n; i++) { // the round ends along the eave
+    const cx = (i + 0.5) * tw, cy = h - endH * 0.5, r = tw * 0.47;
+    a.save(); a.translate(cx, cy); a.scale(1, sy);
+    a.fillStyle = '#26305a'; a.beginPath(); a.arc(0, 0, r, 0, 7); a.fill();
+    a.fillStyle = '#5c72aa'; a.beginPath(); a.arc(0, 0, r * 0.8, 0, 7); a.fill();
+    a.fillStyle = 'rgba(190,206,240,0.8)'; a.beginPath(); a.arc(-r * 0.2, -r * 0.25, r * 0.38, 0, 7); a.fill();
+    a.fillStyle = '#3a4878'; a.beginPath(); a.arc(0, 0, r * 0.22, 0, 7); a.fill(); // (the boss in the middle)
+    a.restore();
+  }
+  a.save(); a.globalCompositeOperation = 'source-atop'; a.globalAlpha = 0.12; a.fillStyle = A.grain; a.fillRect(0, 0, w, h); a.restore();
+  for (let i = 0; i < 40; i++) { a.fillStyle = q() < 0.5 ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,20,0.1)'; a.fillRect(q() * w, q() * (h - endH), tw * (0.5 + q()), 3 + q() * 6); } // (weathering)
+}
+/** the city painting's navy board with gold letters (洋品店) for the painted clothes shop */
+function navyBoard(A, a, e, w, h, text) {
+  rect(a, 0, 0, w, h, '#1c2b5e'); rect(a, 0, 0, w, 4, 'rgba(255,255,255,0.3)'); rect(a, 0, h - 5, w, 5, 'rgba(0,0,0,0.25)');
+  a.strokeStyle = '#d9b44a'; a.lineWidth = 2; a.strokeRect(7, 7, w - 14, h - 14);
+  textFit(a, text, w / 2, h / 2 + 2, w * 0.66, 52, '#f6d35a', 900, 'rgba(60,40,0,0.5)'); grain(a, A, w, h, 0.06);
+  rect(e, 0, 0, w, h, '#0a1024'); textFit(e, text, w / 2, h / 2 + 2, w * 0.66, 52, '#f0c850', 900);
+}
+// the fronts' procedural paint, in case the paintings don't load: plain warm timber shopfronts (each from its own rng)
+function warmBay(A, a, e, w, h, seed, door) {
+  const q = rng(seed), k = w / 360;
+  rect(a, 0, 0, w, h, '#4b3426'); vgrad(a, 0, 0, w, h, [[0, 'rgba(255,230,200,0.08)'], [1, 'rgba(0,0,0,0.2)']]);
+  const gx = w * 0.12, gy = h * (door ? 0.3 : 0.17), gw = w * 0.76, gh = h * (door ? 0.62 : 0.56);
+  for (const c of [a, e]) { rect(c, gx, gy, gw, gh, '#e9b56c'); vgrad(c, gx, gy, gw, gh, [[0, 'rgba(255,240,200,0.55)'], [1, 'rgba(110,60,25,0.4)']]); }
+  if (!door) for (let sy = gy + gh * 0.32; sy < gy + gh - 6 * k; sy += gh * 0.22) {
+    for (let x = gx + 4 * k; x < gx + gw - 10 * k; x += (9 + q() * 12) * k) { const hh = (10 + q() * 12) * k; rect(a, x, sy - hh, 7 * k, hh, ['#c0503a', '#3a6ab0', '#e8c050', '#5a9a50', '#d07a9a'][Math.floor(q() * 5)]); }
+    rect(a, gx, sy, gw, 5 * k, '#6e4a30');
+  }
+  if (door) { rect(a, gx, gy - h * 0.12, gw, h * 0.16, '#28356a'); rect(e, gx, gy - h * 0.12, gw, h * 0.16, '#000'); }
+  rect(a, gx + gw / 2 - 4 * k, gy, 8 * k, gh, '#4b3426'); rect(e, gx + gw / 2 - 4 * k, gy, 8 * k, gh, '#000'); // the mullion
+  rect(a, 0, gy + gh, w, 6 * k, '#3a281d');
+  grain(a, A, w, h, 0.15);
+}
+// …and plain upper floors: cream plaster or dark boards, a timber-framed window (lit: warm lamplight behind it)
+function plainUpper(A, a, e, w, h, wood, lit) {
+  const k = w / 360;
+  rect(a, 0, 0, w, h, wood ? '#5e4130' : '#ece2cc');
+  if (wood) for (let y = 0; y < h; y += 16 * k) rect(a, 0, y, w, 2 * k, 'rgba(15,8,4,0.4)');
+  for (const x of [0, w - 14 * k]) rect(a, x, 0, 14 * k, h, '#4b3426');
+  rect(a, 0, h - 12 * k, w, 12 * k, '#3a281d');
+  const x = w * 0.2, y = h * 0.22, ww = w * 0.6, wh = h * 0.46;
+  rect(a, x - 8 * k, y - 8 * k, ww + 16 * k, wh + 16 * k, '#4a3020');
+  vgrad(a, x, y, ww, wh, [[0, '#4f78b8'], [1, '#a6c8ec']]); rect(a, x + ww / 2 - 3 * k, y, 6 * k, wh, '#4a3020');
+  if (lit) { rect(e, x, y, ww, wh, '#ffcf8f'); rect(e, x + ww / 2 - 3 * k, y, 6 * k, wh, '#000'); }
+  grain(a, A, w, h, 0.12);
+}
+/** the cells' sizes in rows of 2048 px, as Atlas.add lays them out: the y under the last one */
+function flowEnd(sizes) {
+  let x = 0, y = 0, rowH = 0;
+  for (const [w, h] of sizes) { if (x + w + 4 > SW) { x = 0; y += rowH + 4; rowH = 0; } x += w + 4; rowH = Math.max(rowH, h); }
+  return y + rowH;
+}
+/** Builds the painted atlas for a tier ('hi' or 'lo'): the fronts' cells (their procedural paint, then the paintings
+ *  over it when `fa` loaded: painted.js loadFrontAtlas), the big signs, and the painted houses' rows when `ha` loaded
+ *  (loadHouseAtlas; .houses says whether they fit). `main`: the procedural atlas, whose cell list it shares. */
+export function buildPaintedAtlas(main, tier, fa, ha) {
+  const k = tier === 'hi' ? 1 : 0.5, SB = [360 * k, 432 * k], UB = [360 * k, 348 * k], VS = [160 * k, 384 * k], NB = [512, 76];
+  const shops = [], uppers = [], signs = [];
+  for (let i = 0; i < FRONT_SHOPS; i++) shops.push(['shop_p' + i, SB, (A, a, e, w, h) => warmBay(A, a, e, w, h, 6100 + i, i === 2 || i === 7 || i === 10)]);
+  for (const n of FRONT_UPPERS) for (const lit of [false, true]) uppers.push(['win' + n + (lit ? 'L' : ''), UB, (A, a, e, w, h) => plainUpper(A, a, e, w, h, n === 8 || n === 11, lit)]);
+  BIG_SIGNS.forEach((spec, i) => signs.push(['vsB' + i, VS, (A, a, e, w, h) => bigSign(A, a, e, w, h, spec)]));
+  // (in this order the narrow signs fill the rows' ends: 2340 rows on desktops instead of 2432)
+  const list = [...shops.slice(0, 5), signs[0], ...shops.slice(5, 10), signs[1], shops[10], ...uppers.slice(0, 4), signs[2], ...uppers.slice(4, 9), signs[3], uppers[9], ...signs.slice(4),
+    ['hsN_洋品店', NB, (A, a, e, w, h) => navyBoard(A, a, e, w, h, '洋品店')], ['kawaraC', [240, 256], canopyTiles]];
+  const end = flowEnd(list.map(c => c[1])), H = Math.ceil((end + (ha ? 16 + ha.rows : 4)) / 4) * 4;
+  const P = new Atlas(H, 2, main.cells);
+  for (const [n, [w, h], f] of list) P.add(n, w, h, (a, e, cw, ch) => f(P, a, e, cw, ch));
+  if (fa) { const W = fa.img.width, Hh = fa.img.height; for (const t of fa.tiles) P.paintCell(t.name, fa.img, t.x * W, t.y * Hh, t.w * W, t.h * Hh, t.ey < 0 ? -1 : t.ey * Hh); }
+  P.houses = !!ha && paintHouses(P, ha);
+  return P;
+}
+/** the atlas rows the painted houses take (assets/houses/houses.json lists its own: pack.py), per tier: a cell's px are its
+ *  tile's (48 px/m on desktops, 32 on phones and in the X card) */
 export const HOUSE_ROWS = { hi: 1152, lo: 512 };
-/** The painted houses (painted.js loadHouseAtlas): each tile of the sheet becomes a cell of its own, added last (nothing
- *  else moves), in rows of their own under the procedural cells. Their outline is the painting's alpha (the atlas
- *  alpha-tests at 0.5), so the rows are cleared to transparent first: no grey padding can bleed into a roof's edge at a
- *  distance. Returns false (the houses then keep their procedural look) if they don't fit. */
+/** The painted houses (painted.js loadHouseAtlas): each tile of the sheet becomes a cell of its own, in rows of their own
+ *  under the painted atlas's other cells. Their outline is the painting's alpha (the atlas alpha-tests at 0.5), so the rows
+ *  are cleared to transparent first: no grey padding can bleed into a roof's edge at a distance. Returns false (the houses
+ *  then keep their procedural look) if they don't fit. */
 export function paintHouses(A, ha) {
-  const P = 4, y0 = A.y + A.rowH + P + 12; // (a fresh row; 8 more rows of grey under the last procedural cells for their mips)
+  const P = 4, y0 = A.y + A.rowH + P + 12; // (a fresh row; 8 more rows of grey under the last cells for their mips)
   if (y0 + ha.rows > A.H) return false;
   A.x = 0; A.y = y0; A.rowH = 0;
   A.a.clearRect(0, y0 - 8, SW, A.H - y0 + 8);

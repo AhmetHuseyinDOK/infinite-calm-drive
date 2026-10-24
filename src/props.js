@@ -532,6 +532,19 @@ function vsign(G, x, y0, y1, r) {
   nxq(G.atlas, x - 0.065, -0.88, -0.12, y0, y1, k); pxq(G.atlas, x + 0.065, -0.88, -0.12, y0, y1, k);
   G.color.box(x - 0.03, y0 + 0.3, -0.12, x + 0.03, y0 + 0.36, 0, PAL.metal); G.color.box(x - 0.03, y1 - 0.36, -0.12, x + 0.03, y1 - 0.3, 0, PAL.metal);
 }
+// the city painting's big lit signs (袖看板, textures.js BIG_SIGNS: the painted atlas's vsB… cells): a light box up to 1.15 m
+// wide and 2.7 m tall standing off the first floor, its faces along the street (so they face the drive), on two arms.
+// One random number, as vsign: the street's layout stays as it was
+const SIGN_BOX = C('#d9d6cf');
+function vsignBig(G, x, y0, y1, r, hero = '') {
+  const kr = Math.floor(r() * 10), cell = hero || 'vsB' + kr, d = Math.min(1.15, (y1 - y0) * 0.417), z1 = -0.14, z0 = z1 - d, t = 0.1, c = G.color;
+  // the box's edges only (its sides are the two painted faces: the colour pass, drawn first, would shade them for nothing)
+  c.quad([x + t, y0, z0], [x - t, y0, z0], [x - t, y1, z0], [x + t, y1, z0], SIGN_BOX); // (facing the road)
+  c.quad([x - t, y1, z1], [x + t, y1, z1], [x + t, y1, z0], [x - t, y1, z0], SIGN_BOX); // (the top)
+  c.quad([x - t, y0, z0], [x + t, y0, z0], [x + t, y0, z1], [x - t, y0, z1], SIGN_BOX); // (the underside)
+  nxq(G.atlas, x - t, z0, z1, y0, y1, cell); pxq(G.atlas, x + t, z0, z1, y0, y1, cell);
+  for (const y of [y0 + 0.28, y1 - 0.34]) G.color.box(x - 0.03, y, z1, x + 0.03, y + 0.06, 0, PAL.metal);
+}
 
 export function building(G, M, r, spec) {
   G.atlas.setM(M); G.color.setM(M);
@@ -548,6 +561,10 @@ export function building(G, M, r, spec) {
 }
 
 const LIT_SHOP = new Set(['glass', 'door', 'cafe', 'noren']);
+// the machiya's painted windows (besides the bookshop): goods, café, bakery, florist, clothes, tea, sweets; its painted
+// entrances: under a noren with a lantern (twice as often), a ramen shop's, an izakaya's; the boards that go with them
+const GLASS_P = ['shop_p0', 'shop_p3', 'shop_p4', 'shop_p5', 'shop_p6', 'shop_p8', 'shop_p9'], DOOR_P = ['shop_p2', 'shop_p2', 'shop_p7', 'shop_p10'];
+const BOARD_P = { shop_p1: 'hs9', shop_p3: 'hs7', shop_p4: 'hs5', shop_p5: 'hs_花屋', shop_p6: 'hsN_洋品店', shop_p8: 'hs13', shop_p9: 'hs12' }; // 書店 珈琲 パン 花屋 洋品店 喫茶 和菓子
 const THEME_SIGN = { 3: 'hs5', 4: 'hs9', 5: 'hs_花屋', 6: 'hs_洋品店' }; // shop_glass3 bakery → パン, 4 books → 書店, 5 → 花屋, 6 → 洋品店
 function shopHouse(G, M, r, s) {
   const { w, d, floors, tint, litP } = s, a = G.atlas, c = G.color, fh0 = 3.6, fh = 3.0, H = fh0 + (floors - 1) * fh;
@@ -604,13 +621,26 @@ function shopHouse(G, M, r, s) {
 function machiya(G, M, r, s) {
   const { w, d, floors, litP } = s, a = G.atlas, c = G.color, fh0 = 3.6, fh = 2.9, H = fh0 + (floors - 1) * fh, x0 = -w / 2;
   const bays = Math.max(2, Math.round(w / 3)), bw = w / bays, WOOD = C('#5c4030'), DARK = C('#3a2a20');
-  const kinds = r.pick([['glass', 'door', 'glass'], ['noren', 'door'], ['cafe', 'door'], ['noren', 'glass'], ['glass', 'glass', 'door'], ['glass', 'door']]);
-  // the painted bays (textures.js shop_p…, from the city painting): a shop's window of goods, a bookshop's of magazines
-  // or a café's of cakes (one kind a shop, and its sign says so), an entrance under a noren with a lantern; between
-  // them the procedural noren fronts (とんかつ, そば …). All warm-lit by day, as in the painting
-  const glassP = r.pick(['shop_p0', 'shop_p0', 'shop_p1', 'shop_p3']), cells = [];
-  for (let i = 0; i < bays; i++) { const k = kinds[i % kinds.length]; cells.push(k === 'glass' ? glassP : k === 'door' ? 'shop_p2' : k === 'cafe' ? 'shop_p3' : pickV(r, 'shop_' + k)); }
-  const theme = r() < 0.5 ? '' : kinds.includes('glass') && glassP === 'shop_p1' ? 'hs9' : kinds.includes('cafe') || (kinds.includes('glass') && glassP === 'shop_p3') ? 'hs7' : ''; // 書店, 珈琲 (half the time)
+  let kinds = r.pick([['glass', 'door', 'glass'], ['noren', 'door'], ['cafe', 'door'], ['noren', 'glass'], ['glass', 'glass', 'door'], ['glass', 'door']]);
+  // the opening view (the drive starts at s = 140): the shophouse beside the car on either side is the city painting's
+  // nearest one: on the left a bookshop with its magazine racks out on the pavement under a red awning, on the right a
+  // clothes shop under the navy 洋品店 board and a red awning; each with a big 焼き鳥 light box (violet on the left, pink on
+  // the right). (With any seed: only that chunk's later layout changes)
+  const hero = s.at !== undefined && Math.abs(s.at - (s.side < 0 ? 139 : 146)) < w / 2 && floors >= 2 ? s.side : 0; // (the one in the frame's near edge)
+  if (hero) kinds = ['glass', 'door', 'glass'];
+  // the painted bays (textures.js shop_p…, from the city painting): a shop's window of goods, a bookshop's of magazines, a
+  // café's of cakes, a bakery's, a florist's, a clothes shop's, a tea shop's, a sweets shop's (one kind a shop, and its
+  // sign mostly says so); an entrance under a noren with a lantern, a ramen shop's, an izakaya's; now and then the
+  // procedural noren fronts (とんかつ, そば …). All warm-lit by day, as in the painting. Which painting each bay shows comes
+  // from the building's own random numbers (q): the street's (r) are drawn as before, so its layout stays as it was
+  const q = rng(Math.floor((G.atlas.e[12] * 71.3 + G.atlas.e[14] * 37.9) * 977) ^ 0x2b5d);
+  const glassOld = r.pick(['shop_p0', 'shop_p0', 'shop_p1', 'shop_p3']), cells = [];
+  const glassP = hero ? (hero < 0 ? 'shop_p1' : 'shop_p6') : glassOld === 'shop_p1' ? glassOld : GLASS_P[Math.floor(q() * GLASS_P.length)]; // (the bookshops stay where they were: their racks)
+  const doorP = q.pick(DOOR_P), norenP = q() < 0.65 ? q.pick(['shop_p7', 'shop_p10']) : '';
+  for (let i = 0; i < bays; i++) { const k = kinds[i % kinds.length]; cells.push(k === 'glass' ? glassP : k === 'door' ? doorP : k === 'cafe' ? 'shop_p3' : (k2 => (k === 'noren' && norenP) || k2)(pickV(r, 'shop_' + k))); }
+  const tr = r(), oldTheme = tr < 0.5 ? '' : kinds.includes('glass') && glassOld === 'shop_p1' ? 'hs9' : kinds.includes('cafe') || (kinds.includes('glass') && glassOld === 'shop_p3') ? 'hs7' : '';
+  const door = cells.includes('shop_p7') ? 'hs0' : cells.includes('shop_p10') ? 'hs3' : ''; // ラーメン, 居酒屋
+  const theme = hero ? (hero > 0 ? 'hsN_洋品店' : 'hs9') : kinds.includes('glass') && tr >= 0.2 ? BOARD_P[glassP] || door : kinds.includes('cafe') && tr >= 0.5 ? 'hs7' : tr >= 0.2 ? door : '';
   for (let i = 0; i < bays; i++) {
     const k = kinds[i % kinds.length]; fq(a, x0 + i * bw, x0 + (i + 1) * bw, 0, fh0, 0, cells[i]);
     if (LIT_SHOP.has(k)) lampAt(G, M, x0 + (i + 0.5) * bw, 1.9, -0.8, 0.7);
@@ -620,8 +650,9 @@ function machiya(G, M, r, s) {
   // windows in the plaster, a dark timber beam between the floors, plaster gables under the same tiled roof
   const P = !!s.plaster, PT = s.tint;
   const fy = [0, fh0]; for (let f = 1; f < floors; f++) fy.push(fh0 + f * fh);
+  const up = P ? q.pick(['win7', 'win7', 'win9', 'win10']) : q.pick(['win8', 'win8', 'win11']); // (one kind a building)
   for (let f = 1; f < floors; f++) for (let i = 0; i < bays; i++) {
-    const cell = P ? (i % 2 === 1 && r() < 0.3 ? 'win5' : 'win7') : 'win8';
+    const cell = P ? (i % 2 === 1 && r() < 0.3 ? 'win5' : up) : up;
     fq(a, x0 + i * bw, x0 + (i + 1) * bw, fy[f], fy[f + 1], 0, litCell(cell, r(), litP), cell === 'win5' ? PT : W1);
   }
   { // the side walls: timber boards and lattice windows, or plaster and small windows (seen down every side street)
@@ -640,18 +671,20 @@ function machiya(G, M, r, s) {
   // Steep (33°) and high at the wall, so its tiles show above the board from the street, as in the city painting (at
   // 22° only a sliver of them showed); the eave and the board are where they were
   const cy = fh0 + 0.62, cd = 1.05, drop = 0.7, nS = Math.max(2, Math.round((w + 0.3) / 3));
-  for (let i = 0; i < nS; i++) { const xa = x0 - 0.15 + ((w + 0.3) * i) / nS, xb = x0 - 0.15 + ((w + 0.3) * (i + 1)) / nS; a.quad([xb, cy - drop, -cd], [xa, cy - drop, -cd], [xa, cy, 0], [xb, cy, 0], RC, k); }
+  // (its tiles: the painted atlas's kawaraC, a lighter slate than the roof's, with the round tile ends along the eave)
+  const kc = A.has('kawaraC') ? uv('kawaraC') : null;
+  for (let i = 0; i < nS; i++) { const xa = x0 - 0.15 + ((w + 0.3) * i) / nS, xb = x0 - 0.15 + ((w + 0.3) * (i + 1)) / nS; a.quad([xb, cy - drop, -cd], [xa, cy - drop, -cd], [xa, cy, 0], [xb, cy, 0], kc ? W1 : RC, kc || k); }
   c.quad([x0 - 0.15, cy - drop - 0.03, -cd], [-x0 + 0.15, cy - drop - 0.03, -cd], [-x0 + 0.15, cy - 0.1, 0], [x0 - 0.15, cy - 0.1, 0], WOOD);
   const sw = Math.min(w * 0.9, 4.4), y1 = cy - drop + 0.02, y0 = y1 - 0.62; // (a board at most 4.4 m long, its sign's own shape: the eave shows either side)
   c.box(-sw / 2, y0, -cd - 0.02, sw / 2, y1, -cd + 0.07, DARK);
-  fq(a, -sw / 2, sw / 2, y0, y1, -cd - 0.025, theme || 'hs' + Math.floor(r() * 14));
+  { const hsR = oldTheme ? '' : 'hs' + Math.floor(r() * 14); fq(a, -sw / 2, sw / 2, y0, y1, -cd - 0.025, theme || hsR || 'hs' + Math.floor(q() * 14)); } // (r as before)
   for (const x of [-sw / 2 + 0.25, sw / 2 - 0.25]) c.box(x - 0.03, y1, -cd + 0.02, x + 0.03, cy - drop * 0.1, -cd + 0.06, DARK); // the board's hangers
   // warm bulbs on short flexes under the canopy (lit by day too, as in a shopping street)
   G.sodium.setM(M);
   c.noShadow = true; for (let i = 0; i < bays; i++) { const x = x0 + (i + 0.5) * bw; c.box(x - 0.008, y0 - 0.02, -0.62, x + 0.008, cy - drop * 0.6, -0.6, DARK); G.sodium.box(x - 0.06, y0 - 0.16, -0.67, x + 0.06, y0 - 0.04, -0.55, null); } c.noShadow = false;
   let awn = false;
-  if (r() < 0.5) { awn = true; // a fabric awning under the board
-    const col = r.pick(AWN_REF), y = y0 - 0.12;
+  if (r() < 0.5 || hero) { awn = true; // a fabric awning under the board
+    const col = hero ? AWN_REF[0] : r.pick(AWN_REF), y = y0 - 0.12;
     c.quad([w / 2 - 0.2, y - 0.32, -0.95], [-w / 2 + 0.2, y - 0.32, -0.95], [-w / 2 + 0.2, y, -0.02], [w / 2 - 0.2, y, -0.02], col);
     c.quad([w / 2 - 0.2, y - 0.55, -0.95], [-w / 2 + 0.2, y - 0.55, -0.95], [-w / 2 + 0.2, y - 0.32, -0.95], [w / 2 - 0.2, y - 0.32, -0.95], mulC(col, 0.85));
   }
@@ -668,7 +701,8 @@ function machiya(G, M, r, s) {
       for (let fx = xc - bl / 2 + 0.2; fx < xc + bl / 2 - 0.1; fx += 0.32) cards(G, [fx, yb + 0.95, zr - 0.11], fx, yb + 1.05, zr - 0.11, 0.26, r() < 0.65 ? 'sakura' : 'flowers', 3, r, [1, 0.92, 0.96], [0.7, 0.55, 0.62], [yb + 0.9, yb + 1.3]);
     }
   }
-  if (floors >= 2 && r() < 0.9) { const sd = r() < 0.5 ? 1 : -1; vsign(G, sd * (w / 2 - 0.35), fh0 + 0.6, Math.min(H - 0.2, fh0 + 2.7), r); if (w > 7 && r() < 0.35) vsign(G, -sd * (w / 2 - 0.35), fh0 + 0.8, Math.min(H - 0.2, fh0 + 2.5), r); }
+  // a big lit sign over the canopy (and on a wide front now and then a small one at its other end)
+  if (floors >= 2 && (r() < 0.9 || hero)) { const sdR = r() < 0.5 ? 1 : -1, sd = hero || sdR; /* (the opening view's: at the end further along the road, in view) */ vsignBig(G, sd * (w / 2 - 0.35), cy + 0.1, Math.min(H - 0.2, cy + 2.8), r, hero ? (hero < 0 ? 'vsB10' : 'vsB0') : ''); if (w > 7 && r() < 0.35) vsign(G, -sd * (w / 2 - 0.35), fh0 + 0.8, Math.min(H - 0.2, fh0 + 2.5), r); }
   // paper lanterns (提灯) glowing at the canopy's edge: a pair by a noren or a café's door, now and then one elsewhere
   { const pair = kinds.includes('noren') || kinds.includes('cafe'), nL = awn ? 0 : pair ? 2 : r() < 0.3 ? 1 : 0; // (not where an awning hangs)
     G.sodium.setM(M);
@@ -677,9 +711,10 @@ function machiya(G, M, r, s) {
       G.sodium.cyl(x, y, -cd + 0.13, 0.11, 0.16, 0.18, 10, null, false); G.sodium.cyl(x, y + 0.18, -cd + 0.13, 0.16, 0.11, 0.18, 10, null, false); // a barrel of paper
       c.cyl(x, y - 0.035, -cd + 0.13, 0.1, 0.1, 0.04, 8, DARK); c.cyl(x, y + 0.355, -cd + 0.13, 0.1, 0.1, 0.04, 8, DARK); c.noShadow = false; } }
   // a bookshop's magazine rack out in front of its window, and pots of plants along the shopfront
-  let xr = 1e9;
+  let xr = 1e9, xr2 = 1e9;
   if (glassP === 'shop_p1' && kinds.includes('glass')) { xr = x0 + (kinds.indexOf('glass') + 0.5) * bw; magazineRack(G, M, xr, -0.62, r); }
-  for (let x = x0 + 0.45 + r() * 0.4; x < -x0 - 0.3; x += 0.7 + r() * 1.3) if (r() < 0.7 && Math.abs(x - xr) > 0.95) pottedPlant(G, M, r, x, -0.4);
+  if (hero < 0 && bays >= 3) { xr2 = x0 + 2.5 * bw; magazineRack(G, M, xr2, -0.62, r); } // (the opening view's bookshop: racks along its front)
+  for (let x = x0 + 0.45 + r() * 0.4; x < -x0 - 0.3; x += 0.7 + r() * 1.3) if (r() < 0.7 && Math.abs(x - xr) > 0.95 && Math.abs(x - xr2) > 0.95) pottedPlant(G, M, r, x, -0.4);
   G.color.setM(M); G.atlas.setM(M);
 }
 function billboard(G, w, H, d, r) {

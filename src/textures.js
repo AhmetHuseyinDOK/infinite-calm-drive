@@ -17,11 +17,13 @@ const grainC = canvas(256, 256);
 }
 
 export class Atlas {
-  constructor() {
-    this.cA = canvas(SW, SH); this.cE = canvas(SW / 2, SH / 2);
+  /** extra: rows added under the 4096 of the procedural cells, for the painted houses (paintHouses) */
+  constructor(extra = 0) {
+    const H = (this.H = SH + extra);
+    this.cA = canvas(SW, H); this.cE = canvas(SW / 2, H / 2);
     this.a = this.cA.getContext('2d'); this.e = this.cE.getContext('2d');
-    this.e.fillStyle = '#000'; this.e.fillRect(0, 0, SW / 2, SH / 2);
-    this.a.fillStyle = '#8a8a8a'; this.a.fillRect(0, 0, SW, SH); // opaque padding so alpha-test only cuts the railing cell
+    this.e.fillStyle = '#000'; this.e.fillRect(0, 0, SW / 2, H / 2);
+    this.a.fillStyle = '#8a8a8a'; this.a.fillRect(0, 0, SW, H); // opaque padding so alpha-test only cuts the railing cell
     this.x = 0; this.y = 0; this.rowH = 0; this.cells = {};
     this.grain = this.a.createPattern(grainC, 'repeat');
   }
@@ -29,14 +31,14 @@ export class Atlas {
   add(name, w, h, draw) {
     const P = 4;
     if (this.x + w + P > SW) { this.x = 0; this.y += this.rowH + P; this.rowH = 0; }
-    if (this.y + h > SH) throw new Error('atlas full at ' + name);
+    if (this.y + h > this.H) throw new Error('atlas full at ' + name);
     const r = { x: this.x, y: this.y, w, h };
     this.x += w + P; this.rowH = Math.max(this.rowH, h);
     for (const c of [this.a, this.e]) { c.save(); if (c === this.e) c.scale(0.5, 0.5); c.translate(r.x, r.y); c.beginPath(); c.rect(0, 0, w, h); c.clip(); }
     draw(this.a, this.e, w, h);
     this.a.restore(); this.e.restore();
-    const hp = 0.5;
-    this.cells[name] = { u0: (r.x + hp) / SW, u1: (r.x + w - hp) / SW, v0: 1 - (r.y + h - hp) / SH, v1: 1 - (r.y + hp) / SH, w, h, px: r.x, py: r.y };
+    const hp = 0.5, H = this.H;
+    this.cells[name] = { u0: (r.x + hp) / SW, u1: (r.x + w - hp) / SW, v0: 1 - (r.y + h - hp) / H, v1: 1 - (r.y + hp) / H, w, h, px: r.x, py: r.y };
     return this.cells[name];
   }
   /** repaint a cell from an image: the albedo from (sx, sy, sw, sh), the emissive from (sx, ey, sw, sh) of the same
@@ -153,8 +155,8 @@ const SIGN_COLS = [['#d8352a', '#fff'], ['#fff', '#c8241c'], ['#1f4e9c', '#fff']
 const VSIGNS = ['居酒屋', 'カラオケ', '整骨院', '歯科医院', '学習塾', 'スナック', '焼き鳥', '中華料理', 'そろばん', '貸事務所', '理髪', 'ギャラリー'];
 const NOREN = ['うどん', 'そば', '寿司', 'らーめん', '天ぷら', 'おでん', 'とんかつ', '甘味'];
 
-export function buildAtlas() {
-  const A = new Atlas(), R = rng(2024);
+export function buildAtlas(extra = 0) {
+  const A = new Atlas(extra), R = rng(2024);
 
   // ---------------- upper-floor bays (3 m × 3 m → 240 px) ----------------
   const B = 240;
@@ -708,6 +710,26 @@ export function buildAtlas() {
 export function paintFronts(A, fa) {
   const W = fa.img.width, H = fa.img.height;
   for (const t of fa.tiles) A.paintCell(t.name, fa.img, t.x * W, t.y * H, t.w * W, t.h * H, t.ey * H);
+}
+/** the atlas rows the painted houses need under the procedural cells (assets/houses/houses.json lists its own: pack.py),
+ *  per tier: a cell's px are its tile's (48 px/m on desktops, 32 on phones and in the X card) */
+export const HOUSE_ROWS = { hi: 1152, lo: 512 };
+/** The painted houses (painted.js loadHouseAtlas): each tile of the sheet becomes a cell of its own, added last (nothing
+ *  else moves), in rows of their own under the procedural cells. Their outline is the painting's alpha (the atlas
+ *  alpha-tests at 0.5), so the rows are cleared to transparent first: no grey padding can bleed into a roof's edge at a
+ *  distance. Returns false (the houses then keep their procedural look) if they don't fit. */
+export function paintHouses(A, ha) {
+  const P = 4, y0 = A.y + A.rowH + P + 12; // (a fresh row; 8 more rows of grey under the last procedural cells for their mips)
+  if (y0 + ha.rows > A.H) return false;
+  A.x = 0; A.y = y0; A.rowH = 0;
+  A.a.clearRect(0, y0 - 8, SW, A.H - y0 + 8);
+  try {
+    for (const t of ha.tiles) A.add(t.name, t.w, t.h, (a, e, w, h) => {
+      a.clearRect(0, 0, w, h); a.drawImage(ha.img, t.x, t.y, t.w, t.h, 0, 0, w, h);
+      e.drawImage(ha.img, t.x, t.ey, t.w, t.h, 0, 0, w, h); // (the emissive canvas is half size: its context is scaled)
+    });
+  } catch (err) { console.warn('painted houses:', err.message); return false; }
+  return true;
 }
 
 // ---------------- foliage clump textures (leaves, sakura blossom, pine needles) ----------------

@@ -529,7 +529,7 @@ export function building(G, M, r, spec) {
     case 'apt': return apartment(G, M, r, spec);
     case 'office': return office(G, M, r, spec);
     case 'konbini': return konbini(G, M, r, spec);
-    case 'house': return woodHouse(G, M, r, spec);
+    case 'house': return spec.ptype ? paintedHouse(G, M, r, spec) : woodHouse(G, M, r, spec);
     case 'tower': return tower(G, M, r, spec);
   }
 }
@@ -785,6 +785,43 @@ function woodHouse(G, M, r, s) {
   }
   if (s.fence) { // concrete block wall in front, with a gap for the gate
     const z = -s.fence, h = 1.2;
+    for (const [xa, xb] of [[-w / 2, -1.0], [0.4, w / 2]]) { c.box(xa, 0, z - 0.08, xb, h, z + 0.08, PAL.concrete); fq(a, xa, xb, 0, h, z - 0.085, 'block'); }
+  }
+}
+// ------------------------------------------------------------------ painted houses
+// The reference art's houses (country, coast, cherry avenue): flat painted elevations (painted.js loadHouseAtlas, drawn
+// into atlas cells of their own by textures.js paintHouses) on a box with a gable roof. Each type lists its pieces (pack.py):
+// the walls (the front painting on the long walls, the gable-end painting on the short ones), the gables out at the roof's
+// ends, the front painting's tiles on both roof slopes, a pent roof between the floors, what stands above the ridge, and
+// plain soffits under the overhangs. Their outlines are the paintings' alpha. HOUSES.byZone: the types by zone, once their
+// cells are in; until then, and if they failed, houses keep their procedural look (woodHouse).
+export const HOUSES = { byZone: null };
+export function setHouses(types) {
+  const z = {};
+  for (const t of types) for (const k of t.zones) (z[k] || (z[k] = [])).push(t);
+  HOUSES.byZone = z;
+}
+/** a painted house type for the zone (one random number), or null (then the caller keeps its procedural house) */
+export function houseType(zone, r) { const L = HOUSES.byZone && HOUSES.byZone[zone]; return L ? L[Math.floor(r() * L.length)] : null; }
+const _huv = { u0: 0, u1: 0, v0: 0, v1: 0 }, _hp = [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]];
+const hp = (p, o) => { for (let k = 0; k < 4; k++) { _hp[k][0] = p[o + k * 3]; _hp[k][1] = p[o + k * 3 + 1]; _hp[k][2] = p[o + k * 3 + 2]; } };
+// a home window's moment at dusk (as litOf): a byte hashed from where the wall is
+const homeLit = (g, a, b) => { const h = Math.sin(a * 12.9898 + b * 78.233 + g.e[12] * 0.731 + g.e[14] * 0.513) * 43758.5453; return 24 + Math.floor((h - Math.floor(h)) * 231); };
+function paintedHouse(G, M, r, s) {
+  const T = s.ptype, a = G.atlas, c = G.color, cf = uv(T.f), cs = uv(T.s);
+  for (const q of T.pieces) {
+    const cl = q.t === 'f' ? cf : cs, du = cl.u1 - cl.u0, dv = cl.v1 - cl.v0;
+    _huv.u0 = cl.u0 + q.uv[0] * du; _huv.u1 = cl.u0 + q.uv[2] * du; _huv.v1 = cl.v1 - q.uv[1] * dv; _huv.v0 = cl.v1 - q.uv[3] * dv;
+    hp(q.p, 0);
+    // the walls' windows: a home's, lit at its own moment at dusk, or (T.day: the coast painting's house) warm by day too
+    if (q.lit && a.hasLit) a.litV = T.day ? 6 : homeLit(a, q.p[0] + q.p[2], q.p[1]);
+    a.quad(_hp[0], _hp[1], _hp[2], _hp[3], W1, _huv); a.litV = 0;
+  }
+  c.noShadow = true; // (soffits: high up, in the roof's shadow anyway)
+  for (const p of T.soffits) { hp(p, 0); c.quad(_hp[0], _hp[1], _hp[2], _hp[3], T.soffit); }
+  c.noShadow = false;
+  if (s.fence) { // a low block wall in front (the cherry avenue's houses), with a gap for the gate
+    const z = -s.fence, h = 1.1, w = T.ww + 1;
     for (const [xa, xb] of [[-w / 2, -1.0], [0.4, w / 2]]) { c.box(xa, 0, z - 0.08, xb, h, z + 0.08, PAL.concrete); fq(a, xa, xb, 0, h, z - 0.085, 'block'); }
   }
 }

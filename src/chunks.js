@@ -886,6 +886,22 @@ export class World {
     }
   }
 
+  /** round trees and bushes round a painted house at (s, u) (its front wall there, facing the road; `side` the road's
+   *  side): a hedge of leafy bushes along its front (hedge: 1) or flowering ones (2), `beside` trees off its ends and
+   *  `behind` trees beyond its back, as the reference paintings set them. (Its ends are along the road: s ± ww/2.) */
+  houseGarden(G, r, s, u, side, T, onGround, hedge, beside, behind) {
+    const hw = T.ww / 2;
+    if (hedge) for (let x = -hw - 0.6; x < hw + 0.6; x += r.range(1.2, 1.9)) {
+      if (Math.abs(x) < 0.9 && hedge === 1 && r() < 0.7) continue; // (a gap by the door, mostly)
+      const m = onGround(s + x, u - side * r.range(1.1, 1.7), 0, r() * 6, false);
+      if (hedge === 2 && r() < 0.6) P.flowerBush(G, m, r, r.range(0.75, 1.0)); else P.bush(G, m, r, r.range(0.5, 0.75));
+    }
+    for (let k = 0; k < beside; k++) { // off one end or the other, a little back from the front
+      const e = (k % 2 ? -1 : 1) * (r() < 0.5 ? 1 : -1);
+      P.tree(G, onGround(s + e * (hw + r.range(3.2, 5.5)), u + side * r.range(1, T.wd), 0, r() * 6), 'broad', r, r.range(0.9, 1.25));
+    }
+    for (let k = 0; k < behind; k++) P.tree(G, onGround(s + r.range(-hw - 2, hw + 2), u + side * (T.wd + r.range(3.5, 7)), 0, r() * 6), 'broad', r, r.range(0.95, 1.3));
+  }
   *placeSakura(G, r, s0, s1, matAt, onGround, road, rwAt, H) {
     for (const side of [-1, 1]) {
       for (let s = s0 + r() * 4; s < s1; s += r.range(7.5, 10)) {
@@ -904,8 +920,12 @@ export class World {
       }
       for (let s = s0 + r() * 15; s < s1; s += r.range(14, 24)) {
         if (zoneAt(s) !== 'sakura' || r() < 0.35 || nearR(s, 45)) continue;
-        const rw = rwAt(s);
-        P.building(G, onGround(s, side * (rw + r.range(20, 30))), r, { type: 'house', w: r.range(8, 11), d: r.range(7, 9), floors: r() < 0.6 ? 2 : 1, tint: r.pick(P.TINTS), litP: 0.45, fence: r() < 0.6 ? 1.4 : 0 });
+        const rw = rwAt(s), T = P.houseType('sakura', r);
+        if (!T) { P.building(G, onGround(s, side * (rw + r.range(20, 30))), r, { type: 'house', w: r.range(8, 11), d: r.range(7, 9), floors: r() < 0.6 ? 2 : 1, tint: r.pick(P.TINTS), litP: 0.45, fence: r() < 0.6 ? 1.4 : 0 }); continue; }
+        // the painted two-storey houses behind the trees, as in the sakura painting: a block wall in front, or a hedge
+        const u = side * (rw + r.range(19, 26)), fence = r() < 0.45 ? 1.4 : 0;
+        P.building(G, onGround(s, u), r, { type: 'house', w: T.ww, d: T.wd, ptype: T, fence });
+        this.houseGarden(G, r, s, u, side, T, onGround, fence ? 0 : 1, 0, 0); // (no trees: the avenue's are enough, and cost)
       }
     }
     const k = Math.floor((s0 + CH / 2) / 480);
@@ -990,10 +1010,20 @@ export class World {
     // the land side: big round broadleaf trees on the green slope, as in the reference art (it was mostly pines), and a
     // few pines; nothing on the sea side any more (it is water). (The chunk's shared random numbers are drawn as before
     // outside the coast, walks and all, so every other zone's layout is unchanged; the coast's new things have their own)
+    // the painting's house up the slope (its own random numbers): decided first, so the slope's trees stand clear of it
+    const hq = rng(Math.floor(hash2(c, 5531) * 4294967295));
+    let house = null;
+    if (zoneAt(s0 + 30) === 'coast' && hq() < 0.5) {
+      const s = s0 + hq() * CH, rw = rwAt(s);
+      if (!nearT(s, T_RIDGE + 25)) house = { s, rw, T: P.houseType('coast', hq), u: rw + hq.range(11, 17) };
+    }
     for (let s = s0 + r() * 6; s < s1; s += r.range(5, 9)) {
       if (zoneAt(s) !== 'coast' || nearT(s, T_RIDGE + 6)) continue;
       const rw = rwAt(s), k = r();
-      if (k < 0.58) P.tree(G, onGround(s, rw + r.range(4.5, 30), 0, r() * 6, false), k < 0.48 ? 'broad' : 'pine', r, r.range(1.0, 1.4));
+      if (k >= 0.58) continue;
+      const u = rw + r.range(4.5, 30);
+      if (house && house.T && Math.abs(s - house.s) < house.T.ww / 2 + 2.5 && u > house.u - 3.5 && u < house.u + house.T.wd + 2.5) continue;
+      P.tree(G, onGround(s, u, 0, r() * 6, false), k < 0.48 ? 'broad' : 'pine', r, r.range(1.0, 1.4));
     }
     for (let s = s0 + 4; s < s1; ) s += r.range(18, 30); // (the old beach tetrapods' walk: its draws, as above)
     for (let s = s0 + 12; s < s1; s += 48) {
@@ -1013,9 +1043,10 @@ export class World {
         P.flowerBush(G, onGround(ss, u, 0, a, false), fb, sc);
       }
     }
-    if (zoneAt(s0 + 30) === 'coast' && r() < 0.5) {
-      const s = s0 + r() * CH, rw = rwAt(s);
-      if (!nearT(s, T_RIDGE + 25)) P.building(G, onGround(s, rw + r.range(9, 16)), r, { type: 'house', w: r.range(7, 10), d: 8, floors: r() < 0.5 ? 2 : 1, tint: r.pick(P.TINTS), litP: 0.5, fence: 0 });
+    if (house) { // the coast painting's house up the green slope, among round trees, with flowering bushes in front
+      const { s, rw, T, u } = house;
+      if (T) { P.building(G, onGround(s, u), hq, { type: 'house', w: T.ww, d: T.wd, ptype: T }); this.houseGarden(G, hq, s, u, 1, T, onGround, 2, 1, 1); }
+      else P.building(G, onGround(s, rw + hq.range(9, 16)), hq, { type: 'house', w: hq.range(7, 10), d: 8, floors: hq() < 0.5 ? 2 : 1, tint: hq.pick(P.TINTS), litP: 0.5, fence: 0 });
     }
     if (zoneAt(s0 + 30) === 'coast' && r() < 0.55) {
       const s = s0 + r() * CH; P.boat(G, matAt(s, -(rwAt(s) + r.range(45, 220)), SEA - 0.25, r() * 6, false), r);
@@ -1029,7 +1060,12 @@ export class World {
       yield;
       for (let s = s0 + r() * 20; s < s1; s += r.range(20, 40)) {
         if (zoneAt(s) !== 'country' || r() < 0.55 || nearX(s, 16) || nearR(s, 48)) continue;
-        const u = side * r.range(16, 95), M = onGround(s, u);
+        const u = side * r.range(16, 95), M = onGround(s, u), T = P.houseType('country', r);
+        if (T) { // the country painting's houses: white plaster and cobalt tiles, round trees beside and behind, low hedges
+          P.building(G, M, r, { type: 'house', w: T.ww, d: T.wd, ptype: T });
+          this.houseGarden(G, r, s, u, side, T, onGround, 1, 2, 2);
+          continue;
+        }
         P.building(G, M, r, { type: 'house', w: r.range(9, 13), d: r.range(8, 10), floors: r() < 0.45 ? 2 : 1, tint: r.pick(P.TINTS), litP: 0.5, fence: 0 });
         for (let t = 0; t < 2 + r() * 3; t++) { const tu = u + side * r.range(6, 14), ts = s + r.range(-8, 8); P.tree(G, onGround(ts, tu, 0, r() * 6), 'broad', r, r.range(0.9, 1.3)); }
       }

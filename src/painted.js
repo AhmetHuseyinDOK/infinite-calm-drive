@@ -141,6 +141,33 @@ export async function loadFrontAtlas(tier, timeoutMs = 15000) {
   })(), timeoutMs, 'painted fronts unavailable, keeping the procedural shopfronts:');
 }
 
+/** Loads the painted houses of the country, the coast and the cherry avenue (assets/houses/, made by
+ *  ~/cdtest/hs/scripts/pack.py from asset batch 1's elevations and Grok Imagine gable ends, anchored on the reference
+ *  art): a sheet of flat elevations (front = eave side, gable end) cut out on their alpha, the lit windows' emissive tiles
+ *  under them, and each house type's 3D pieces. The tiles are drawn into atlas cells of their own (textures.js
+ *  paintHouses), so the houses take them with no new texture, material or draw. 'hi' (48 px/m) or 'lo' (32 px/m: phones,
+ *  the embed). Resolves to null (never rejects) when the index or the image is missing, broken, truncated or too slow:
+ *  the houses then keep their procedural look (props.js woodHouse). */
+export async function loadHouseAtlas(tier, timeoutMs = 15000) {
+  const base = ASSETS + 'houses/';
+  return orNull((async () => {
+    const r = await fetch(base + 'houses.json');
+    if (!r.ok) throw new Error('houses.json ' + r.status);
+    const J = await r.json();
+    const file = J.files && J.files[tier] ? tier : 'hi', tiles = (J.tiles && J.tiles[file]) || [];
+    const types = (J.types || []).filter(t => t.f && t.s && t.pieces && t.pieces.length && tiles.some(q => q.name === t.f) && tiles.some(q => q.name === t.s));
+    if (!types.length || !(J.rows && J.rows[file] > 0)) throw new Error('no houses listed');
+    const ri = await fetch(base + J.files[file]);
+    if (!ri.ok) throw new Error(J.files[file] + ' ' + ri.status);
+    const blob = await ri.blob(); // (checked whole: a truncated image decodes without complaint)
+    if (J.bytes && J.bytes[file] && blob.size !== J.bytes[file]) throw new Error(J.files[file] + ' is ' + blob.size + ' bytes, not ' + J.bytes[file]);
+    const img = await createImageBitmap(blob, { premultiplyAlpha: 'none' });
+    if (J.size && J.size[file] && (img.width !== J.size[file][0] || img.height !== J.size[file][1])) throw new Error(J.files[file] + ' has the wrong size');
+    if (tiles.some(t => !(t.w > 0 && t.h > 0 && t.x >= 0 && t.x + t.w <= img.width && t.ey + t.h <= img.height))) throw new Error('a tile lies outside the sheet');
+    return { img, tiles, types, rows: J.rows[file], tier: file };
+  })(), timeoutMs, 'painted houses unavailable, keeping the procedural ones:');
+}
+
 /** Loads the painted meadow (assets/fields/, made by ~/cdtest/ft/scripts/field.py): a tileable top-down painting of the
  *  country paintings' grass, 'hi' or 'lo' (phones, the embed). Resolves to null (never rejects) when the index or the
  *  image is missing, broken, truncated or too slow: the countryside then keeps its procedural paddies. */

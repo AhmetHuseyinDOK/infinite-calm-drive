@@ -2,6 +2,51 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-24 · 08:xx — Restyle 13: the reference art's houses in the country, on the coast and along the cherry avenue
+- **The houses are painted, as in the reference art.** The brown timber boxes and beige boxes with flat navy roofs gave
+  way to:
+  - the countryside: white bungalows under cobalt glazed tiles (one with a brick chimney), a plank barn, a cream
+    two-storey farmhouse and a white cottage with a porch, among round trees, with low hedges;
+  - the coast: the painting's half-timbered two-storey house up the green slope, its windows warm-lit by day, round
+    trees and flowering bushes round it;
+  - the cherry avenue: two-storey houses of plaster and dark timber under dark kawara roofs on both storeys, behind the
+    trees, with a block wall or a hedge in front.
+- **Roofs read as glazed tiles** from the road: each roof carries its painting's tiles, eaves and ridge. The pent roofs
+  between the floors stand out from the wall.
+- **Measured against the reference** (CIELAB ΔE of patch medians): country roof 39.0 → 17.3, country gable wall
+  22.3 → 14.3, coast roof 27.8 → 15.2; the coast wall did not improve (35.8 → 36.8: the painting's wall is in shade,
+  ours is sunlit cream).
+- **Dusk, night and rain keep their look:** country and avenue windows light one by one at dusk.
+- **If the paintings can't be loaded** (missing or truncated; the main agent tested both), the houses keep their
+  procedural look.
+- **Research:** asset batch 1's elevations (Grok Imagine, anchored on the references); three new gable ends generated
+  with Grok, as batch 1's didn't match their fronts; one widened in the pipeline so both floors line up. Built by a
+  subagent; verified independently by the main agent.
+- How:
+  - **Assets:** `assets/houses/` (new): one sheet of 12 cut-out elevations with their lit windows below and an index of
+    each house's pieces. 308 KB on desktops (48 px/m), 167 KB on phones and in the X card (32 px/m).
+  - **No new texture, material, program or draw:** the tiles become 12 atlas cells added last (`painted.js
+    loadHouseAtlas`, `textures.js paintHouses`). The atlas grows from 4096 to 5248 rows on desktops and 4608 on phones
+    (+16 MB / +7 MB of GPU memory); a device whose texture limit is 4096 gets the whole atlas scaled down (a little
+    blurrier). The other 126 cells are pixel-identical.
+  - **Geometry:** `props.js paintedHouse` lays each painting on a box with a gable roof (walls, gables, both slopes, pent
+    roof, chimney, soffits); outlines come from the paintings' alpha.
+  - **World:** `chunks.js houseGarden` puts trees and bushes round each house; the coast house has its own random
+    numbers and the slope's trees keep clear of it. The country's and the coast's layouts are reshuffled.
+- Cost: none measurable. Everything ran on the shared box's Vega iGPU (the desktop machine was offline), interleaved
+  with live:
+  - **Main agent's check, GPU over drives:** desktop country 19.30 vs 19.30 ms, coast 20.16 vs 20.63 (+0.46 over seven
+    pairs: one set read +2.03, a re-run −0.71), avenue 20.08 vs 19.99; phone profile country +0.19, coast +0.47,
+    avenue −0.63.
+  - **The subagent's:** desktop country +1.21 (+0.09 in an earlier set), coast −0.44, avenue −0.10; phone −0.33 /
+    +0.22 / +0.35.
+  - **World building:** unchanged (country, desktop medians 160.9 / 126.7 vs 127.8 / 175.7 ms per 20 chunks); flat out
+    on the phone profile (×4 CPU), no world-build spikes.
+  - **Start-up:** about the same (median 2.9 vs 2.7 s on a busy box, one 4.3 s outlier).
+  - **Programs:** 60, none compiled through sunset, night, rain or a drive.
+  - **Checks:** 0 shader errors in all six zones; the city, mountain and snow starts match live; no console errors at
+    any quality; embed starts on tap.
+
 ## 2026-10-24 · 06:xx — Restyle 12: the reference art's shopping street, painted shopfronts in unbroken rows
 - **The drive starts in the reference art's 商店街.** From the first frame both sides are unbroken rows of two- and
   three-storey shophouses running to the vanishing point. The opening view used to have a signalised crossing 10 m

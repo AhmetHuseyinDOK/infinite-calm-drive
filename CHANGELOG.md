@@ -2,6 +2,45 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-24 · 15:xx — Restyle 16: the open sea, as painted
+- **The open sea is covered in painted wavelets, as in the reference art.** Beyond the surf it was a smooth, flat blue
+  with a few long white streaks. Now, right out to the far shore, it is the painting's ripple: horizontal lenses of
+  deep navy (little waves' faces turned towards us), light cyan streaks along their backs and white glints on the
+  highest, small and many far out, larger towards the sea wall, rolling slowly in.
+- **Its colours by distance are the painting's,** measured row by row: deep by the wall, paling out to ~250 m, then on
+  to the far shore's light azure with all its tones together, so the far sea keeps its texture instead of fading flat.
+- **Measured against the reference** (CIELAB ΔE of the median water by distance, left third, noon, s = 900 / 1100):
+  400–1200 m 10.2 → 3.0; 45–80 m 5.1 → 2.6; 160–400 m 1.5 / 1.9 → 2.8 / 2.1; 80–160 m 3.2 / 3.4 → 5.1 / 4.9 (worse:
+  a little too light and warm). Lightness spread at 160–400 m (L* p10–p90) 60–79 (painting 62–82; was 63–66); fine
+  detail in the far strip 7.3–7.8 (painting 7.1; was 2.1–4.9); white glints 3% (painting 2.3%; was 0–0.5%).
+- **Dusk, night and rain keep their look;** the water along the wall, its foam, the surf and the spray are unchanged.
+- **Also:** the sea's patterns no longer jump when the world's origin moves (every ~900 m).
+- **Research:** stylised oceans (Sea of Thieves' SIGGRAPH 2018 talk, toon-water crest thresholds, Quilez on texture
+  repetition) and the painting at the pixel level: its far sea is a mosaic of small horizontal wavelets, not rows of
+  crests. A first try drawing crests as walls the eye sees over gave contour-map bands and was dropped; a painted
+  tiling texture laid flat would shrink under a pixel within ~100 m. Built by a subagent; verified independently by
+  the main agent on the desktop machine.
+- How:
+  - **`sea.js paintedSea`:** value noise stretched along the crests (two layers; one on phones, `SEA_LITE`); its height
+    and its slope up away from the eye pick the tone. The wavelets grow with distance just enough that far ones shrink
+    on screen as in the painting without going under a pixel or two (per doubling of distance: 2^1.75 across the
+    crests, 2^0.75 along), two neighbouring sizes blended keeping their contrast; the noise's footprint from the smooth
+    world position.
+  - **The way they roll:** one direction per coast zone, fixed in the world: back along its mean road heading, slanting
+    in to the shore (`coastDir`, once per zone). Where a bend looks along them their faces fade out.
+  - **Tones:** 12 painted tones (by the wall, ~60–90 m, ~250 m; dark, middle, face, lightest), ungraded on the CPU as
+    before. The old painted tones' noise (9 reads a pixel) is gone; the dusk/night look runs only when it shows. Test
+    switch `st.waves`.
+  - **Assets:** none.
+- Cost: none measurable.
+  - **GPU over 1.15 km coast drives, desktop machine's GTX 1660 Super, interleaved with live (L S S L L S S L):**
+    desktop profile 3.32 vs 3.43 ms (+0.12; pairs +0.05 / +0.47 / +0.05 / −0.10), phone profile 4.06 vs 4.04 (−0.01).
+    The subagent's: GTX desktop +0.14, phone −0.12; the shared box's Vega iGPU desktop −0.24, phone −0.12.
+  - **Start-up:** the same (1.28 vs 1.30 s). Flat out on the phone profile (×4 CPU): no world-build spikes.
+  - **Programs:** 60, as live; none compiled through sunset, night, rain or a coast drive. 0 shader errors in all six
+    zones; no console errors at any quality; embed starts on tap.
+  - **World:** unchanged; the waves' direction costs ~1.6 ms once per coast zone.
+
 ## 2026-10-24 · 13:xx — Restyle 15: the shopping street's big lit signs, eleven painted shopfronts, a far city in haze
 - **Big lit signs, as in the reference art.** The shophouses' signs standing off the first floor are light boxes up to
   1.15 m wide and 2.7 m tall (were 0.76 × 2.1 m): a white panel lit from inside with a neon tube round its edge and the

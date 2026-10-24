@@ -173,7 +173,7 @@ async function main() {
   const world = new World(scene, path, M, riverMat);
   const sky = makeSky(); scene.add(sky);
   const mountains = makeMountains(); scene.add(mountains.group);
-  const sea = makeSea(); scene.add(sea.mesh);
+  const sea = makeSea(quality !== 'high'); scene.add(sea.mesh); // (phones: lighter painted waves, as the shore's lace)
   const car = makeCar(); car.group.rotation.order = 'YXZ'; scene.add(car.group);
   car.group.traverse(o => { o.userData.car = true; }); // casts into its own shadow map only
   const parts = makeParticles(M.glowTex); parts.group.forEach(o => scene.add(o));
@@ -208,7 +208,7 @@ async function main() {
   // speed: the zone's cruising speed × mult (0.4 … 5.5, so up to ~190–265 km/h); uHome: the lane the car settles back
   // into when nobody steers — wherever the player last steered it (it used to always drift back to the left lane)
   const MULT_MIN = 0.4, MULT_MAX = 5.5;
-  const st = { s: Math.max(100, parseFloat(QS.get('s')) || 140), u: -1.65, uHome: -1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, spray: QS.has('nospray') ? 0 : 1 /* test switch */, grass: 1 /* test switch: the meadow's blades */, pclouds: 1 /* test switch: painted clouds (0: the procedural ones, with ?clouds=both) */, band: 1 /* test switch: the painted horizon (0: the mountain rings) */, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
+  const st = { s: Math.max(100, parseFloat(QS.get('s')) || 140), u: -1.65, uHome: -1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, spray: QS.has('nospray') ? 0 : 1 /* test switch */, grass: 1 /* test switch: the meadow's blades */, pclouds: 1 /* test switch: painted clouds (0: the procedural ones, with ?clouds=both) */, band: 1 /* test switch: the painted horizon (0: the mountain rings) */, waves: 1 /* test switch: the painted sea's waves (0: its flat tones) */, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
   let started = false;
   if (pclouds) pclouds.opening = ['sakura', 'city'].includes(zoneAt(st.s)) ? 'center' : 'flank'; // (a narrow sky over the road: one tower over it)
   status('building the road…');
@@ -645,7 +645,7 @@ async function main() {
     mountains.update(camera.position, Math.max(w.snow, zoneW(st.s + 600).snow * 0.7), 1 - bandW);
     let seaW = 0; for (const d of [-150, 0, 250, 500, 800]) seaW = Math.max(seaW, zoneW(st.s + d).coast);
     sea.mesh.visible = seaW > 0.001;
-    sea.update(camera.position, t, fogD * 0.8, sstep(0.0, 0.35, seaW), post.grade.uniforms); // (and the shore's foam and surf)
+    sea.u.uWaves.value = st.waves; sea.update(camera.position, t, fogD * 0.8, sstep(0.0, 0.35, seaW), post.grade.uniforms, path, st.s); // (and the shore's foam and surf)
     riverMat.uniforms.uTime.value = t; riverMat.uniforms.uFogD.value = scene.fog.near; riverMat.uniforms.uNight.value = TOD.night; riverMat.uniforms.uSpecK.value = 1 - TOD.overcast * 0.85;
     U.uSunDir.value.copy(TOD.lightDir); U.uSunCol.value.copy(TOD.sunCol);
     const nightK = sstep(0.15, 0.8, TOD.night);
@@ -777,7 +777,7 @@ async function main() {
     if (started && frames > 150 && dt > 0.03) slowT += dt; else slowT = Math.max(0, slowT - dt * 0.5);
     if (slowT > 3 && !QS.has('q')) { slowT = 0; stepDown(); }
   }
-  window.__dbg = { renderer, st, scene, camera, world, TOD, KEYS, X, train, weather, U, birds, cine, post, car, sun, M, clouds, pclouds, band, sky, mountains, shadowDir, CM, spray, grass, get audio() { return audio; } };
+  window.__dbg = { renderer, st, scene, camera, world, TOD, KEYS, X, train, weather, U, birds, cine, post, car, sun, M, clouds, pclouds, band, sky, mountains, shadowDir, CM, spray, grass, sea, get audio() { return audio; } };
   status('');
   $start.classList.add('ready');
   if (QS.has('auto')) begin();

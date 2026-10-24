@@ -81,6 +81,7 @@ export const U = {
   uSunCol: { value: new THREE.Color(1, 1, 1) },
   uTuftV: { value: new THREE.Vector4(0.167, 0.333, 0.164, 0.165) }, // foliage atlas v: the tuft row's bottom and top, the verge banks' top, a split between them
   uGhShade: { value: new THREE.Vector3(0.3, 0.85, 1.7) }, // the painted crowns' shade tint (makeGhibliLeaf): teal on a bright day, else neutral (main.js)
+  uGhTint: { value: new THREE.Vector3(1, 1, 1) },          // …and their leaves' tint by the time of day (1 by day; main.js)
   // the tetrapods' painted tones (tetraMaterial; main.js, ungraded each frame): how much of them (a bright day), and the
   // painting's deep blue, blue-grey shade, neutral middle and warm light grey, and its foam lit and in shade
   uTpK: { value: 0 }, uTpD: { value: new THREE.Color() }, uTpS: { value: new THREE.Color() }, uTpM: { value: new THREE.Color() }, uTpL: { value: new THREE.Color() },
@@ -1127,6 +1128,7 @@ export function makeGhibliLeaf(tex, { blossom = false } = {}) {
     worldShade(sh); backlit(sh);
     billboard(sh, false); // (uTime comes with the vertex cloud shadows)
     sh.uniforms.uGhShade = blossom ? U.uBlShade : U.uGhShade; // (blossom: its own shade, a bright rose-magenta)
+    if (!blossom) sh.uniforms.uGhTint = U.uGhTint;
     // the sun's shadow is looked up from the cluster's sunward surface (~1.1 × its half-width out), so a cluster never
     // shadows itself (its sun-facing depth twin cuts through its middle) while the lobes above and toward the sun still
     // shade the ones below. The crown's core (marked by a straight-down normal) looks it up 2.5 m deeper into the crown:
@@ -1136,12 +1138,12 @@ worldPosition.xyz += uSunDir * mix(-2.5, length(aOff) * 1.11, step(-0.97, object
 #endif
 #include <shadowmap_vertex>`);
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform vec3 uGhShade;')
+      .replace('#include <common>', '#include <common>\nuniform vec3 uGhShade;' + (blossom ? '' : ' uniform vec3 uGhTint;'))
       .replace('#include <map_fragment>', `
 vec4 gTx = texture2D(map, vMapUv);
 vec2 gN2 = gTx.rg * 2.0 - 1.0;
 vec3 gTexN = vec3(gN2, sqrt(max(0.0, 1.0 - dot(gN2, gN2))));
-${blossom ? BLOSSOM_RAMP : 'diffuseColor.rgb *= gTx.b;'}
+${blossom ? BLOSSOM_RAMP : 'diffuseColor.rgb *= gTx.b * uGhTint;'}
 diffuseColor.a *= gTx.a;`)
       // the cluster's own normal (in card = view space) mixed with the crown's
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>

@@ -4,16 +4,17 @@
 // around the horizon.
 //  - On a bright clear day they are the paintings themselves: their shader runs the exact inverse of the grade pass
 //    (`ungrade`), so the frame shows the painted colours while the 3D world around them keeps the game's light.
-//  - At dawn, dusk, night and under grey skies they are recoloured with the time-of-day cloud palette (TOD.cLit, cShade,
-//    cRim), the way the procedural clouds are: the painted luminance (the brushwork) sets where each pixel falls between
-//    the shade and the lit colour, and the rim facing the sun gets a silver lining.
+//  - At golden hour, sunset and night they are recoloured with a palette read from the paintings repainted at those hours
+//    (ref/tod/): the painted luminance (the brushwork) sets where each pixel falls between the shade, middle and lit tones,
+//    and the rim facing the sun gets a silver lining. Under grey skies, the old time-of-day palette (TOD.cLit, cShade, cRim),
+//    as the procedural clouds'.
 //  - Each sprite is painted lit from one side; it is mirrored to face the sun (only while it is out of view, so it never
 //    flips in front of the camera).
 // If the atlas can't be loaded the game keeps its procedural clouds (sky.js).
 import * as THREE from 'three';
 import { rng } from './util.js';
 import { TOD } from './sky.js';
-import { S_WRAP } from './materials.js';
+import { S_WRAP, U as MU } from './materials.js';
 
 export const ASSETS = './assets/';
 
@@ -68,6 +69,37 @@ export function ungradeRGB(g, r, gr, b, out) {
   const m = Math.min(_ug[0], _ug[1], _ug[2]), off = m < 0.04 ? Math.sqrt(Math.max(m, 0) / 6.25) - m : 0.04;
   return out.setRGB((_ug[0] + off) / exp, (_ug[1] + off) / exp, (_ug[2] + off) / exp);
 }
+/** Painted tones by time of day. The reference paintings are bright days; for golden hour, sunset and night the same
+ *  scenes were repainted (Grok Imagine edits of each painting, ref/tod/) and each painted piece's tones read from them by
+ *  the same roles as its day tones. keys: [[t, { tone: [r, g, b] (display sRGB, 0…255), … }], …], t rising from 0 to 1
+ *  (as sky.js KEYS). at(t) blends the two keys around t (smoothly, as KEYS); ug(grade, tone, out) writes a tone as the
+ *  linear scene colour that the grade shows as it (ungradeRGB); rgb(tone) is the blended display colour. No allocation. */
+export function todTones(keys) {
+  const names = Object.keys(keys[0][1]), cur = {};
+  for (const n of names) cur[n] = [0, 0, 0];
+  return {
+    cur,
+    at(t) {
+      let k = 0; while (k < keys.length - 2 && keys[k + 1][0] <= t) k++;
+      const a = keys[k], b = keys[k + 1], x = Math.min(Math.max((t - a[0]) / (b[0] - a[0]), 0), 1), f = x * x * (3 - 2 * x);
+      for (const n of names) { const A = a[1][n], B = b[1][n], o = cur[n]; o[0] = A[0] + (B[0] - A[0]) * f; o[1] = A[1] + (B[1] - A[1]) * f; o[2] = A[2] + (B[2] - A[2]) * f; }
+      return this;
+    },
+    ug(grade, n, out) { const c = cur[n]; return ungradeRGB(grade, c[0], c[1], c[2], out); },
+    rgb(n) { return cur[n]; },
+  };
+}
+/** mixes two tone sets (display sRGB): a new key between them (k: 0 → a, 1 → b) */
+export function mixTones(a, b, k) {
+  const o = {};
+  for (const n of Object.keys(a)) o[n] = [0, 1, 2].map(i => a[n][i] + (b[n][i] - a[n][i]) * k);
+  return o;
+}
+/** how much of the painted look, by the weather: all of it under a clear sky at any hour, none under grey skies and in
+ *  rain (they keep their own look). (PAINT_TOD.on, a test switch, main.js st.todpaint: 0 = only on a bright day, as before) */
+export const PAINT_TOD = { on: 1 };
+export const paintSky = () => { const k = Math.min(Math.max(((PAINT_TOD.on ? 1 - TOD.overcast : TOD.bright) - 0.55) / 0.4, 0), 1); return k * k * (3 - 2 * k); };
+
 /** the drawing buffer's size (the vignette of ungrade); set on resize */
 export const PG_RES = { value: new THREE.Vector2(1280, 720) };
 export function updatePainted(renderer) { renderer.getDrawingBufferSize(PG_RES.value); }
@@ -241,6 +273,22 @@ function layout(list, seed) {
   return out.sort((a, b) => b.d - a.d); // far → near, for blending (one instanced draw, in order)
 }
 
+// the painted cumulus's palette by time of day (display sRGB): its shade, middle and lit tones by the painted (day)
+// lightness, and the silver lining towards the sun, read from the four paintings repainted at golden hour, at sunset and
+// at night (ref/tod/; the zones' ramps averaged): honey and peach at golden hour, salmon and orange over mauve at sunset,
+// moonlit blue-grey at night. By day the clouds are the painting itself (these only show while it hands over)
+const CL_DAY = { shade: [172, 196, 234], mid: [214, 226, 246], lit: [246, 249, 253], rim: [255, 246, 228] };
+const CL_GOLD = { shade: [137, 114, 117], mid: [184, 147, 138], lit: [238, 196, 146], rim: [255, 214, 150] };
+const CL_SUNSET = { shade: [96, 65, 92], mid: [158, 82, 98], lit: [226, 124, 100], rim: [242, 172, 122] };
+const CL_NIGHT = { shade: [33, 58, 90], mid: [45, 76, 116], lit: [78, 112, 152], rim: [140, 166, 200] };
+// (dusk: the high clouds keep the afterglow, lilac over a slate shade, on the way from the sunset's salmon to the moonlit grey)
+const CL_DUSK = { shade: [58, 56, 96], mid: [104, 86, 132], lit: [170, 128, 168], rim: [214, 150, 170] };
+const CLOUD_TONES = todTones([
+  [0.0, CL_NIGHT], [0.2, mixTones(CL_NIGHT, CL_DUSK, 0.5)], [0.245, mixTones(CL_SUNSET, CL_GOLD, 0.4)], [0.3, CL_DAY], [0.62, CL_DAY],
+  [0.7, CL_GOLD], [0.75, CL_SUNSET], [0.765, mixTones(CL_SUNSET, CL_DUSK, 0.4)], [0.8, CL_DUSK], [0.86, CL_NIGHT], [1.0, CL_NIGHT],
+]);
+const _cm = new THREE.Color();
+
 /** The painted cloud field. `atlas` from loadCloudAtlas; `post` for the grade's uniforms. update(camera, dt) each frame. */
 export function makePaintedClouds(atlas, post, seed = 5) {
   const L = atlas.list, C = layout(L, seed), N = C.length;
@@ -258,7 +306,7 @@ export function makePaintedClouds(atlas, post, seed = 5) {
   const mat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, fog: false, premultipliedAlpha: true,
     uniforms: {
-      map: { value: atlas.tex }, uLit: { value: new THREE.Color() }, uShade: { value: TOD.cShade }, uRimCol: { value: TOD.cRim }, uHaze: { value: TOD.horizon },
+      map: { value: atlas.tex }, uLit: { value: new THREE.Color() }, uMid: { value: new THREE.Color() }, uShade: { value: new THREE.Color() }, uRimCol: { value: new THREE.Color() }, uHaze: { value: TOD.horizon },
       uPaint: { value: 1 }, uOpacity: { value: 1 }, uRimLod: { value: atlas.tier === 'hi' ? 3.0 : 2.0 }, ...gradeUniforms(post),
     },
     vertexShader: /* glsl */`
@@ -268,7 +316,7 @@ export function makePaintedClouds(atlas, post, seed = 5) {
         gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
       }`,
     fragmentShader: UNGRADE + /* glsl */`
-      uniform sampler2D map; uniform vec3 uLit, uShade, uRimCol, uHaze; uniform float uPaint, uOpacity, uRimLod;
+      uniform sampler2D map; uniform vec3 uLit, uMid, uShade, uRimCol, uHaze; uniform float uPaint, uOpacity, uRimLod;
       varying vec2 vUv; varying vec4 vInfo; varying float vRim, vY;
       void main(){
         vec4 t = texture2D(map, vUv);
@@ -277,7 +325,7 @@ export function makePaintedClouds(atlas, post, seed = 5) {
         if (uPaint < 0.999) { // the time-of-day palette, keeping the brushwork (the painted luminance) and a silver lining
           float k = clamp((dot(t.rgb, vec3(0.299, 0.587, 0.114)) - vInfo.y) * vInfo.z, 0.0, 1.0);
           float rim = 1.0 - smoothstep(0.35, 0.95, textureLod(map, vUv, uRimLod).a);
-          c = mix(uShade, uLit, k) + uRimCol * rim * smoothstep(0.35, 0.8, k) * vRim;
+          c = (k < 0.5 ? mix(uShade, uMid, k * 2.0) : mix(uMid, uLit, k * 2.0 - 1.0)) + uRimCol * rim * smoothstep(0.35, 0.8, k) * vRim;
         }
         if (uPaint > 0.001) c = mix(c, clamp(ungrade(t.rgb), 0.0, 2.0), uPaint); // a bright day: the painting itself
         c = mix(c, uHaze, vInfo.w * (1.0 - smoothstep(0.0, 0.45, vY)));         // the far feet melt into the horizon haze
@@ -338,9 +386,14 @@ export function makePaintedClouds(atlas, post, seed = 5) {
       // palette (by golden hour, TOD.bright 0.4, it is all palette: the noon painting's whites, run through the inverse
       // grade, are bright enough there to bloom)
       { const b = Math.min(Math.max((TOD.bright - 0.55) / 0.4, 0), 1); u.uPaint.value = b * b * (3 - 2 * b); }
-      u.uLit.value.copy(TOD.cLit).multiplyScalar(1 + 0.35 * TOD.bright);
-      // as the procedural clouds: dimmer at night, and in rain they melt into the low grey deck the sky draws
-      u.uOpacity.value = (1 - TOD.night * 0.35) * (1 - TOD.overcast * 0.55) * (1 - 0.85 * TOD.rain);
+      // the palette: under a clear sky the targets' cloud tones by the time of day (ref/tod/, read by the painted day
+      // lightness of each cloud pixel: ~/cdtest/tod/tools/ramps.py), ungraded; under grey skies the old time-of-day palette
+      const g = post.grade.uniforms, P = CLOUD_TONES.at(TOD.t), ov = 1 - paintSky();
+      P.ug(g, 'shade', u.uShade.value).lerp(TOD.cShade, ov); P.ug(g, 'mid', u.uMid.value).lerp(_cm.copy(TOD.cShade).lerp(TOD.cLit, 0.5), ov);
+      P.ug(g, 'lit', u.uLit.value).lerp(_cm.copy(TOD.cLit).multiplyScalar(1 + 0.35 * TOD.bright), ov); P.ug(g, 'rim', u.uRimCol.value).lerp(TOD.cRim, ov);
+      // as the procedural clouds: in rain they melt into the low grey deck the sky draws; at night, under a clear sky, the
+      // moonlit cumulus stand as clearly as in the paintings (only dimmer under cloud)
+      u.uOpacity.value = (1 - TOD.night * (0.08 + 0.27 * ov)) * (1 - TOD.overcast * 0.55) * (1 - 0.85 * TOD.rain);
     },
   };
   return api;
@@ -362,9 +415,11 @@ export function makePaintedClouds(atlas, post, seed = 5) {
 //    painting's alpha: with MSAA (desktop) the alpha sets each pixel's coverage, so they keep a soft edge and two zones'
 //    bands cross-fade smoothly; without it (phones) they are alpha-tested, and a cross-fade hides the moment one
 //    skyline gives way to the other in a passing haze.
-//  - Colour: on a bright clear day the painting itself (the inverse grade, as for the clouds). Otherwise it is relit:
-//    the painted colours times the ratio of the light now to the light at noon (warm at golden hour, dim and rosy at
-//    sunset, a cold blue at night), then hazed: more under grey skies and in rain. Below the horizon it takes the haze
+//  - Colour: on a bright clear day the painting itself (the inverse grade, as for the clouds); under a clear sky at golden
+//    hour, sunset and night the painting in that hour's tones, read from the paintings repainted then (ref/tod/: honey
+//    ranges, mauve and rose ones, deep blue ones), with the far city's windows lit at night. Under grey skies it is relit:
+//    the painted colours times the ratio of the light now to the light at noon, then hazed: more under grey skies and in
+//    rain. Below the horizon it takes the haze
 //    the 3D world's own fog puts on flat ground at that angle, so its foot melts into the fog colour the world fades
 //    into at its far edge: there is no seam where the two meet.
 //  - Between zones the two bands cross-fade (premultiplied, so ridges dissolve rather than smear).
@@ -391,6 +446,18 @@ export async function loadBandAtlas(tier, timeoutMs = 15000) {
   })(), timeoutMs, 'painted horizon unavailable, keeping the mountain rings:');
 }
 
+// the horizon band's tones by time of day (display sRGB), read from the paintings repainted at golden hour, sunset and night
+// (ref/tod/; the far ranges', hills' and far city's pixels by their painted day lightness: ~/cdtest/tod/tools/ramps.py):
+// honey-brown ranges at golden hour, mauve and rose with an orange light on the peaks at sunset, deep blue at night; ch: how
+// much of the painting's own colour stays. (By day the band is the painting itself: the day key only shows in hand-overs)
+const BT_DAY = { shade: [84, 112, 132], mid: [142, 170, 190], lit: [200, 220, 234], ch: [0.6, 0.6, 0.6] };
+const BT_GOLD = { shade: [70, 78, 100], mid: [110, 108, 124], lit: [160, 140, 134], ch: [0.3, 0.3, 0.3] };
+const BT_SUNSET = { shade: [46, 36, 58], mid: [84, 56, 84], lit: [130, 76, 92], ch: [0.25, 0.25, 0.25] };
+const BT_NIGHT = { shade: [20, 38, 60], mid: [30, 54, 84], lit: [46, 76, 112], ch: [0.12, 0.12, 0.12] };
+const BAND_TONES = todTones([
+  [0.0, BT_NIGHT], [0.2, mixTones(BT_NIGHT, BT_SUNSET, 0.3)], [0.245, mixTones(BT_SUNSET, BT_GOLD, 0.4)], [0.3, BT_DAY], [0.62, BT_DAY],
+  [0.7, BT_GOLD], [0.75, BT_SUNSET], [0.765, mixTones(BT_SUNSET, BT_NIGHT, 0.25)], [0.8, mixTones(BT_SUNSET, BT_NIGHT, 0.55)], [0.86, BT_NIGHT], [1.0, BT_NIGHT],
+]);
 const BAND_R = 2500, BAND_LO = -8; // ring radius (m) and its bottom (degrees: far fields below the painting)
 // the light the paintings stand in: the clear noon's sun and twice its sky light (sky.js KEYS at t = 0.45)
 const _bc = new THREE.Vector3(), _bn = new THREE.Color(), NOON_SUN = new THREE.Color('#fff5dd').multiplyScalar(3.35), NOON_SKY = new THREE.Color('#8fb1ec').multiplyScalar(1.35 * 2);
@@ -418,6 +485,10 @@ export function makePaintedBand(atlas, post, fog) {
       map: { value: atlas.tex }, uRowA: { value: new THREE.Vector4() }, uRowB: { value: new THREE.Vector4() }, uMix: { value: 0 }, uAlpha: { value: 1 }, uRot: { value: 0 },
       uLightC: { value: new THREE.Color(1, 1, 1) }, uPaint: { value: 1 }, uFogC: { value: fog }, uHaze: { value: 0 }, uHz: { value: Math.tan(0.8 * D2) },
       uGnd: { value: new THREE.Vector3(2.8, 0.0014, 700) }, uSpan: { value: new THREE.Vector2(yLo, yHi) }, ...gradeUniforms(post),
+      // under a clear sky at golden hour, sunset and night: the painting in the time of day's tones (display sRGB: shade,
+      // middle and light by its painted lightness, and how much of its own colour it keeps), and the far city's lit windows
+      uTone: { value: 0 }, uBS: { value: new THREE.Vector3() }, uBM: { value: new THREE.Vector3() }, uBH: { value: new THREE.Vector3() }, uBCh: { value: 0 },
+      uWin: { value: new THREE.Vector2() }, uLightsOn: MU.uLightsOn,
     },
     // the ring is trimmed every frame to what can show (uSpan: tan of its bottom and top elevation): from just under the
     // 3D world's horizon (lower from a high camera) to the top of the bands on show
@@ -429,6 +500,7 @@ export function makePaintedBand(atlas, post, fog) {
       }`,
     fragmentShader: UNGRADE + /* glsl */`
       uniform sampler2D map; uniform vec4 uRowA, uRowB; uniform float uMix, uAlpha, uRot, uHaze, uHz, uPaint; uniform vec3 uLightC, uFogC, uGnd;
+      uniform float uTone, uBCh, uLightsOn; uniform vec3 uBS, uBM, uBH; uniform vec2 uWin;
       varying vec2 vUv;
       // a zone's row: x = v of its bottom edge, y = v of its top edge, z / w = tan(elevation) there. Above it, sky (the
       // top rows fade out: coarse mips bleed the next row's fields into them); below it, its bottom row (opaque far
@@ -450,10 +522,27 @@ export function makePaintedBand(atlas, post, fog) {
         #else
         if (a < 0.5) discard;
         #endif
-        // a bright day: the painting itself; otherwise its colours relit (a plain linear relight, bounded: the inverse grade
-        // would blow its pale peaks up past the bloom threshold at dusk)
+        // a bright day: the painting itself; under a clear sky at golden hour, sunset and night the painting in that hour's
+        // tones (as the targets repaint it: its lightness through a shade-middle-light ramp, keeping some of its own colour);
+        // under grey skies its colours relit (a plain linear relight, bounded: the inverse grade would blow its pale peaks up
+        // past the bloom threshold at dusk)
         vec3 c = pgSrgbToLin(t.rgb) * 0.8 * uLightC;
+        if (uTone > 0.001) {
+          float l = dot(t.rgb, vec3(0.299, 0.587, 0.114)), k = clamp((l - 0.25) * 1.54, 0.0, 1.0);
+          vec3 d = (k < 0.5 ? mix(uBS, uBM, k * 2.0) : mix(uBM, uBH, k * 2.0 - 1.0)) + (t.rgb - l) * uBCh;
+          c = mix(c, ungrade(clamp(d, 0.0, 0.97)), uTone);
+        }
         if (uPaint > 0.001) c = mix(c, ungrade(t.rgb), uPaint);
+        // the far city's windows lit at night (the city's row only): a grid of small windows over its pale towers (the
+        // painting's own opaque, light pixels), some lit, warm or cool white, coming on as the town's do
+        float win = mix(uWin.x, uWin.y, uMix);
+        if (win > 0.003) {
+          vec2 wq = vec2((vUv.x + uRot) * 720.0, vUv.y * 400.0), wi = floor(wq), wf = fract(wq) - 0.5, ww = fwidth(wq);
+          vec3 h3 = fract(vec3(wi.xyx) * 0.1031); h3 += dot(h3, h3.yzx + 33.33); float h = fract((h3.x + h3.y) * h3.z), h2 = fract(h * 13.7);
+          float on = step(h, 0.2 * uLightsOn) * step(0.42, dot(t.rgb, vec3(0.299, 0.587, 0.114))) * step(0.97, t.a);
+          float box = (1.0 - smoothstep(0.26 - ww.x * 0.5, 0.26 + ww.x * 0.5, abs(wf.x))) * (1.0 - smoothstep(0.22 - ww.y * 0.5, 0.22 + ww.y * 0.5, abs(wf.y)));
+          c += mix(vec3(1.25, 0.8, 0.36), vec3(0.85, 0.8, 0.68), step(0.75, h2)) * (0.45 + 0.4 * h2) * on * box * win;
+        }
         // haze: below the horizon as much as the 3D world's own fog puts on flat ground seen at that angle (uGnd: the
         // camera's height above it, the fog density, the draw distance, where the world fades out completely), so the
         // band's foot meets the world's far edge in its colour, and from a high camera the skirt reads as far fields;
@@ -501,6 +590,11 @@ export function makePaintedBand(atlas, post, fog) {
       _bn.copy(TOD.hemiSky).multiplyScalar(TOD.hemiI * 2); _bc.x += _bn.r; _bc.y += _bn.g; _bc.z += _bn.b;
       const k = Math.min(Math.max((TOD.bright - 0.55) / 0.4, 0), 1), paint = k * k * (3 - 2 * k);
       u.uLightC.value.setRGB(_bc.x / (NOON_SUN.r + NOON_SKY.r), _bc.y / (NOON_SUN.g + NOON_SKY.g), _bc.z / (NOON_SUN.b + NOON_SKY.b)); u.uPaint.value = paint;
+      // the time of day's tones (all but a bright day's: the painting itself), under a clear sky; the far city's windows
+      u.uTone.value = paintSky() * (1 - paint);
+      if (u.uTone.value > 0) { const P = BAND_TONES.at(TOD.t); u.uBS.value.fromArray(P.rgb('shade')).divideScalar(255); u.uBM.value.fromArray(P.rgb('mid')).divideScalar(255); u.uBH.value.fromArray(P.rgb('lit')).divideScalar(255); u.uBCh.value = P.rgb('ch')[0]; }
+      const nk = Math.min(Math.max((TOD.night - 0.15) / 0.65, 0), 1), wn = nk * nk * (3 - 2 * nk) * (1 - 0.6 * TOD.overcast);
+      u.uWin.value.set(m.a === 'city' ? wn * PAINT_TOD.on : 0, m.b === 'city' ? wn * PAINT_TOD.on : 0);
       // (alpha-tested, without MSAA: a passing haze while one zone's skyline gives way to the next, or to the rings)
       const k2 = Math.max(4 * u.uMix.value * (1 - u.uMix.value), Math.min(1, 2 * (1 - w))), fade = a2c ? 0 : 0.45 * k2 * k2 * k2;
       u.uHaze.value = 1 - (1 - (1 - (1 - 0.12 * TOD.warm - 0.25 * TOD.night) * (1 - 0.55 * TOD.overcast) * (1 - 0.6 * TOD.rain)) * (1 - paint)) * (1 - fade);

@@ -6,8 +6,8 @@ import { GLSL_NOISE, U as MU } from './materials.js';
 // ---------------------------------------------------------------- palette
 //  t, zenith, horizon, sun colour, sun I, hemi sky, hemi ground, hemi I, fog, cloud lit, cloud shade, cloud rim, night, warm
 export const KEYS = [
-  [0.00, '#070b26', '#1c2752', '#8ea4ff', 0.55, '#2a3c74', '#16141f', 1.0, '#19223f', '#3d4a78', '#1b2244', '#2a3050', 1.0, 0],
-  [0.20, '#1c2560', '#56568a', '#9fb0ff', 0.45, '#42508a', '#262432', 1.0, '#41497a', '#6a6a9a', '#3a3a6a', '#7a6aa0', 0.85, 0],
+  [0.00, '#070b26', '#1c2752', '#a8b6f0', 0.55, '#30427a', '#16141f', 1.0, '#19223f', '#3d4a78', '#1b2244', '#2a3050', 1.0, 0],
+  [0.20, '#1c2560', '#56568a', '#b0bcf2', 0.45, '#46548a', '#262432', 1.0, '#41497a', '#6a6a9a', '#3a3a6a', '#7a6aa0', 0.85, 0],
   [0.245, '#3a56aa', '#f2aa8a', '#ffb48a', 1.7, '#8a92cc', '#6a5060', 1.25, '#dcaca2', '#ffd2b2', '#9a88b2', '#ffd8a8', 0.3, 0.9],
   // the clear day, matched to the reference paintings: a deep azure sky paling to near-white at the horizon, a warm
   // cream sun and a saturated blue skylight (so shadows are deep blue: it is all the light they get; together they light
@@ -15,14 +15,16 @@ export const KEYS = [
   [0.30, '#3270c2', '#e2effc', '#fff2d3', 3.15, '#93b3ec', '#b8a890', 1.35, '#d6e8f8', '#ffffff', '#acc4ea', '#fff4e0', 0.0, 0.2],
   [0.45, '#2f68bb', '#e0f0ff', '#fff5dd', 3.35, '#8fb1ec', '#c8b8a0', 1.35, '#d0e7fb', '#ffffff', '#a8c4ec', '#ffffff', 0.0, 0],
   [0.62, '#3068ba', '#e0efff', '#fff4db', 3.3, '#91b1e9', '#c8b49a', 1.35, '#d2e7fa', '#ffffff', '#aac4ea', '#fffaf0', 0.0, 0.1],
-  [0.70, '#2e5ec2', '#ffd8a6', '#ffcf8a', 2.9, '#a8b4e0', '#c0a080', 1.4, '#eed0ae', '#fff2d8', '#a2a0c8', '#ffd890', 0.0, 0.6],
-  [0.75, '#3a3a9a', '#ff946c', '#ff8a52', 1.9, '#9a88c8', '#8a6070', 1.2, '#e0968a', '#ffb894', '#8a6aa0', '#ffcf8a', 0.15, 1.0],
+  [0.70, '#1d4492', '#ffd8a6', '#ffcf8a', 2.9, '#a8b4e0', '#c0a080', 1.4, '#eed0ae', '#fff2d8', '#a2a0c8', '#ffd890', 0.0, 0.6],
+  [0.75, '#283c88', '#ff946c', '#ff8a52', 1.9, '#9a88c8', '#8a6070', 1.2, '#e0968a', '#ffb894', '#8a6aa0', '#ffcf8a', 0.15, 1.0],
+  // (golden hour to dusk: the deep steel-blue zenith of the paintings repainted at those hours, ref/tod/, not lavender; and
+  // at night a moonlight less saturated, their blue-grey night instead of an inky indigo)
   // end of civil twilight (sun ~6° down): no more sunlight on the ground — the light softens and cools into skylight
   // (faint shadows), while the sky towards the sunset and the high clouds keep the afterglow
-  [0.765, '#2f3488', '#c8788a', '#e8806e', 0.9, '#7076b8', '#5a4a5e', 1.15, '#a07890', '#ffa890', '#6a5a92', '#ffb48a', 0.4, 0.85],
-  [0.80, '#1f2466', '#86709e', '#a08ac8', 0.35, '#4f5a98', '#2f3040', 1.0, '#4f5285', '#c08ab8', '#4a3a70', '#ff9a8a', 0.7, 0.5],
-  [0.86, '#0a0f30', '#24305e', '#8ea4ff', 0.55, '#2c3e78', '#16141f', 1.0, '#1c2548', '#404c7c', '#1c2346', '#2a3050', 1.0, 0],
-  [1.00, '#070b26', '#1c2752', '#8ea4ff', 0.55, '#2a3c74', '#16141f', 1.0, '#19223f', '#3d4a78', '#1b2244', '#2a3050', 1.0, 0],
+  [0.765, '#232f78', '#c8788a', '#e8806e', 0.9, '#7076b8', '#5a4a5e', 1.15, '#a07890', '#ffa890', '#6a5a92', '#ffb48a', 0.4, 0.85],
+  [0.80, '#1a2260', '#86709e', '#a08ac8', 0.35, '#4f5a98', '#2f3040', 1.0, '#4f5285', '#c08ab8', '#4a3a70', '#ff9a8a', 0.7, 0.5],
+  [0.86, '#0a0f30', '#24305e', '#a8b6f0', 0.55, '#32447c', '#16141f', 1.0, '#1c2548', '#404c7c', '#1c2346', '#2a3050', 1.0, 0],
+  [1.00, '#070b26', '#1c2752', '#a8b6f0', 0.55, '#30427a', '#16141f', 1.0, '#19223f', '#3d4a78', '#1b2244', '#2a3050', 1.0, 0],
 ].map(k => k.map(v => (typeof v === 'string' ? new THREE.Color(v) : v)));
 
 export const TOD = {
@@ -30,8 +32,10 @@ export const TOD = {
   fog: new THREE.Color(), cLit: new THREE.Color(), cShade: new THREE.Color(), cRim: new THREE.Color(), night: 0, warm: 0, overcast: 0, rain: 0,
   bright: 1, // how much this is a bright clear day (not night, dawn/dusk or overcast): drives the day-only parts of the look
   sunDir: new THREE.Vector3(), moonDir: new THREE.Vector3(), lightDir: new THREE.Vector3(), sunEl: 0,
+  t: 0.4, // the time of day (the painted palettes by time of day key on it: painted.js todTones)
 };
 export function updateTOD(t) {
+  TOD.t = t;
   let k = 0; while (k < KEYS.length - 2 && KEYS[k + 1][0] <= t) k++;
   const a = KEYS[k], b = KEYS[k + 1], f = smooth(clamp((t - a[0]) / (b[0] - a[0]), 0, 1));
   const lc = (i, out) => out.copy(a[i]).lerp(b[i], f);

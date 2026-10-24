@@ -2,6 +2,57 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-24 · 23:xx — Restyle 20: golden hour, sunset and night, as painted
+- **The painted world stays painted when the sun goes down.** The four reference paintings are bright days, and every
+  painted piece (the sea, the clouds, the far horizon, the tetrapods, the bark, the lawns) fell back to the old
+  procedural colours from golden hour on. Now each has its golden-hour, sunset and night tones, read from the same four
+  paintings repainted at those hours (12 Grok Imagine edits that keep each painting's composition, `ref/tod/`), blended
+  through the day as the sky's palette is. Grey skies and rain keep their own look; noon is unchanged.
+- **The coast's sea at sunset is violet water with rose crests and pink-white foam** (it was a flat pale pink); at
+  night a deep navy with moonlit crests. Where a low sun or a low moon stands over the water, a column of glinting light
+  runs to it.
+- **The cumulus:** honey and peach at golden hour, salmon over mauve at sunset, a lilac afterglow at dusk, and at night
+  moonlit blue-grey with silver edges (they were a barely visible navy).
+- **The horizon:** honey-brown ranges at golden hour, mauve ones at sunset, deep blue ones at night; **the far city
+  lights up at night**, its towers dark blue with scattered lit windows coming on with the town's.
+- **The tetrapods, the bark, the lawns and fields, the cherry blossom and the round trees' leaves** take the repainted
+  hours' colours: golden concrete, then dark mauve heaps, then moonlit blue-grey; gold-green fields, then a moonlit
+  blue-green (the old deeper green turned a saturated grass green under the moon); pale lavender blossom at night (it
+  went a near-black purple).
+- **The evening sky is the paintings' steel blue overhead** (it was lavender), and **moonlight is less saturated**:
+  blue-grey nights instead of inky indigo.
+- **Measured against the repainted targets** (CIELAB ΔE of region medians, 23 regions in four zones): golden hour
+  25.9 → 19.5, sunset 35.6 → 21.3, night 28.9 → 14.9. The coast's sea at sunset 37–54 → 5–7, at night 18–26 → 4–11;
+  the clouds at night 27–37 → 5–12; the country's fields 29–34 → 2–6; the blossom at night 41 → 13. Worse: the
+  avenue's lawn at night (15 → 27: moon shadows under the trees), the city's far end at golden hour (41 → 49: the target
+  sets the sun at the street's end), the country's hills at sunset (14 → 20). Roads are not painted per hour (23–36).
+- **Research:** the targets first (no evening or night reference existed): all twelve repaints kept their painting's
+  composition at the first try. Built by a subagent; verified independently by the main agent, both on the shared box
+  (the desktop machine is off limits while its crashes are investigated).
+- How:
+  - **`painted.js todTones` / `mixTones`:** palettes keyed by the time of day (as sky.js KEYS, on the new `TOD.t`),
+    ungraded each frame; `paintSky()`: the painted look by the weather alone.
+  - **`sea.js`:** golden, sunset and night tones per role; the open sea's glints have their own tone (`uPSpark`); the
+    light's path where a wave no steeper than the painted ones would mirror it into the eye (`uPathK`, `uPathDir`,
+    `uPPath`, `uPGlint`), faded out for a high moon.
+  - **Clouds:** a shade, middle, lit and rim palette. **Band:** a tone ramp by the painting's lightness, keeping some
+    of its own colour; the far city's windows (`uWin`).
+  - **`main.js`:** keyed tones for the tetrapods, bark, lawns (the day key reproduces the old daytime tints exactly),
+    blossom shade and leaves (`materials.js uGhTint`). **`sky.js`:** the evening zenith and the night lights.
+  - **Test switch:** `st.todpaint` (0: the painted look on bright days only, as before). **Assets:** none. **World:**
+    unchanged.
+- Cost: none on phones; the city at night costs desktops about a millisecond on an integrated GPU. On the shared box's
+  Vega iGPU, interleaved with live (four pairs each):
+  - **The city at night:** desktop profile 27.12 vs 28.30 ms (+1.18; pairs +2.17 / +0.83 / +0.48 / +1.24; the
+    subagent's in-page toggle +1.7 ± 0.5), phone profile 16.65 vs 16.72 (+0.08). Likely the horizon band's per-pixel
+    tone ramp and window grid over its whole strip; to trim in the finishing step.
+  - **The coast at sunset:** desktop profile +1.92 ms (pairs −0.90 / +2.08 / +6.29 / +0.21: the box's load rose
+    mid-set), phone −0.22. The subagent's coast drives: at night −0.44 / +0.25, at sunset +0.01 / −0.05.
+  - **Noon:** unchanged (all 42 painted uniforms identical to live at t = 0.5; noon frames match in all six zones).
+  - **Start-up:** about the same (medians 3.15 vs 2.98 s on a busy box).
+  - **Programs:** 62, none compiled through sunset, night, rain or a drive. 0 shader errors in all six zones; no
+    console errors at any quality; embed starts on tap.
+
 ## 2026-10-24 · 21:xx — Restyle 19: smooth painted trunks and branches
 - **The cherry trees' trunks and limbs are smooth and round, as in the reference art.** They were faceted boxes (5–7
   flat sides, straight pieces kinked at each bend) in the props' hard toon steps: a light tan with bright and dark

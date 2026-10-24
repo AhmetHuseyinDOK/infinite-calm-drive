@@ -19,7 +19,7 @@ import { makePost } from './post.js';
 import { makeAudio } from './audio.js';
 import { makeParticles } from './particles.js';
 import { clamp, lerp, sstep, setSeed, hash2 } from './util.js';
-import { loadCloudAtlas, makePaintedClouds, loadBandAtlas, makePaintedBand, updatePainted, loadFieldTexture, loadFrontAtlas, loadHouseAtlas, ungradeRGB } from './painted.js';
+import { loadCloudAtlas, makePaintedClouds, loadBandAtlas, makePaintedBand, updatePainted, loadFieldTexture, loadFrontAtlas, loadHouseAtlas, todTones, mixTones, paintSky, PAINT_TOD } from './painted.js';
 
 const QS = new URLSearchParams(location.search);
 // inside an X player card (or any iframe): lighter quality, compact UI, tap-only start
@@ -155,6 +155,14 @@ async function main() {
   // (CIELAB ΔE of the median grass at noon: the coast's slope 2.7–9.5, was 8.6–15.7; the avenue's lawns in the sun
   // 1.5–5.1, were 9.6–18.4); otherwise about the old procedural grass's colours
   const COAST_DAY = [0.95, 1.05, 1.8], COAST_DIM = [0.91, 1.34, 1.2], SAK_DAY = [1.88, 1.28, 2.0], SAK_DIM = [1.97, 1.54, 1.62];
+  // …and under a clear sky at golden hour, sunset and night, nearer the paintings repainted at those hours (ref/tod/: a
+  // warm gold-green at golden hour, a darker green going mauve at sunset, a moonlit blue-green at night, where the old deeper
+  // green turned a saturated grass-green under the moon); grey skies keep the old tints. (c: the country's, co: the coast's,
+  // sa: the avenue's)
+  const FT = (c, co, sa) => ({ c, co, sa });
+  const F_DAY = FT([...FIELD_DAY], [...COAST_DAY], [...SAK_DAY]), F_GOLD = FT([3.8, 1.6, 3.2], [3.4, 2.0, 3.0], [7.0, 4.6, 2.6]);
+  const F_SUNSET = FT([2.3, 1.4, 5.6], [0.62, 0.85, 4.0], [2.6, 2.3, 10.0]), F_NIGHT = FT([2.6, 1.8, 6.0], [5.5, 3.0, 8.0], [4.0, 2.6, 6.0]);
+  const FIELD_T = todTones([[0, F_NIGHT], [0.2, mixTones(F_NIGHT, F_SUNSET, 0.3)], [0.245, mixTones(F_SUNSET, F_GOLD, 0.4)], [0.3, F_DAY], [0.62, F_DAY], [0.7, F_GOLD], [0.75, F_SUNSET], [0.765, mixTones(F_SUNSET, F_NIGHT, 0.25)], [0.8, mixTones(F_SUNSET, F_NIGHT, 0.55)], [0.86, F_NIGHT], [1, F_NIGHT]]);
   { // the fields: the painted meadow once its texture is in (the country's ground variants then read it), else the paddies
     const fa = await fieldLoad;
     if (fa) {
@@ -197,14 +205,34 @@ async function main() {
   // the cherry blossom's shade tint (materials.js makeGhibliLeaf): a bright rose-magenta on a bright day (the shaded
   // undersides of the crowns stay a glowing pink, as in the painting), and a little pink otherwise; the avenue's wet road
   const BL_SHADE_DAY = [7.5, 3, 2.3], BL_SHADE_DIM = [1.7, 1.15, 1.0], SAK_WET = 0.7;
+  // …and under a clear sky at golden hour, sunset and night, as the avenue painted at those hours (ref/tod/sakura_*.png):
+  // the shaded blossom a warm pink at golden hour, a rosy mauve at sunset, and at night pale lavender in the moonlight (it
+  // went a near-black purple)
+  const BL_DAY = { b: [...BL_SHADE_DAY] }; // (its daytime key: kept as the old tint, deeper by TOD.warm, each frame)
+  // the broadleaf crowns' leaves by the time of day (materials.js uGhTint; read against the coast painting repainted at those
+  // hours: darker at golden hour and sunset, a little bluer at night)
+  const GH_D = { c: [1, 1, 1] }, GH_G = { c: [0.78, 0.82, 1.15] }, GH_S = { c: [0.52, 0.56, 1.3] }, GH_N = { c: [1.25, 1.9, 2.2] };
+  const GH_T = todTones([[0, GH_N], [0.2, mixTones(GH_N, GH_S, 0.3)], [0.245, mixTones(GH_S, GH_G, 0.4)], [0.3, GH_D], [0.62, GH_D], [0.7, GH_G], [0.75, GH_S], [0.765, mixTones(GH_S, GH_N, 0.25)], [0.8, mixTones(GH_S, GH_N, 0.55)], [0.86, GH_N], [1, GH_N]]);
+  const BL_T = todTones([[0, { b: [22, 16, 6] }], [0.2, { b: [16, 12, 5.5] }], [0.245, { b: [7, 4.6, 3] }], [0.3, BL_DAY], [0.62, BL_DAY], [0.7, { b: [7.5, 5, 2.3] }], [0.75, { b: [4.2, 3.0, 2.6] }], [0.765, { b: [8, 6.5, 3.8] }], [0.8, { b: [14, 11, 5] }], [0.86, { b: [22, 16, 6] }], [1, { b: [22, 16, 6] }]]);
   // the tetrapods' tones in coast.png (sRGB, by lightness): its deep blue (creases, the wet band), blue-grey shade, neutral
   // middle and warm light grey, and the white of its foam lit and in its light-blue shade
-  const TP_TONES = [57, 76, 94, 82, 96, 114, 156, 151, 148, 207, 197, 189, 246, 251, 254, 160, 205, 240];
-  const TP_U = [U.uTpD.value, U.uTpS.value, U.uTpM.value, U.uTpL.value, U.uTpFL.value, U.uTpFS.value];
+  // …and at golden hour, sunset and night from the coast painting repainted at those hours (ref/tod/; the same pixels'
+  // lightness percentiles, ~/cdtest/tod/tools/props.py): golden-lit concrete, dark mauve heaps with a rosy rim at sunset,
+  // moonlit blue-grey at night; the foam as the painted sea's
+  const TP_DAY = { d: [57, 76, 94], s: [82, 96, 114], m: [156, 151, 148], l: [207, 197, 189], fl: [246, 251, 254], fs: [160, 205, 240] };
+  const TP_GOLD = { d: [77, 65, 62], s: [93, 73, 69], m: [160, 111, 81], l: [209, 153, 107], fl: [250, 223, 177], fs: [182, 164, 157] };
+  const TP_SUNSET = { d: [42, 33, 47], s: [56, 41, 56], m: [74, 52, 68], l: [124, 80, 90], fl: [247, 180, 162], fs: [177, 122, 140] };
+  const TP_NIGHT = { d: [30, 38, 48], s: [42, 52, 64], m: [56, 68, 82], l: [84, 98, 116], fl: [133, 172, 202], fs: [70, 105, 140] };
+  const TP_N = ['d', 's', 'm', 'l', 'fl', 'fs'], TP_U = [U.uTpD.value, U.uTpS.value, U.uTpM.value, U.uTpL.value, U.uTpFL.value, U.uTpFS.value];
   // the bark's tones (sRGB), measured in the paintings: the cherries' shade, dark body and warm lit edge (sakura.png), and
-  // the broadleaf trees' (coast.png)
-  const BK_TONES = [38, 23, 16, 54, 34, 25, 104, 70, 48, 60, 50, 37, 112, 90, 65, 164, 126, 86];
-  const BK_U = [U.uBkS.value, U.uBkM.value, U.uBkL.value, U.uBkS2.value, U.uBkM2.value, U.uBkL2.value];
+  // the broadleaf trees' (coast.png); and at golden hour, sunset and night (ref/tod/, as the tetrapods')
+  const BK_DAY = { s: [38, 23, 16], m: [54, 34, 25], l: [104, 70, 48], s2: [60, 50, 37], m2: [112, 90, 65], l2: [164, 126, 86] };
+  const BK_GOLD = { s: [41, 24, 18], m: [51, 29, 20], l: [100, 58, 34], s2: [81, 43, 24], m2: [106, 61, 36], l2: [150, 95, 50] };
+  const BK_SUNSET = { s: [26, 18, 22], m: [34, 22, 26], l: [72, 42, 42], s2: [55, 32, 35], m2: [80, 45, 45], l2: [132, 70, 50] };
+  const BK_NIGHT = { s: [14, 15, 22], m: [20, 22, 30], l: [40, 48, 66], s2: [30, 32, 38], m2: [42, 44, 52], l2: [70, 78, 95] };
+  const BK_N = ['s', 'm', 'l', 's2', 'm2', 'l2'], BK_U = [U.uBkS.value, U.uBkM.value, U.uBkL.value, U.uBkS2.value, U.uBkM2.value, U.uBkL2.value];
+  const todKeys = (N, S, D, G) => todTones([[0, N], [0.2, mixTones(N, S, 0.3)], [0.245, mixTones(S, G, 0.4)], [0.3, D], [0.62, D], [0.7, G], [0.75, S], [0.765, mixTones(S, N, 0.25)], [0.8, mixTones(S, N, 0.55)], [0.86, N], [1, N]]);
+  const TP_T = todKeys(TP_NIGHT, TP_SUNSET, TP_DAY, TP_GOLD), BK_T = todKeys(BK_NIGHT, BK_SUNSET, BK_DAY, BK_GOLD);
   const LIGHTS_ON = QS.has('lightson') ? parseFloat(QS.get('lightson')) : -1; // (test hook)
   const glowV = new THREE.Vector3(), HAZE_GLOW = QS.has('haze') ? parseFloat(QS.get('haze')) : 1; // (test hook: ?haze=0 off)
   const rig = makeCrossingRig(); scene.add(rig.group);
@@ -218,7 +246,7 @@ async function main() {
   // speed: the zone's cruising speed × mult (0.4 … 5.5, so up to ~190–265 km/h); uHome: the lane the car settles back
   // into when nobody steers — wherever the player last steered it (it used to always drift back to the left lane)
   const MULT_MIN = 0.4, MULT_MAX = 5.5;
-  const st = { s: Math.max(100, parseFloat(QS.get('s')) || 140), u: -1.65, uHome: -1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, spray: QS.has('nospray') ? 0 : 1 /* test switch */, grass: 1 /* test switch: the meadow's blades */, pclouds: 1 /* test switch: painted clouds (0: the procedural ones, with ?clouds=both) */, band: 1 /* test switch: the painted horizon (0: the mountain rings) */, waves: 1 /* test switch: the painted sea's waves (0: its flat tones) */, shore: 1 /* test switch: the waves and foam along the sea wall (0: the open sea's colour there) */, surf: 1 /* test switch: the spray over the tetrapods */, tetra: 1 /* test switch: the tetrapods */, bark: 1 /* test switch: the bark's painted tones (0: the old colours, lit) */, trunks: 1 /* test switch: the painted trees' bark (0: hidden) */, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
+  const st = { s: Math.max(100, parseFloat(QS.get('s')) || 140), u: -1.65, uHome: -1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, spray: QS.has('nospray') ? 0 : 1 /* test switch */, grass: 1 /* test switch: the meadow's blades */, pclouds: 1 /* test switch: painted clouds (0: the procedural ones, with ?clouds=both) */, band: 1 /* test switch: the painted horizon (0: the mountain rings) */, waves: 1 /* test switch: the painted sea's waves (0: its flat tones) */, shore: 1 /* test switch: the waves and foam along the sea wall (0: the open sea's colour there) */, surf: 1 /* test switch: the spray over the tetrapods */, tetra: 1 /* test switch: the tetrapods */, bark: 1 /* test switch: the bark's painted tones (0: the old colours, lit) */, trunks: 1 /* test switch: the painted trees' bark (0: hidden) */, todpaint: 1 /* test switch: the painted look at golden hour, sunset and night (0: only on a bright day, as before) */, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
   let started = false;
   if (pclouds) pclouds.opening = ['sakura', 'city'].includes(zoneAt(st.s)) ? 'center' : 'flank'; // (a narrow sky over the road: one tower over it)
   status('building the road…');
@@ -655,7 +683,7 @@ async function main() {
     mountains.update(camera.position, Math.max(w.snow, zoneW(st.s + 600).snow * 0.7), 1 - bandW);
     let seaW = 0; for (const d of [-150, 0, 250, 500, 800]) seaW = Math.max(seaW, zoneW(st.s + d).coast);
     sea.mesh.visible = seaW > 0.001;
-    sea.u.uWaves.value = st.waves; sea.u.uShoreW.value = st.shore; M.surf.visible = st.surf > 0; M.tetra.visible = st.tetra > 0; M.bark.visible = st.trunks > 0; sea.update(camera.position, t, fogD * 0.8, sstep(0.0, 0.35, seaW), post.grade.uniforms, path, st.s); // (and the shore's foam and surf)
+    PAINT_TOD.on = st.todpaint; sea.u.uWaves.value = st.waves; sea.u.uShoreW.value = st.shore; M.surf.visible = st.surf > 0; M.tetra.visible = st.tetra > 0; M.bark.visible = st.trunks > 0; sea.update(camera.position, t, fogD * 0.8, sstep(0.0, 0.35, seaW), post.grade.uniforms, path, st.s); // (and the shore's foam and surf)
     riverMat.uniforms.uTime.value = t; riverMat.uniforms.uFogD.value = scene.fog.near; riverMat.uniforms.uNight.value = TOD.night; riverMat.uniforms.uSpecK.value = 1 - TOD.overcast * 0.85;
     U.uSunDir.value.copy(TOD.lightDir); U.uSunCol.value.copy(TOD.sunCol);
     const nightK = sstep(0.15, 0.8, TOD.night);
@@ -665,24 +693,35 @@ async function main() {
     // the painted crowns' shade: the reference art's deep teal on a bright day, neutral at dusk, at night and under grey
     // skies (there it turned the shaded side of a crown cyan against a warm or grey scene)
     U.uGhShade.value.set(lerp(0.8, 0.3, TOD.bright), lerp(0.8, 0.85, TOD.bright), lerp(0.8, 1.7, TOD.bright));
-    { // the tetrapods' painted tones on a bright day (as the painted sea's), ungraded: they show as the painting's colours
-      const k = clamp((TOD.bright - 0.55) / 0.4, 0, 1), g = post.grade.uniforms, T = TP_TONES; U.uTpK.value = k * k * (3 - 2 * k);
-      if (U.uTpK.value > 0) for (let i = 0; i < 6; i++) ungradeRGB(g, T[i * 3], T[i * 3 + 1], T[i * 3 + 2], TP_U[i]);
-      // …and the bark's, on the same bright days
+    // …and their leaves, under a clear sky, as the paintings repainted at golden hour, sunset and night show them (GH_T: an
+    // olive green at golden hour, a dark green going mauve against the sunset, a moonlit teal at night, where the sun had
+    // turned them yellow and orange); by day and under grey skies the leaves' own colour
+    { const c = GH_T.at(TOD.t).rgb('c'), k = 1 - ov; U.uGhTint.value.set(lerp(1, c[0], k), lerp(1, c[1], k), lerp(1, c[2], k)); }
+    { // the tetrapods' painted tones under a clear sky, by the time of day (as the painted sea's), ungraded: they show as the
+      // painting's colours (grey skies and rain keep the old look: lit by the scene)
+      const g = post.grade.uniforms; U.uTpK.value = paintSky();
+      if (U.uTpK.value > 0) { const P = TP_T.at(TOD.t); for (let i = 0; i < 6; i++) P.ug(g, TP_N[i], TP_U[i]); }
+      // …and the bark's, under the same skies
       U.uBkK.value = U.uTpK.value * st.bark;
-      if (U.uBkK.value > 0) for (let i = 0; i < 6; i++) ungradeRGB(g, BK_TONES[i * 3], BK_TONES[i * 3 + 1], BK_TONES[i * 3 + 2], BK_U[i]);
+      if (U.uBkK.value > 0) { const P = BK_T.at(TOD.t); for (let i = 0; i < 6; i++) P.ug(g, BK_N[i], BK_U[i]); }
     }
-    // the painted meadow's tint: the reference art's light lime on a bright day; the paddies' old, deeper green at dusk,
-    // at night and under grey skies (the lime turned the fields ochre at sunset)
-    if (FIELD.tex) {
-      const b = TOD.bright;
-      FIELD.uFieldC.value.set(lerp(FIELD_DIM[0], FIELD_DAY[0], b), lerp(FIELD_DIM[1], FIELD_DAY[1], b), lerp(FIELD_DIM[2], FIELD_DAY[2], b));
-      FIELD.uFieldCo.value.set(lerp(COAST_DIM[0], COAST_DAY[0], b), lerp(COAST_DIM[1], COAST_DAY[1], b), lerp(COAST_DIM[2], COAST_DAY[2], b));
-      FIELD.uFieldSa.value.set(lerp(SAK_DIM[0], SAK_DAY[0], b), lerp(SAK_DIM[1], SAK_DAY[1], b), lerp(SAK_DIM[2], SAK_DAY[2], b));
+    // the painted meadow's tint: the reference art's light lime on a bright day, the repainted hours' tints at golden hour,
+    // sunset and night (FIELD_T); the paddies' old, deeper green under grey skies (the day's lime turned the fields ochre at
+    // sunset)
+    if (FIELD.tex) { // (by the time of day under a clear sky; towards the old deeper tints as the sky greys over. The day's
+      // key keeps the old daytime tints exactly: deeper by TOD.warm towards the morning and the evening)
+      const wd = 1 - TOD.warm;
+      for (let i = 0; i < 3; i++) { F_DAY.c[i] = lerp(FIELD_DIM[i], FIELD_DAY[i], wd); F_DAY.co[i] = lerp(COAST_DIM[i], COAST_DAY[i], wd); F_DAY.sa[i] = lerp(SAK_DIM[i], SAK_DAY[i], wd); }
+      const b = 1 - ov, P = FIELD_T.at(TOD.t), c = P.rgb('c'), co = P.rgb('co'), sa = P.rgb('sa');
+      FIELD.uFieldC.value.set(lerp(FIELD_DIM[0], c[0], b), lerp(FIELD_DIM[1], c[1], b), lerp(FIELD_DIM[2], c[2], b));
+      FIELD.uFieldCo.value.set(lerp(COAST_DIM[0], co[0], b), lerp(COAST_DIM[1], co[1], b), lerp(COAST_DIM[2], co[2], b));
+      FIELD.uFieldSa.value.set(lerp(SAK_DIM[0], sa[0], b), lerp(SAK_DIM[1], sa[1], b), lerp(SAK_DIM[2], sa[2], b));
     }
-    // the cherry blossom's: a bright rose-magenta on a bright day (thin petals glow in the shade); otherwise only enough
-    // pink to keep the bluish skylight from turning the crowns' shade purple
-    U.uBlShade.value.set(lerp(BL_SHADE_DIM[0], BL_SHADE_DAY[0], TOD.bright), lerp(BL_SHADE_DIM[1], BL_SHADE_DAY[1], TOD.bright), lerp(BL_SHADE_DIM[2], BL_SHADE_DAY[2], TOD.bright));
+    // the cherry blossom's: a bright rose-magenta on a bright day (thin petals glow in the shade), the repainted hours' at
+    // golden hour, sunset and night (BL_T); under grey skies only enough pink to keep the bluish skylight from turning the
+    // crowns' shade purple
+    { for (let i = 0; i < 3; i++) BL_DAY.b[i] = lerp(BL_SHADE_DIM[i], BL_SHADE_DAY[i], 1 - TOD.warm);
+      const b = BL_T.at(TOD.t).rgb('b'), k = 1 - ov; U.uBlShade.value.set(lerp(BL_SHADE_DIM[0], b[0], k), lerp(BL_SHADE_DIM[1], b[1], k), lerp(BL_SHADE_DIM[2], b[2], k)); }
     // home lights come on one by one over the two hours after sunset (18:00 → ~20:00 on the clock, ~40 s of driving) and
     // go off one by one at dawn; on a dark rainy day some are on in the daytime too
     U.uLightsOn.value = LIGHTS_ON >= 0 ? LIGHTS_ON : Math.max(sstep(0.02, 0.75, TOD.night), 0.3 * ov);

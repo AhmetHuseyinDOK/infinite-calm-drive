@@ -5,13 +5,15 @@
 //    clouds and horizon: painted.js) and its manner: a deep, saturated azure covered right out to the far shore in
 //    wavelets (navy lenses, light cyan streaks, white glints), small and many far out, larger towards the wall, paling to
 //    a light azure at the painted far shore instead of fogging to white; along the wall, rows of breaking waves.
-//  - At dawn, dusk, night and under grey skies it keeps its old look: the sky mirrored by the Fresnel law, in the fog (the
-//    waves along the wall keep their foam, lit as any white surface).
+//  - At golden hour, sunset and night (under a clear sky) it stays painted, in the tones of the coast painting repainted at
+//    those hours (ref/tod/): violet water with rosy crests at sunset, deep navy at night; the low sun's (or the moon's) path
+//    a column of glinting light under it. Under grey skies and in rain it keeps its old look: the sky mirrored by the Fresnel
+//    law, in the fog (the waves along the wall keep their foam, lit as any white surface).
 import * as THREE from 'three';
 import { GLSL_NOISE, U as MU, S_WRAP } from './materials.js';
 import { TOD } from './sky.js';
 import { SEA, ZONE_LEN, TRANS, zoneWeight } from './path.js';
-import { ungradeRGB } from './painted.js';
+import { todTones, mixTones, paintSky } from './painted.js';
 
 /** the waves along the coast's sea wall, shared by the water there (shoreMaterial) and the surf over the tetrapods
  *  (surf.js). As in the reference art they come in rows across the view, rolling back along the road towards us, slanting
@@ -53,6 +55,9 @@ export const SEA_U = {
   // wall); and (a test switch) whether the strip draws them and their foam
   uPWBack: { value: new THREE.Color() }, uPWFace: { value: new THREE.Color() }, uPWLite: { value: new THREE.Color() }, uPWTurq: { value: new THREE.Color() },
   uShoreW: { value: 1 },
+  // the low sun's (or the moon's) path on the painted water: its tones, where the light is, and how strong (0: none)
+  uPPath: { value: new THREE.Color() }, uPGlint: { value: new THREE.Color() }, uPathDir: { value: new THREE.Vector3(0, 1, 0) }, uPathK: { value: 0 },
+  uPSpark: { value: new THREE.Color(1, 1, 1) }, // (the open sea's glints: by day the foam's white)
 };
 // the painted sea's tones, measured in coast.png (sRGB), each by lightness (the darkest tenth, the middle, the lightest
 // fifth, the lightest few per cent): the water along the sea wall (~35 m out: trough, mid, face, lite), out at ~60–90 m
@@ -65,11 +70,42 @@ const PAINT = {
   // the waves along the wall (the water left of the near tetrapods, by hue): the navy of their troughs, the clear cyan
   // beyond each line of foam and its lightest at the foam, and the turquoise of the churned water by the wall
   wBack: [1, 109, 193], wFace: [68, 163, 212], wLite: [113, 188, 241], wTurq: [46, 154, 201],
+  // the low sun's (or the moon's) path on the water: its lit wavelets and its glints, and how strong it is (none by day:
+  // the noon sun is high, and the day look is the reference's)
+  path: [140, 210, 250], glint: [246, 251, 254], pk: [0, 0, 0],
+  // the open sea's glints on the wavelets' crests (by day the foam's white)
+  spark: [246, 251, 254],
 };
+// …and the same tones at golden hour, at sunset and at night, read from the coast painting repainted at those hours
+// (ref/tod/coast_*.png; ~/cdtest/tod/tools/seatones.py, seatod.py): each tone by the same role as its day tone (a band of
+// distance from the wall and a lightness percentile, left of the tetrapods and away from the sun's path), moved from the day
+// tone by the difference the target shows (CIELAB); the path's tones are its lightest in the targets
+const PAINT_GOLD = {
+  trough: [62, 71, 85], mid: [100, 105, 118], face: [157, 129, 131], lite: [193, 169, 149], midD: [82, 97, 123], midM: [146, 129, 126], midF: [212, 165, 128], midL: [242, 200, 139],
+  farD: [137, 119, 127], far: [228, 186, 134], farF: [246, 222, 154], farL: [243, 227, 168], hz: [238, 201, 149], foam: [250, 223, 177], foamShade: [182, 164, 157],
+  wBack: [63, 79, 98], wFace: [148, 128, 110], wLite: [181, 149, 139], wTurq: [94, 114, 112], path: [238, 197, 147], glint: [253, 232, 165], pk: [0.8, 0.8, 0.8], spark: [244, 214, 172],
+};
+const PAINT_SUNSET = {
+  trough: [63, 47, 73], mid: [91, 73, 99], face: [129, 80, 110], lite: [202, 125, 125], midD: [74, 63, 95], midM: [94, 76, 105], midF: [101, 74, 105], midL: [122, 86, 102],
+  farD: [84, 58, 86], far: [104, 70, 98], farF: [124, 78, 100], farL: [146, 84, 98], hz: [126, 76, 100], foam: [247, 180, 162], foamShade: [177, 122, 140],
+  wBack: [67, 56, 82], wFace: [125, 86, 95], wLite: [157, 106, 126], wTurq: [94, 84, 91], path: [244, 171, 118], glint: [255, 228, 149], pk: [1, 1, 1], spark: [196, 128, 128],
+};
+const PAINT_NIGHT = {
+  trough: [8, 33, 62], mid: [17, 57, 92], face: [28, 64, 106], lite: [50, 88, 126], midD: [9, 42, 76], midM: [17, 53, 90], midF: [18, 55, 95], midL: [32, 62, 96],
+  farD: [14, 41, 72], far: [29, 63, 96], farF: [20, 66, 111], farL: [40, 78, 120], hz: [13, 76, 131], foam: [133, 172, 202], foamShade: [70, 105, 140],
+  wBack: [12, 43, 73], wFace: [50, 77, 103], wLite: [63, 96, 136], wTurq: [32, 71, 90], path: [185, 221, 236], glint: [230, 250, 254], pk: [0.75, 0.75, 0.75], spark: [58, 96, 134],
+};
+// keyed as sky.js KEYS: the night until dawn; sunrise as a sunset turning golden; the day; golden hour, sunset, the end of
+// twilight (the sun's path gone) and dusk on the way to the night. The path follows the sun until it has set, then the moon
+const SEA_TONES = todTones([
+  [0.0, PAINT_NIGHT], [0.2, { ...mixTones(PAINT_NIGHT, PAINT_SUNSET, 0.25), pk: [0, 0, 0] }], [0.245, mixTones(PAINT_SUNSET, PAINT_GOLD, 0.35)],
+  [0.3, PAINT], [0.62, PAINT], [0.7, PAINT_GOLD], [0.75, PAINT_SUNSET], [0.765, { ...mixTones(PAINT_SUNSET, PAINT_NIGHT, 0.25), pk: [0, 0, 0] }],
+  [0.8, { ...mixTones(PAINT_SUNSET, PAINT_NIGHT, 0.55), pk: [0, 0, 0] }], [0.86, PAINT_NIGHT], [1.0, PAINT_NIGHT],
+]);
 /** GLSL: the open sea's colour at a world position (before the zones' fade-in) */
 const SEA_PARS = /* glsl */`
-uniform float uTime, uNight, uFogD, uVis, uSpecK, uBright, uPaint, uWaves; uniform vec3 uCam, uSunDir, uSunCol, uHorizon, uZenith, uFog;
-uniform vec3 uPTrough, uPMid, uPFace, uPLite, uPMidD, uPMidM, uPMidF, uPMidL, uPFarD, uPFar, uPFarF, uPFarL, uPHz, uFoamLit, uFoamShade;
+uniform float uTime, uNight, uFogD, uVis, uSpecK, uBright, uPaint, uWaves, uPathK; uniform vec3 uCam, uSunDir, uSunCol, uHorizon, uZenith, uFog;
+uniform vec3 uPTrough, uPMid, uPFace, uPLite, uPMidD, uPMidM, uPMidF, uPMidL, uPFarD, uPFar, uPFarF, uPFarL, uPHz, uFoamLit, uFoamShade, uPPath, uPGlint, uPathDir, uPSpark;
 uniform vec2 uOrigin, uSeaDir;
 ${GLSL_NOISE}${NOISE4}
 vec4 vnoise4g(vec2 p, vec2 gx, vec2 gy){ vec2 i = floor(p), f = fract(p); vec2 w = f*f*(3.0-2.0*f); return textureGrad(uNoiseTex, (i + w + 0.5) / 256.0, gx / 256.0, gy / 256.0); }
@@ -95,8 +131,9 @@ vec3 ripple(vec2 q, vec2 gx, vec2 gy){
   return vec3(n0.x * 0.65 + d0 * 0.35, ((h1 - n0.x) * 0.65 + (d1 - d0) * 0.35) * 5.0, n0.y);
 #endif
 }
-/** p: the world position (absolute), d: from the camera, dist: its length */
-vec3 paintedSea(vec2 p, vec2 d, float dist){
+/** p: the world position (absolute), d: from the camera, dist: its length; pw: how much of the low sun's (or the moon's)
+ *  path on the water is here (0 … 1) */
+vec3 paintedSea(vec2 p, vec2 d, float dist, float pw){
   vec2 V = d / max(dist, 1e-3), e = vec2(-uSeaDir.y, uSeaDir.x);
   float c = dot(uSeaDir, V);
   float al = dot(p, e), ac = dot(p, uSeaDir);   // (along the crests, and the way they roll)
@@ -122,7 +159,16 @@ vec3 paintedSea(vec2 p, vec2 d, float dist){
   col = mix(col, Li, lite * smoothstep(0.59 - hw, 0.59 + hw, h));
   float gl = mix(ra.z, rb.z, fr), gw = fwidth(gl) * 0.6 + 0.01, gt = 0.67 - 0.14 * ff;   // (more glints far out)
   float white = lite * max(smoothstep(0.77 - hw, 0.77 + hw, h), smoothstep(gt - gw, gt + gw, gl) * smoothstep(0.45, 0.6, h));
-  return mix(col, mix(uFoamLit, uPFarL, ff * 0.5), white);
+  col = mix(col, mix(uPSpark, uPFarL, ff * 0.5), white);
+  if (pw > 0.003) {
+    // the low sun's (or the moon's) path, as the paintings draw it: a column of light on the water under it, its wavelets'
+    // lit backs taking its colour and most of them glinting, the water between lighter too
+    col = mix(col, mix(col, uPPath, 0.5), pw * (1.0 - lite) * 0.75);
+    col = mix(col, uPPath, min(lite * 1.5, 1.0) * pw);
+    float pg = lite * max(smoothstep(0.6 - 0.25 * pw - hw, 0.6 - 0.25 * pw + hw, h), smoothstep(gt - 0.2 * pw - gw, gt - 0.2 * pw + gw, gl));
+    col = mix(col, uPGlint, pg * pw);
+  }
+  return col;
 }
 vec3 seaColour(vec3 w){
   vec3 V = normalize(uCam - w); float dist = length(uCam.xz - w.xz);
@@ -152,9 +198,12 @@ vec3 seaColour(vec3 w){
     col = mix(col, uFog, 1.0 - exp(-fd * fd));
   }
   if (uPaint > 0.001) {
-    // the painted sea (a bright clear day): the painting's wavelets, paling into the light azure at the far shore (uWaves
-    // off, a test switch: its flat tones)
-    vec3 pc = uWaves > 0.5 ? paintedSea(p, w.xz - uCam.xz, dist) : mix(uPMid, uPFar, smoothstep(15.0, 260.0, dist));
+    // the painted sea (under a clear sky): the painting's wavelets, paling into the light azure at the far shore by day
+    // (uWaves off, a test switch: its flat tones). The low sun's (or the moon's) path: where the water would mirror it into
+    // the eye with a wave tilted no more than the painted waves are (the half-vector's tilt from the vertical)
+    float pw = 0.0;
+    if (uPathK > 0.001) { vec3 H = normalize(uPathDir + V); pw = uPathK * exp(-(1.0 - H.y) * 16.0); }
+    vec3 pc = uWaves > 0.5 ? paintedSea(p, w.xz - uCam.xz, dist, pw) : mix(uPMid, uPFar, smoothstep(15.0, 260.0, dist));
     pc = mix(pc, uPHz, smoothstep(1500.0, 4000.0, dist) * 0.7);
     col = mix(col, pc, uPaint);
   }
@@ -182,31 +231,37 @@ export function makeSea(lite = false) {
       mesh.position.x = cam.x; mesh.position.z = cam.z;
       if (path && vis > 0) coastDir(path, s, u.uSeaDir.value);
       u.uTime.value = time; u.uCam.value.copy(cam); u.uNight.value = TOD.night; u.uBright.value = TOD.bright; u.uFogD.value = fogD; u.uVis.value = vis; u.uSpecK.value = 1 - TOD.overcast * 0.85;
-      // the painted look on a bright day only (as the horizon band's: none at golden hour, sunset, night or under cloud)
-      const k = Math.min(Math.max((TOD.bright - 0.55) / 0.4, 0), 1), paint = grade ? k * k * (3 - 2 * k) : 0;
+      // the painted look under a clear sky, at any hour (its tones by the time of day); grey skies and rain keep the old look
+      const paint = grade ? paintSky() : 0;
       u.uPaint.value = paint;
       // the foam: white lit by the sun and the sky as any white surface is (at night only by the moon: it doesn't glow),
-      // or, on a bright day, the painting's own white with its light-blue shade
+      // or, under a clear sky, the painting's own white with its light-blue shade (rosy at sunset, moonlit at night)
       const dayExp = 1 + 0.25 * TOD.bright, kl = 1 / (Math.PI * dayExp), sc = TOD.sunCol, hs = TOD.hemiSky, si = TOD.sunI * 0.8, hi = TOD.hemiI;
       u.uFoamLit.value.setRGB((sc.r * si + hs.r * hi) * kl, (sc.g * si + hs.g * hi) * kl, (sc.b * si + hs.b * hi) * kl);
       u.uFoamShade.value.setRGB(hs.r * hi * 0.9 * kl, hs.g * hi * 0.9 * kl, hs.b * hi * 0.9 * kl);
+      u.uPathK.value = 0;
       if (paint > 0) {
-        const P = PAINT;
-        ug(grade, P.trough, u.uPTrough.value); ug(grade, P.mid, u.uPMid.value); ug(grade, P.face, u.uPFace.value); ug(grade, P.lite, u.uPLite.value);
-        ug(grade, P.midD, u.uPMidD.value); ug(grade, P.midM, u.uPMidM.value); ug(grade, P.midF, u.uPMidF.value); ug(grade, P.midL, u.uPMidL.value);
-        ug(grade, P.farD, u.uPFarD.value); ug(grade, P.far, u.uPFar.value); ug(grade, P.farF, u.uPFarF.value); ug(grade, P.farL, u.uPFarL.value); ug(grade, P.hz, u.uPHz.value);
-        u.uFoamLit.value.lerp(ug(grade, P.foam, _c), paint); u.uFoamShade.value.lerp(ug(grade, P.foamShade, _c), paint);
+        const P = SEA_TONES.at(TOD.t), g = grade;
+        P.ug(g, 'trough', u.uPTrough.value); P.ug(g, 'mid', u.uPMid.value); P.ug(g, 'face', u.uPFace.value); P.ug(g, 'lite', u.uPLite.value);
+        P.ug(g, 'midD', u.uPMidD.value); P.ug(g, 'midM', u.uPMidM.value); P.ug(g, 'midF', u.uPMidF.value); P.ug(g, 'midL', u.uPMidL.value);
+        P.ug(g, 'farD', u.uPFarD.value); P.ug(g, 'far', u.uPFar.value); P.ug(g, 'farF', u.uPFarF.value); P.ug(g, 'farL', u.uPFarL.value); P.ug(g, 'hz', u.uPHz.value);
+        u.uFoamLit.value.lerp(P.ug(g, 'foam', _c), paint); u.uFoamShade.value.lerp(P.ug(g, 'foamShade', _c), paint); P.ug(g, 'spark', u.uPSpark.value);
         // (the waves' tones along the wall as offsets from the open sea's middle tone there: they ride on its wavelets)
-        ugD(grade, P.wBack, u.uPWBack.value, u.uPMid.value); ugD(grade, P.wFace, u.uPWFace.value, u.uPMid.value);
-        ugD(grade, P.wLite, u.uPWLite.value, u.uPMid.value); ugD(grade, P.wTurq, u.uPWTurq.value, u.uPMid.value);
+        ugD2(P, g, 'wBack', u.uPWBack.value, u.uPMid.value); ugD2(P, g, 'wFace', u.uPWFace.value, u.uPMid.value);
+        ugD2(P, g, 'wLite', u.uPWLite.value, u.uPMid.value); ugD2(P, g, 'wTurq', u.uPWTurq.value, u.uPMid.value);
+        // the low sun's path on the water while it is up (sets), then the moon's while it is low (as the paintings draw it:
+        // a column from the horizon; a high moon's would wash the near water pale)
+        const L = TOD.sunEl > -0.04 ? TOD.sunDir : TOD.moonDir, hi = Math.min(Math.max((L.y - 0.3) / 0.3, 0), 1);
+        u.uPathK.value = P.rgb('pk')[0] * paint * u.uWaves.value * (1 - hi * hi * (3 - 2 * hi));
+        if (u.uPathK.value > 0) { u.uPathDir.value.copy(L); P.ug(g, 'path', u.uPPath.value); P.ug(g, 'glint', u.uPGlint.value); }
       }
     },
   };
 }
 const _c = new THREE.Color();
-const ug = (grade, c, out) => ungradeRGB(grade, c[0], c[1], c[2], out);
-/** a painted tone's offset from another (ungraded) colour: out = ug(c) − m (three's Color.sub would clamp it at 0) */
-const ugD = (grade, c, out, m) => { ug(grade, c, out); out.r -= m.r; out.g -= m.g; out.b -= m.b; };
+/** a painted tone's offset from another (ungraded) colour: out = ungrade(tone n of palette P) − m (three's Color.sub would
+ *  clamp it at 0) */
+const ugD2 = (P, grade, n, out, m) => { P.ug(grade, n, out); out.r -= m.r; out.g -= m.g; out.b -= m.b; };
 /** the way the open sea's waves roll: as in the painting, in rows across the view, i.e. back along the coast's mean line
  *  (the road's mean heading over the whole coast zone in view), slanting WAVE_SLANT in towards the shore. Set once per
  *  zone, so the waves stay put in the world and never swing round with the road's bends; where a bend looks along them,

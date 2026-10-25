@@ -2,6 +2,34 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-25 · 05:xx — Finish 3: phones' evening glow at under a third of the cost
+- **Nothing visible changes.** On phones and in the X card the glow at sunset and night (the city's neon and lit
+  shopfronts, lamps, lanterns, tail lamps) comes from a lighter bloom that spreads the same light over the same widths.
+  Side by side with live, in 2× crops of the brightest glows (the 中華料理 and 焼き鳥 neon, the tail lamps, the avenue's
+  lamps), the frames can't be told apart: region medians move by a CIELAB ΔE of at most 2.4 (the city at night, where
+  the test harness's seeded fireflies also land elsewhere; the subagent's aligned build read ≤ 1.15), the coast at
+  sunset is pixel-identical. Desktops keep three's UnrealBloomPass: their frames are pixel-identical to live.
+- **Phones' bloom costs under a third of what it did:** the pass in the city at night 4.0–4.3 → 0.9–1.3 ms; over phone
+  drives the city at night 17.25 → 13.08 ms a frame (pairs −4.85 / −4.50 / −4.11 / −3.19) and the coast at sunset
+  12.09 → 10.77 (pairs −1.08 / −1.07 / −1.90 / −1.20).
+- **The night sky works out the Milky Way only near it** (farther, its light is under a level): the sky's draw in the
+  city at night 2.25 → 1.11 ms on phones, 1.29 → 0.68 on desktops.
+- **Research:** the phone frame from noon to evening: the extra cost was almost all the bloom (four passes at half size or
+  more and a full-size blend), plus the night sky and the night's lamp heads and light pools. Dual-filter (Kawase) and
+  Call of Duty's 13-tap chains were weighed: at a quarter size their taps cost what the Gaussians do and their glow has
+  another shape; the saving is in where the work runs. A numpy model of both chains showed a first try's quarter grid
+  thresholding other pixels than the desktop's (a neon sign's halo off by ΔE 13.8): the high pass now samples the
+  desktop's half-size grid exactly. Built by a subagent; verified independently by the main agent, both on the shared
+  box (the desktop machine is off limits).
+- How: `post.js LiteBloomPass` (a high pass of four thresholded taps to a quarter size; five mips at ¼ … 1/64, each
+  UnrealBloomPass's Gaussian with the same width in screen pixels and half the taps; the composite at a quarter size,
+  added in the grade pass: `LITE_BLOOM`); `makePost({ lite })` where the quality isn't high (`main.js`); `sky.js` (the
+  Milky Way's noise only where its band weighs over 0.001). Assets: none. World: the same layout. Programs: 62 on
+  desktops, 61 on phones.
+- Cost: less. 0 shader errors in all six zones on both tiers; no console errors at any quality; none compiled through
+  sunset, night, rain or a drive on either tier; embed starts on tap; start-up the same (medians 3.07 vs 3.08 s over
+  ten interleaved loads).
+
 ## 2026-10-25 · 03:xx — Finish 2: a first visit a third lighter, the start button sooner on a slow line
 - **Nothing visible changes.** The painted horizon, the shopfronts, the houses and the meadow are re-encoded from their
   lossless masters at WebP quality 50 (they were 84–90); the clouds keep their colour at q88 (their near-white

@@ -196,7 +196,8 @@ async function main() {
   // anti-aliasing: MSAA on desktop; FXAA in the grade pass on phones and in the X embed (MSAA's 2× buffer and resolve cost
   // 2–5 ms a frame at phone resolution on a mobile-class GPU — most in foliage); none at low quality. ?aa=msaa|fxaa|none
   const AA = QS.get('aa') || (quality === 'high' ? 'msaa' : quality === 'mid' ? 'fxaa' : 'none');
-  const post = makePost(renderer, scene, camera, { msaa: AA === 'msaa' ? (quality === 'high' ? 4 : 2) : 0, fxaa: AA === 'fxaa' });
+  // bloom: the desktop's UnrealBloomPass; on phones and in the X embed a lighter one with the same glow (post.js LiteBloomPass)
+  const post = makePost(renderer, scene, camera, { msaa: AA === 'msaa' ? (quality === 'high' ? 4 : 2) : 0, fxaa: AA === 'fxaa', lite: quality !== 'high' });
   U.uReflTex.value = post.refl.rt.texture;
   // the cumulus (painted or procedural) and the painted horizon: made once the road is built and the light prepared
   // (below), so their downloads overlap that work

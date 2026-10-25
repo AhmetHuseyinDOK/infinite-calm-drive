@@ -28,17 +28,78 @@ class ReflCopyPass extends Pass {
   }
 }
 
+/** Phones' bloom: UnrealBloomPass's glow (the light over its threshold, spread over five widths from ~4 to ~250 pixels
+ *  and summed) for a fraction of its cost. All of it at a quarter of the frame's size or less: the high pass takes four
+ *  taps on exactly the texels of the desktop's half-size high pass (each the average of 2×2 pixels, thresholded), so
+ *  the same strokes of a neon sign glow as there; each mip's Gaussian has the same width in screen pixels with half the
+ *  taps; and the sum is added in the grade pass, not blended into the frame by a full-size pass of its own. */
+const BLOOM_F = [1.0, 0.8, 0.6, 0.4, 0.2]; // (UnrealBloomPass's mip weights, mirrored by `radius`)
+const VS_QUAD = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
+function bloomBlur(k) { // UnrealBloomPass's separable Gaussian (σ = k/3 texels; taps paired into bilinear fetches), its weights as constants
+  const c = [], sg = k / 3, f = x => x.toFixed(6); for (let i = 0; i < k; i++) c.push(0.39894 * Math.exp(-0.5 * i * i / (sg * sg)) / sg);
+  let taps = '';
+  for (let i = 1; i < k; i += 2) { const a = c[i], b = i + 1 < k ? c[i + 1] : 0, o = (i * a + (i + 1) * b) / (a + b); taps += ` s += (texture2D(tSrc, vUv + uStep * ${f(o)}).rgb + texture2D(tSrc, vUv - uStep * ${f(o)}).rgb) * ${f(a + b)};`; }
+  return new THREE.ShaderMaterial({ uniforms: { tSrc: { value: null }, uStep: { value: new THREE.Vector2() } }, vertexShader: VS_QUAD, depthTest: false, depthWrite: false,
+    fragmentShader: `uniform sampler2D tSrc; uniform vec2 uStep; varying vec2 vUv; void main(){ vec3 s = texture2D(tSrc, vUv).rgb * ${f(c[0])};${taps} gl_FragColor = vec4(s, 1.0); }` });
+}
+class LiteBloomPass extends Pass {
+  constructor() {
+    super(); this.needsSwap = false; this.strength = 1; this.radius = 0; this.threshold = 1;
+    const rt = () => new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false, generateMipmaps: false });
+    this.bright = rt(); this.rtH = []; this.rtV = []; this.blur = [];
+    for (let i = 0; i < 5; i++) { this.rtH.push(rt()); this.rtV.push(rt()); this.blur.push(bloomBlur(3 + 2 * i)); } // (σ 1 … 3.7 texels at ¼ … 1/64 size: the desktop's 2 … 7.3 at ½ … 1/32)
+    // (uHalf: the desktop's half-size grid; this pass's texel j covers its texels 2j and 2j + 1 in each direction)
+    this.high = new THREE.ShaderMaterial({ uniforms: { tDiffuse: { value: null }, uHalf: { value: new THREE.Vector2(1, 1) }, uThreshold: { value: 1 } }, vertexShader: VS_QUAD, depthTest: false, depthWrite: false,
+      fragmentShader: `uniform sampler2D tDiffuse; uniform vec2 uHalf; uniform float uThreshold;
+        vec3 hp(vec2 p){ vec3 c = texture2D(tDiffuse, p / uHalf).rgb; return c * smoothstep(uThreshold, uThreshold + 0.01, luminance(c)); }
+        void main(){ vec2 p = floor(gl_FragCoord.xy) * 2.0 + 0.5; gl_FragColor = vec4(0.25 * (hp(p) + hp(p + vec2(1.0, 0.0)) + hp(p + vec2(0.0, 1.0)) + hp(p + 1.0)), 1.0); }` });
+    this.comp = new THREE.ShaderMaterial({ uniforms: { t0: { value: this.rtV[0].texture }, t1: { value: this.rtV[1].texture }, t2: { value: this.rtV[2].texture }, t3: { value: this.rtV[3].texture }, t4: { value: this.rtV[4].texture }, uW: { value: [0, 0, 0, 0, 0] } },
+      vertexShader: VS_QUAD, depthTest: false, depthWrite: false,
+      fragmentShader: `uniform sampler2D t0, t1, t2, t3, t4; uniform float uW[5]; varying vec2 vUv;
+        void main(){ gl_FragColor = vec4(uW[0] * texture2D(t0, vUv).rgb + uW[1] * texture2D(t1, vUv).rgb + uW[2] * texture2D(t2, vUv).rgb + uW[3] * texture2D(t3, vUv).rgb + uW[4] * texture2D(t4, vUv).rgb, 1.0); }` });
+    this.texture = this.rtH[0].texture; this.uvScale = new THREE.Vector2(1, 1); // (the composite, and the scale from the frame's uv to its: the grade pass adds it)
+    this.quad = new FullScreenQuad(null); this.clearColor = new THREE.Color(0, 0, 0); this.oldClear = new THREE.Color();
+  }
+  setSize(w, h) {
+    const hx = Math.max(1, Math.round(w / 2)), hy = Math.max(1, Math.round(h / 2)); // (the desktop's half-size grid, as UnrealBloomPass)
+    let x = Math.ceil(hx / 2), y = Math.ceil(hy / 2);
+    this.high.uniforms.uHalf.value.set(hx, hy); this.uvScale.set(hx / (2 * x), hy / (2 * y)); this.bright.setSize(x, y);
+    for (let i = 0; i < 5; i++) { this.rtH[i].setSize(x, y); this.rtV[i].setSize(x, y); x = Math.max(1, Math.round(x / 2)); y = Math.max(1, Math.round(y / 2)); }
+  }
+  draw(renderer, m, target) { this.quad.material = m; renderer.setRenderTarget(target); renderer.clear(); this.quad.render(renderer); }
+  render(renderer, writeBuffer, readBuffer) {
+    const ac = renderer.autoClear, ca = renderer.getClearAlpha(); renderer.getClearColor(this.oldClear);
+    renderer.autoClear = false; renderer.setClearColor(this.clearColor, 0);
+    this.high.uniforms.tDiffuse.value = readBuffer.texture; this.high.uniforms.uThreshold.value = this.threshold;
+    this.draw(renderer, this.high, this.bright);
+    let src = this.bright;
+    for (let i = 0; i < 5; i++) {
+      const m = this.blur[i], u = m.uniforms, H = this.rtH[i], V = this.rtV[i];
+      u.tSrc.value = src.texture; u.uStep.value.set(1 / H.width, 0); this.draw(renderer, m, H);
+      u.tSrc.value = H.texture; u.uStep.value.set(0, 1 / V.height); this.draw(renderer, m, V);
+      src = V;
+    }
+    const w = this.comp.uniforms.uW.value, k = 3 * this.strength; // (3: as UnrealBloomPass's composite)
+    for (let i = 0; i < 5; i++) w[i] = k * (BLOOM_F[i] + (1.2 - 2 * BLOOM_F[i]) * this.radius);
+    this.draw(renderer, this.comp, this.rtH[0]);
+    renderer.setClearColor(this.oldClear, ca); renderer.autoClear = ac;
+  }
+}
+
 const GradeShader = {
   uniforms: {
     tDiffuse: { value: null }, toneMappingExposure: { value: 1 }, uSun: { value: new THREE.Vector2(0.5, 0.8) }, uSunVis: { value: 0 }, uDay: { value: 1 }, uWarm: { value: 0 },
     uTime: { value: 0 }, uAspect: { value: 1 }, uVig: { value: 0.55 }, uSat: { value: 1.1 }, uTexel: { value: new THREE.Vector2(1 / 1280, 1 / 720) },
-    uLo: { value: new THREE.Vector3(-0.014, 0.0, 0.03) },
+    uLo: { value: new THREE.Vector3(-0.014, 0.0, 0.03) }, tBloom: { value: null }, uBloomK: { value: 0 }, uBloomUv: { value: new THREE.Vector2(1, 1) },
   },
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
   fragmentShader: /* glsl */`
     // tone mapping + sRGB output and the anime grade in ONE full-screen pass (was OutputPass + a separate grade pass)
     #include <tonemapping_pars_fragment>
     uniform sampler2D tDiffuse; uniform vec2 uSun; uniform float uSunVis, uDay, uWarm, uTime, uAspect, uVig, uSat; uniform vec3 uLo; varying vec2 vUv;
+    #ifdef LITE_BLOOM
+    uniform sampler2D tBloom; uniform float uBloomK; uniform vec2 uBloomUv; // (phones: the bloom, added here)
+    #endif
     float h11(float p){ p = fract(p * .1031); p *= p + 33.33; p *= p + p; return fract(p); }
     float n1(float x){ float i = floor(x), f = fract(x); return mix(h11(i), h11(i + 1.0), f * f * (3.0 - 2.0 * f)); }
     #ifdef USE_FXAA
@@ -68,6 +129,9 @@ const GradeShader = {
       #else
       vec4 src = texture2D(tDiffuse, vUv);
       #endif
+      #ifdef LITE_BLOOM
+      if (uBloomK > 0.0) src.rgb += texture2D(tBloom, vUv * uBloomUv).rgb;
+      #endif
       src.rgb = NeutralToneMapping(src.rgb);
       vec3 c = sRGBTransferOETF(src).rgb;
       float l = dot(c, vec3(0.299, 0.587, 0.114));
@@ -91,19 +155,22 @@ const GradeShader = {
     }`,
 };
 
-export function makePost(renderer, scene, camera, { msaa = 4, fxaa = false, scale = 1 } = {}) {
+/** `lite`: phones' bloom (LiteBloomPass), else three's UnrealBloomPass at half size */
+export function makePost(renderer, scene, camera, { msaa = 4, fxaa = false, scale = 1, lite = false } = {}) {
   const size = renderer.getSize(new THREE.Vector2());
   const rt = new THREE.WebGLRenderTarget(size.x * renderer.getPixelRatio(), size.y * renderer.getPixelRatio(), { type: THREE.HalfFloatType, samples: msaa });
   const composer = new EffectComposer(renderer, rt);
   composer.addPass(new RenderPass(scene, camera));
   const refl = new ReflCopyPass(); composer.addPass(refl);
-  const bloom = new UnrealBloomPass(new THREE.Vector2(size.x * scale * 0.5, size.y * scale * 0.5), 0.42, 0.55, 0.86);
+  const bloom = lite ? new LiteBloomPass() : new UnrealBloomPass(new THREE.Vector2(size.x * scale * 0.5, size.y * scale * 0.5), 0.42, 0.55, 0.86);
   composer.addPass(bloom);
   const grade = new ShaderPass(GradeShader);
-  grade.material.defines = fxaa ? { NEUTRAL_TONE_MAPPING: '', USE_FXAA: '' } : { NEUTRAL_TONE_MAPPING: '' };
+  grade.material.defines = { NEUTRAL_TONE_MAPPING: '' };
+  if (fxaa) grade.material.defines.USE_FXAA = '';
+  if (lite) { grade.material.defines.LITE_BLOOM = ''; grade.uniforms.tBloom.value = bloom.texture; grade.uniforms.uBloomUv.value = bloom.uvScale; }
   grade.material.toneMapped = false;
   composer.addPass(grade);
   const render = composer.render.bind(composer);
-  composer.render = dt => { grade.uniforms.toneMappingExposure.value = renderer.toneMappingExposure; render(dt); };
+  composer.render = dt => { grade.uniforms.toneMappingExposure.value = renderer.toneMappingExposure; grade.uniforms.uBloomK.value = bloom.enabled ? 1 : 0; render(dt); };
   return { composer, bloom, grade, refl };
 }

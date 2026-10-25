@@ -124,11 +124,11 @@ export function makeSky() {
           vec3 deck = mix(uDeckDark, uDeckLit, smoothstep(0.35, 0.85, n));
           col = mix(col, deck, cov * uOvercast * smoothstep(-0.02, 0.1, e));
         }
-        float band = 0.0;
-        if (uMilky > 0.01 && e > -0.05) { // the Milky Way: a soft, clumpy band with dark dust lanes
-          vec3 bn = normalize(vec3(0.62, 0.3, 0.72)), t1 = normalize(cross(bn, vec3(0.0, 1.0, 0.0))), t2 = cross(bn, t1);
-          float v = dot(d, bn), ang = atan(dot(d, t2), dot(d, t1));
-          band = exp(-(v * v) / 0.045);
+        vec3 bn = normalize(vec3(0.62, 0.3, 0.72)); float v = dot(d, bn), band = 0.0;
+        if (uMilky > 0.01 && e > -0.05) band = exp(-(v * v) / 0.045);
+        if (band > 0.001) { // the Milky Way: a soft, clumpy band with dark dust lanes (farther from it, its light is under a level)
+          vec3 t1 = normalize(cross(bn, vec3(0.0, 1.0, 0.0))), t2 = cross(bn, t1);
+          float ang = atan(dot(d, t2), dot(d, t1));
           float clump = fbm2(vec2(ang * 3.2, v * 9.0)) * 0.7 + fbm2(vec2(ang * 9.0 + 4.0, v * 26.0)) * 0.3;
           float dust = smoothstep(0.52, 0.68, fbm2(vec2(ang * 6.0 + 11.0, v * 30.0 + 2.0))) * exp(-(v * v) / 0.006);
           float speck = 0.55 + 0.45 * vnoise(vec2(ang * 60.0, v * 160.0));   // grainy, made of faint stars

@@ -829,7 +829,7 @@ export function buildPaintedAtlas(main, tier, fa, ha) {
   P.houses = !!ha && paintHouses(P, ha);
   return P;
 }
-/** the atlas rows the painted houses take (assets/houses/houses.json lists its own: pack.py), per tier: a cell's px are its
+/** the atlas rows the painted houses take (assets/houses/houses2.json lists its own: pack.py), per tier: a cell's px are its
  *  tile's (48 px/m on desktops, 32 on phones and in the X card) */
 export const HOUSE_ROWS = { hi: 1152, lo: 512 };
 /** The painted houses (painted.js loadHouseAtlas): each tile of the sheet becomes a cell of its own, in rows of their own

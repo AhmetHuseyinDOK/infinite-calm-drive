@@ -1,11 +1,11 @@
 {
  "files": {
-  "hi": "fronts2_hi.webp",
-  "lo": "fronts2_lo.webp"
+  "hi": "fronts3_hi.webp",
+  "lo": "fronts3_lo.webp"
  },
  "bytes": {
-  "hi": 539390,
-  "lo": 156538
+  "hi": 222664,
+  "lo": 77630
  },
  "size": {
   "hi": [
@@ -187,5 +187,6 @@
    "ey": 0.75
   }
  ],
- "note": "painted city fronts, batch 1 + 2 (Grok Imagine image_edit, anchored on ref/city.png): rows 0-1 albedo, rows 2-3 emissive; tiles in fractions of the sheet; ey -1: no emissive (an unlit window)"
+ "note": "painted city fronts, batch 1 + 2 (Grok Imagine image_edit, anchored on ref/city.png): rows 0-1 albedo, rows 2-3 emissive; tiles in fractions of the sheet; ey -1: no emissive (an unlit window)",
+ "encode": "WebP q50 method 6 from the lossless master (PLAN 14b, ~/cdtest/dl/scripts/pack14b.py)"
 }

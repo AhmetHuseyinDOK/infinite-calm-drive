@@ -2,6 +2,31 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-25 · 03:xx — Finish 2: a first visit a third lighter, the start button sooner on a slow line
+- **Nothing visible changes.** The painted horizon, the shopfronts, the houses and the meadow are re-encoded from their
+  lossless masters at WebP quality 50 (they were 84–90); the clouds keep their colour at q88 (their near-white
+  brushwork changed shape at every step below it) with an exact, lossless alpha plane, which is also smaller. In 2×
+  crops of the game's frames (the shopfronts' magazine windows, the houses, the ranges and forests of the horizon, the
+  cumulus) the new files can't be told from the old; frame-wide the colour moves by a mean CIELAB ΔE of 0.13–0.72.
+- **A first visit fetches about a third less:** the painted assets 3.0 → 1.9 MB on a 1080p desktop and 1.1 → 0.8 MB on
+  a phone (the whole visit 4.0 → 2.9 MB and 2.1 → 1.8 MB).
+- **The start button comes up sooner on a slow line:** the crowns, meadow, fronts and houses download first, and the
+  horizon band and the clouds (the largest) after them, awaited only once the road is built and the light prepared, so
+  they download during that work. On a 3 Mbps phone line 8.1 → 6.8 s, on a 10 Mbps desktop line 6.4 → 5.7 s (the
+  subagent's medians: 6.4 → 4.9 s); unthrottled the same (~3.0 s on this box).
+- **Research:** every painted WebP's lossless master was found or rebuilt (each re-encodes byte-for-byte to the file it
+  replaces), then candidates from q90 down to q50 were judged in 2× crops at noon, sunset and night against a lossless
+  render; deferring assets past the start button was left out (a late house sheet would re-upload the whole painted
+  atlas mid-drive; houses change world generation; fields switch ground shader variants). Built by a subagent; verified
+  independently by the main agent, both on the shared box (the desktop machine is off limits).
+- How: `painted.js` (the loaders read `band3`, `clouds2`, `fronts3`, `houses2`, `fields2`), `main.js` (the fetch and
+  await order; a "painting the sky…" step compiles the band's and clouds' programs and uploads their textures before the
+  start button). Assets: five new sets from `~/cdtest/dl/scripts/pack14b.py`; the old ones (`band2.*`, `clouds.*`,
+  `fronts2.*`, `houses.*`, `fields.*`) are removed. World: the same layout. Programs: 62.
+- Cost: none on the GPU (the same texture sizes and formats, programs and draws). 0 shader errors in all six zones; no
+  console errors at any quality; none compiled through sunset, night, rain or a drive; embed starts on tap; with the
+  band's or the clouds' files missing the procedural look takes over, with no errors and nothing compiled mid-drive.
+
 ## 2026-10-25 · 02:xx — Finish 1: the coast's tetrapods at a quarter less GPU time, the night city checked
 - **Nothing changes on screen.** A new deterministic capture (a fixed virtual clock and seeded randomness: two loads of
   one build give the same pixels) shows the frames identical to live: the subagent's 18 pairs (noon, sunset and night in

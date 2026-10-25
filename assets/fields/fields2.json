@@ -1,0 +1,21 @@
+{
+ "files": {
+  "hi": "fields2_hi.webp",
+  "lo": "fields2_lo.webp"
+ },
+ "bytes": {
+  "hi": 58086,
+  "lo": 21582
+ },
+ "tile": [
+  12,
+  21
+ ],
+ "source": "asset batch 1 meadow_02 (Grok Imagine, anchored on ref/country.png)",
+ "mean": [
+  0.1606,
+  0.3248,
+  0.0491
+ ],
+ "encode": "WebP q50 method 6 from the lossless master (PLAN 14b, ~/cdtest/dl/scripts/pack14b.py)"
+}

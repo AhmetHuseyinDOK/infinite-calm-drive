@@ -1,12 +1,12 @@
 {
  "version": 1,
  "files": {
-  "hi": "clouds_hi.webp",
-  "lo": "clouds_lo.webp"
+  "hi": "clouds2_hi.webp",
+  "lo": "clouds2_lo.webp"
  },
  "bytes": {
-  "hi": 575668,
-  "lo": 278720
+  "hi": 555704,
+  "lo": 276138
  },
  "size": [
   4096,
@@ -409,5 +409,6 @@
     0.978
    ]
   }
- ]
+ ],
+ "encode": "WebP q88, alpha_quality 100 method 6 from the lossless master (PLAN 14b, ~/cdtest/dl/scripts/pack14b.py)"
 }

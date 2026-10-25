@@ -44,14 +44,12 @@ async function main() {
   renderer.toneMapping = THREE.NeutralToneMapping; renderer.toneMappingExposure = 1.0;
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.debug.checkShaderErrors = QS.has('debug'); // checking forces each shader compile to finish synchronously
-  // the painted cumulus (painted.js) download while the town is painted. The full atlas (4096²×½, towers ~600 px tall)
-  // only where the frame is tall enough to show it; phones, the embed and smaller windows take the half-size one (it
-  // decodes and uploads 4× faster, and its towers are still ~1:1 at 720 px)
+  // the painted assets download while the town is painted, the ones needed first first (each loader resolves to null if
+  // its asset fails: the procedural look then stays). The full-size tiers of the clouds, the band and the meadow only
+  // where the frame is tall enough to show them; phones, the embed and smaller windows take the half-size ones (they
+  // decode and upload 4× faster, and the clouds' towers are still ~1:1 at 720 px)
   // (test hook ?clouds=old: the procedural clouds only; ?clouds=both: both are built and st.pclouds flips between them)
   const CLOUDS = QS.get('clouds') || 'painted', TIER = quality === 'high' && innerHeight * DPR >= 900 ? 'hi' : 'lo';
-  const pcLoad = CLOUDS === 'old' ? Promise.resolve(null) : loadCloudAtlas(TIER);
-  // the painted horizon band (painted.js) on the same tiers: 32 px/° where the frame is tall enough, else 16 px/°
-  const bandLoad = loadBandAtlas(TIER);
   // the painted crowns' clusters (ghibli.js): 256² clusters on desktops (a near crown fills a third of the frame, and its
   // flowers are a few texels wide), else 128² (phones, the embed)
   const treeLoad = loadTreeAtlas(quality === 'high' && innerHeight * DPR >= 560 ? 'hi' : 'lo');
@@ -63,6 +61,14 @@ async function main() {
   // the painted houses of the country, the coast and the cherry avenue (painted.js), on the same tiers: 48 px/m on desktops,
   // 32 on phones and in the X card. Their cells take rows of their own in the painted atlas (textures.js paintHouses)
   const HTIER = quality === 'high' && innerHeight * DPR >= 560 ? 'hi' : 'lo', houseLoad = loadHouseAtlas(HTIER);
+  // the painted cumulus and the horizon band (painted.js; 32 px/° where the frame is tall enough, else 16 px/°): the
+  // largest downloads, and needed last (they are awaited once the road is built and the light prepared, below), so they
+  // start once the four above are in (or after 4 s, so a stalled one never holds them up for its whole 15 s timeout): on
+  // a slow line those then have all of it, instead of a share. On a fast line this costs nothing (all six are in long
+  // before the band and the clouds are awaited)
+  const firstLoads = Promise.race([Promise.all([treeLoad, fieldLoad, frontLoad, houseLoad]), new Promise(r => setTimeout(r, 4000))]);
+  const pcLoad = CLOUDS === 'old' ? Promise.resolve(null) : firstLoads.then(() => loadCloudAtlas(TIER));
+  const bandLoad = firstLoads.then(() => loadBandAtlas(TIER));
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0xc6ddf2, 0.0019, 700); // near = exp² density, far = draw distance (see materials.js)
@@ -192,14 +198,9 @@ async function main() {
   const AA = QS.get('aa') || (quality === 'high' ? 'msaa' : quality === 'mid' ? 'fxaa' : 'none');
   const post = makePost(renderer, scene, camera, { msaa: AA === 'msaa' ? (quality === 'high' ? 4 : 2) : 0, fxaa: AA === 'fxaa' });
   U.uReflTex.value = post.refl.rt.texture;
-  // the cumulus: painted ones when their atlas has loaded, else (or with ?clouds=both, also) the procedural ones
-  const pcAtlas = await pcLoad;
-  const pclouds = pcAtlas ? makePaintedClouds(pcAtlas, post) : null; if (pclouds) scene.add(pclouds.mesh);
-  const clouds = !pclouds || CLOUDS === 'both' ? makeClouds(paintClouds(renderer)) : null; if (clouds) scene.add(clouds.group);
-  // the painted horizon: far ranges, hills and headlands per zone, in front of the cumulus feet; where it shows, the
-  // procedural mountain rings give way (they stay as the fallback, and in any zone without a band)
-  const bandAtlas = await bandLoad;
-  const band = bandAtlas ? makePaintedBand(bandAtlas, post, scene.fog.color) : null; if (band) scene.add(band.mesh);
+  // the cumulus (painted or procedural) and the painted horizon: made once the road is built and the light prepared
+  // (below), so their downloads overlap that work
+  let pclouds = null, clouds = null, band = null;
   const hz = new THREE.Vector3(), camFlat = new THREE.Vector3(), REFL = QS.get('refl') || 'auto';
   const BACKLIT_K = QS.has('backlit') ? parseFloat(QS.get('backlit')) : 1; // (test hook)
   // the cherry blossom's shade tint (materials.js makeGhibliLeaf): a bright rose-magenta on a bright day (the shaded
@@ -248,7 +249,6 @@ async function main() {
   const MULT_MIN = 0.4, MULT_MAX = 5.5;
   const st = { s: Math.max(100, parseFloat(QS.get('s')) || 140), u: -1.65, uHome: -1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, spray: QS.has('nospray') ? 0 : 1 /* test switch */, grass: 1 /* test switch: the meadow's blades */, pclouds: 1 /* test switch: painted clouds (0: the procedural ones, with ?clouds=both) */, band: 1 /* test switch: the painted horizon (0: the mountain rings) */, waves: 1 /* test switch: the painted sea's waves (0: its flat tones) */, shore: 1 /* test switch: the waves and foam along the sea wall (0: the open sea's colour there) */, surf: 1 /* test switch: the spray over the tetrapods */, tetra: 1 /* test switch: the tetrapods */, bark: 1 /* test switch: the bark's painted tones (0: the old colours, lit) */, trunks: 1 /* test switch: the painted trees' bark (0: hidden) */, todpaint: 1 /* test switch: the painted look at golden hour, sunset and night (0: only on a bright day, as before) */, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
   let started = false;
-  if (pclouds) pclouds.opening = ['sakura', 'city'].includes(zoneAt(st.s)) ? 'center' : 'flank'; // (a narrow sky over the road: one tower over it)
   status('building the road…');
   await new Promise(r => setTimeout(r, 10));
   // build only the first stretch up-front; the rest streams in while the title screen is up
@@ -289,6 +289,21 @@ async function main() {
     // and the post passes: bloom is off by day, so its 8 programs used to compile all at once at the first sunset,
     // night or tunnel — a 160 ms freeze here, far longer on a phone
     post.bloom.enabled = post.refl.enabled = true; post.composer.render(0); post.bloom.enabled = post.refl.enabled = false; // (+ the wet-road copy pass)
+  }
+  { // the cumulus: painted ones when their atlas has loaded, else (or with ?clouds=both, also) the procedural ones; and the
+    // painted horizon: far ranges, hills and headlands per zone, in front of the cumulus feet (where it shows, the
+    // procedural mountain rings give way: they stay as the fallback, and in any zone without a band). Awaited only now,
+    // so their downloads (the largest) overlap the road's build and the warm-up; their programs are compiled and their
+    // textures uploaded here, still behind the title screen
+    status('painting the sky…');
+    const pcAtlas = await pcLoad;
+    pclouds = pcAtlas ? makePaintedClouds(pcAtlas, post) : null; if (pclouds) scene.add(pclouds.mesh);
+    clouds = !pclouds || CLOUDS === 'both' ? makeClouds(paintClouds(renderer)) : null; if (clouds) scene.add(clouds.group);
+    if (pclouds) pclouds.opening = ['sakura', 'city'].includes(zoneAt(st.s)) ? 'center' : 'flank'; // (a narrow sky over the road: one tower over it)
+    const bandAtlas = await bandLoad;
+    band = bandAtlas ? makePaintedBand(bandAtlas, post, scene.fog.color) : null; if (band) scene.add(band.mesh);
+    renderer.setRenderTarget(post.composer.readBuffer); renderer.compile(scene, camera); renderer.setRenderTarget(null);
+    if (pcAtlas) renderer.initTexture(pcAtlas.tex); if (bandAtlas) renderer.initTexture(bandAtlas.tex);
   }
   // level crossing state
   const X = { k: Math.ceil((st.s - XOFF) / XING), phase: 'idle', raise: 1, decided: false, t2: 0 };

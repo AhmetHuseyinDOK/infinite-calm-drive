@@ -1,12 +1,12 @@
 {
  "period": 120.0,
  "files": {
-  "hi": "band2_hi.webp",
-  "lo": "band2_lo.webp"
+  "hi": "band3_hi.webp",
+  "lo": "band3_lo.webp"
  },
  "bytes": {
-  "hi": 943140,
-  "lo": 307806
+  "hi": 439526,
+  "lo": 160280
  },
  "size": {
   "hi": [
@@ -159,5 +159,6 @@
     ]
    }
   }
- }
+ },
+ "encode": "WebP q50, alpha_quality 90 method 6 from the lossless master (PLAN 14b, ~/cdtest/dl/scripts/pack14b.py)"
 }

@@ -16,6 +16,12 @@ import { rng } from './util.js';
 import { TOD } from './sky.js';
 import { S_WRAP, U as MU } from './materials.js';
 
+// The painted assets' WebPs are encoded from lossless masters (PLAN 14b, ~/cdtest/dl/scripts/pack14b.py: the packers'
+// outputs before their WebP step, each proven to re-encode byte-for-byte to the file it replaced): the horizon band, the
+// fronts, the houses and the meadow at quality 50, where 2× crops of the game's frames at noon, sunset and night, on
+// desktops and phones, could not be told from the old q84–90 files (a first visit fetches ~1.1 MB less on a desktop,
+// ~0.34 MB less on a phone); the clouds keep their colour at q88 (their near-white brushwork showed every step below it)
+// with a lossless alpha plane (exact, and smaller than the old alpha_quality 90).
 export const ASSETS = './assets/';
 
 /** GLSL: the inverse of post.js's grade pass (Neutral tone mapping with exposure, sRGB, saturation, shadow/highlight
@@ -139,8 +145,8 @@ export async function orNull(work, timeoutMs, what) {
 export async function loadCloudAtlas(tier, timeoutMs = 15000) {
   const base = ASSETS + 'clouds/';
   return orNull((async () => {
-    const r = await fetch(base + 'clouds.json');
-    if (!r.ok) throw new Error('clouds.json ' + r.status);
+    const r = await fetch(base + 'clouds2.json');
+    if (!r.ok) throw new Error('clouds2.json ' + r.status);
     const J = await r.json();
     const list = (J.clouds || []).filter(c => c.u1 > c.u0 && c.v1 > c.v0 && c.w > 0 && c.h > 0 && c.lum && c.lum[1] > c.lum[0]);
     if (!list.length) throw new Error('no clouds listed');
@@ -149,7 +155,7 @@ export async function loadCloudAtlas(tier, timeoutMs = 15000) {
   })(), timeoutMs, 'painted clouds unavailable, keeping the procedural ones:');
 }
 
-/** Loads the shopping street's painted fronts (assets/fronts/fronts2.*, made by ~/cdtest/cf2/scripts/pack2.py from Grok
+/** Loads the shopping street's painted fronts (assets/fronts/fronts3.*, made by ~/cdtest/cf2/scripts/pack2.py from Grok
  *  Imagine edits anchored on the city painting): eleven warm-lit shopfront bays (a general store, a bookshop, a noren'd
  *  entrance, a café, a bakery, a florist, a clothes shop, a ramen shop, a tea shop, a sweets shop, an izakaya) and five
  *  upper-floor bays, flat-on, with what glows in them (rows of emissive tiles under the albedo ones; an unlit window has
@@ -159,8 +165,8 @@ export async function loadCloudAtlas(tier, timeoutMs = 15000) {
 export async function loadFrontAtlas(tier, timeoutMs = 15000) {
   const base = ASSETS + 'fronts/';
   return orNull((async () => {
-    const r = await fetch(base + 'fronts2.json');
-    if (!r.ok) throw new Error('fronts2.json ' + r.status);
+    const r = await fetch(base + 'fronts3.json');
+    if (!r.ok) throw new Error('fronts3.json ' + r.status);
     const J = await r.json();
     const tiles = (J.tiles || []).filter(t => t.name && t.w > 0 && t.h > 0 && t.x >= 0 && t.x + t.w <= 1 && t.y >= 0 && t.y + t.h <= 1 && t.ey + t.h <= 1);
     if (!tiles.length) throw new Error('no fronts listed');
@@ -184,8 +190,8 @@ export async function loadFrontAtlas(tier, timeoutMs = 15000) {
 export async function loadHouseAtlas(tier, timeoutMs = 15000) {
   const base = ASSETS + 'houses/';
   return orNull((async () => {
-    const r = await fetch(base + 'houses.json');
-    if (!r.ok) throw new Error('houses.json ' + r.status);
+    const r = await fetch(base + 'houses2.json');
+    if (!r.ok) throw new Error('houses2.json ' + r.status);
     const J = await r.json();
     const file = J.files && J.files[tier] ? tier : 'hi', tiles = (J.tiles && J.tiles[file]) || [];
     const types = (J.types || []).filter(t => t.f && t.s && t.pieces && t.pieces.length && tiles.some(q => q.name === t.f) && tiles.some(q => q.name === t.s));
@@ -207,8 +213,8 @@ export async function loadHouseAtlas(tier, timeoutMs = 15000) {
 export async function loadFieldTexture(tier, timeoutMs = 15000) {
   const base = ASSETS + 'fields/';
   return orNull((async () => {
-    const r = await fetch(base + 'fields.json');
-    if (!r.ok) throw new Error('fields.json ' + r.status);
+    const r = await fetch(base + 'fields2.json');
+    if (!r.ok) throw new Error('fields2.json ' + r.status);
     const J = await r.json();
     // (its length along the road must divide the shaders' wrapped road distance, S_WRAP, or it would jump there)
     if (!(J.tile && J.tile[0] > 0 && J.tile[1] > 0 && Math.abs(S_WRAP / J.tile[1] - Math.round(S_WRAP / J.tile[1])) < 1e-6)) throw new Error('bad tile size');
@@ -425,15 +431,15 @@ export function makePaintedClouds(atlas, post, seed = 5) {
 //  - Between zones the two bands cross-fade (premultiplied, so ridges dissolve rather than smear).
 // If the atlas can't be loaded the game keeps the procedural mountain rings.
 
-/** Loads the band atlas (assets/band/band2.*: the five zones' bands and, since Restyle 15, the shopping street's far city
+/** Loads the band atlas (assets/band/band3.*: the five zones' bands and, since Restyle 15, the shopping street's far city
  *  of pale high-rise flats in haze, ~/cdtest/hb2/scripts/band2.py): 'hi' (32 px/°) or 'lo' (16 px/°, phones). Resolves to
  *  null (never rejects) when the JSON or the image is missing, broken or too slow: the caller then keeps the procedural
  *  mountain rings. */
 export async function loadBandAtlas(tier, timeoutMs = 15000) {
   const base = ASSETS + 'band/';
   return orNull((async () => {
-    const r = await fetch(base + 'band2.json');
-    if (!r.ok) throw new Error('band2.json ' + r.status);
+    const r = await fetch(base + 'band3.json');
+    if (!r.ok) throw new Error('band3.json ' + r.status);
     const J = await r.json();
     const { tex, file } = await paintedTexture(base, J, tier);
     const zones = {};

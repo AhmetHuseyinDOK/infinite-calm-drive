@@ -255,6 +255,16 @@ async function main() {
   const LIGHTS_ON = QS.has('lightson') ? parseFloat(QS.get('lightson')) : -1; // (test hook)
   // the car's painter's sun (CAR_KEY): the real sun pulled round to within KEY_A of the car's heading (see the frame loop)
   const KEY_A = 1.4, carKey = new THREE.Vector3();
+  // the sun stands by the road's mean heading over ±SUN_W metres (see the frame loop)
+  const SUN_W = 200;
+  // the painted volumes' keys (materials.js VOL_KEY; see the frame loop): the tetrapods' 110° round from the view's direction,
+  // the broadleaf crowns' 150° (against coast.png's crowns, ΔE 17.0 at 110°, 11.1 at 130°, 8.1 at 150°; its tetrapods 6.0
+  // at 110°, 10.5 at 130°). (Tried on the props, the guardrail's material: the city's right-hand shops and the avenue's lawn
+  // got worse)
+  const volF = new THREE.Vector3(), VOL_B = (110 * Math.PI) / 180, LEAF_B = (150 * Math.PI) / 180;
+  /** a painter's key: the light L's height, on its side of the view (horizontal forward f), b round from the view's direction */
+  const keyAt = (L, f, b, out) => { const hm = Math.hypot(L.x, L.z), sd = L.x * f.z - L.z * f.x < 0 ? -1 : 1, cb = Math.cos(b) * hm, sb = Math.sin(b) * hm * sd;
+    return out.set(f.x * cb + f.z * sb, L.y, f.z * cb - f.x * sb).transformDirection(camera.matrixWorldInverse); };
   const glowV = new THREE.Vector3(), HAZE_GLOW = QS.has('haze') ? parseFloat(QS.get('haze')) : 1; // (test hook: ?haze=0 off)
   const rig = makeCrossingRig(); scene.add(rig.group);
   const train = makeTrain(); scene.add(train.group);
@@ -267,7 +277,7 @@ async function main() {
   // speed: the zone's cruising speed × mult (0.4 … 5.5, so up to ~190–265 km/h); uHome: the lane the car settles back
   // into when nobody steers — wherever the player last steered it (it used to always drift back to the left lane)
   const MULT_MIN = 0.4, MULT_MAX = 5.5;
-  const st = { s: Math.max(100, parseFloat(QS.get('s')) || 140), u: -1.65, uHome: -1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, spray: QS.has('nospray') ? 0 : 1 /* test switch */, grass: 1 /* test switch: the meadow's blades */, pclouds: 1 /* test switch: painted clouds (0: the procedural ones, with ?clouds=both) */, band: 1 /* test switch: the painted horizon (0: the mountain rings) */, waves: 1 /* test switch: the painted sea's waves (0: its flat tones) */, shore: 1 /* test switch: the waves and foam along the sea wall (0: the open sea's colour there) */, surf: 1 /* test switch: the spray over the tetrapods */, tetra: 1 /* test switch: the tetrapods */, bark: 1 /* test switch: the bark's painted tones (0: the old colours, lit) */, trunks: 1 /* test switch: the painted trees' bark (0: hidden) */, todpaint: 1 /* test switch: the painted look at golden hour, sunset and night (0: only on a bright day, as before) */, road: 1 /* test switch: the coast's and the country's painted asphalt (0: the old warm grey) */, carkey: 1 /* test switch: the car lit by the painter's sun (0: by the real sun) */, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
+  const st = { s: Math.max(100, parseFloat(QS.get('s')) || 140), u: -1.65, uHome: -1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, spray: QS.has('nospray') ? 0 : 1 /* test switch */, grass: 1 /* test switch: the meadow's blades */, pclouds: 1 /* test switch: painted clouds (0: the procedural ones, with ?clouds=both) */, band: 1 /* test switch: the painted horizon (0: the mountain rings) */, waves: 1 /* test switch: the painted sea's waves (0: its flat tones) */, shore: 1 /* test switch: the waves and foam along the sea wall (0: the open sea's colour there) */, surf: 1 /* test switch: the spray over the tetrapods */, tetra: 1 /* test switch: the tetrapods */, bark: 1 /* test switch: the bark's painted tones (0: the old colours, lit) */, trunks: 1 /* test switch: the painted trees' bark (0: hidden) */, todpaint: 1 /* test switch: the painted look at golden hour, sunset and night (0: only on a bright day, as before) */, road: 1 /* test switch: the coast's and the country's painted asphalt (0: the old warm grey) */, carkey: 1 /* test switch: the car lit by the painter's sun (0: by the real sun) */, sunroad: 1 /* test switch: the sun and the moon stand by the road's heading, as in the paintings (0: fixed in the world, as before) */, volkey: 1 /* test switch: the crowns and the tetrapods lit by the painted volumes' key (0: by the real sun) */, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
   let started = false;
   status('building the road…');
   await new Promise(r => setTimeout(r, 10));
@@ -451,6 +461,8 @@ async function main() {
   // the car's motion as its suspension feels it (see car.update): sideways / fore-aft acceleration, the road surface, rail jolts
   const CM = { lat: 0, lon: 0, road: 0, jolt: 0, kick: 0, u: st.u, vu: 0, v: 0, s: st.s, yaw: 0, brake: 0, rk: NaN, rb: null };
   const LAMP_NIGHT = new THREE.Color(3.6, 2.8, 1.8); // (the street lamps' night colour: one object, not one per frame)
+  /** the light j steps of 0.001 of the day ahead (the hour moving on if `run`, the car `ds` metres further on per step) */
+  const lightAhead = (j, run, ds, out) => lightDirAt(st.tod + (run ? j * 0.001 : 0), out, TOD.head === null ? null : path.meanHeading(st.s + j * ds, SUN_W));
   const RAILS = [-2.5335, -1.4665, 1.4665, 2.5335], AXLES = [1.12, -1.12]; // rails of a crossing's two tracks (from sx); axles (from the car's centre)
   const JOINTS = [-24.5, 24.5]; // a river bridge's expansion joints (from its centre, chunks.js placeRiver)
   function frame(now) {
@@ -498,7 +510,11 @@ async function main() {
 
     // time of day (nights pass a little quicker)
     if (!st.todPaused && started) st.tod = (st.tod + (dt / 480) * (TOD.night > 0.5 ? 1.7 : 1)) % 1;
-    updateTOD(st.tod);
+    // the sun and the moon stand by the road (sky.js skyDirs: the sun ahead-left at noon, ahead at sunset, as in the
+    // paintings), by its mean heading over ±SUN_W: on top of the hour's, the road's long bends turn the shadows at under
+    // 0.3–1.8°/s at cruising speed (95% of the time; 2.3 on the mountain pass; the old sky swept 0.75°/s all day), and the
+    // light keeps within 2–7° of its place against the car (95% of the time; 11° on the mountain pass)
+    updateTOD(st.tod, st.sunroad ? path.meanHeading(st.s, SUN_W) : null);
     weather.update(dt);
     const ov = weather.W.ov, rn = weather.W.rain;
     applyWeather(ov, rn);
@@ -633,9 +649,13 @@ async function main() {
     // P' = P + (P.y − y0)·(D/D.y − L/L.y) slides each point along the true light L onto the camera's direction D.
     { const L = TOD.lightDir; // L.y ≥ 0.12 (sky.js)
       if (shadowDir.angleTo(L) > 0.1) { // re-aim (re-rasterises every shadow): at where the sun will be once it has moved
-        let k = 0; // ~0.09 rad, so the skew swings −0.1 … +0.1 rad and re-aims come half as often (every ~20 s by day)
-        if (started && !st.todPaused) for (let j = 1; j <= 60; j++) { if (lightDirAt(st.tod + j * 0.001, shAim).angleTo(L) > 0.09) break; k = j; }
-        lightDirAt(st.tod + k * 0.001, shadowDir); shPhX = shPhY = 0;
+        // ~0.09 rad, so the skew swings −0.1 … +0.1 rad and re-aims come half as often (about every 30 s at noon, 10 s at
+        // golden hour): looking ahead in steps of 0.001 of the day (0.48 s; 0.28 at night), the hour moving on and the car
+        // driving on round the road's bends at its speed (the sun stands by the road)
+        const run = started && !st.todPaused, ds = TOD.head === null ? 0 : st.speed * (TOD.night > 0.5 ? 0.28 : 0.48);
+        let k = 0;
+        if (run || ds > 0.01) for (let j = 1; j <= 60; j++) { if (lightAhead(j, run, ds, shAim).angleTo(L) > 0.09) break; k = j; }
+        lightAhead(k, run, ds, shadowDir); shPhX = shPhY = 0;
       }
       shX.crossVectors(UPV, shadowDir).normalize(); shY.crossVectors(shadowDir, shX);
       shT.set(car.group.position.x + f.fx * 26, car.group.position.y, car.group.position.z + f.fz * 26);
@@ -658,10 +678,11 @@ async function main() {
     hemi.color.copy(TOD.hemiSky); hemi.groundColor.copy(TOD.hemiGround); hemi.intensity = TOD.hemiI / dayExp;
     { // the painter's sun for the car (materials.js CAR_KEY): in all four paintings, and in their repaints at golden hour,
       // sunset and night, the light comes from ahead of the car (at noon 60–80° to its left, by its shadow), so its back is
-      // in the shade, its lamps glowing out of it. Here the sun stood 84–124° round from the car's heading at the four
-      // paintings' places, lighting its back. The car takes the real sun's light and height, swung round towards its
+      // in the shade, its lamps glowing out of it. The car takes the real sun's light and height, swung round towards its
       // heading: as it is while within KEY_A (80°) of ahead; beyond that pulled forward on its own side, the further behind
-      // the more (straight behind: straight ahead), so it never jumps. The shadows it casts and receives stay the real sun's
+      // the more (straight behind: straight ahead), so it never jumps. The shadows it casts and receives stay the real sun's.
+      // (Now the sun stands by the road (sky.js), 70° left of its mean heading at noon, this is the real sun but on the
+      // mountain pass's sharper left-hand bends (~5% of a noon drive there) and with the old sky (test switch st.sunroad 0))
       const h = car.group.rotation.y, fx = Math.sin(h), fz = Math.cos(h), L = TOD.lightDir;
       const a = L.x * fx + L.z * fz, b = L.x * fz - L.z * fx, hm = Math.hypot(a, b); // ahead, and to the car's left (+X)
       let ph = Math.atan2(b, a); const x = Math.abs(ph);
@@ -669,6 +690,12 @@ async function main() {
       const ca = Math.cos(ph) * hm, cb = Math.sin(ph) * hm;
       carKey.set(fx * ca + fz * cb, L.y, fz * ca - fx * cb);
       camera.updateMatrixWorld(); U.uCarKey.value.copy(carKey).transformDirection(camera.matrixWorldInverse);
+      // …and the painted volumes' keys (materials.js VOL_KEY: the broadleaf crowns, the tetrapods): the paintings
+      // light them from the upper left of the frame, the camera's side, while their shadows fall towards us. The real light's
+      // height, on its side of the view, VOL_B / LEAF_B round from the view's direction (their shadows stay the real sun's)
+      camera.getWorldDirection(volF); volF.y = 0; volF.normalize();
+      if (st.volkey) { keyAt(L, volF, VOL_B, U.uVolKey.value); keyAt(L, volF, LEAF_B, U.uLeafKey.value); }
+      else { U.uVolKey.value.copy(L).transformDirection(camera.matrixWorldInverse); U.uLeafKey.value.copy(U.uVolKey.value); }
     }
     { // …and the painter's fill in the car's shade (car.js CAR_FILL), by the time of day under a clear sky (grey skies: none)
       const c = CF_T.at(TOD.t).rgb('f'), k = paintSky() * st.carkey; U.uCarFill.value.set(c[0] * k, c[1] * k, c[2] * k);
@@ -713,6 +740,9 @@ async function main() {
     su.uNight.value = TOD.night; su.uWarm.value = TOD.warm; su.uTime.value = t; su.uCirrusCol.value.copy(TOD.cLit).lerp(TOD.horizon, 0.25);
     su.uCirrus.value = 0.6 * (1 - ov) * (1 - 0.65 * sstep(0.4, 0.9, TOD.night)); su.uOvercast.value = ov;
     su.uMilky.value = sstep(0.55, 0.95, TOD.night) * (1 - ov);
+    // the moon (the night's light: ahead and to the left, sky.js) shows once the twilight has gone, not beside the sunset
+    // glow ahead (a full moon there read wrong); and fades out before dawn
+    su.uMoon.value = sstep(0.4, 0.8, TOD.night);
     // shooting stars on clear nights, somewhere ahead of us
     if (TOD.night > 0.65 && ov < 0.3) {
       if (meteor.p < 0 && (meteor.next -= dt) < 0) {
@@ -828,7 +858,9 @@ async function main() {
     const g = post.grade.uniforms;
     const inFront = tmp.z < 1 ? 1 : 0, edge = Math.max(Math.abs(tmp.x), Math.abs(tmp.y));
     g.uSun.value.set(tmp.x * 0.5 + 0.5, tmp.y * 0.5 + 0.5);
-    g.uSunVis.value = inFront * (1 - sstep(1.0, 1.9, edge)) * sstep(-0.02, 0.15, TOD.sunEl) * (1 - TOD.night) * (1 - ov) * (1 - tunS);
+    // (only for a high sun: low ahead, at golden hour and sunset, the paintings repainted then show no starburst, just the
+    // soft glow round it, the sky's halo and the bloom on its disc; the streaks' pass cost 0.9 ms there on the Vega)
+    g.uSunVis.value = inFront * (1 - sstep(1.0, 1.9, edge)) * sstep(0.45, 0.65, TOD.sunEl) * (1 - TOD.night) * (1 - ov) * (1 - tunS);
     // the grade of the reference art: punchy colour (muted again under grey skies), and on a bright day an indigo lift in
     // the shadows and only a light vignette (the paintings have none); sunsets and nights keep their old grade
     g.uSat.value = 1.22 - 0.24 * ov; g.uVig.value = 0.55 - 0.43 * TOD.bright; g.uLo.value.set(-0.014 + 0.026 * TOD.bright, 0, 0.03);

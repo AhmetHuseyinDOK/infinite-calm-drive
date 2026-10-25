@@ -48,18 +48,28 @@ THREE.ShaderChunk.lights_fragment_begin = THREE.ShaderChunk.lights_fragment_begi
 	// shade as in every painting; the shadows it casts and receives stay the real sun's
 	vec3 sunV = directLight.direction; directLight.direction = uCarKey;
 	#endif
+	#ifdef VOL_KEY
+	// the scenery's painted volumes (the broadleaf crowns, the tetrapods) are lit from the paintings' side (VOL_KEY names the
+	// material's key: main.js uLeafKey / uVolKey, the sun swung round towards the camera), their shadows the real sun's where
+	// it reaches them
+	vec3 sunV = directLight.direction; directLight.direction = VOL_KEY;
+	#endif
 	#if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
 	if ( directLight.visible && receiveShadow ) {
 		directionalLightShadow = directionalLightShadows[ 0 ];
 		float sh = getShadow( directionalShadowMap[ 0 ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ 0 ] );
 		#ifdef GRAZE_FADE
 		// walls the sun only grazes keep the toon ramp: there the map can't resolve their own depth (acne stripes that crawl as the sun moves)
+		#ifdef VOL_KEY
+		sh = mix( 1.0, sh, smoothstep( GRAZE_LO, GRAZE_HI, dot( geometryNormal, sunV ) ) ); // (and faces turned from the real sun: the key's ramp alone)
+		#else
 		sh = mix( 1.0, sh, smoothstep( GRAZE_LO, GRAZE_HI, dot( geometryNormal, directLight.direction ) ) );
+		#endif
 		#endif
 		#if NUM_DIR_LIGHT_SHADOWS > 1
 		// surfaces turning away from the sun keep just the toon ramp: the sharp map would cut their wrapped light
 		// into jagged bands (the car shadowing its own back)
-		#ifdef CAR_KEY
+		#if defined( CAR_KEY ) || defined( VOL_KEY )
 		float nl = smoothstep( 0.0, 0.2, dot( geometryNormal, sunV ) ); // (the car's own shadows: where the real sun reaches)
 		#else
 		float nl = smoothstep( 0.0, 0.2, dot( geometryNormal, directLight.direction ) );
@@ -113,6 +123,8 @@ export const U = {
   uTunR: { value: 4.6 },
   uCarPos: { value: new THREE.Vector3() }, uCarFwd: { value: new THREE.Vector3(0, 0, 1) }, uHead: { value: 0 },
   uCarKey: { value: new THREE.Vector3(0, 1, 0) }, // the car's painter's sun, in view space (main.js; CAR_KEY above)
+  uVolKey: { value: new THREE.Vector3(0, 1, 0) }, // the painted volumes' key (the tetrapods), in view space (main.js; VOL_KEY above)
+  uLeafKey: { value: new THREE.Vector3(0, 1, 0) }, // …and the broadleaf crowns' (further round towards the camera)
   uCarFill: { value: new THREE.Vector3() },       // …and the painter's fill in its shade (car.js CAR_FILL; main.js, by the time of day)
   uWind: { value: 1 },
   uNoiseTex: { value: makeNoiseTex() },
@@ -737,6 +749,12 @@ reflectedLight.directDiffuse *= gRoadT;
 }
 
 /** vertex-coloured toon material with a little painterly world-space noise */
+/** light a material's volumes by a painter's key (VOL_KEY in the lights chunk): the uniform `name` (U, view space, set in
+ *  main.js) in place of the sun's direction; call in onBeforeCompile (the material's defines carry VOL_KEY: name) */
+function volKey(sh, name) {
+  sh.uniforms[name] = U[name];
+  sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>\nuniform vec3 ${name};`);
+}
 function painterly(m, scale, amt, key, pre = null) {
   m.onBeforeCompile = sh => {
     if (pre) pre(sh);
@@ -809,9 +827,10 @@ function contactAO(sh) {
  *  phase: sea.js SHORE_PHASE (GLSL; materials.js can't import sea.js) */
 export function tetraMaterial(phase, lite = false) {
   const m = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: gradGhibli(-0.15, 0.3, 0.0) });
-  if (lite) m.defines = { TP_LITE: '' }; // (phones: one noise read for the mottling)
+  m.defines = { VOL_KEY: 'uVolKey' }; if (lite) m.defines.TP_LITE = ''; // (lit by the painted volumes' key; phones: one noise read for the mottling)
   m.onBeforeCompile = sh => {
     for (const k of ['uTpK', 'uTpD', 'uTpS', 'uTpM', 'uTpL', 'uTpFL', 'uTpFS']) sh.uniforms[k] = U[k];
+    volKey(sh, 'uVolKey');
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nattribute float aoD; varying float vAoD; varying vec2 vTp;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvAoD = aoD; vTp = uv;');
@@ -854,7 +873,7 @@ diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93), tpFoam);`)
   reflectedLight.directDiffuse = tpDD; reflectedLight.indirectDiffuse = tpID; }`);
     worldShade(sh); // (last: its declarations go first, ahead of shorePhase's use of uTime)
   };
-  m.customProgramCacheKey = () => (lite ? 'tetra-v1-lite' : 'tetra-v1');
+  m.customProgramCacheKey = () => (lite ? 'tetra-v2-lite' : 'tetra-v2');
   return m;
 }
 
@@ -1170,11 +1189,12 @@ export function makeGhibliLeaf(tex, { blossom = false } = {}) {
   // Blossom: the atlas's B is a key into the sakura painting's own colours (BLOSSOM_RAMP), so the material is white
   const m = new THREE.MeshToonMaterial({ map: tex, vertexColors: true, color: blossom ? 0xffffff : new THREE.Color().setRGB(0.68, 0.85, 0.46, THREE.SRGBColorSpace), gradientMap: blossom ? GRAD_BLOSSOM : GRAD_GHIBLI, alphaTest: 0.5, side: THREE.FrontSide });
   m.shadowSide = THREE.DoubleSide; // (three flips FrontSide to BackSide for shadows; the depth twins face the sun)
+  if (!blossom) m.defines = { VOL_KEY: 'uLeafKey' }; // (the leaves lit by the crowns' painter's key, as the paintings light them)
   m.onBeforeCompile = sh => {
     worldShade(sh); backlit(sh);
     billboard(sh, false); // (uTime comes with the vertex cloud shadows)
     sh.uniforms.uGhShade = blossom ? U.uBlShade : U.uGhShade; // (blossom: its own shade, a bright rose-magenta)
-    if (!blossom) sh.uniforms.uGhTint = U.uGhTint; else { sh.uniforms.uBlMid = U.uBlMid; sh.uniforms.uBlTip = U.uBlTip; }
+    if (!blossom) { sh.uniforms.uGhTint = U.uGhTint; volKey(sh, 'uLeafKey'); } else { sh.uniforms.uBlMid = U.uBlMid; sh.uniforms.uBlTip = U.uBlTip; }
     // the sun's shadow is looked up from the cluster's sunward surface (~1.1 × its half-width out), so a cluster never
     // shadows itself (its sun-facing depth twin cuts through its middle) while the lobes above and toward the sun still
     // shade the ones below. The crown's core (marked by a straight-down normal) looks it up 2.5 m deeper into the crown:
@@ -1201,7 +1221,7 @@ reflectedLight.indirectDiffuse = hemisphereLights[0].skyColor * BRDF_Lambert(dif
 #endif
 #include <aomap_fragment>`);
   };
-  m.customProgramCacheKey = () => (blossom ? 'gblossom-v2' : 'gleaf-v1');
+  m.customProgramCacheKey = () => (blossom ? 'gblossom-v2' : 'gleaf-v2');
   const d = new THREE.MeshDepthMaterial();
   d.onBeforeCompile = sh => billboard(sh, true);
   d.customProgramCacheKey = () => 'gleaf-depth-v1';

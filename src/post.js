@@ -86,22 +86,38 @@ class LiteBloomPass extends Pass {
   }
 }
 
+/** the sun's rays (the grade pass): its two layers of value noise round the sun as a table, R8, 4096 × 2: row 0 the slow
+ *  layer n1(7·ang + 3) over the angle, row 1 the fine one n1(x) over x = 19·ang − 0.03·t in [−256, 256) (8 texels a cell;
+ *  repeating after ~1.8 h). Worked out per pixel (these hashes and noise were GLSL there) the streaks cost the pass twice
+ *  as much (~1.8 ms on the shared box's Vega at desktop size, ~0.9 on phones) whenever the sun was in view: now every
+ *  golden hour and sunset, the sun standing ahead (sky.js). Read back, the streaks are within a level of the old ones */
+function raysTable() {
+  const N = 4096, d = new Uint8Array(N * 2), fr = x => x - Math.floor(x);
+  const h11 = q => { let p = fr(q * 0.1031); p *= p + 33.33; p *= p + p; return fr(p); };
+  const n1 = x => { const i = Math.floor(x), f = x - i; return h11(i) + (h11(i + 1) - h11(i)) * f * f * (3 - 2 * f); };
+  for (let k = 0; k < N; k++) {
+    d[k] = Math.round(n1(((k + 0.5) / N - 0.5) * Math.PI * 2 * 7 + 3) * 255);
+    d[N + k] = Math.round(n1(((k + 0.5) / N - 0.5) * 512) * 255);
+  }
+  const t = new THREE.DataTexture(d, N, 2, THREE.RedFormat);
+  t.wrapS = THREE.RepeatWrapping; t.minFilter = t.magFilter = THREE.LinearFilter; t.generateMipmaps = false; t.needsUpdate = true;
+  return t;
+}
+
 const GradeShader = {
   uniforms: {
     tDiffuse: { value: null }, toneMappingExposure: { value: 1 }, uSun: { value: new THREE.Vector2(0.5, 0.8) }, uSunVis: { value: 0 }, uDay: { value: 1 }, uWarm: { value: 0 },
     uTime: { value: 0 }, uAspect: { value: 1 }, uVig: { value: 0.55 }, uSat: { value: 1.1 }, uTexel: { value: new THREE.Vector2(1 / 1280, 1 / 720) },
-    uLo: { value: new THREE.Vector3(-0.014, 0.0, 0.03) }, tBloom: { value: null }, uBloomK: { value: 0 }, uBloomUv: { value: new THREE.Vector2(1, 1) },
+    uLo: { value: new THREE.Vector3(-0.014, 0.0, 0.03) }, tBloom: { value: null }, uBloomK: { value: 0 }, uBloomUv: { value: new THREE.Vector2(1, 1) }, uRays: { value: null },
   },
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
   fragmentShader: /* glsl */`
     // tone mapping + sRGB output and the anime grade in ONE full-screen pass (was OutputPass + a separate grade pass)
     #include <tonemapping_pars_fragment>
-    uniform sampler2D tDiffuse; uniform vec2 uSun; uniform float uSunVis, uDay, uWarm, uTime, uAspect, uVig, uSat; uniform vec3 uLo; varying vec2 vUv;
+    uniform sampler2D tDiffuse, uRays; uniform vec2 uSun; uniform float uSunVis, uDay, uWarm, uTime, uAspect, uVig, uSat; uniform vec3 uLo; varying vec2 vUv;
     #ifdef LITE_BLOOM
     uniform sampler2D tBloom; uniform float uBloomK; uniform vec2 uBloomUv; // (phones: the bloom, added here)
     #endif
-    float h11(float p){ p = fract(p * .1031); p *= p + 33.33; p *= p + p; return fract(p); }
-    float n1(float x){ float i = floor(x), f = fract(x); return mix(h11(i), h11(i + 1.0), f * f * (3.0 - 2.0 * f)); }
     #ifdef USE_FXAA
     // FXAA (the classic 5 + 4 tap version) on the HDR input, with a tone-mapped luma: smooths edges in this same pass, so
     // phones can drop MSAA (its 2× buffer and resolve were up to a third of the frame on a mobile-class GPU)
@@ -140,14 +156,18 @@ const GradeShader = {
       if (uSunVis > 0.001) { // sun streaks and lens ghosts only while the sun is on screen
         vec2 d = vUv - uSun; d.x *= uAspect; float dist = length(d), ang = atan(d.y, d.x);
         vec3 rc = mix(vec3(1.0, 0.97, 0.88), vec3(1.0, 0.78, 0.52), uWarm);
-        float rays = pow(n1(ang * 7.0 + 3.0) * 0.55 + n1(ang * 19.0 - uTime * 0.03) * 0.45, 2.6);
-        c += rc * rays * exp(-dist * 1.5) * 0.2 * uSunVis;
-        c += rc * exp(-dist * 4.5) * 0.12 * uSunVis;
-        vec2 axis = vec2(0.5) - uSun;
-        for (int i = 1; i <= 3; i++) {
-          vec2 gp = uSun + axis * (0.55 + float(i) * 0.42), gd = vUv - gp; gd.x *= uAspect;
-          float g = 1.0 - smoothstep(0.0, 0.05 + float(i) * 0.025, length(gd));
-          c += rc * g * 0.045 * uSunVis;
+        // the rays: two layers of value noise round the sun (n1(7·ang + 3), n1(19·ang − 0.03·t)), read from a table (raysTable)
+        float rays = pow(texture2D(uRays, vec2(ang * 0.15915494 + 0.5, 0.25)).r * 0.55 + texture2D(uRays, vec2((ang * 19.0 - uTime * 0.03) * 0.001953125 + 0.5, 0.75)).r * 0.45, 2.6);
+        float e1 = exp(-dist * 1.5);
+        c += rc * (rays * 0.2 + e1 * e1 * 0.12) * e1 * uSunVis;
+        // the lens ghosts: three discs on the line from the sun through the centre (only pixels near it can be in one)
+        vec2 axis = vec2(0.5) - uSun, ax = axis * vec2(uAspect, 1.0);
+        if (abs(d.x * ax.y - d.y * ax.x) < 0.125 * length(ax)) {
+          for (int i = 1; i <= 3; i++) {
+            vec2 gp = uSun + axis * (0.55 + float(i) * 0.42), gd = vUv - gp; gd.x *= uAspect;
+            float g = 1.0 - smoothstep(0.0, 0.05 + float(i) * 0.025, length(gd));
+            c += rc * g * 0.045 * uSunVis;
+          }
         }
       }
       vec2 v = vUv - 0.5; c *= 1.0 - dot(v, v) * uVig;
@@ -164,7 +184,7 @@ export function makePost(renderer, scene, camera, { msaa = 4, fxaa = false, scal
   const refl = new ReflCopyPass(); composer.addPass(refl);
   const bloom = lite ? new LiteBloomPass() : new UnrealBloomPass(new THREE.Vector2(size.x * scale * 0.5, size.y * scale * 0.5), 0.42, 0.55, 0.86);
   composer.addPass(bloom);
-  const grade = new ShaderPass(GradeShader);
+  const grade = new ShaderPass(GradeShader); grade.uniforms.uRays.value = raysTable();
   grade.material.defines = { NEUTRAL_TONE_MAPPING: '' };
   if (fxaa) grade.material.defines.USE_FXAA = '';
   if (lite) { grade.material.defines.LITE_BLOOM = ''; grade.uniforms.tBloom.value = bloom.texture; grade.uniforms.uBloomUv.value = bloom.uvScale; }

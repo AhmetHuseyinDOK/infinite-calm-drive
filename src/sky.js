@@ -33,31 +33,51 @@ export const TOD = {
   bright: 1, // how much this is a bright clear day (not night, dawn/dusk or overcast): drives the day-only parts of the look
   sunDir: new THREE.Vector3(), moonDir: new THREE.Vector3(), lightDir: new THREE.Vector3(), sunEl: 0,
   t: 0.4, // the time of day (the painted palettes by time of day key on it: painted.js todTones)
+  head: null, // the road's heading the sun and the moon stand by (null: fixed in the world, the old sky; see skyDirs)
 };
-export function updateTOD(t) {
-  TOD.t = t;
+/** t: the time of day; head: the road's smoothed heading (main.js; the sun's and the moon's bearings follow it), or null
+ *  for a sky fixed in the world */
+export function updateTOD(t, head = null) {
+  TOD.t = t; TOD.head = head;
   let k = 0; while (k < KEYS.length - 2 && KEYS[k + 1][0] <= t) k++;
   const a = KEYS[k], b = KEYS[k + 1], f = smooth(clamp((t - a[0]) / (b[0] - a[0]), 0, 1));
   const lc = (i, out) => out.copy(a[i]).lerp(b[i], f);
   lc(1, TOD.zenith); lc(2, TOD.horizon); lc(3, TOD.sunCol); TOD.sunI = lerp(a[4], b[4], f);
   lc(5, TOD.hemiSky); lc(6, TOD.hemiGround); TOD.hemiI = lerp(a[7], b[7], f); lc(8, TOD.fog);
   lc(9, TOD.cLit); lc(10, TOD.cShade); lc(11, TOD.cRim); TOD.night = lerp(a[12], b[12], f); TOD.warm = lerp(a[13], b[13], f);
-  TOD.sunEl = skyDirs(t, TOD.sunDir, TOD.moonDir, TOD.lightDir);
+  TOD.sunEl = skyDirs(t, TOD.sunDir, TOD.moonDir, TOD.lightDir, head);
 }
-// the sun climbs to ~62° at noon and sweeps east → west; the moon mirrors it. The light used for shading is the sun
-// while it's up and the moon otherwise (with a soft hand-over). Returns the sun's elevation.
-function skyDirs(t, sun, moon, light) {
-  const el = Math.sin((t - 0.25) * Math.PI * 2) * 1.08, az = (t - 0.25) * Math.PI + 0.9;
-  sun.set(Math.cos(el) * Math.sin(az), Math.sin(el), Math.cos(el) * Math.cos(az)).normalize();
-  moon.set(-sun.x, Math.abs(Math.sin(el)) * 0.8 + 0.25, -sun.z).normalize();
+// The sun rises at 06:00 (t 0.25), climbs to ~62° at noon and sets at 18:00 (t 0.75). The light used for shading is the
+// sun while it's up and the moon otherwise (with a soft hand-over). Returns the sun's elevation.
+// Its bearing: all four paintings light the road from ahead and to its left. At noon the sun stands 60–80° left of ahead
+// (the car's shadow falls to its right and back towards us; the trees' and the poles' too), and in the paintings repainted
+// at golden hour and sunset it is straight ahead, a little left (the glow at the vanishing point). So, given the road's
+// heading `head` (its mean over a few hundred metres: main.js), the sun stands sunBearing(t) to the left of it: 70° from
+// 09:36 to noon, then swinging round to 8° by sunset (14° at golden hour, t 0.7; at most 0.78°/s, the old sky's pace),
+// and from 8° at sunrise (at most 1.3°/s; the dawn glows ahead too); the moon 20° to the left all night. Their heights
+// keep the hour's. (Without a heading, the old sky fixed in the world: the sun sweeping east → west, the moon opposite it.)
+const D2R = Math.PI / 180, AZ_NOON = 70 * D2R, AZ_LOW = 8 * D2R, MOON_AZ = 20 * D2R;
+/** the sun's bearing to the left of the road's heading at time of day t (radians) */
+export const sunBearing = t => AZ_LOW + (AZ_NOON - AZ_LOW) * smooth(clamp(t < 0.5 ? (t - 0.25) / 0.15 : (0.75 - t) / 0.25, 0, 1));
+function skyDirs(t, sun, moon, light, head = null) {
+  const el = Math.sin((t - 0.25) * Math.PI * 2) * 1.08, ce = Math.cos(el), my = Math.abs(Math.sin(el)) * 0.8 + 0.25;
+  if (head === null) {
+    const az = (t - 0.25) * Math.PI + 0.9;
+    sun.set(ce * Math.sin(az), Math.sin(el), ce * Math.cos(az)).normalize();
+    moon.set(-sun.x, my, -sun.z).normalize();
+  } else {
+    const az = head + sunBearing(t), mz = head + MOON_AZ;
+    sun.set(ce * Math.sin(az), Math.sin(el), ce * Math.cos(az)).normalize();
+    moon.set(ce * Math.sin(mz), my, ce * Math.cos(mz)).normalize();
+  }
   light.copy(sun);
   if (el < 0.08) light.lerpVectors(moon, sun, clamp((el + 0.12) / 0.2, 0, 1)).normalize();
   if (light.y < 0.12) { light.y = 0.12; light.normalize(); }
   return el;
 }
 const _sd = new THREE.Vector3(), _md = new THREE.Vector3();
-/** the shading light direction at time of day t (no side effects) */
-export function lightDirAt(t, out) { skyDirs(((t % 1) + 1) % 1, _sd, _md, out); return out; }
+/** the shading light direction at time of day t for the road's heading `head` (null: the old fixed sky); no side effects */
+export function lightDirAt(t, out, head = null) { skyDirs(((t % 1) + 1) % 1, _sd, _md, out, head); return out; }
 
 // overcast palette (day / night), blended over the clear-sky palette by the weather
 const OV = {
@@ -87,11 +107,11 @@ export function makeSky() {
       uZenith: { value: TOD.zenith }, uHorizon: { value: TOD.horizon }, uSunDir: { value: TOD.sunDir }, uMoonDir: { value: TOD.moonDir },
       uNoiseTex: MU.uNoiseTex, uSunCol: { value: TOD.sunCol }, uNight: { value: 0 }, uWarm: { value: 0 }, uTime: { value: 0 }, uCirrus: { value: 0.6 }, uCirrusCol: { value: new THREE.Color() }, uOvercast: { value: 0 }, uDeckLit: { value: new THREE.Color() }, uDeckDark: { value: new THREE.Color() },
       uMilky: { value: 0 }, uMetA: { value: new THREE.Vector3(0, 1, 0) }, uMetB: { value: new THREE.Vector3(0, 1, 0) }, uMetP: { value: -1 },
-      uBright: { value: 0 },
+      uBright: { value: 0 }, uMoon: { value: 0 },
     },
     vertexShader: /* glsl */`varying vec3 vDir; void main(){ vDir = position; vec4 p = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * p; }`,
     fragmentShader: /* glsl */`
-      uniform vec3 uZenith, uHorizon, uSunDir, uMoonDir, uSunCol, uCirrusCol, uDeckLit, uDeckDark, uMetA, uMetB; uniform float uNight, uWarm, uTime, uCirrus, uOvercast, uMilky, uMetP, uBright;
+      uniform vec3 uZenith, uHorizon, uSunDir, uMoonDir, uSunCol, uCirrusCol, uDeckLit, uDeckDark, uMetA, uMetB; uniform float uNight, uWarm, uTime, uCirrus, uOvercast, uMilky, uMetP, uBright, uMoon;
       varying vec3 vDir;
       ${GLSL_NOISE}
       float hash13(vec3 p){ p = fract(p * .1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
@@ -148,9 +168,9 @@ export function makeSky() {
             float fade = smoothstep(0.0, 0.06, uMetP) * (1.0 - smoothstep(1.0, 1.3, uMetP));
             col += vec3(0.9, 0.95, 1.0) * (1.0 - smoothstep(0.0, 0.0024, dist)) * tt * tt * fade * 2.2 * uNight;
           }
-          float md = dot(d, uMoonDir);
-          col += vec3(0.5, 0.58, 0.85) * pow(max(md, 0.0), 60.0) * 0.35 * uNight;
-          col = mix(col, vec3(1.6, 1.6, 1.5), smoothstep(0.99955, 0.9998, md) * uNight);
+          float md = dot(d, uMoonDir); // (the moon: uMoon, out of the twilight's sky: main.js)
+          col += vec3(0.5, 0.58, 0.85) * pow(max(md, 0.0), 60.0) * 0.35 * uMoon;
+          col = mix(col, vec3(1.6, 1.6, 1.5), smoothstep(0.99955, 0.9998, md) * uMoon);
         }
         gl_FragColor = vec4(col, 1.0);
       }`,

@@ -2,6 +2,55 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-25 · 16:xx — Gap 3: the sun where the paintings have it
+- **The sun stands by the road, ahead and to its left, as in all four paintings.** At noon it is 70° left of ahead, so
+  the car's, the trees' and the poles' shadows fall to the right and back towards us, as painted (they fell ahead and to
+  the right: the sun stood 84–127° round from the car at the four paintings' places, and anywhere over a drive). Through
+  the afternoon it swings round to 14° left at golden hour and 8° at sunset, so the evening glow and the long shadows run
+  down the road from its end, as in the repaints (the glow was behind the camera: 120–172° round). The moon stands 20° to
+  the left all night. The heights by the hour are as before.
+- **It turns only with the road's long bends** (its mean heading over ±200 m). Over drives at cruising speed a 10 m
+  pole's shadow tip moves at noon at 0.11–0.16 m/s (the old sky 0.10), from the afternoon to sunset at 5.4 m/s (the old
+  sky 6.7; at most 9.4 against 18.9: at dusk the old light swung from the sun to the moon opposite it at 60°/s, now
+  2.3°/s). Recorded drives round the mountain pass's and the coast's bends show no sliding shadows (the car's shadow, now
+  falling back-right, sits steady by it).
+- **The paintings' light on the scenery's volumes:** the broadleaf crowns and the tetrapods are lit from the upper left
+  of the frame, as painted (a painter's key, as the car's: the real light's height, on its side, swung round towards the
+  camera, 150° from the view for the crowns and 110° for the tetrapods), while their shadows stay the sun's and fall
+  towards us. coast.png's crowns ΔE 11.1 → 8.1, tetrapods 8.7 → 6.0.
+- **No starburst at golden hour and sunset:** with the sun now low ahead every evening, the grade's streaks show only for
+  a high sun; the soft glow (the sky's halo, the bloom on the disc, the haze) carries it, as in the repaints. The streaks'
+  ray noise comes from a table (within a level of the old streaks; 1.80 → 0.94 ms where they still show).
+- **The moon shows once the twilight has gone** (ahead now, a full moon beside the sunset glow read wrong).
+- Against the paintings at noon (share-weighted region ΔE): the city 8.87 → 8.77, the avenue 14.45 → 11.20 (blossom
+  10.7 → 5.6, lawn in the sun 26.5 → 5.2; its left pavement 26.9 → 41.8, now under the trees' shadows), the coast 6.57 →
+  7.20 (crowns and tetrapods closer, its house 36.3 → 18.7; worse: the slope's box 13.4 → 18.0 with a tree's shadow now
+  falling into it, as painted, and the rail's box 13.9 → 25.7, its median flipping between the yellow wall-top and the
+  grey rail), the country 6.48 → 6.46.
+- The car's painter's sun (Gap 2) is now the real sun but on the mountain pass's sharper left-hand bends (~5% of a noon
+  drive there): it stays as a guard.
+- How: `path.js` (`Path.I`, the heading's running integral; `meanHeading(s, w)`), `sky.js` (`skyDirs(t, …, head)`: the sun
+  at `head + sunBearing(t)`, the moon at `head + 20°`; `updateTOD(t, head)`, `lightDirAt(t, out, head)`; null: the old
+  sky; the moon by `uMoon`), `main.js` (`SUN_W` 200; the shadow re-aim looks ahead along the road at the car's speed;
+  `keyAt()`, `VOL_B` 110°, `LEAF_B` 150°; the streaks by the sun's height), `materials.js` (`VOL_KEY` in the lights chunk,
+  `volKey()`, `U.uVolKey`, `U.uLeafKey`; faces the real sun misses take the key's ramp alone), `post.js` (`raysTable()`,
+  the ghosts only near their line). Test switches `st.sunroad`, `st.volkey`. Assets: none. World: the same layout.
+  Programs: 62 on desktops, 61 on phones.
+- Cost (the shared box's Vega; the desktop machine dropped ~5 min into this step's GTX runs and stayed down): at noon
+  nothing measurable (in-page toggle of `st.sunroad`: desktop −0.49 ms, phone +0.05, the control −0.36 / −0.11; city
+  drives desktop 20.26 / 20.03 → 21.19 / 20.56 ms, phone 12.35 / 12.41 → 12.22 / 12.80). At golden hour and sunset the
+  low sun now shines along the road, so the shadow pass covers ~380 m of it (~124 m when it shone from the side): per-draw
+  timers over coast drives at golden hour, the shadow pass +1.3 ms at desktop quality (the main pass the same) and
+  +0.3 ms on phones; drives desktop 25.99 / 25.80 → 28.08 / 26.90 ms, phone 11.81 / 11.02 / 11.45 → 11.55 / 11.63 /
+  10.80 (the iGPU's clock steps). The streaks' cost where they still show: 1.80 → 0.94 ms. CPU: two lookups a frame;
+  shadow re-aims 2 a minute at noon (was 1), 5–7 at golden hour (was 4). 0 shader errors in all six zones on the desktop
+  and phone tiers at noon, golden hour, sunset and night (26 sweeps); no console errors at q=low, mid and high; none
+  compiled through sunset, night, rain or drives; embed starts on tap; start-up the same within the box's noise (medians
+  3.04 vs 3.31 s over seven interleaved loads each; both builds had one 5 s load).
+- Left over: the golden hour's longer shadow pass (fit the shadow box to the view at a low sun: step 24); the noon sun
+  higher than painted (62° against ~45–55°); the sunset sun under the band's ridges; the night's moon above the frame;
+  the coast's slope and rail boxes (a guardrail key of its own would cost a program).
+
 ## 2026-10-25 · 10:xx — Gap 2: the car as painted
 - **The car's back is in the shade, as in every painting:** a deeper teal (CIELAB L* 69–84 → 66–67; the paintings
   55–68) with a navy lower bumper and glowing lamps. The car's body against the paintings, ΔE: the city 24.8 → 12.3, the

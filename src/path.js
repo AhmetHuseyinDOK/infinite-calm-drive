@@ -96,7 +96,8 @@ export const tubeHalf = rw => rw + 1.4;
 
 const STEP = 2;
 export class Path {
-  constructor() { this.X = [0]; this.Z = [0]; this.H = [0.3]; this.Y = [this.elev(0)]; }
+  // (I: the heading's running integral, ∫₀ˢ H, for meanHeading)
+  constructor() { this.X = [0]; this.Z = [0]; this.H = [0.3]; this.I = [0]; this.Y = [this.elev(0)]; }
   curv(s) {
     const v = (noise1(s / 300, 11) - 0.5) * 2 + (noise1(s / 95, 17) - 0.5) * 0.35;
     const a = Math.abs(v), c = a < 0.22 ? 0 : Math.sign(v) * (a - 0.22) / 0.78;
@@ -119,9 +120,19 @@ export class Path {
       this.X.push(this.X[i] + Math.sin(h + k / 2) * STEP);
       this.Z.push(this.Z[i] + Math.cos(h + k / 2) * STEP);
       this.H.push(h + k);
+      this.I.push(this.I[i] + (h + k / 2) * STEP);
       this.Y.push(this.elev(si + STEP));
     }
   }
+  /** ∫₀ˢ H ds (the heading is linear between its samples) */
+  headInt(s) {
+    s = Math.max(0, s);
+    this.ensure(s + STEP);
+    const f = s / STEP, i = Math.floor(f), t = f - i, h = this.H[i];
+    return this.I[i] + STEP * t * (h + (this.H[i + 1] - h) * t / 2);
+  }
+  /** the road's mean heading over [s − w, s + w] (radians, unwrapped like the headings: no jump at ±π) */
+  meanHeading(s, w) { const a = Math.max(0, s - w), b = s + w; return (this.headInt(b) - this.headInt(a)) / (b - a); }
   /** centre-line frame at distance s: position, heading, forward (fx,fz) and right (rx,rz) */
   at(s, o = {}) {
     s = Math.max(0, s);

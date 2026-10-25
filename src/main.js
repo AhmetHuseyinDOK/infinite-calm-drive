@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import { Path, zoneW, zoneWeight, zoneAt, zparam, ZINFO, setStartZone, startZone, zoneSets, trafficSide, seaWeight, regionWeight, viewMix, borderNear, REGION, crossingS, crossingValid, XING, XOFF, riverNear, RIV, ROFF, groundOffsetMix, tunnelNear, T_HALF, T_RIDGE } from './path.js';
+import { Path, zoneW, zoneWeight, zoneAt, zparam, ZINFO, setStartZone, startZone, zoneSets, trafficSide, seaWeight, regionWeight, viewMix, borderNear, nextBorderS, REGION, crossingS, crossingValid, XING, XOFF, riverNear, RIV, ROFF, groundOffsetMix, tunnelNear, T_HALF, T_RIDGE } from './path.js';
 import { makeCrossingRig, makeTrain, xingPosts } from './crossing.js';
 import { buildAtlas, buildFoliage, buildPaintedAtlas, buildWorldAtlas } from './textures.js';
-import { makeMaterials, makeAtlasW, U, groundMaterialFor, setGrazeFade, makeCloudMap, makeGhibliLeaf, FIELD, tetraMaterial, barkMaterial } from './materials.js';
-import { setAtlas, setFoliage, warmTrees, warmTetrapods, setLeafDensity, GHIBLI, setHouses } from './props.js';
+import { makeMaterials, makeAtlasW, setWorldTex, U, groundMaterialFor, setGrazeFade, makeCloudMap, makeGhibliLeaf, FIELD, tetraMaterial, barkMaterial } from './materials.js';
+import { setAtlas, setFoliage, warmTrees, warmTetrapods, setLeafDensity, GHIBLI, setHouses, setTrHouses } from './props.js';
 import { loadTreeAtlas } from './ghibli.js';
 import { World, CH } from './chunks.js';
 import { makeSky, paintClouds, makeClouds, makeMountains, updateTOD, applyWeather, TOD, lightDirAt, KEYS, REGION_KEYS } from './sky.js';
@@ -13,13 +13,14 @@ import { makeMirage } from './mirage.js';
 import { makeGrass } from './grass.js';
 import { makeBirds } from './birds.js';
 import { makeSea, shoreMaterial, riverMaterial, SHORE_PHASE } from './sea.js';
+import { makeFerry } from './ferry.js';
 import { surfMaterial, SURF } from './surf.js';
 import { makeCar } from './car.js';
 import { makePost } from './post.js';
 import { makeAudio } from './audio.js';
 import { makeParticles } from './particles.js';
 import { clamp, lerp, sstep, setSeed, hash2 } from './util.js';
-import { loadCloudAtlas, makePaintedClouds, loadBandAtlas, makePaintedBand, updatePainted, loadFieldTexture, loadFrontAtlas, loadHouseAtlas, todTones, mixTones, paintSky, PAINT_TOD } from './painted.js';
+import { loadCloudAtlas, makePaintedClouds, loadBandAtlas, makePaintedBand, updatePainted, loadFieldTexture, loadFrontAtlas, loadHouseAtlas, loadTrHouseAtlas, todTones, mixTones, paintSky, PAINT_TOD } from './painted.js';
 
 const QS = new URLSearchParams(location.search);
 // inside an X player card (or any iframe): lighter quality, compact UI, tap-only start
@@ -31,6 +32,8 @@ setStartZone(QS.get('env') || 'city');
 const $ = id => document.getElementById(id);
 const status = t => { const el = $('loading'); if (el) el.textContent = t; };
 
+/** a zone set (path.js zoneSets) holding any of Turkey's zones: its ground variant is one of Turkey's programs */
+const trSet = zs => zs.some(z => REGION[z] === 'tr');
 async function main() {
   await new Promise(r => setTimeout(r, 30));
   // ------------------------------------------------------------ renderer & scene
@@ -61,6 +64,12 @@ async function main() {
   // the painted houses of the country, the coast and the cherry avenue (painted.js), on the same tiers: 48 px/m on desktops,
   // 32 on phones and in the X card. Their cells take rows of their own in the painted atlas (textures.js paintHouses)
   const HTIER = quality === 'high' && innerHeight * DPR >= 560 ? 'hi' : 'lo', houseLoad = loadHouseAtlas(HTIER);
+  // Turkey (W2): its painted horizon, its houses (the world atlas: painted.js loadTrHouseAtlas, on the same tiers as Japan's
+  // houses, 32 px/m on desktops, 24 on phones and in the X card) and its programs only for a start in Turkey or within TR_NEAR
+  // of a border tunnel; otherwise they load and compile in the background as the drive comes that close (trLazy, below: the
+  // border is then ~4–5 minutes away at a cruising speed, ~1 at full speed)
+  const TR_NEAR = 3200, S0 = Math.max(100, parseFloat(QS.get('s')) || 140), TR_START = REGION[startZone()] === 'tr' || nextBorderS(S0) - S0 < TR_NEAR;
+  const trHouseLoad = TR_START ? loadTrHouseAtlas(HTIER) : null;
   // the painted cumulus and the horizon band (painted.js; 32 px/° where the frame is tall enough, else 16 px/°): the
   // largest downloads, and needed last (they are awaited once the road is built and the light prepared, below), so they
   // start once the four above are in (or after 4 s, so a stalled one never holds them up for its whole 15 s timeout): on
@@ -69,8 +78,8 @@ async function main() {
   const firstLoads = Promise.race([Promise.all([treeLoad, fieldLoad, frontLoad, houseLoad]), new Promise(r => setTimeout(r, 4000))]);
   const pcLoad = CLOUDS === 'old' ? Promise.resolve(null) : firstLoads.then(() => loadCloudAtlas(TIER));
   const bandLoad = firstLoads.then(() => loadBandAtlas(TIER));
-  // …and Turkey's (the Bosphorus's far shore: one row, ~1/5 of Japan's bytes), with Japan's
-  const bandTrLoad = firstLoads.then(() => loadBandAtlas(TIER, 15000, 'bandtr1'));
+  // …and Turkey's (the Bosphorus's far shore: one row, ~1/5 of Japan's bytes), with Japan's when it is needed at the start
+  const bandTrLoad = TR_START ? firstLoads.then(() => loadBandAtlas(TIER, 15000, 'bandtr1')) : null;
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0xc6ddf2, 0.0019, 700); // near = exp² density, far = draw distance (see materials.js)
@@ -150,7 +159,12 @@ async function main() {
   // the world atlas: the regions after Japan (Turkey's flag, signs and wooden houses), on the painted atlas's tiers. (Its
   // textures and the atlas material's world variant are made once the rest of the scene is (makeAtlasW, below): made
   // earlier, their ids drew random numbers ahead of the particles', which moved every falling petal of a seeded capture)
-  const watlas = buildWorldAtlas(atlas, HTIER);
+  let watlas = null;
+  if (TR_START) {
+    const th = await trHouseLoad; watlas = buildWorldAtlas(atlas, HTIER, th);
+    if (watlas.trHouses) setTrHouses(th.types, th.extras); // (else: the procedural houses)
+    if (th) th.img.close();
+  }
   const fol = buildFoliage(renderer); setFoliage(fol.cells); U.uTuftV.value.set(...fol.tuftV);
   const M = makeMaterials(atlas.textures(renderer), fol.tex, patlas.textures(renderer));
   const cloudMap = makeCloudMap(); cloudMap.update(renderer, 0, 0, 0, 0);
@@ -181,9 +195,11 @@ async function main() {
   // warm gold-green at golden hour, a darker green going mauve at sunset, a moonlit blue-green at night, where the old deeper
   // green turned a saturated grass-green under the moon); grey skies keep the old tints. (c: the country's, co: the coast's,
   // sa: the avenue's)
-  const FT = (c, co, sa) => ({ c, co, sa });
-  const F_DAY = FT([...FIELD_DAY], [...COAST_DAY], [...SAK_DAY]), F_GOLD = FT([3.8, 1.6, 3.2], [3.4, 2.0, 3.0], [7.0, 4.6, 2.6]);
-  const F_SUNSET = FT([2.3, 1.4, 5.6], [0.62, 0.85, 4.0], [2.6, 2.3, 10.0]), F_NIGHT = FT([2.6, 1.8, 6.0], [5.5, 3.0, 8.0], [4.0, 2.6, 6.0]);
+  // (bo: the Bosphorus's gardens and hill: the coast's by day; in the evening and at night darker and less blue than the coast's
+  // slope, as the concept repainted at those hours (ref/tod/bosphorus_*.png) has its hillside: its steep banks face the road)
+  const FT = (c, co, sa, bo) => ({ c, co, sa, bo });
+  const F_DAY = FT([...FIELD_DAY], [...COAST_DAY], [...SAK_DAY], [...COAST_DAY]), F_GOLD = FT([3.8, 1.6, 3.2], [3.4, 2.0, 3.0], [7.0, 4.6, 2.6], [1.45, 1.0, 1.9]);
+  const F_SUNSET = FT([2.3, 1.4, 5.6], [0.62, 0.85, 4.0], [2.6, 2.3, 10.0], [0.65, 0.5, 1.15]), F_NIGHT = FT([2.6, 1.8, 6.0], [5.5, 3.0, 8.0], [4.0, 2.6, 6.0], [0.55, 0.55, 1.1]);
   const FIELD_T = todTones([[0, F_NIGHT], [0.2, mixTones(F_NIGHT, F_SUNSET, 0.3)], [0.245, mixTones(F_SUNSET, F_GOLD, 0.4)], [0.3, F_DAY], [0.62, F_DAY], [0.7, F_GOLD], [0.75, F_SUNSET], [0.765, mixTones(F_SUNSET, F_NIGHT, 0.25)], [0.8, mixTones(F_SUNSET, F_NIGHT, 0.55)], [0.86, F_NIGHT], [1, F_NIGHT]]);
   { // the fields: the painted meadow once its texture is in (the country's ground variants then read it), else the paddies
     const fa = await fieldLoad;
@@ -231,6 +247,10 @@ async function main() {
   // hours: darker at golden hour and sunset, a little bluer at night)
   const GH_D = { c: [1, 1, 1] }, GH_G = { c: [0.78, 0.82, 1.15] }, GH_S = { c: [0.52, 0.56, 1.3] }, GH_N = { c: [1.25, 1.9, 2.2] };
   const GH_T = todTones([[0, GH_N], [0.2, mixTones(GH_N, GH_S, 0.3)], [0.245, mixTones(GH_S, GH_G, 0.4)], [0.3, GH_D], [0.62, GH_D], [0.7, GH_G], [0.75, GH_S], [0.765, mixTones(GH_S, GH_N, 0.25)], [0.8, mixTones(GH_S, GH_N, 0.55)], [0.86, GH_N], [1, GH_N]]);
+  // …and the Bosphorus's (W2), as its concept repainted at those hours (ref/tod/bosphorus_*.png) has its gardens' trees: a deep
+  // olive at golden hour, nearly black-green against the sunset, a dark moonlit blue-green at night (the coast's moonlit teal
+  // read far too light on its hillside, which faces the road)
+  const GH_TR = todTones([[0, { c: [0.5, 0.72, 1.0] }], [0.2, { c: [0.5, 0.62, 0.95] }], [0.245, { c: [0.6, 0.6, 0.9] }], [0.3, GH_D], [0.62, GH_D], [0.7, { c: [0.66, 0.68, 0.85] }], [0.75, { c: [0.42, 0.42, 0.72] }], [0.765, { c: [0.44, 0.48, 0.8] }], [0.8, { c: [0.46, 0.56, 0.88] }], [0.86, { c: [0.5, 0.72, 1.0] }], [1, { c: [0.5, 0.72, 1.0] }]]);
   const BL_T = todTones([[0, { b: [22, 16, 6] }], [0.2, { b: [16, 12, 5.5] }], [0.245, { b: [7, 4.6, 3] }], [0.3, BL_DAY], [0.62, BL_DAY], [0.7, { b: [7.5, 5, 2.3] }], [0.75, { b: [4.2, 3.0, 2.6] }], [0.765, { b: [8, 6.5, 3.8] }], [0.8, { b: [14, 11, 5] }], [0.86, { b: [22, 16, 6] }], [1, { b: [22, 16, 6] }]]);
   // the tetrapods' tones in coast.png (sRGB, by lightness): its deep blue (creases, the wet band), blue-grey shade, neutral
   // middle and warm light grey, and the white of its foam lit and in its light-blue shade
@@ -295,10 +315,17 @@ async function main() {
   // into when nobody steers — wherever the player last steered it (it used to always drift back to the left lane), measured
   // towards the kerb of the side the traffic keeps to (path.js trafficSide: left in Japan, right in Turkey), so through a
   // border tunnel the car moves over to the other side of the road with the traffic
-  const MULT_MIN = 0.4, MULT_MAX = 5.5, S0 = Math.max(100, parseFloat(QS.get('s')) || 140), SIDE0 = trafficSide(S0) < 0 ? -1 : 1;
+  const MULT_MIN = 0.4, MULT_MAX = 5.5, SIDE0 = trafficSide(S0) < 0 ? -1 : 1;
   const st = { s: S0, u: 1.65 * SIDE0, uHome: 1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, spray: QS.has('nospray') ? 0 : 1 /* test switch */, grass: 1 /* test switch: the meadow's blades */, pclouds: 1 /* test switch: painted clouds (0: the procedural ones, with ?clouds=both) */, band: 1 /* test switch: the painted horizon (0: the mountain rings) */, waves: 1 /* test switch: the painted sea's waves (0: its flat tones) */, shore: 1 /* test switch: the waves and foam along the sea wall (0: the open sea's colour there) */, surf: 1 /* test switch: the spray over the tetrapods */, tetra: 1 /* test switch: the tetrapods */, bark: 1 /* test switch: the bark's painted tones (0: the old colours, lit) */, trunks: 1 /* test switch: the painted trees' bark (0: hidden) */, todpaint: 1 /* test switch: the painted look at golden hour, sunset and night (0: only on a bright day, as before) */, road: 1 /* test switch: the coast's and the country's painted asphalt (0: the old warm grey) */, carkey: 1 /* test switch: the car lit by the painter's sun (0: by the real sun) */, sunroad: 1 /* test switch: the sun and the moon stand by the road's heading, as in the paintings (0: fixed in the world, as before) */, volkey: 1 /* test switch: the crowns and the tetrapods lit by the painted volumes' key (0: by the real sun) */, shsoft: 1 /* test switch: soft shadow edges near the camera (0: one tap everywhere, as before) */, shfit: 1 /* test switch: the sun's shadow box fitted to what can be seen at a low sun (0: the old square box) */, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
   let started = false;
-  makeAtlasW(M, watlas.textures(renderer));
+  // (the atlas's world variant and its shadow twin are made, and their programs compiled, at every start: without Turkey's
+  // atlas yet, on a stand-in, its textures swapped in when they load (materials.js setWorldTex))
+  const STAND_IN = () => { const t = new THREE.DataTexture(new Uint8Array([128, 128, 128, 255]), 1, 1); t.needsUpdate = true; return t; };
+  makeAtlasW(M, watlas ? watlas.textures(renderer) : { map: STAND_IN(), emissive: STAND_IN() });
+  // the Bosphorus's city ferry (ferry.js: its painted side is a world atlas cell); where the concept has it at a Turkish start
+  let ferry = null;
+  if (TR_START) { ferry = makeFerry(M, sea); scene.add(ferry.group); if (zoneAt(st.s) === 'bosphorus') ferry.opening(path, st.s); }
+  world.trReady = TR_START; // (no chunk of Turkey's, or of a border's, is built before its assets are in: chunks.js)
   status('building the road…');
   await new Promise(r => setTimeout(r, 10));
   // build only the first stretch up-front; the rest streams in while the title screen is up
@@ -322,7 +349,7 @@ async function main() {
     const tri0 = new THREE.BufferGeometry(); tri0.setAttribute('position', tri.attributes.position);
     const bare = new Set([M.shore, M.surf, riverMat]);
     const mats = [M.color, M.atlas, M.atlasW, M.foliage, M.leaf, M.lamp, M.sig, M.sodium, M.decal, M.pool, M.shore, M.surf, riverMat, M.tetra, M.bark, ...(M.gleaf ? [M.gleaf] : []), ...(M.gblossom ? [M.gblossom] : [])];
-    for (const zs of zoneSets()) mats.push(groundMaterialFor(zs)); // (each zone, each pair of neighbours, each border's)
+    for (const zs of zoneSets()) if (TR_START || !trSet(zs)) mats.push(groundMaterialFor(zs)); // (each zone, each pair of neighbours, each border's: Turkey's later if not needed now)
     for (const m of mats) { const o = new THREE.Mesh(bare.has(m) ? tri0 : tri, m); o.castShadow = o.receiveShadow = !bare.has(m); o.frustumCulled = false; if (m === M.gleaf || m === M.gblossom) o.customDepthMaterial = M.gleafDepth; if (m === M.atlas) o.customDepthMaterial = M.atlasDepth; if (m === M.atlasW) o.customDepthMaterial = M.atlasWDepth; warm.add(o); }
     warm.position.set(0, 0, 0); scene.add(warm);
     sun.target.position.set(0, 0, 0); sun.position.set(0, 150, 60); // so the warm-up meshes sit inside the shadow camera
@@ -352,14 +379,42 @@ async function main() {
     // (the avenue's narrow sky over the road: one tower over it; the city's, a V between its tall blocks: the cumulus either
     // side of it, the blue between, as in the city painting)
     if (pclouds) pclouds.opening = zoneAt(st.s) === 'sakura' ? 'center' : 'flank';
-    const bandAtlas = await bandLoad, trAtlas = await bandTrLoad;
-    // (Turkey's band: the same program as Japan's. Without it the Bosphorus borrows the coast's far shore)
+    const bandAtlas = await bandLoad, trAtlas = TR_START ? await bandTrLoad : null;
+    // (Turkey's band: the same program as Japan's. Without it (or until it loads) the Bosphorus borrows the coast's far shore)
     band = bandAtlas ? makePaintedBand(bandAtlas, post, scene.fog.color, trAtlas ? null : { bosphorus: 'coast' }) : null; if (band) scene.add(band.mesh);
-    bandTr = trAtlas ? makePaintedBand(trAtlas, post, scene.fog.color, null, 0.12) : null; if (bandTr) scene.add(bandTr.mesh); // (the Asian shore in a light haze, as painted)
+    bandTr = trAtlas ? makePaintedBand(trAtlas, post, scene.fog.color, null, 0.12, 'bosphorus') : null; if (bandTr) scene.add(bandTr.mesh); // (the Asian shore in a light haze, as painted; its houses' windows lit at night)
     if (band && zoneAt(st.s) === 'city') band.hero = 0.5; // (the street's far end: the far city's pale towers in haze, its second painting, not the first's green hill)
     if (bandTr) bandTr.hero = 0.208; // (the Bosphorus Bridge's middle 15° left of ahead, as in the concept painting, when its band first shows)
     renderer.setRenderTarget(post.composer.readBuffer); renderer.compile(scene, camera); renderer.setRenderTarget(null);
     if (pcAtlas) renderer.initTexture(pcAtlas.tex); if (bandAtlas) renderer.initTexture(bandAtlas.tex); if (trAtlas) renderer.initTexture(trAtlas.tex);
+  }
+  // ---- Turkey, loaded in the background (a Japanese start, once the drive comes within TR_NEAR of the border): the downloads,
+  // then one piece of main-thread work a frame (the world atlas painted, its two textures and the band's uploaded, the ferry
+  // made), then its ground variants compiled off the main thread (KHR_parallel_shader_compile); only then are the chunks
+  // round the border built (world.trReady)
+  const TRL = { started: TR_START, done: TR_START, t0: 0, steps: [] };
+  const nextFrame = () => new Promise(r => requestAnimationFrame(() => r()));
+  async function trLazy() {
+    TRL.started = true; TRL.t0 = performance.now();
+    const step = n => TRL.steps.push([n, Math.round(performance.now() - TRL.t0)]);
+    const [trAtlas, th] = await Promise.all([loadBandAtlas(TIER, 15000, 'bandtr1'), loadTrHouseAtlas(HTIER)]); step('loaded');
+    await nextFrame();
+    const wa = buildWorldAtlas(atlas, HTIER, th); if (wa.trHouses) setTrHouses(th.types, th.extras); if (th) th.img.close(); step('atlas');
+    await nextFrame();
+    const wt = wa.textures(renderer); renderer.initTexture(wt.map); step('map');
+    await nextFrame();
+    renderer.initTexture(wt.emissive); setWorldTex(wt); step('emissive');
+    await nextFrame();
+    if (trAtlas) { bandTr = makePaintedBand(trAtlas, post, scene.fog.color, null, 0.12, 'bosphorus'); bandTr.hero = 0.208; scene.add(bandTr.mesh); renderer.initTexture(trAtlas.tex); if (band) band.alias = null; }
+    step('band');
+    await nextFrame();
+    ferry = makeFerry(M, sea); scene.add(ferry.group); step('ferry');
+    const warm = new THREE.Group(), tri = new THREE.BufferGeometry();
+    tri.setAttribute('position', new THREE.Float32BufferAttribute([0, -50, 0, 0.01, -50, 0, 0, -49.99, 0], 3)); tri.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
+    for (const zs of zoneSets()) if (trSet(zs)) { const o = new THREE.Mesh(tri, groundMaterialFor(zs)); o.receiveShadow = true; warm.add(o); }
+    renderer.setRenderTarget(post.composer.readBuffer); const ready = renderer.compileAsync(warm, camera, scene); renderer.setRenderTarget(null);
+    await ready; tri.dispose(); step('programs');
+    world.trReady = true; TRL.done = true;
   }
   // level crossing state
   const X = { k: Math.ceil((st.s - XOFF) / XING), phase: 'idle', raise: 1, decided: false, t2: 0 };
@@ -560,6 +615,8 @@ async function main() {
     wet = clamp(wet + (rn > 0.25 ? dt / 18 : -dt / 120), 0, 1);
 
     // stream the world
+    if (!TRL.started && nextBorderS(st.s) - st.s < TR_NEAR) trLazy().catch(e => { // (should anything fail: its procedural look)
+      console.warn('Turkey:', e); try { setWorldTex(buildWorldAtlas(atlas, HTIER, null).textures(renderer)); } catch (e2) {} world.trReady = true; TRL.done = true; });
     const tw0 = performance.now(); world.update(st.s, started ? 3.5 : 14); const tw1 = performance.now();
     path.at(st.s, f);
     if (Math.abs(f.x - world.origin.x) > 900 || Math.abs(f.z - world.origin.z) > 900) {
@@ -831,6 +888,7 @@ async function main() {
       for (const d of [-150, 0, 250, 500, 800]) if (!bn || tube || (st.s + d - bn.s) * (st.s - bn.s) > 0) seaW = Math.max(seaW, seaWeight(st.s + d)); }
     sea.mesh.visible = seaW > 0.001;
     PAINT_TOD.on = st.todpaint; sea.u.uWaves.value = st.waves; sea.u.uShoreW.value = st.shore; M.surf.visible = st.surf > 0; M.tetra.visible = st.tetra > 0; M.bark.visible = st.trunks > 0; sea.update(camera.position, t, fogD * 0.8, sstep(0.0, 0.35, seaW), post.grade.uniforms, path, st.s, regionWeight(st.s, 'tr')); // (and the shore's foam and surf; the strait's tones in Turkey)
+    if (ferry) ferry.update(dt, path, st.s, world.origin, w.bosphorus * (sea.mesh.visible ? 1 : 0));
     riverMat.uniforms.uTime.value = t; riverMat.uniforms.uFogD.value = scene.fog.near; riverMat.uniforms.uNight.value = TOD.night; riverMat.uniforms.uSpecK.value = 1 - TOD.overcast * 0.85;
     U.uSunDir.value.copy(TOD.lightDir); U.uSunCol.value.copy(TOD.sunCol);
     const nightK = sstep(0.15, 0.8, TOD.night);
@@ -843,7 +901,10 @@ async function main() {
     // …and their leaves, under a clear sky, as the paintings repainted at golden hour, sunset and night show them (GH_T: an
     // olive green at golden hour, a dark green going mauve against the sunset, a moonlit teal at night, where the sun had
     // turned them yellow and orange); by day and under grey skies the leaves' own colour
-    { const c = GH_T.at(TOD.t).rgb('c'), k = 1 - ov; U.uGhTint.value.set(lerp(1, c[0], k), lerp(1, c[1], k), lerp(1, c[2], k)); }
+    { const c = GH_T.at(TOD.t).rgb('c'), k = 1 - ov, rt = regionWeight(st.s, 'tr'); // (Istanbul's: GH_TR, by Turkey's weight)
+      let c0 = c[0], c1 = c[1], c2 = c[2];
+      if (rt > 0) { const d = GH_TR.at(TOD.t).rgb('c'); c0 = lerp(c0, d[0], rt); c1 = lerp(c1, d[1], rt); c2 = lerp(c2, d[2], rt); }
+      U.uGhTint.value.set(lerp(1, c0, k), lerp(1, c1, k), lerp(1, c2, k)); }
     { // the tetrapods' painted tones under a clear sky, by the time of day (as the painted sea's), ungraded: they show as the
       // painting's colours (grey skies and rain keep the old look: lit by the scene)
       const g = post.grade.uniforms; U.uTpK.value = paintSky();
@@ -862,8 +923,9 @@ async function main() {
     if (FIELD.tex) { // (by the time of day under a clear sky; towards the old deeper tints as the sky greys over. The day's
       // key keeps the old daytime tints exactly: deeper by TOD.warm towards the morning and the evening)
       const wd = 1 - TOD.warm;
-      for (let i = 0; i < 3; i++) { F_DAY.c[i] = lerp(FIELD_DIM[i], FIELD_DAY[i], wd); F_DAY.co[i] = lerp(COAST_DIM[i], COAST_DAY[i], wd); F_DAY.sa[i] = lerp(SAK_DIM[i], SAK_DAY[i], wd); }
-      const b = 1 - ov, P = FIELD_T.at(TOD.t), c = P.rgb('c'), co = P.rgb('co'), sa = P.rgb('sa');
+      for (let i = 0; i < 3; i++) { F_DAY.c[i] = lerp(FIELD_DIM[i], FIELD_DAY[i], wd); F_DAY.co[i] = lerp(COAST_DIM[i], COAST_DAY[i], wd); F_DAY.sa[i] = lerp(SAK_DIM[i], SAK_DAY[i], wd); F_DAY.bo[i] = F_DAY.co[i]; }
+      const b = 1 - ov, P = FIELD_T.at(TOD.t), c = P.rgb('c'), co = P.rgb('co'), sa = P.rgb('sa'), bo = P.rgb('bo');
+      FIELD.uFieldBo.value.set(lerp(COAST_DIM[0], bo[0], b), lerp(COAST_DIM[1], bo[1], b), lerp(COAST_DIM[2], bo[2], b));
       FIELD.uFieldC.value.set(lerp(FIELD_DIM[0], c[0], b), lerp(FIELD_DIM[1], c[1], b), lerp(FIELD_DIM[2], c[2], b));
       FIELD.uFieldCo.value.set(lerp(COAST_DIM[0], co[0], b), lerp(COAST_DIM[1], co[1], b), lerp(COAST_DIM[2], co[2], b));
       FIELD.uFieldSa.value.set(lerp(SAK_DIM[0], sa[0], b), lerp(SAK_DIM[1], sa[1], b), lerp(SAK_DIM[2], sa[2], b));
@@ -991,7 +1053,7 @@ async function main() {
     if (started && frames > 150 && dt > 0.03) slowT += dt; else slowT = Math.max(0, slowT - dt * 0.5);
     if (slowT > 3 && !QS.has('q')) { slowT = 0; stepDown(); }
   }
-  window.__dbg = { renderer, st, scene, camera, world, TOD, KEYS, X, train, weather, U, birds, cine, post, car, sun, M, clouds, pclouds, band, bandTr, sky, mountains, shadowDir, CM, spray, grass, sea, get audio() { return audio; } };
+  window.__dbg = { renderer, st, scene, camera, world, TOD, KEYS, X, train, weather, U, birds, cine, post, car, sun, M, clouds, pclouds, band, get bandTr() { return bandTr; }, sky, mountains, shadowDir, CM, spray, grass, sea, get ferry() { return ferry; }, TRL, get audio() { return audio; } };
   status('');
   $start.classList.add('ready');
   if (QS.has('auto')) begin();

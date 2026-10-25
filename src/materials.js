@@ -518,6 +518,9 @@ vec3 coastGround(float s, float u, float rw){
   return mix(sand, L(vec3(0.6, 0.55, 0.46)), 0.6*(1.0 - smoothstep(0.0, 0.9, vWY)));
 }
 #ifdef Z_BOS
+#ifdef F_PAINT
+uniform vec3 uFieldBo; // (the Bosphorus's grass tint: its gardens and hill, by the time of day: main.js)
+#endif
 // the Bosphorus shore road at Arnavutköy, as its concept painting has it (drawn in the coast's channel: the two never meet).
 // The strait's side: the asphalt's shoulder, then the sea wall of pale dressed stone, its top a course of long blocks and
 // its face (the steep ground between the wall's top and the water) blocks in courses, darker and wet low down. The land
@@ -527,11 +530,11 @@ vec3 bosGround(float s, float u, float rw){
   vec2 p = vec2(s, u); float a = abs(u);
   if (u > 0.0) {
 #ifdef F_PAINT
-    vec3 g = fieldTex(1.25) * uFieldCo;
+    vec3 g = fieldTex(1.25) * uFieldBo;
 #else
     vec3 g = grassCol(p, L(vec3(0.31, 0.60, 0.25)), L(vec3(0.52, 0.79, 0.32)));
 #endif
-    if (a < rw + 1.6) return g * mix(0.55, 0.92, smoothstep(rw + 0.1, rw + 1.3, a));
+    if (a < rw + 1.6) return g * vec3(1.05, 0.86, 0.82) * mix(0.55, 0.92, smoothstep(rw + 0.1, rw + 1.3, a)); // (the verge: a paler, yellower green, as the concept's)
     if (a < rw + 4.6) {
       // slabs ~0.9 × 0.6 m in courses along the road, each its own grey, the joints dark; a dressed kerb along the verge
       float row = floor((a - rw - 1.6) / 0.6), q = s / 0.9 + 0.5 * mod(row, 2.0), fx = fract(q), fy = fract((a - rw - 1.6) / 0.6);
@@ -762,6 +765,7 @@ export const FIELD = {
   uFieldK: { value: new THREE.Vector2(1 / 12, 1 / 21) },   // 1 / the painted tile's size (m) across and along the road
   uFieldC: { value: new THREE.Vector3(1, 1, 1) },          // its tint (main.js: lime on a bright day, deeper otherwise)
   uFieldCo: { value: new THREE.Vector3(1, 1, 1) },         // …on the coast's green slope (main.js)
+  uFieldBo: { value: new THREE.Vector3(1, 1, 1) },         // …on the Bosphorus's gardens and hill (main.js)
   uFieldSa: { value: new THREE.Vector3(1, 1, 1) },         // …on the cherry avenue's lawns (main.js)
   uFieldM: { value: new THREE.Vector3(0.16, 0.32, 0.05) }, // its average linear colour (the 3D blades take it)
 };
@@ -793,7 +797,7 @@ export function groundMaterial(defines = groundDefines(Object.keys(ZDEF)), key =
   m.onBeforeCompile = sh => {
     sh.uniforms.uSkyHor = U.uSkyHor; sh.uniforms.uSkyZen = U.uSkyZen; sh.uniforms.uWet = U.uWet; sh.uniforms.uSakWet = U.uSakWet; sh.uniforms.uNight = U.uNight; sh.uniforms.uSunDir = U.uSunDir; sh.uniforms.uSunCol = U.uSunCol;
     for (const k of ['uReflTex', 'uReflOn', 'uReflRes', 'uHorizon', 'uReflK', 'uRoadN', 'uRoadF']) sh.uniforms[k] = U[k];
-    if (paint) { sh.uniforms.uFieldTex = { value: FIELD.tex }; for (const k of ['uFieldK', 'uFieldC', 'uFieldCo', 'uFieldSa', 'uFieldM']) sh.uniforms[k] = FIELD[k]; }
+    if (paint) { sh.uniforms.uFieldTex = { value: FIELD.tex }; for (const k of ['uFieldK', 'uFieldC', 'uFieldCo', 'uFieldSa', 'uFieldM', 'uFieldBo']) sh.uniforms[k] = FIELD[k]; }
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
 attribute vec2 su; attribute vec4 zw; attribute vec2 rk; attribute float rv; attribute float zs;
@@ -1144,10 +1148,15 @@ if (!gCull) {
 // world variant (M.atlasW: the chunks that hold any of its cells): a cell whose u is 4 or more is one of its cells (uWMap,
 // uWEm). (Japan's chunks keep the plain variant: with the third read in it, sub-pixel cells at the far end of the shopping
 // street read other mips)
+// (the world atlas's textures in uniform objects of their own, shared by the world variant and its shadow twin: a Japanese
+// start makes both with a stand-in and swaps Turkey's in when it loads, near the border: setWorldTex, no new program)
+const UW = { uWMap: { value: null }, uWEm: { value: null } };
+/** the world atlas's textures ({ map, emissive }: textures.js Atlas.textures) for the atlas material's world variant */
+export function setWorldTex(t) { UW.uWMap.value = t.map; UW.uWEm.value = t.emissive; }
 function paintedAtlas(sh, P, alpha = false, Wt = null) {
   const W = !!Wt;
-  sh.uniforms.uPMap = { value: P.map }; if (W) sh.uniforms.uWMap = { value: Wt.map };
-  if (!alpha) { sh.uniforms.uPEm = { value: P.emissive }; if (W) sh.uniforms.uWEm = { value: Wt.emissive }; }
+  sh.uniforms.uPMap = { value: P.map }; if (W) sh.uniforms.uWMap = UW.uWMap;
+  if (!alpha) { sh.uniforms.uPEm = { value: P.emissive }; if (W) sh.uniforms.uWEm = UW.uWEm; }
   sh.fragmentShader = sh.fragmentShader
     .replace('#include <common>', `#include <common>\nuniform sampler2D uPMap;${alpha ? '' : ' uniform sampler2D uPEm;'}${W ? `\nuniform sampler2D uWMap;${alpha ? '' : ' uniform sampler2D uWEm;'}` : ''}`)
     .replace('#include <map_fragment>', /* glsl */`
@@ -1169,7 +1178,7 @@ totalEmissiveRadiance *= emissiveColor.rgb;`);
  *  cells (Turkey's). Made once the rest of the scene is (their ids draw random numbers: made earlier they moved every
  *  falling petal of a seeded capture) */
 export function makeAtlasW(M, worldTex) {
-  const P = M.ptex;
+  const P = M.ptex; setWorldTex(worldTex);
   M.atlasW = M.atlas.clone();
   M.atlasW.onBeforeCompile = sh => { contactAO(sh); windowLights(sh); worldShade(sh); paintedAtlas(sh, P, false, worldTex); };
   M.atlasW.customProgramCacheKey = () => 'atlasw-v1';

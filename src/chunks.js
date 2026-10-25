@@ -1,6 +1,6 @@
 // The world is built in 60 m chunks along the infinite road; each chunk merges its contents into a handful of meshes.
 import * as THREE from 'three';
-import { zoneMix, zoneW, zoneAt, zparam, groundOffsetMix, SEA, WALL_U, crossingS, crossingValid, crossingNear, XING, XOFF, riverS, riverValid, riverNear, riverBank, RIV, ROFF, RIVER_DROP, tunnelNear, borderNear, REGION, T_HALF, T_RIDGE, RAISE, ridgeHr, tubeHalf } from './path.js';
+import { zoneMix, zoneW, zoneAt, zparam, groundOffsetMix, regionWeight, SEA, WALL_U, crossingS, crossingValid, crossingNear, XING, XOFF, riverS, riverValid, riverNear, riverBank, RIV, ROFF, RIVER_DROP, tunnelNear, borderNear, REGION, T_HALF, T_RIDGE, RAISE, ridgeHr, tubeHalf } from './path.js';
 import { xingPosts } from './crossing.js';
 import { GB } from './geom.js';
 import * as P from './props.js';
@@ -16,7 +16,7 @@ const POLE_SP = 32;
 // the coast's water along its sea wall (placeCoast): how far out from the wall each column of the strip lies (m)
 const SHORE_D = [-0.2, 2.2, 5.5, 10, 17, 27, 38];
 const WIRE = [0.025, 0.026, 0.032], BIRD = [0.05, 0.05, 0.065];
-const IDENT = new THREE.Matrix4();
+const IDENT = new THREE.Matrix4(), _sc = new THREE.Matrix4();
 const mod = (a, n) => ((a % n) + n) % n;
 /** true within m metres of a level crossing (keeps the track corridor clear) */
 const nearX = (s, m) => { const c = crossingNear(s); return !!c && Math.abs(s - c.s) < m; };
@@ -37,6 +37,13 @@ const nearT = (s, m) => { const t = tunnelNear(s); return !!t && Math.abs(s - t.
 const nearB = (s, m) => { const b = borderNear(s); return !!b && Math.abs(s - b.s) < m; };
 /** a zone weight's sum for the ground's coast channel: the coast's or the Bosphorus's (they never meet; materials.js Z_BOS) */
 const wSea = w => w.coast + w.bosphorus;
+/** the Bosphorus's verge: its long grass a paler, yellower green than the coast's, as the concept's (it was CIELAB ΔE 16
+ *  from it): the clumps' vertex colours (props.js bank) */
+const BOS_VERGE = [1.0, 0.8, 0.86];
+/** the Bosphorus's painted house types by a random number: o1, o2, o5 (brown, grey and honey boards) twice as often as o3,
+ *  o4, o6 (cream boards, cream plaster, ochre plaster), as the concept's (props.js TR_HOUSES: in packtr.py's order) */
+const TR_W = [2, 2, 1, 1, 2, 1], TR_WS = TR_W.reduce((a, b) => a + b, 0);
+const trPick = x => { let k = x * TR_WS; for (let i = 0; i < TR_W.length; i++) { k -= TR_W[i]; if (k < 0) return i; } return TR_W.length - 1; };
 /** true within m metres of a river (keeps houses, poles and trees out of the channel) */
 const nearR = (s, m) => { const r = riverNear(s); return !!r && Math.abs(s - r.s) < m; };
 
@@ -88,7 +95,7 @@ export class World {
     this.path = path; this.M = M; this.riverMat = riverMat; this.heapCache = new Map(); // (M.shore, M.surf: the coast's water along its wall, and its surf)
     this.group = new THREE.Group(); scene.add(this.group);
     this.chunks = new Map(); this.origin = { x: 0, z: 0 }; this.reveal = [];
-    this.ahead = 760; this.behind = 40;
+    this.ahead = 760; this.behind = 40; this.trReady = true;
   }
   setOrigin(x, z) {
     this.origin.x = x; this.origin.z = z;
@@ -106,6 +113,7 @@ export class World {
         let next = -1;
         for (let c = Math.max(0, c0); c <= c1; c++) if (!this.chunks.has(c)) { next = c; break; }
         if (next < 0) return 0;
+        if (!this.trReady && this.needsTR(next)) return 1; // (Turkey's assets and programs aren't in yet: main.js trLazy)
         if (next * CH - s < 320) budgetMs = Math.max(budgetMs, 12); // falling behind: catch up
         this.job = { c: next, it: this.gen(next) };
       }
@@ -116,6 +124,11 @@ export class World {
       }
       if (performance.now() - t0 > budgetMs) return 1;
     }
+  }
+  /** whether chunk c holds any of Turkey (or of a border tunnel's surroundings: their ground variants are Turkey's programs) */
+  needsTR(c) {
+    for (const s of [c * CH, c * CH + CH]) { if (regionWeight(s, 'tr') > 0) return true; const b = borderNear(s); if (b && Math.abs(s - b.s) < 2 * T_RIDGE + 2 * CH) return true; }
+    return false;
   }
   dispose(ch) {
     this.group.remove(ch.group); ch.group.traverse(o => { if (o.geometry) o.geometry.dispose(); });
@@ -668,9 +681,10 @@ export class World {
         if (sd < 0) c.quad([xp, oy1, oz1], [xp, oy0, oz0], [xo, oy0, oz0], [xo, oy1, oz1], RING); else c.quad([xp, oy0, oz0], [xp, oy1, oz1], [xo, oy1, oz1], [xo, oy0, oz0], RING);
       }
       for (const zz of [-1, 1]) c.box(Math.min(xp, xo), 0.2, zz > 0 ? WT : -WT * 1.12, Math.max(xp, xo), 3.2, zz > 0 ? WT * 1.12 : -WT, RING); // its legs down to the walkway
-      if (t.border && REGION[zoneAt(sp)] !== 'jp') continue; // (the plate's name is Japanese: none on the Turkish mouth yet)
       G.atlas.setM(M);
-      const pw = 1.9, py0 = 7.05, py1 = 7.85, xq = xp + sd * 0.03, cell = P.uvOf('tunnel' + (w.coast > 0.5 ? 1 : Math.abs(t.k) % 2 ? 2 : 0));
+      // (on a border tunnel's Turkish mouth, Turkey's plate: the world atlas's cell, by which border it is)
+      const trM = t.border && REGION[zoneAt(sp)] !== 'jp'; if (trM) G.atlas.world = true;
+      const pw = 1.9, py0 = 7.05, py1 = 7.85, xq = xp + sd * 0.03, cell = P.uvOf(trM ? 'trTunnel' + (REGION[t.b] === 'tr' ? 0 : 1) : 'tunnel' + (w.coast > 0.5 ? 1 : Math.abs(t.k) % 2 ? 2 : 0));
       if (sd < 0) G.atlas.quad([xq, py0, -pw], [xq, py0, pw], [xq, py1, pw], [xq, py1, -pw], [1, 1, 1], cell);
       else G.atlas.quad([xq, py0, pw], [xq, py0, -pw], [xq, py1, -pw], [xq, py1, pw], [1, 1, 1], cell);
     }
@@ -1139,44 +1153,80 @@ export class World {
       if (!ok(s) || !offPole(s, 0.9)) continue;
       path.at(s, f); const rw = rwAt(s), u = rw + 0.75 + (br() - 0.5) * 0.3, y = f.y + groundOffsetMix(s, u, f.y, rw);
       const a = (br() - 0.5) * 0.8, ca = Math.cos(a), sa = Math.sin(a);
-      P.bank(G, f.x + f.rx * u - ox, y, f.z + f.rz * u - oz, f.rx * ca + f.fx * sa, f.rz * ca + f.fz * sa, br, br.range(0.6, 0.8), 'bankC');
+      P.bank(G, f.x + f.rx * u - ox, y, f.z + f.rz * u - oz, f.rx * ca + f.fx * sa, f.rz * ca + f.fz * sa, br, br.range(0.6, 0.8), 'bankC', BOS_VERGE);
     }
-    for (let s = s0 + br() * 6; s < s1; s += br.range(4.5, 9)) {
+    for (let s = s0 + br() * 4; s < s1; s += br.range(2.6, 6)) { // (as the concept's: bushes in white flower all along it)
       if (!ok(s) || !offPole(s, 1.4)) continue;
-      const m = onGround(s, rwAt(s) + br.range(0.75, 1.15), 0, br() * 6.28, false);
-      if (br() < 0.75) P.flowerBush(G, m, br, br.range(0.95, 1.3)); else P.bush(G, m, br, br.range(0.45, 0.6));
+      const m = onGround(s, rwAt(s) + br.range(0.75, 1.25), 0, br() * 6.28, false);
+      if (br() < 0.8) P.flowerBush(G, m, br, br.range(0.95, 1.35)); else P.bush(G, m, br, br.range(0.45, 0.6));
     }
     yield;
-    // the houses: a row behind the gardens' railings, then rows up the slope, each house its own width, wood and plaster;
-    // gardens with a round tree or a cypress between them now and then. Each stays inside its chunk (no overlaps)
-    // (u0, its spread, the share of gardens, the chance of a third floor)
-    // (on phones, P.bankStep() > 1: the upper rows mostly gardens and fewer trees between the houses — the houses, their
-    // shadows and the crowns cost ~2.7 ms a frame more than the coast there, per draw over drives)
-    const ROWS = [[7.8, 1.6, 0.25, 0.45], [19.5, 3, 0.3, 0.5], [32.5, 4, 0.4, 0.4], [47, 6, 0.5, 0.25]], lite = P.bankStep() > 1;
+    // the village climbing the hill on its terraces (path.js HILL), a row of houses on each, as the concept's: the painted
+    // Ottoman houses (props.js trHouse) with their gable ends to the lane, each turned 34–57° back towards the drive so its
+    // gable end shows nearly face on and its long side beside it, as painted; or, if their paintings failed, the
+    // procedural ones (ottomanHouse) in the same places. Round trees and cypresses in the gardens between them, on the green
+    // banks between the terraces and over the hill's top. Each house stays inside its chunk (no overlaps)
+    // (the front of the row's houses: its nearest u, how far it wanders back, the share of gardens; on phones,
+    // P.bankStep() > 1: the upper rows more gardens and fewer trees)
+    const TRH = P.TR_HOUSES.types, lite = P.bankStep() > 1, VX = P.TR_HOUSES.extras, VC = ['trV1', 'trV2', 'trV3'].filter(n => VX[n]);
+    // (the third terrace's houses only without the painted village strips: they stand there instead, below)
+    const ROWS = VC.length ? [[11, 2, 0.12], [29.5, 2, 0.15]] : [[11, 2, 0.12], [29.5, 2, 0.15], [71, 2, 0.2], [88, 2.5, 0.3]];
     let nh = 0;
-    for (const [u0, du, gap, p3] of ROWS) {
-      for (let s = s0 + 0.3 + br() * 2; s < s1 - 6;) {
-        const w = br.range(6.5, 9.5), rw = rwAt(s), u = rw + u0 + br() * du;
-        if (s + w > s1 - 0.3) break;
-        if (!ok(s, 12) || !ok(s + w, 12) || br() < gap + (lite && u0 > 25 ? 0.3 : 0)) { // a garden: a round tree, or a cypress
-          const t = br();
-          if (ok(s + w / 2, 12)) P.tree(G, onGround(s + w / 2, u + br.range(1, 5), 0, br() * 6), t < 0.55 ? 'broad' : 'cypress', br, br.range(0.85, 1.2));
-          s += w * 0.8; continue;
+    for (const [u0, du, gap] of ROWS) {
+      let sFree = s0 + 0.3 + br() * 2; // (the row is taken up to here)
+      for (;;) {
+        // (the weathered brown and grey boards twice as often as the cream and ochre paint and plaster, as the concept's)
+        const T = TRH ? TRH[Math.min(trPick(br()), TRH.length - 1)] : null, a = br.range(0.6, 1.0), sc = br.range(0.94, 1.06);
+        const w = (T ? T.ww : br.range(6, 7.5)) * sc, d = (T ? T.wd : br.range(7.5, 9)) * sc, j = (T ? T.j : 1.2) * sc, ca = Math.cos(a), sa = Math.sin(a);
+        // its footprint along the road (the house turned by a: local x runs along the road turned towards it, z up the hill
+        // turned forward) and across it, from its front's middle
+        const sMin = -(w / 2 + 0.4) * ca - j * sa, sMax = (w / 2 + 0.4) * ca + d * sa, uMin = -(w / 2 + 0.4) * sa - j * ca;
+        const s = sFree + br.range(0.3, 2.2) - sMin;
+        if (s + sMax > s1 - 0.3) break;
+        sFree = s + sMax;
+        const rw = rwAt(s), u = u0 - uMin + br() * du; // (its nearest corner at u0 … u0 + du from the road's middle)
+        if (!ok(s + sMin, 12) || !ok(s + sMax, 12)) continue;
+        if (br() < gap + (lite && u0 > 25 ? 0.3 : 0)) { // a garden: a round tree, or a cypress
+          P.tree(G, onGround(s, u + br.range(1, 5), 0, br() * 6), br() < 0.5 ? 'broad' : 'cypress', br, br.range(0.85, 1.2));
+          continue;
         }
-        const floors = br() < p3 ? 3 : 2, wood = Math.floor(br() * 4), plaster = Math.floor(br() * 3), pastel = br() < 0.25 ? Math.floor(br() * 4) : -1;
-        P.ottomanHouse(G, onGround(s + w / 2, u, 0), br, { w, d: br.range(7.5, 9.5), floors, wood, plaster, stone: br() < 0.45, pastel, cumba: br() < 0.6, gable: br() < 0.4, litP: 0.5, flag: u0 < 10 && br() < 0.12 });
-        if (u0 < 10 && br() < 0.45) { const m = onGround(s + br.range(1, w - 1), rw + br.range(5.3, 6.6), 0, br() * 6.28, false); if (br() < 0.6) P.flowerBush(G, m, br, br.range(0.8, 1.1)); else P.bush(G, m, br, br.range(0.5, 0.7)); } // (the front garden)
-        if (br() < (lite ? 0.3 : 0.55)) P.tree(G, onGround(s + w + 0.8, u + br.range(1, 6), 0, br() * 6), br() < 0.35 ? 'cypress' : 'broad', br, br.range(0.8, 1.2)); // (round trees and cypresses between the houses, as the concept's)
-        s += w + br.range(1.0, 3.5);
+        const M = onGround(s, u, -0.1, a);
+        if (T) { if (sc !== 1) M.multiply(_sc.makeScale(sc, sc, sc)); P.trHouse(G, M, br, T); }
+        else P.ottomanHouse(G, M, br, { w, d, floors: br() < 0.3 ? 3 : 2, wood: Math.floor(br() * 4), plaster: Math.floor(br() * 3), stone: br() < 0.5, pastel: br() < 0.2 ? Math.floor(br() * 4) : -1, cumba: br() < 0.6, gable: true, litP: 0.5, flag: u0 < 20 && br() < 0.1 });
+        // the front garden (the first row's): bushes, in flower or plain, between the railings and the house
+        if (u0 < 20) for (let k = br() < 0.5 ? 1 : 2; k > 0; k--) { const m = onGround(s + br.range(-3, 3), br.range(9.2, u + uMin - 0.8), 0, br() * 6.28, false); if (br() < 0.55) P.flowerBush(G, m, br, br.range(0.8, 1.2)); else P.bush(G, m, br, br.range(0.5, 0.8)); }
+        // a round tree or a cypress beside it, as the concept's between the houses
+        if (br() < (lite ? 0.3 : 0.5)) P.tree(G, onGround(s + sMax + 0.6, u + br.range(2, 8), 0, br() * 6), br() < 0.45 ? 'cypress' : 'broad', br, br.range(0.8, 1.15));
         if (++nh % 2 === 0) yield; // (two houses a step: a row at once made long world-build steps on phones)
       }
       yield;
     }
-    // the hill's top beyond the houses: round trees and cypresses (half of each: the painted crowns are the dearer, ~1.6 ms
-    // a frame more than the coast's on desktops with three in four of them round)
-    for (let s = s0 + br() * 8; s < s1; s += br.range(7, 13)) {
-      if (!ok(s, 12)) continue;
-      P.tree(G, onGround(s, rwAt(s) + br.range(62, 110), -0.3, br() * 6, false), br() < 0.5 ? 'broad' : 'cypress', br, br.range(1.0, 1.4));
+    // the village higher up the hill, as the concept paints it (the painted strips: props.js trVillage), on the third terrace:
+    // big cards, each turned 24–33° from along the road towards the drive (its left end, as seen from the road, ahead and
+    // lower down, its right end behind and up the hill, as the paintings rise), overlapping, one every ~58 m
+    if (VC.length) {
+      const SP = 58;
+      for (let k = Math.ceil((s0 - 10 - 7) / SP); k * SP + 10 - 7 < s1; k++) {
+        const sc = k * SP + 10 + (hash2(k, 6151) - 0.5) * 14; if (sc < s0 || sc >= s1 || !ok(sc, 45)) continue;
+        const cell = VC[Math.floor(hash2(k, 6153) * VC.length)], info = VX[cell], W = info.w * (0.92 + 0.16 * hash2(k, 6157)), Hh = (info.h * W) / info.w;
+        const a = 0.42 + 0.16 * hash2(k, 6159), uc = 81 + (hash2(k, 6163) - 0.5) * 6, ca = Math.cos(a), sa = Math.sin(a);
+        const sL = sc + (W / 2) * ca, uL = uc - (W / 2) * sa, sR = sc - (W / 2) * ca, uR = uc + (W / 2) * sa;
+        const y = onGround(sL, uL).groundY - 2.5; // (its foot a little into the terrace)
+        P.trVillage(G, world(sL, uL, y), world(sR, uR, y), Hh, cell);
+      }
+    }
+    // the green banks between the terraces: round trees and cypresses (and over the hill's top, without the village strips).
+    // On the first bank, under the second row, few and small: tall crowns there hid the row above and the strips; on the
+    // second, below the strips, fewer and smaller, mostly round
+    for (const [ua, ub, step, pb, sc0, sc1] of [[23.5, 28.5, 26, 0.5, 0.7, 0.95], VC.length ? [45.5, 58, 24, 0.8, 0.75, 1.0] : [45.5, 68, 11, 0.5, 1.0, 1.35], ...(VC.length ? [] : [[105, 160, 9, 0.5, 1.0, 1.35]])]) {
+      for (let s = s0 + br() * step; s < s1; s += br.range(0.7, 1.3) * step) {
+        if (!ok(s, 12) || (lite && br() < 0.4)) continue;
+        P.tree(G, onGround(s, br.range(ua, ub), -0.3, br() * 6, false), br() < pb ? 'broad' : 'cypress', br, br.range(sc0, sc1));
+      }
+    }
+    for (let s = s0 + br() * 3; s < s1; s += br.range(2, 4.5)) { // (bushes on the steep bank under the second row, as the concept's green between its rows)
+      if (!ok(s, 12) || (lite && br() < 0.4)) continue;
+      const m = onGround(s, br.range(23.2, 28.8), -0.15, br() * 6.28, false); if (br() < 0.3) P.flowerBush(G, m, br, br.range(0.9, 1.3)); else P.bush(G, m, br, br.range(0.7, 1.1));
     }
     yield;
     // lamps along the pavement; the flag on its pole; the speed limit and the next places' sign (traffic keeps right: on the right)
@@ -1184,8 +1234,7 @@ export class World {
     { const sf = Math.floor((s0 + CH / 2) / 360) * 360 + 140; if (sf >= s0 && sf < s1 && ok(sf, 10) && offPole(sf, 3)) P.flagPole(G, onGround(sf, rwAt(sf) + 3.4), 9.5); }
     { const sl = Math.floor((s0 + CH / 2) / 420) * 420 + 60; if (sl >= s0 && sl < s1 && ok(sl, 10) && offPole(sl, 2)) P.trSign(G, matAt(sl, rwAt(sl) + 1.9, road(sl) + 0.12), 'trSign50', 2.2, 0.62, 0.62); }
     { const sd = Math.floor((s0 + CH / 2) / 1500) * 1500 + 330; if (sd >= s0 && sd < s1 && ok(sd, 10) && offPole(sd, 3)) P.trSign(G, matAt(sd, rwAt(sd) + 2.2, road(sd) + 0.12), 'trSignDir', 2.9, 2.2, 1.1); }
-    // out on the strait: a city ferry now and then, small boats
-    if (hash2(c, 6131) < 0.14 && ok(s0 + 30, 20)) { const s = s0 + 30; P.ferry(G, matAt(s, -(rwAt(s) + br.range(140, 360)), SEA - 0.3, br() < 0.5 ? 0 : Math.PI, false), br); }
+    // out on the strait: small fishing boats (the city ferries move: ferry.js)
     if (br() < 0.3 && ok(s0 + 20, 20)) { const s = s0 + br() * CH; P.boat(G, matAt(s, -(rwAt(s) + br.range(40, 160)), SEA - 0.25, br() * 6, false), br); }
   }
   /** the Bosphorus's iron railing along the sea wall's top: square posts every 2 m, a top rail and a middle rail (thin boxes

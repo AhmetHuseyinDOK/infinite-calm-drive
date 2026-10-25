@@ -55,6 +55,12 @@ export const SEA_U = {
   // wall); and (a test switch) whether the strip draws them and their foam
   uPWBack: { value: new THREE.Color() }, uPWFace: { value: new THREE.Color() }, uPWLite: { value: new THREE.Color() }, uPWTurq: { value: new THREE.Color() },
   uShoreW: { value: 1 },
+  // the Bosphorus (W2): its strait calm along the wall, as its concept painting has it (no rows of breaking waves: the open
+  // sea's own painted wavelets and glints right up to the stones). Turkey's weight (makeSea's update: bos); 0 in Japan
+  uCalm: { value: 0 },
+  // a city ferry out on the Bosphorus (ferry.js): its bow (x, z: absolute world), its heading, how much of its wake (0: none,
+  // in Japan); its length, beam, speed
+  uFerry: { value: new THREE.Vector4(0, 0, 0, 0) }, uFerryB: { value: new THREE.Vector4(47, 9.2, 6, 0) },
   // the low sun's (or the moon's) path on the painted water: its tones, where the light is, and how strong (0: none)
   uPPath: { value: new THREE.Color() }, uPGlint: { value: new THREE.Color() }, uPathDir: { value: new THREE.Vector3(0, 1, 0) }, uPathK: { value: 0 },
   uPSpark: { value: new THREE.Color(1, 1, 1) }, // (the open sea's glints: by day the foam's white)
@@ -102,20 +108,27 @@ const SEA_TONES = todTones([
   [0.3, PAINT], [0.62, PAINT], [0.7, PAINT_GOLD], [0.75, PAINT_SUNSET], [0.765, { ...mixTones(PAINT_SUNSET, PAINT_NIGHT, 0.25), pk: [0, 0, 0] }],
   [0.8, { ...mixTones(PAINT_SUNSET, PAINT_NIGHT, 0.55), pk: [0, 0, 0] }], [0.86, PAINT_NIGHT], [1.0, PAINT_NIGHT],
 ]);
-// the Bosphorus (W2): its concept painting's strait (ref/world/istanbul_bosphorus.png, measured as the coast's tones: by
+// the Bosphorus (W1): its concept painting's strait (ref/world/istanbul_bosphorus.png, measured as the coast's tones: by
 // distance band and lightness percentile, ~/cdtest/w1): a deeper, darker teal-navy than the coast painting's azure, paling
-// to a soft blue at the far shore. The other hours keep the coast's tones (no repaints of the strait yet). Blended in by
-// Turkey's weight (makeSea's update: bos), so Japan's sea is as it was
+// to a soft blue at the far shore. Blended in by Turkey's weight (makeSea's update: bos), so Japan's sea is as it was
 const PAINT_BOS = { ...PAINT,
   trough: [28, 90, 132], mid: [40, 109, 150], face: [56, 121, 161], lite: [136, 180, 206],
   midD: [27, 93, 134], midM: [41, 123, 173], midF: [46, 129, 181], midL: [62, 141, 190],
   farD: [34, 82, 116], far: [60, 147, 200], farF: [96, 160, 205], farL: [129, 185, 222], hz: [101, 163, 200],
   wBack: [20, 80, 125], wFace: [60, 128, 168], wLite: [110, 165, 200], wTurq: [45, 120, 150],
 };
+// …and its own at golden hour, sunset and night (W2), read from the concept painting repainted at those hours (Grok Imagine:
+// ref/tod/bosphorus_*.png; ~/cdtest/w2/tools/bossea.py: each tone by its band of the strait and lightness percentile, the sun's
+// or the moon's path from the lightest in its column): a mauve-grey strait with a golden path at golden hour, violet water
+// under an orange path at sunset, a navy one with the moon's silver path at night. The foam and the waves' tones keep the
+// coast's (the strait is calm)
+const BOS_GOLD = { ...PAINT_GOLD, trough: [68, 62, 66], mid: [76, 79, 94], face: [85, 88, 103], lite: [88, 91, 106], midD: [82, 84, 97], midM: [94, 95, 108], midF: [140, 124, 121], midL: [189, 160, 143], farD: [118, 103, 108], far: [130, 110, 112], farF: [150, 128, 125], farL: [202, 172, 154], hz: [174, 132, 115], path: [233, 180, 126], glint: [252, 234, 158] };
+const BOS_SUNSET = { ...PAINT_SUNSET, trough: [34, 45, 71], mid: [54, 58, 90], face: [64, 64, 97], lite: [66, 66, 99], midD: [53, 50, 78], midM: [69, 61, 92], midF: [97, 68, 89], midL: [118, 75, 93], farD: [97, 72, 101], far: [113, 74, 101], farF: [126, 77, 101], farL: [131, 80, 104], hz: [144, 81, 98], path: [244, 174, 117], glint: [255, 219, 141] };
+const BOS_NIGHT = { ...PAINT_NIGHT, trough: [9, 30, 54], mid: [14, 40, 67], face: [19, 46, 75], lite: [21, 48, 77], midD: [14, 39, 65], midM: [24, 49, 77], midF: [49, 72, 99], midL: [80, 109, 138], farD: [21, 49, 82], far: [24, 54, 88], farF: [28, 57, 91], farL: [32, 62, 97], hz: [34, 64, 100], path: [172, 196, 218], glint: [218, 242, 251] };
 const BOS_TONES = todTones([
-  [0.0, PAINT_NIGHT], [0.2, { ...mixTones(PAINT_NIGHT, PAINT_SUNSET, 0.25), pk: [0, 0, 0] }], [0.245, mixTones(PAINT_SUNSET, PAINT_GOLD, 0.35)],
-  [0.3, PAINT_BOS], [0.62, PAINT_BOS], [0.7, PAINT_GOLD], [0.75, PAINT_SUNSET], [0.765, { ...mixTones(PAINT_SUNSET, PAINT_NIGHT, 0.25), pk: [0, 0, 0] }],
-  [0.8, { ...mixTones(PAINT_SUNSET, PAINT_NIGHT, 0.55), pk: [0, 0, 0] }], [0.86, PAINT_NIGHT], [1.0, PAINT_NIGHT],
+  [0.0, BOS_NIGHT], [0.2, { ...mixTones(BOS_NIGHT, BOS_SUNSET, 0.25), pk: [0, 0, 0] }], [0.245, mixTones(BOS_SUNSET, BOS_GOLD, 0.35)],
+  [0.3, PAINT_BOS], [0.62, PAINT_BOS], [0.7, BOS_GOLD], [0.75, BOS_SUNSET], [0.765, { ...mixTones(BOS_SUNSET, BOS_NIGHT, 0.25), pk: [0, 0, 0] }],
+  [0.8, { ...mixTones(BOS_SUNSET, BOS_NIGHT, 0.55), pk: [0, 0, 0] }], [0.86, BOS_NIGHT], [1.0, BOS_NIGHT],
 ]);
 const _c2 = new THREE.Color();
 /** tone n of the coast's palette P, or as much of the Bosphorus's Q as k, ungraded into out */
@@ -124,9 +137,29 @@ const tn = (P, Q, k, g, n, out) => { P.ug(g, n, out); if (k > 0) out.lerp(Q.ug(g
 const SEA_PARS = /* glsl */`
 uniform float uTime, uNight, uFogD, uVis, uSpecK, uBright, uPaint, uWaves, uPathK; uniform vec3 uCam, uSunDir, uSunCol, uHorizon, uZenith, uFog;
 uniform vec3 uPTrough, uPMid, uPFace, uPLite, uPMidD, uPMidM, uPMidF, uPMidL, uPFarD, uPFar, uPFarF, uPFarL, uPHz, uFoamLit, uFoamShade, uPPath, uPGlint, uPathDir, uPSpark;
-uniform vec2 uOrigin, uSeaDir;
+uniform vec2 uOrigin, uSeaDir; uniform vec4 uFerry, uFerryB;
 ${GLSL_NOISE}${NOISE4}
 vec4 vnoise4g(vec2 p, vec2 gx, vec2 gy){ vec2 i = floor(p), f = fract(p); vec2 w = f*f*(3.0-2.0*f); return textureGrad(uNoiseTex, (i + w + 0.5) / 256.0, gx / 256.0, gy / 256.0); }
+// a ferry's wake (ferry.js; the Bosphorus), as the concept paints it: white water cushioned at its bow and thrown off along
+// its hull, a churned trail behind its stern widening and breaking up, the two arms of its V (Kelvin's 19.5°) spreading
+// out behind it in streaks, all fading behind it. p: the sea's point (absolute), px / py: p's footprint on screen (the noise
+// is read with explicit gradients: this runs only near the ferry)
+float ferryWake(vec2 p, vec2 px, vec2 py){
+  vec2 q = p - uFerry.xy, d = vec2(sin(uFerry.z), cos(uFerry.z)), e = vec2(d.y, -d.x);
+  float t = -dot(q, d), sd = abs(dot(q, e)), L = uFerryB.x, B = uFerryB.y * 0.5;   // (t: behind its bow; sd: off its keel line)
+  if (t < -3.0 || t > 300.0 || sd > B + 3.0 + t * 0.4) return 0.0;
+  vec2 a1 = d * -0.21, a2 = e * 0.55;
+  vec4 n4 = vnoise4g(vec2(dot(q, a1) - uTime * 1.1, dot(q, a2)), vec2(dot(px, a1), dot(px, a2)), vec2(dot(py, a1), dot(py, a2)));
+  // (the bow wave: thrown out wide from the bow, a band of white along the hull behind it)
+  float bw = mix(B + 3.4 + t * 0.22, B + 1.4 + t * 0.06, smoothstep(6.0, 20.0, t));
+  float hull = (1.0 - smoothstep(bw - 1.2, bw + 0.4, sd)) * smoothstep(-2.5, 0.5, t) * (1.0 - smoothstep(L * 0.55, L + 8.0, t));
+  hull *= mix(1.0, smoothstep(0.3, 0.6, n4.x), smoothstep(4.0, 22.0, t));
+  float tr = t - L, trail = step(0.0, tr) * (1.0 - smoothstep(B * 0.8 + tr * 0.05, B * 1.15 + tr * 0.09, sd)) * (1.0 - smoothstep(25.0, 230.0, tr));
+  trail *= smoothstep(0.62 - 0.4 * (1.0 - smoothstep(0.0, 70.0, tr)), 0.82, n4.x * 0.55 + n4.y * 0.45);
+  float arm = abs(sd - t * 0.354), aw = 0.8 + t * 0.012;
+  float vee = (1.0 - smoothstep(aw * 0.35, aw, arm)) * smoothstep(3.0, 12.0, t) * (1.0 - smoothstep(60.0, 290.0, t)) * smoothstep(0.36, 0.6, n4.z);
+  return clamp(max(max(hull, trail), vee * 0.85), 0.0, 1.0);
+}
 float wh(vec2 p){ return vnoise(p * 0.18 + vec2(uTime * 0.05, uTime * 0.03)) * 0.6 + vnoise(p * 0.55 - vec2(uTime * 0.09, -uTime * 0.04)) * 0.4; }
 // ---- the painted waves (a bright day), in the reference art's manner: a field of wavelets drawn as horizontal lenses of
 // deep blue (their faces turned towards us, which mirror the deep sky overhead), light streaks along their backs (which
@@ -225,6 +258,11 @@ vec3 seaColour(vec3 w){
     pc = mix(pc, uPHz, smoothstep(1500.0, 4000.0, dist) * 0.7);
     col = mix(col, pc, uPaint);
   }
+  if (uFerry.w > 0.001) { // (a ferry's wake: the Bosphorus only)
+    vec2 px = dFdx(p), py = dFdy(p);
+    float fw = ferryWake(p, px, py);
+    if (fw > 0.0) col = mix(col, uFoamLit, fw * uFerry.w * (1.0 - smoothstep(450.0, 950.0, dist)));
+  }
   return col;
 }`;
 
@@ -248,6 +286,7 @@ export function makeSea(lite = false) {
     update(cam, time, fogD, vis = 1, grade = null, path = null, s = 0, bos = 0) {
       mesh.position.x = cam.x; mesh.position.z = cam.z;
       if (path && vis > 0) coastDir(path, s, u.uSeaDir.value);
+      u.uCalm.value = bos; // (the strait's water along the wall: calm)
       u.uTime.value = time; u.uCam.value.copy(cam); u.uNight.value = TOD.night; u.uBright.value = TOD.bright; u.uFogD.value = fogD; u.uVis.value = vis; u.uSpecK.value = 1 - TOD.overcast * 0.85;
       // the painted look under a clear sky, at any hour (its tones by the time of day); grey skies and rain keep the old look
       const paint = grade ? paintSky() : 0;
@@ -330,7 +369,7 @@ export function shoreMaterial(lite = false) {
     vertexShader: 'attribute vec2 su; attribute vec2 hf; varying vec2 vSU; varying vec2 vHF; varying vec3 vW; void main(){ vSU = su; vHF = hf; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
     fragmentShader: /* glsl */`
       ${SEA_PARS}${SHORE_PHASE}
-      uniform vec3 uPWBack, uPWFace, uPWLite, uPWTurq; uniform float uShoreW;
+      uniform vec3 uPWBack, uPWFace, uPWLite, uPWTurq; uniform float uShoreW, uCalm;
       varying vec2 vSU; varying vec2 vHF; varying vec3 vW;
       vec4 vnoise4L(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 w = f*f*(3.0-2.0*f); return textureLod(uNoiseTex, (i + w + 0.5) / 256.0, 0.0); }
       // a wave's profile as the painting draws it, by e (from its line of foam, in waves; > 0 beyond it): the water just
@@ -340,7 +379,7 @@ export function shoreMaterial(lite = false) {
       void main(){
         vec3 sea = seaColour(vW), col = sea;
         float s = vSU.x, d = max(vSU.y, 0.0), dist = length(uCam - vW);
-        if (uShoreW > 0.5) {
+        if (uShoreW > 0.5 && uCalm < 0.999) { // (the Bosphorus: calm, the open sea's colour only)
           // the waves' frame (m): a along their crests (out from the wall), b square to them (away from us, out to sea)
           float a = d * ${g7(CT)} - s * ${g7(ST)}, b = s * ${g7(CT)} + d * ${g7(ST)};
           vec4 nA = vnoise4(vec2(s * 0.0609524, d * 0.12 + uTime * 0.01));
@@ -414,7 +453,7 @@ export function shoreMaterial(lite = false) {
           }
           foam = mix(foam, mix(uFoamShade, uFoamLit, cl), crest);
           // it all fades out with the sea's fog, towards the end of the built world and towards the strip's ends
-          float fd = dist * uFogD, k = exp(-fd * fd) * (1.0 - smoothstep(420.0, 700.0, dist)) * vHF.y;
+          float fd = dist * uFogD, k = exp(-fd * fd) * (1.0 - smoothstep(420.0, 700.0, dist)) * vHF.y * (1.0 - uCalm);
           col = mix(mix(sea, col, k), foam, max(la, crest) * k);
         }
         gl_FragColor = vec4(mix(uFog, col, uVis), 1.0);

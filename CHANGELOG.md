@@ -2,6 +2,57 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-26 · 02:xx — World 2: Istanbul's Bosphorus as its concept painting has it
+- **A village of wooden houses climbing the hill**, as in the concept (ref/world/istanbul_bosphorus.png): Ottoman houses with
+  their gable ends to the lane, the upper floor jutting out on brackets over a stone or plastered ground floor, weathered
+  brown and grey boards, cream and ochre plaster, terracotta roofs. Six types, each painted with Grok Imagine as two flat
+  elevations (its gable end, its long side) anchored on the concept's own houses, each turned back towards the drive so its
+  gable end shows nearly face on, as painted. They stand on terraces up the hill behind gardens in flower: the front row
+  behind the railings, a steep green bank, the second row 10 m higher. Higher up the village goes on as the concept paints
+  it, rows of small houses stacked among cypresses and round trees (Grok repaints of its own hillside, as big flat painted
+  cards). They were big procedural boxes lined up along the pavement. Against the concept: the houses' upper floors
+  ΔE 14.7 → 8.8, roofs 19.4 → 7.2, the hillside village 2.7.
+- **The strait is calm along the wall**, its painted wavelets and glints right up to the stones (the coast's rows of
+  breaking waves read wrong there): water by the wall ΔE 2.4 → 0.7.
+- **A city ferry crosses the strait**: a Şehir Hatları ferry, its side painted after the concept's, crossing or plying the
+  Bosphorus at 6 m/s, with white water at its bow and along its hull and the two arms of its wake painted into the sea. A
+  Turkish start finds it where the concept has it; then one at a time comes into view ahead. Its windows light up at dusk.
+- **A paler verge**: its long grass a yellower green, bushes in white flower all along it (ΔE 16.2 → 11.0).
+- **Istanbul's own evening and night**: the concept repainted at golden hour, sunset and night (Grok, ref/tod/bosphorus_*.png)
+  and the strait's tones read from them (a mauve-grey strait under a golden path, violet water under the orange one, navy
+  with the moon's silver path); its hill's grass and trees darker in the evening light; the Asian shore's houses, the
+  higher village's windows and the ferry lit at night.
+- **The Turkish tunnel mouths have their name plates**: Akıntıburnu Tüneli, Kuruçeşme Tüneli, white on Turkey's road-sign
+  blue.
+- **Japan no longer loads Turkey**: a start in Japan more than 3.2 km from the border downloads, paints and compiles none of
+  Turkey's horizon, houses, ferry or ground programs; they load in the background once the drive comes within 3.2 km of the
+  border (the downloads, one step of main-thread work a frame, the ground variants compiled off the main thread with
+  `compileAsync`). A Japanese start's first visit is 146 KB lighter on desktops (48 KB on phones) and quicker (desktop
+  medians 3.67 → 3.40 s over four interleaved loads each). Driving from the country through the border at 5× speed, the
+  three programs join ~3 km before the border and none compiles there; fewer frames over 20 ms than live (165 vs 189).
+- Japan is unchanged: on the desktop GTX, five of Japan's six seeded starts pixel-identical; the avenue's differs in
+  1,496 scattered pixels (its falling petals: seeded at load, before the first frame, and Turkey's band no longer loads
+  there); city drives' GPU the same.
+- How: props.js (trHouse, trVillage, TR_HOUSES; no Japanese plates on Turkey's poles; the bank's tint), chunks.js (the
+  terraced village, the strips, the verge; needsTR), path.js (HILL, nextBorderS), textures.js (the houses' rows in the world
+  atlas, trTunnelPlate), painted.js (loadTrHouseAtlas, a band's alias and lit zone), sea.js (uCalm, ferryWake, BOS_GOLD /
+  SUNSET / NIGHT), ferry.js (new), materials.js (setWorldTex, uFieldBo), main.js (Turkey's lazy load, the ferry, the
+  Bosphorus's evening tints).
+- Assets: assets/trhouses/trhouses1.json, trhouses1_hi.webp (209 KB), trhouses1_lo.webp (132 KB): WebP q50 from lossless
+  masters (~/cdtest/w2/masters; packtr.py). If they fail the Bosphorus keeps its procedural houses and box ferry.
+- Programs: a Turkish start 66 desktop / 65 phone (as before); a Japanese start 63 / 62, then 66 / 65 once Turkey is in.
+- Cost: the Bosphorus is cheaper to draw (fewer 3D houses and their shadows): over drives on the desktop GTX desktop
+  3.23 / 3.17 → 3.05 / 3.00 ms, phone 4.19 / 4.31 → 3.78 / 3.87; on the shared box's Vega desktop 21.52 / 21.32 / 21.55 →
+  18.10 / 18.31 / 17.57, phone 11.41 / 11.04 / 11.42 → 9.68 / 9.33 / 9.37. Japan's city the same (GTX 3.42 / 3.48 →
+  3.43 / 3.39; Vega within its noise). World build −22% (phone −27%). A Turkish start's first visit +231 KB desktop /
+  +156 KB phone: desktop ~0.1 s, a 3 Mbps phone ~0.5 s slower (7.20 / 7.03 → 7.52 / 7.65 s). 0 shader errors in all seven
+  zones on every tier; no console errors at q=low, mid and high; none compiled through sunset, night, rain, either border,
+  or a border reached after the lazy load; embed starts on tap. (The desktop machine crashed partway through the main
+  agent's checks; they were finished on this box.)
+- Left over: the higher village is painted cards (three, repeating every ~170 m); the first bank is plain grass; the verge
+  ΔE 11; a Turkish start's slow-phone first visit; the bridge's lights at night; the ferry's wake subtle far off; six house
+  types only.
+
 ## 2026-10-25 · 23:xx — World 1: beyond Japan, through the border tunnel to the Bosphorus
 - **The drive leaves Japan.** After the snow country the road runs into a long tunnel at the border (国境の長いトンネル,
   the other way round) and comes out on the Bosphorus at Arnavutköy, Istanbul: the first of the world's regions after

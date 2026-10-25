@@ -113,6 +113,14 @@ export function borderNear(s) {
   return memo(MEMO.b, k, () => ({ k: 10000 + k, s: k * ZONE_LEN - B_TRANS / 2, border: true, a, b }));
 }
 
+/** the middle of the first border tunnel whose tube ends at or after s (Infinity if the route has none) */
+export function nextBorderS(s) {
+  for (let k = Math.max(1, Math.ceil((s - T_HALF + B_TRANS / 2) / ZONE_LEN)), n = 0; n <= ZONES.length + 1; k++, n++) {
+    const b = borderNear(k * ZONE_LEN - B_TRANS / 2); if (b && b.s + T_HALF >= s) return b.s;
+  }
+  return Infinity;
+}
+
 // ---- railway level crossings (踏切): every XING metres, where the road runs through city or countryside
 export const XING = 650, XOFF = 375;
 export const crossingS = k => k * XING + XOFF;
@@ -229,6 +237,17 @@ export class Path {
   }
 }
 
+// the Bosphorus's hill above its pavement (m from the road's middle, height over the pavement): the front row's terrace (its
+// gardens and houses, 8–23 m), a steep bank, the second row's (29–45), a long bank, the third terrace (70–104: the village
+// higher up, chunks.js placeBosphorus), the wooded top. (Each row ~10 m over the one in front: its upper floors and roofs show
+// over that one's roofs from the road, the village stepping up the hill as the concept's)
+const HILL = [[8.3, 0], [11.5, 0.2], [14.5, 0.4], [18, 0.65], [23, 1.0], [29, 11.5], [36, 12.0], [45, 13.0], [56, 23.0], [70, 33.0], [86, 34.0], [104, 35.0], [124, 50], [140, 56], [160, 61], [185, 66], [215, 71]];
+/** the Bosphorus's hill: its height over the pavement at a (m from the road's middle) */
+export function hillH(a) {
+  if (a <= HILL[0][0]) return 0;
+  for (let i = 1; i < HILL.length; i++) if (a < HILL[i][0]) { const [a0, h0] = HILL[i - 1], [a1, h1] = HILL[i]; return h0 + ((h1 - h0) * (a - a0)) / (a1 - a0); }
+  return HILL[HILL.length - 1][1];
+}
 /** Height of the ground relative to the road surface at (s,u), per zone. u > 0 is the right-hand side. */
 export function groundOffset(zone, s, u, e, rw) {
   const a = Math.abs(u);
@@ -256,11 +275,10 @@ export function groundOffset(zone, s, u, e, rw) {
       if (u < 0) return groundOffset('coast', s, u, e, rw);
       if (a < rw + 1.6) return -0.06;
       if (a < rw + 5) return 0.12;
-      // (an even slope from the gardens up, ~0.8 m a metre: each row of houses stands 9–11 m over the one in front, its
-      // upper floors and roofs over the front row's, as the concept's climb the hill; even, so the ground's coarse far
-      // columns follow it)
-      const t = Math.min(a - rw - 5, 75), k = 0.85 + 0.15 * noise1(s / 150, 83);
-      return 0.12 + (t < 6 ? (t * t) / 12 : t - 3) * 0.8 * k + sstep(rw + 80, 220, a) * 14;
+      // (the village climbs the hill on terraces, as the concept's houses do: each row of houses on a gentle terrace, a steep
+      // green bank up to the next row 8–11 m higher, its upper floors and roofs over the front row's; the wooded top beyond.
+      // The knots stand on the ground's far columns (chunks.js FAR), so its coarse grid follows them)
+      return 0.12 + hillH(a) * (0.9 + 0.1 * noise1(s / 150, 83));
     }
     case 'mountain': {
       if (u > 0) { // uphill: gutter, then a concrete-framed slope face (法面), then the forest slope

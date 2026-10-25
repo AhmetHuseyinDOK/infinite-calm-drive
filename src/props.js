@@ -24,6 +24,8 @@ const AWN_REF = ['#c62f2a', '#2b46a6', '#7b3c9e', '#b8336f', '#a8282a', '#273b86
 let A = null;
 export function setAtlas(a) { A = a; }
 const uv = n => A.uv(n);
+/** a cell of the atlases (their one namespace): for the modules that draw painted pieces of their own (ferry.js) */
+export const atlasCell = n => A.uv(n);
 export const uvOf = uv;
 // a cell or one of its variants (base, base2, base3 …), with one random number when there are any (layouts stay as before)
 const pickV = (r, base) => { let n = 1; while (A.has(base + (n + 1))) n++; if (n === 1) return base; const k = Math.floor(r() * n); return k ? base + (k + 1) : base; };
@@ -70,8 +72,9 @@ export function utilityPole(G, M, r, opt = {}) {
   if (r() < 0.6) c.box(-0.17, 3.0, -0.3, 0.17, 3.5, -0.13, PAL.concrete);
   for (let y = 2.4, k = 0; y < H - 2; y += 0.45, k++) c.rod([0, y, 0], [k % 2 ? 0.3 : -0.3, y, 0], 0.015, 0.015, 3, PAL.metal);
   G.atlas.setM(M);
-  fq(G.atlas, -0.12, 0.12, 1.7, 2.45, -0.2, 'pole_plate');
-  if (r() < 0.4) fq(G.atlas, -0.14, 0.14, 2.6, 3.0, -0.2, 'poster' + Math.floor(r() * 4));
+  // (Japan's address plate and a festival poster; not on Turkey's poles: the same random numbers are drawn there)
+  if (!opt.tr) fq(G.atlas, -0.12, 0.12, 1.7, 2.45, -0.2, 'pole_plate');
+  if (r() < 0.4) { const k = Math.floor(r() * 4); if (!opt.tr) fq(G.atlas, -0.14, 0.14, 2.6, 3.0, -0.2, 'poster' + k); }
   const anchors = [...A1.map(z => [0, H - 0.4, z]), ...A2.map(z => [0, H - 1.52, z]), [0, 5.72, -0.3], [0, 5.72, 0.3]];
   return anchors.map(p => new THREE.Vector3(p[0], p[1], p[2]).applyMatrix4(M));
 }
@@ -278,11 +281,11 @@ const BANK_LO = [0.62, 0.68, 0.74]; // (the clump's own shade at its root: darke
 // low road end empty, and every fragment there would only be shaded and thrown away (5% fewer fragments than a quad)
 const BANK_HULL = [[0, 0], [1, 0], [1, 1], [0.36, 1], [0, 0.7]], BANK_TRI = [0, 1, 2, 0, 2, 3, 0, 3, 4];
 const BANK_COL = BANK_HULL.map(([, y]) => mixC(BANK_LO, W1, y));
-export function bank(G, px, py, pz, dx, dz, r, s = 1, cell = null) { // (base point, and the horizontal direction away from the road; cell: bankA, bankB, or bankC (the coast's, without flowers, which stands still in the breeze); else A or B at random)
+export function bank(G, px, py, pz, dx, dz, r, s = 1, cell = null, tint = null) { // (base point, and the horizontal direction away from the road; cell: bankA, bankB, or bankC (the coast's, without flowers, which stands still in the breeze); else A or B at random; tint: its vertex colours' multiplier (the Bosphorus's))
   const c = FOL[cell || (r() < 0.5 ? 'bankA' : 'bankB')], h = 0.82 * s, w = (h + 0.06) * 2.03, g = G.leaf;
   for (const k of BANK_TRI) {
-    const [x, y] = BANK_HULL[k], o = (x - 0.5) * w;
-    g.vtx(px + dx * o, py + y * (h + 0.06) - 0.06, pz + dz * o, 0, 1, 0, c.u0 + (c.u1 - c.u0) * x, c.v0 + (c.v1 - c.v0) * y, BANK_COL[k]);
+    const [x, y] = BANK_HULL[k], o = (x - 0.5) * w, bc = BANK_COL[k];
+    g.vtx(px + dx * o, py + y * (h + 0.06) - 0.06, pz + dz * o, 0, 1, 0, c.u0 + (c.u1 - c.u0) * x, c.v0 + (c.v1 - c.v0) * y, tint ? [bc[0] * tint[0], bc[1] * tint[1], bc[2] * tint[2]] : bc);
   }
 }
 /** how far apart the bank's clumps stand along the verge (m): fewer on phones (set with the foliage density) */
@@ -910,7 +913,7 @@ export function setHouses(types) {
 }
 /** a painted house type for the zone (one random number), or null (then the caller keeps its procedural house) */
 export function houseType(zone, r) { const L = HOUSES.byZone && HOUSES.byZone[zone]; return L ? L[Math.floor(r() * L.length)] : null; }
-const _huv = { u0: 0, u1: 0, v0: 0, v1: 0 }, _hp = [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]];
+const IDENT4 = new THREE.Matrix4(), _huv = { u0: 0, u1: 0, v0: 0, v1: 0 }, _hp = [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]];
 const hp = (p, o) => { for (let k = 0; k < 4; k++) { _hp[k][0] = p[o + k * 3]; _hp[k][1] = p[o + k * 3 + 1]; _hp[k][2] = p[o + k * 3 + 2]; } };
 // a home window's moment at dusk (as litOf): a byte hashed from where the wall is
 const homeLit = (g, a, b) => { const h = Math.sin(a * 12.9898 + b * 78.233 + g.e[12] * 0.731 + g.e[14] * 0.513) * 43758.5453; return 24 + Math.floor((h - Math.floor(h)) * 231); };
@@ -1338,6 +1341,43 @@ export function ottomanHouse(G, M, r, s) {
     c.rod([x, y, z], tip, 0.025, 0.02, 4, PAL.white);
     flagCloth(G, M, tip, 1.0, 0.77, -1);
   }
+}
+/** the Bosphorus's painted Ottoman houses (painted.js loadTrHouseAtlas; textures.js buildWorldAtlas draws their cells): their
+ *  types, once those cells are in the world atlas; null until then, and if they failed (the Bosphorus then keeps ottomanHouse) */
+export const TR_HOUSES = { types: null, extras: {} };
+/** types: the house types; extras: the hillside village strips' and the ferry's sizes (their cells: trV1…, trFerry) */
+export const setTrHouses = (types, extras = {}) => { TR_HOUSES.types = types && types.length ? types : null; TR_HOUSES.extras = TR_HOUSES.types ? extras : {}; };
+/** the hillside village higher up the hill, as the concept paints it (the rows of houses stacked up the slope among cypresses
+ *  and round trees: Grok repaints of its own hillside, cut as panoramas): a big flat card standing on the hill, from its
+ *  bottom-left corner p0 to its bottom-right p1, h tall, turned towards the drive (chunks.js placeBosphorus). In three upright
+ *  strips, each with its own moment for its lit windows at dusk */
+export function trVillage(G, p0, p1, h, cell) {
+  const a = G.atlas, cl = uv(cell); a.setM(IDENT4); a.world = true;
+  for (let i = 0; i < 3; i++) {
+    const k0 = i / 3, k1 = (i + 1) / 3, L = (k) => [p0[0] + (p1[0] - p0[0]) * k, p0[1] + (p1[1] - p0[1]) * k, p0[2] + (p1[2] - p0[2]) * k];
+    const b0 = L(k0), b1 = L(k1), t0 = [b0[0], b0[1] + h, b0[2]], t1 = [b1[0], b1[1] + h, b1[2]];
+    _huv.u0 = cl.u0 + (cl.u1 - cl.u0) * k0; _huv.u1 = cl.u0 + (cl.u1 - cl.u0) * k1; _huv.v0 = cl.v0; _huv.v1 = cl.v1;
+    if (a.hasLit) a.litV = homeLit(a, b0[0] * 0.37 + b0[2], i * 7.1);
+    a.quad(b0, b1, t1, t0, W1, _huv); a.litV = 0;
+  }
+}
+/** a painted Ottoman house of the Bosphorus (Arnavutköy), as its concept painting has them: its gable end (its front to the
+ *  lane: a stone or plastered ground floor, the upper floor jutting out over it on brackets, the gable under the verges of
+ *  the tiled roof) and its long sides painted, the long side's tiles over both slopes of its roof; the jut's underside, the
+ *  eaves', its back and a plinth carrying its walls down into the slope in plain paint. T: one of TR_HOUSES.types. Local
+ *  frame as every building's (the front facing −z). Each painted wall's windows light up at their own moment at dusk */
+export function trHouse(G, M, r, T) {
+  const a = G.atlas, c = G.color, cf = uv(T.f), cs = uv(T.s);
+  a.setM(M); c.setM(M); a.world = true; // (the world atlas's cells: the chunk takes the atlas material's world variant)
+  for (const q of T.pieces) {
+    const cl = q.t === 'f' ? cf : cs, du = cl.u1 - cl.u0, dv = cl.v1 - cl.v0;
+    _huv.u0 = cl.u0 + q.uv[0] * du; _huv.u1 = cl.u0 + q.uv[2] * du; _huv.v1 = cl.v1 - q.uv[1] * dv; _huv.v0 = cl.v1 - q.uv[3] * dv;
+    hp(q.p, 0);
+    if (q.lit && a.hasLit) a.litV = homeLit(a, q.p[0] + q.p[2] * 1.7, q.p[1] + q.p[5]);
+    a.quad(_hp[0], _hp[1], _hp[2], _hp[3], W1, _huv); a.litV = 0;
+  }
+  for (const q of T.plains) { hp(q.p, 0); c.noShadow = !!q.ns; c.quad(_hp[0], _hp[1], _hp[2], _hp[3], q.c); }
+  c.noShadow = false;
 }
 /** a flag's cloth hanging from the top of its pole (top: the pole's tip, in the prop's frame) out along ±x (dir), its height
  *  hh, length 1.5 hh, in three panels with a gentle wave; both faces (the back shows it mirrored, as cloth does) */

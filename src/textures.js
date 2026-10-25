@@ -1022,19 +1022,37 @@ function trDirSign(A, a, e, w, h, lines) {
   a.fillStyle = '#fff'; a.beginPath(); // the arrow, straight on
   const ax = w * 0.13; a.moveTo(ax, m * 1.3); a.lineTo(ax + m * 1.4, m * 3.1); a.lineTo(ax + m * 0.5, m * 3.1); a.lineTo(ax + m * 0.5, h - m * 1.3); a.lineTo(ax - m * 0.5, h - m * 1.3); a.lineTo(ax - m * 0.5, m * 3.1); a.lineTo(ax - m * 1.4, m * 3.1); a.closePath(); a.fill();
 }
-/** Builds the world atlas for a tier ('hi' or 'lo': half the px). `main`: the procedural atlas, whose cell list it shares */
-export function buildWorldAtlas(main, tier) {
+/** a Turkish tunnel's name plate: white lettering on the blue of Turkey's road signs, a white border, its length */
+function trTunnelPlate(A, a, w, h, name) {
+  const m = h / 80;
+  rect(a, 0, 0, w, h, '#eef0ee'); rect(a, 4 * m, 4 * m, w - 8 * m, h - 8 * m, '#1d4f9a'); grain(a, A, w, h, 0.06);
+  a.fillStyle = '#fff'; a.textAlign = 'center'; a.textBaseline = 'middle';
+  let fs = Math.round(34 * m); a.font = `700 ${fs}px ${TR_FONT}`; while (a.measureText(name).width > w * 0.86 && fs > 8) { fs--; a.font = `700 ${fs}px ${TR_FONT}`; }
+  a.fillText(name, w / 2, h * 0.42);
+  a.font = `600 ${Math.round(13 * m)}px ${TR_FONT}`; a.fillStyle = '#d8e2f0'; a.fillText('L = 170 m', w / 2, h * 0.8);
+}
+/** Builds the world atlas for a tier ('hi' or 'lo': half the px). `main`: the procedural atlas, whose cell list it shares;
+ *  `th`: the Bosphorus's painted houses (painted.js loadTrHouseAtlas), in rows of their own (.trHouses: whether they are in);
+ *  with them the procedural houses' bays and tiles aren't painted (only their fallback, props.js ottomanHouse, uses them) */
+export function buildWorldAtlas(main, tier, th = null) {
   const k = tier === 'hi' ? 1 : 0.5, B = [Math.round(208 * k), Math.round(240 * k)], list = [];
-  TR_WOOD.forEach((col, i) => { for (const lit of [false, true]) list.push(['trW' + i + (lit ? 'L' : ''), B, (A, a, e, w, h) => trBay(A, a, e, w, h, col, lit, 900 + i, true, true, i === 3 ? '#f4f1ea' : '#5a3f2c')]); }); // (stained wood: dark frames)
-  TR_PLASTER.forEach((col, i) => { for (const lit of [false, true]) list.push(['trS' + i + (lit ? 'L' : ''), B, (A, a, e, w, h) => trBay(A, a, e, w, h, col, lit, 950 + i, false)]); });
-  TR_PASTEL.forEach((col, i) => { for (const lit of [false, true]) list.push(['trP' + i + (lit ? 'L' : ''), B, (A, a, e, w, h) => trBay(A, a, e, w, h, col, lit, 970 + i, false, false)]); });
-  for (const lit of [false, true]) list.push(['trSt' + (lit ? 'L' : ''), B, (A, a, e, w, h) => trStone(A, a, e, w, h, lit, 990)]);
-  list.push(['trDoor', B, trDoor], ['trTile', [Math.round(256 * k), Math.round(256 * k)], kiremit], ['trFlag', [Math.round(192 * k), Math.round(128 * k)], (A, a, e, w, h) => trFlag(a, e, w, h)],
+  if (!th) TR_WOOD.forEach((col, i) => { for (const lit of [false, true]) list.push(['trW' + i + (lit ? 'L' : ''), B, (A, a, e, w, h) => trBay(A, a, e, w, h, col, lit, 900 + i, true, true, i === 3 ? '#f4f1ea' : '#5a3f2c')]); }); // (stained wood: dark frames)
+  if (!th) {
+    TR_PLASTER.forEach((col, i) => { for (const lit of [false, true]) list.push(['trS' + i + (lit ? 'L' : ''), B, (A, a, e, w, h) => trBay(A, a, e, w, h, col, lit, 950 + i, false)]); });
+    TR_PASTEL.forEach((col, i) => { for (const lit of [false, true]) list.push(['trP' + i + (lit ? 'L' : ''), B, (A, a, e, w, h) => trBay(A, a, e, w, h, col, lit, 970 + i, false, false)]); });
+    for (const lit of [false, true]) list.push(['trSt' + (lit ? 'L' : ''), B, (A, a, e, w, h) => trStone(A, a, e, w, h, lit, 990)]);
+    list.push(['trDoor', B, trDoor], ['trTile', [Math.round(256 * k), Math.round(256 * k)], kiremit]);
+  }
+  list.push(['trFlag', [Math.round(192 * k), Math.round(128 * k)], (A, a, e, w, h) => trFlag(a, e, w, h)],
     ['trSign50', [Math.round(128 * k), Math.round(128 * k)], (A, a, e, w, h) => trSpeed(A, a, e, w, h, 50)],
-    ['trSignDir', [Math.round(256 * k), Math.round(128 * k)], (A, a, e, w, h) => trDirSign(A, a, e, w, h, ['Bebek', 'Sarıyer'])]);
-  const H = Math.ceil((flowEnd(list.map(c => c[1])) + 8) / 4) * 4, W = new Atlas(H, 4, main.cells);
+    ['trSignDir', [Math.round(256 * k), Math.round(128 * k)], (A, a, e, w, h) => trDirSign(A, a, e, w, h, ['Bebek', 'Sarıyer'])],
+    // the border tunnels' Turkish mouths: their name plates (a Turkish highway's blue, white lettering), through the cape at
+    // Arnavutköy (Akıntıburnu) and the headland towards Kuruçeşme
+    ...['AKINTIBURNU TÜNELİ', 'KURUÇEŞME TÜNELİ'].map((name, i) => ['trTunnel' + i, [Math.round(360 * k), Math.round(80 * k)], (A, a, e, w, h) => trTunnelPlate(A, a, w, h, name)]));
+  const H = Math.ceil((flowEnd(list.map(c => c[1])) + (th ? 16 + th.rows : 0) + 8) / 4) * 4, W = new Atlas(H, 4, main.cells);
   for (const [n, [w, h], f] of list) W.add(n, w, h, (a, e, cw, ch) => f(W, a, e, cw, ch));
-  return W;
+  W.trHouses = !!th && paintHouses(W, th);
+  return th && !W.trHouses ? buildWorldAtlas(main, tier, null) : W; // (if they didn't fit: the procedural houses' cells)
 }
 /** the atlas rows the painted houses take (assets/houses/houses2.json lists its own: pack.py), per tier: a cell's px are its
  *  tile's (48 px/m on desktops, 32 on phones and in the X card) */

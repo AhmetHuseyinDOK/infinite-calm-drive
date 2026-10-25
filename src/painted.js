@@ -187,11 +187,11 @@ export async function loadFrontAtlas(tier, timeoutMs = 15000) {
  *  (textures.js buildPaintedAtlas, paintHouses), so the houses take them with no new material or draw. 'hi' (48 px/m) or 'lo' (32 px/m: phones,
  *  the embed). Resolves to null (never rejects) when the index or the image is missing, broken, truncated or too slow:
  *  the houses then keep their procedural look (props.js woodHouse). */
-export async function loadHouseAtlas(tier, timeoutMs = 15000) {
-  const base = ASSETS + 'houses/';
+export async function loadHouseAtlas(tier, timeoutMs = 15000, dir = 'houses/', name = 'houses2', what = 'painted houses unavailable, keeping the procedural ones:') {
+  const base = ASSETS + dir;
   return orNull((async () => {
-    const r = await fetch(base + 'houses2.json');
-    if (!r.ok) throw new Error('houses2.json ' + r.status);
+    const r = await fetch(base + name + '.json');
+    if (!r.ok) throw new Error(name + '.json ' + r.status);
     const J = await r.json();
     const file = J.files && J.files[tier] ? tier : 'hi', tiles = (J.tiles && J.tiles[file]) || [];
     const types = (J.types || []).filter(t => t.f && t.s && t.pieces && t.pieces.length && tiles.some(q => q.name === t.f) && tiles.some(q => q.name === t.s));
@@ -203,9 +203,16 @@ export async function loadHouseAtlas(tier, timeoutMs = 15000) {
     const img = await createImageBitmap(blob, { premultiplyAlpha: 'none' });
     if (J.size && J.size[file] && (img.width !== J.size[file][0] || img.height !== J.size[file][1])) throw new Error(J.files[file] + ' has the wrong size');
     if (tiles.some(t => !(t.w > 0 && t.h > 0 && t.x >= 0 && t.x + t.w <= img.width && t.ey + t.h <= img.height))) throw new Error('a tile lies outside the sheet');
-    return { img, tiles, types, rows: J.rows[file], tier: file };
-  })(), timeoutMs, 'painted houses unavailable, keeping the procedural ones:');
+    return { img, tiles, types, rows: J.rows[file], tier: file, extras: J.extras || {} };
+  })(), timeoutMs, what);
 }
+/** …and the Bosphorus's painted Ottoman houses (assets/trhouses/, made by ~/cdtest/w2/scripts/packtr.py from Grok Imagine
+ *  elevations anchored on its concept painting, ref/world/istanbul_bosphorus.png): each type's gable end (its front to the
+ *  lane: the stone or plastered ground floor, the upper floor jutting out on brackets, the gable) and its long side, cut out
+ *  on their alpha, the windows' glow under them, and the 3D pieces. Drawn into rows of their own in the world atlas
+ *  (textures.js buildWorldAtlas). 'hi' (32 px/m) or 'lo' (24 px/m). Null when missing or broken: the Bosphorus then keeps its
+ *  procedural houses (props.js ottomanHouse) */
+export const loadTrHouseAtlas = (tier, timeoutMs = 15000) => loadHouseAtlas(tier, timeoutMs, 'trhouses/', 'trhouses1', "the Bosphorus's painted houses unavailable, keeping the procedural ones:");
 
 /** Loads the painted meadow (assets/fields/, made by ~/cdtest/ft/scripts/field.py): a tileable top-down painting of the
  *  country paintings' grass, 'hi' or 'lo' (phones, the embed). Resolves to null (never rejects) when the index or the
@@ -470,11 +477,12 @@ const _bc = new THREE.Vector3(), _bn = new THREE.Color(), NOON_SUN = new THREE.C
 
 /** The painted horizon. `atlas` from loadBandAtlas; `post` for the grade's uniforms; `fog` the scene's fog colour (the
  *  3D world fades into it at its far edge); `alias`: zones without a row that borrow another's ({ zone: its stand-in });
- *  `haze0`: the haze its far shores stand in on a bright day (Turkey's: the concept painting's Asian shore is a hazy one).
+ *  `haze0`: the haze its far shores stand in on a bright day (Turkey's: the concept painting's Asian shore is a hazy one);
+ *  `winZone`: the zone whose row's light pixels take lit windows at night (Japan's far city; Turkey's Asian shore).
  *  update(camera, mix) each frame, with mix = { a, b, t } from path.zoneMix; returns how much of the view's far horizon
  *  the band covers (0…1), for the procedural rings to give way. Each region's bands are an atlas of their own (Japan's
  *  band3, Turkey's bandtr1: main.js draws one band per atlas, each fading the zones it has in and out) */
-export function makePaintedBand(atlas, post, fog, alias = null, haze0 = 0) {
+export function makePaintedBand(atlas, post, fog, alias = null, haze0 = 0, winZone = 'city') {
   const Z = atlas.zones, top = Math.max(...Object.values(Z).map(v => v.w)), N = 192, per = 360 / atlas.period;
   const pos = new Float32Array((N + 1) * 6), uv = new Float32Array((N + 1) * 4), idx = [];
   const yLo = Math.tan((BAND_LO * Math.PI) / 180), yHi = top + 0.004;
@@ -578,12 +586,14 @@ export function makePaintedBand(atlas, post, fog, alias = null, haze0 = 0) {
   let first = true;
   return {
     mesh, zones: Z,
+    /** the zones without a row of their own that borrow another's (it can change: Turkey's band loads later, main.js) */
+    alias,
     /** the opening view: where in its loop the band starts, straight ahead (0.125: the middle of its first painting) */
     hero: 0.125,
     /** m: { a, b, t } from path.zoneMix; camH: the camera's height above the ground; fogD / fogFar: the scene fog's
      *  exp² density and draw distance */
     update(camera, m, camH = 2.8, fogD = 0.0014, fogFar = 700) {
-      const A = Z[m.a] || (alias && Z[alias[m.a]]), B = Z[m.b] || (alias && Z[alias[m.b]]), t = m.t;
+      const al = this.alias, A = Z[m.a] || (al && Z[al[m.a]]), B = Z[m.b] || (al && Z[al[m.b]]), t = m.t;
       // how much band: a zone without one fades it out and leaves the far horizon to the rings
       let w = 0;
       if (A && B) { u.uRowA.value.copy(A); u.uRowB.value.copy(B); u.uMix.value = A === B ? 0 : t; w = 1; }
@@ -609,7 +619,7 @@ export function makePaintedBand(atlas, post, fog, alias = null, haze0 = 0) {
       u.uTone.value = paintSky() * (1 - paint);
       if (u.uTone.value > 0) { const P = BAND_TONES.at(TOD.t); u.uBS.value.fromArray(P.rgb('shade')).divideScalar(255); u.uBM.value.fromArray(P.rgb('mid')).divideScalar(255); u.uBH.value.fromArray(P.rgb('lit')).divideScalar(255); u.uBCh.value = P.rgb('ch')[0]; }
       const nk = Math.min(Math.max((TOD.night - 0.15) / 0.65, 0), 1), wn = nk * nk * (3 - 2 * nk) * (1 - 0.6 * TOD.overcast);
-      u.uWin.value.set(m.a === 'city' ? wn * PAINT_TOD.on : 0, m.b === 'city' ? wn * PAINT_TOD.on : 0);
+      u.uWin.value.set(m.a === winZone ? wn * PAINT_TOD.on : 0, m.b === winZone ? wn * PAINT_TOD.on : 0); // (Turkey's: the Asian shore's houses)
       // (alpha-tested, without MSAA: a passing haze while one zone's skyline gives way to the next, or to the rings)
       const k2 = Math.max(4 * u.uMix.value * (1 - u.uMix.value), Math.min(1, 2 * (1 - w))), fade = a2c ? 0 : 0.45 * k2 * k2 * k2;
       u.uHaze.value = 1 - (1 - (1 - (1 - 0.12 * TOD.warm - 0.25 * TOD.night) * (1 - 0.55 * TOD.overcast) * (1 - 0.6 * TOD.rain)) * (1 - paint)) * (1 - fade);

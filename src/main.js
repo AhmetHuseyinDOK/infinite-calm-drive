@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Path, ZONES, zoneW, zoneWeight, zoneAt, zoneMix, zparam, ZINFO, setStartZone, crossingS, crossingValid, XING, XOFF, riverNear, RIV, ROFF, groundOffsetMix, tunnelNear, T_HALF, T_RIDGE } from './path.js';
 import { makeCrossingRig, makeTrain, xingPosts } from './crossing.js';
 import { buildAtlas, buildFoliage, buildPaintedAtlas } from './textures.js';
-import { makeMaterials, U, groundMaterialFor, setShadowTaps, setGrazeFade, makeCloudMap, makeGhibliLeaf, FIELD, tetraMaterial, barkMaterial } from './materials.js';
+import { makeMaterials, U, groundMaterialFor, setGrazeFade, makeCloudMap, makeGhibliLeaf, FIELD, tetraMaterial, barkMaterial } from './materials.js';
 import { setAtlas, setFoliage, warmTrees, warmTetrapods, setLeafDensity, GHIBLI, setHouses } from './props.js';
 import { loadTreeAtlas } from './ghibli.js';
 import { World, CH } from './chunks.js';
@@ -77,7 +77,6 @@ async function main() {
   const sun = new THREE.DirectionalLight(0xffffff, 3);
   sun.castShadow = true;
   const SM = quality === 'low' ? 1024 : quality === 'mid' ? 1536 : 2048; sun.shadow.mapSize.set(SM, SM);
-  setShadowTaps(QS.has('pcf') ? parseInt(QS.get('pcf')) : 1); // ?pcf=2: adaptive (4 taps on edge texels; +0.5–0.9 ms), 4: always 4
   // Shadows follow the sun continuously. The shadow camera is aimed along `shadowDir`, re-aimed only when the sun has
   // moved ~6° (its texel grid stays fixed in the world between re-aims, snapped to whole texels as the car drives),
   // and a skew slides every point along the TRUE light direction onto the pivot plane under the car before the
@@ -86,6 +85,16 @@ async function main() {
   const SH_HALF = 62; // shadow frustum half-size (m): ~6 cm texels at 2048²
   const shCam = sun.shadow.camera, shSkew = new THREE.Matrix4(), shTmp = new THREE.Matrix4();
   Object.assign(shCam, { left: -SH_HALF, right: SH_HALF, top: SH_HALF, bottom: -SH_HALF, near: 1, far: 420 });
+  // The box fitted to what can be seen and what can shadow it (step 24). A low sun along the road stretches the square box
+  // over ~400 m of it (the map's rows run along the light, each row sin(elevation) as tall on the ground), so at golden hour
+  // the shadow pass drew the scenery 220 m ahead, mostly for shadows nobody sees. The box keeps its width (its columns) and
+  // its texel grid, but takes only the rows that hold the shadow receivers within SH_FIT.R of its centre (up to HH above it
+  // and HL below), drawn into that many rows of the map (a viewport: the same texels, less to fill); and its near plane
+  // reaches out towards the sun only as far as a caster HC tall standing beyond those receivers (the city's towers: HC 80 m).
+  // At noon it is the old box. Both are refitted every frame without moving a texel (the rows are whole texels from the
+  // box's snapped centre, the near plane only clips), so the stair-steps' layout is the old box's wherever both reach
+  const SH_FIT = { R: SH_HALF, HH: 25, HL: 10, HC: 15 }, SH_BIAS_M = 0.0004 * 419; // (the depth bias in metres: −0.0004 of the old 419 m range)
+  const shVP = new THREE.Vector4(0, 0, 1, 1); sun.shadow.getViewport = () => shVP; // (the rows the box is drawn into)
   const shadowDir = new THREE.Vector3(0, 1, 0), shX = new THREE.Vector3(), shY = new THREE.Vector3(), shT = new THREE.Vector3(), UPV = new THREE.Vector3(0, 1, 0);
   const shC = new THREE.Vector3(0, 150, 60), shLook = new THREE.Vector3(), shAim = new THREE.Vector3(); // (start: the warm-up meshes at the origin are in view)
   let shY0 = null, shPhX = 0, shPhY = 0, shTex = 0; // pivot plane height (follows the road in 3 m steps); texel-grid phase
@@ -94,7 +103,7 @@ async function main() {
     shCam.updateProjectionMatrix(); // projection · (view · skew · view⁻¹), so three's projection · view applies the skew first
     shTmp.multiplyMatrices(shCam.matrixWorldInverse, shSkew).multiply(shCam.matrixWorld);
     shCam.projectionMatrix.multiply(shTmp); shCam.projectionMatrixInverse.copy(shCam.projectionMatrix).invert();
-    this._updateMatrix(shCam, this.matrix, this._frustum);
+    this._updateMatrix(shCam, this.matrix, this._frustum, shVP); // (the lookups read the box's rows of the map)
   };
   let bloomAllowed = true;
   // Anti-acne: the normal offset is 1.5 shadow texels (it was 0.05 m — under a texel at phone quality, so walls lit at a
@@ -277,7 +286,7 @@ async function main() {
   // speed: the zone's cruising speed × mult (0.4 … 5.5, so up to ~190–265 km/h); uHome: the lane the car settles back
   // into when nobody steers — wherever the player last steered it (it used to always drift back to the left lane)
   const MULT_MIN = 0.4, MULT_MAX = 5.5;
-  const st = { s: Math.max(100, parseFloat(QS.get('s')) || 140), u: -1.65, uHome: -1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, spray: QS.has('nospray') ? 0 : 1 /* test switch */, grass: 1 /* test switch: the meadow's blades */, pclouds: 1 /* test switch: painted clouds (0: the procedural ones, with ?clouds=both) */, band: 1 /* test switch: the painted horizon (0: the mountain rings) */, waves: 1 /* test switch: the painted sea's waves (0: its flat tones) */, shore: 1 /* test switch: the waves and foam along the sea wall (0: the open sea's colour there) */, surf: 1 /* test switch: the spray over the tetrapods */, tetra: 1 /* test switch: the tetrapods */, bark: 1 /* test switch: the bark's painted tones (0: the old colours, lit) */, trunks: 1 /* test switch: the painted trees' bark (0: hidden) */, todpaint: 1 /* test switch: the painted look at golden hour, sunset and night (0: only on a bright day, as before) */, road: 1 /* test switch: the coast's and the country's painted asphalt (0: the old warm grey) */, carkey: 1 /* test switch: the car lit by the painter's sun (0: by the real sun) */, sunroad: 1 /* test switch: the sun and the moon stand by the road's heading, as in the paintings (0: fixed in the world, as before) */, volkey: 1 /* test switch: the crowns and the tetrapods lit by the painted volumes' key (0: by the real sun) */, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
+  const st = { s: Math.max(100, parseFloat(QS.get('s')) || 140), u: -1.65, uHome: -1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, spray: QS.has('nospray') ? 0 : 1 /* test switch */, grass: 1 /* test switch: the meadow's blades */, pclouds: 1 /* test switch: painted clouds (0: the procedural ones, with ?clouds=both) */, band: 1 /* test switch: the painted horizon (0: the mountain rings) */, waves: 1 /* test switch: the painted sea's waves (0: its flat tones) */, shore: 1 /* test switch: the waves and foam along the sea wall (0: the open sea's colour there) */, surf: 1 /* test switch: the spray over the tetrapods */, tetra: 1 /* test switch: the tetrapods */, bark: 1 /* test switch: the bark's painted tones (0: the old colours, lit) */, trunks: 1 /* test switch: the painted trees' bark (0: hidden) */, todpaint: 1 /* test switch: the painted look at golden hour, sunset and night (0: only on a bright day, as before) */, road: 1 /* test switch: the coast's and the country's painted asphalt (0: the old warm grey) */, carkey: 1 /* test switch: the car lit by the painter's sun (0: by the real sun) */, sunroad: 1 /* test switch: the sun and the moon stand by the road's heading, as in the paintings (0: fixed in the world, as before) */, volkey: 1 /* test switch: the crowns and the tetrapods lit by the painted volumes' key (0: by the real sun) */, shsoft: 1 /* test switch: soft shadow edges near the camera (0: one tap everywhere, as before) */, shfit: 1 /* test switch: the sun's shadow box fitted to what can be seen at a low sun (0: the old square box) */, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
   let started = false;
   status('building the road…');
   await new Promise(r => setTimeout(r, 10));
@@ -665,6 +674,27 @@ async function main() {
       { const y0 = Math.round(car.group.position.y); // the pivot follows the road in 3 m steps; moving it slides the whole
         if (shY0 === null) shY0 = y0;              // map by d·v, so the texel grid's phase moves with it: no re-rasterising
         else if (Math.abs(car.group.position.y - shY0) > 3) { const d = y0 - shY0; shPhX -= d * (vx * shX.x + vz * shX.z); shPhY -= d * (vx * shY.x + vz * shY.z); shY0 = y0; } }
+      // the box's rows and its near plane (SH_FIT, at the top), every frame: neither moves a texel (the rows keep the grid,
+      // whole texels from its snapped centre). The receivers within R of the centre along the sun's bearing, from HL below the
+      // car to HH above it (more on the mountains' slopes), as the skew lifts them (a metre of height moves sy along the rows,
+      // sz along the light); the casters HC taller than them (the city's towers 80 m, the mountains' slopes 40 m)
+      { const se = shadowDir.y, ce = Math.hypot(shadowDir.x, shadowDir.z), half = sun.shadow.mapSize.y / 2;
+        const zm = Math.max(zoneWeight(st.s + 26, 'mountain') + zoneWeight(st.s + 26, 'snow'), zoneWeight(st.s + 110, 'mountain') + zoneWeight(st.s + 110, 'snow'));
+        const zc = Math.max(zoneWeight(st.s + 26, 'city'), zoneWeight(st.s + 110, 'city'));
+        const hh = SH_FIT.HH + 15 * zm + 3, hl = SH_FIT.HL + 20 * zm + 3, hc = SH_FIT.HC + 65 * zc + 25 * zm; // (+3: the pivot's 3 m steps)
+        const sy = vx * shY.x + vz * shY.z, sz = vx * shadowDir.x + vz * shadowDir.z, ky = Math.max(0.05, ce + sy);
+        let kHi = half, kLo = half, near = 1;
+        if (st.shfit) {
+          kHi = Math.min(half, Math.ceil((SH_FIT.R * se + hh * ky) / tex) + 1); kLo = Math.min(half, Math.ceil((SH_FIT.R * se + hl * ky) / tex) + 1);
+          near = Math.max(1, 200 - (SH_FIT.R * ce + hh * se + hc / se + Math.max(0, (hh + hc) * sz)));
+        }
+        shCam.top = kHi * tex; shCam.bottom = -kLo * tex; shCam.near = near; shVP.set(0, 0, 1, (kHi + kLo) / (2 * half));
+        sun.shadow.bias = -SH_BIAS_M / (shCam.far - near); }
+      // the soft shadow edges' reach (materials.js getShadow; its radius is 1 / that view depth): a tent wherever the sun's
+      // texels span two pixels or more on screen (~22 m at 720 px, 34 m at 1080, ~37 m on a phone), one tap from twice as
+      // far (a texel under a pixel); the car's own map everywhere
+      sun.shadow.radius = st.shsoft ? (4 * Math.tan((camera.fov * Math.PI) / 360)) / (tex * innerHeight * DPR) : 1e6;
+      carSun.shadow.radius = st.shsoft ? 0 : 1e6;
       // snap to whole texels (plus that phase) in absolute world coordinates, so the world re-centring (every 900 m)
       // doesn't re-rasterise either
       const ox0 = world.origin.x, oz0 = world.origin.z;

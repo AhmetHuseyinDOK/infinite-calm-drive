@@ -14,22 +14,35 @@ THREE.ShaderChunk.fog_fragment = /* glsl */`
 #endif`;
 
 // Shadows: hardware-filtered taps (bilinear depth compare) at fixed offsets instead of three.js's 5 Vogel-disk taps
-// rotated by per-pixel noise — much cheaper, and stable: the rotated noise made shadow edges shimmer as we moved.
-// One tap by default; 4 taps at ±½ texel (?pcf=4) soften the static stair-steps into a ~3-texel edge for ~1 ms more.
+// rotated by per-pixel noise — cheaper, and stable: the rotated noise made shadow edges shimmer as we moved.
+// The paintings' shadows have clean, soft edges; one tap showed the map's texels as stair-steps wherever a texel spans
+// pixels (the world map's 6 cm texels near the camera: the avenue's crown shadows on the road, the guardrail's at golden
+// hour; the car's own map's 1 cm ones as a jagged pixel edge). On the ground (materials defining SH_SOFT) the shadow is
+// filtered there by a tent over 3 × 3 texels from four taps (Castaño's optimised PCF, as in The Witness and MJP's shadows
+// sample: each tap's weight and sub-texel offset follow the point's place in its texel, so the edge is a smooth ramp ~2
+// texels wide, not a staircase); further away, where a texel is under ~a pixel, one tap, the tent's taps drawn in towards
+// the point so the two meet without a seam. How far is the light's: its shadow.radius is 1 / the view depth (m) to which
+// the tent is whole, one tap from twice that (0: everywhere, the car's own map; main.js sets the sun's by the map's texels
+// on screen). Everything else keeps one tap (each tap counts on the crowns, many alpha-tested layers deep).
 // (The moving car has its own fine map, below.) Call before the first compile.
 const SHADOW_SRC = THREE.ShaderChunk.shadowmap_pars_fragment;
-export function setShadowTaps(n) {
-  const tap = o => `texture( shadowMap, vec3( shadowCoord.xy${o}, shadowCoord.z ) )`;
-  const four = `0.25 * ( ${tap(' - so')} + ${tap(' + so')} + ${tap(' + vec2( so.x, -so.y )')} + ${tap(' + vec2( -so.x, so.y )')} )`;
-  const body = n >= 4 ? `vec2 so = texelSize * 0.5;\nshadow = ${four};`
-    // adaptive: one tap, and only where it lands on an edge texel (a fractional result) widen to the 4-tap tent — the
-    // stair-steps of shadow edges on walls smooth out, while fully lit / shadowed pixels (most of them) pay one tap
-    : n === 2 ? `shadow = ${tap('')};\nif ( shadow > 0.001 && shadow < 0.999 ) { vec2 so = texelSize * 0.5; shadow = ${four}; }`
-    : `shadow = ${tap('')};`;
+export function setShadowTaps() {
+  const body = /* glsl */`#ifdef SH_SOFT
+float k = clamp( 2.0 - shDepth * shadowRadius, 0.0, 1.0 );
+#else
+float k = 0.0;
+#endif
+if ( k > 0.0 ) { // (s: the point's place in its texel, from the nearest texel corner; the taps' offsets in texels, × k)
+	vec2 s = fract( shadowCoord.xy * shadowMapSize + 0.5 ), w0 = 3.0 - 2.0 * s, w1 = 4.0 - w0, kt = k * texelSize;
+	vec2 p0 = shadowCoord.xy + ( ( 2.0 - s ) / w0 - s - 1.0 ) * kt, p1 = shadowCoord.xy + ( s / w1 + 1.0 - s ) * kt;
+	shadow = ( w0.x * w0.y * texture( shadowMap, vec3( p0, shadowCoord.z ) ) + w1.x * w0.y * texture( shadowMap, vec3( p1.x, p0.y, shadowCoord.z ) )
+		+ w0.x * w1.y * texture( shadowMap, vec3( p0.x, p1.y, shadowCoord.z ) ) + w1.x * w1.y * texture( shadowMap, vec3( p1, shadowCoord.z ) ) ) * 0.0625;
+} else shadow = texture( shadowMap, vec3( shadowCoord.xy, shadowCoord.z ) );`;
   THREE.ShaderChunk.shadowmap_pars_fragment = SHADOW_SRC.replace(
-    /float phi = interleavedGradientNoise\( gl_FragCoord\.xy \) \* PI2;\s*shadow = \([\s\S]*?\) \* 0\.2;/, body);
+    /float phi = interleavedGradientNoise\( gl_FragCoord\.xy \) \* PI2;\s*shadow = \([\s\S]*?\) \* 0\.2;/, body)
+    .replace('float getShadow( sampler2DShadow', 'float shDepth = 0.0; // (the view depth, set by the lights chunk: how far the tent reaches)\nfloat getShadow( sampler2DShadow');
 }
-setShadowTaps(1);
+setShadowTaps();
 /** Fade the sun's shadow on surfaces it only grazes (N·L from lo to hi): there the map can't resolve the surface's own
  *  depth, which showed as stripes and saw-teeth on walls that crawled as the sun moved. Call before the first compile. */
 export function setGrazeFade(lo, hi) {
@@ -56,16 +69,23 @@ THREE.ShaderChunk.lights_fragment_begin = THREE.ShaderChunk.lights_fragment_begi
 	#endif
 	#if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
 	if ( directLight.visible && receiveShadow ) {
-		directionalLightShadow = directionalLightShadows[ 0 ];
-		float sh = getShadow( directionalShadowMap[ 0 ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ 0 ] );
+		#ifdef SHADOWMAP_TYPE_PCF
+		shDepth = - geometryPosition.z; // (the soft tent's reach: see getShadow)
+		#endif
 		#ifdef GRAZE_FADE
 		// walls the sun only grazes keep the toon ramp: there the map can't resolve their own depth (acne stripes that crawl as the sun moves)
 		#ifdef VOL_KEY
-		sh = mix( 1.0, sh, smoothstep( GRAZE_LO, GRAZE_HI, dot( geometryNormal, sunV ) ) ); // (and faces turned from the real sun: the key's ramp alone)
+		float gz = smoothstep( GRAZE_LO, GRAZE_HI, dot( geometryNormal, sunV ) ); // (and faces turned from the real sun: the key's ramp alone)
 		#else
-		sh = mix( 1.0, sh, smoothstep( GRAZE_LO, GRAZE_HI, dot( geometryNormal, directLight.direction ) ) );
+		float gz = smoothstep( GRAZE_LO, GRAZE_HI, dot( geometryNormal, directLight.direction ) );
 		#endif
+		#else
+		float gz = 1.0;
 		#endif
+		// (faces turned from the sun, which the fade gives the ramp alone, skip the lookup: its result was thrown away)
+		float sh = 1.0;
+		if ( gz > 0.0 ) { directionalLightShadow = directionalLightShadows[ 0 ];
+			sh = mix( 1.0, getShadow( directionalShadowMap[ 0 ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ 0 ] ), gz ); }
 		#if NUM_DIR_LIGHT_SHADOWS > 1
 		// surfaces turning away from the sun keep just the toon ramp: the sharp map would cut their wrapped light
 		// into jagged bands (the car shadowing its own back)
@@ -720,7 +740,7 @@ export function groundMaterialFor(zones) {
 export const groundVariants = () => [...GROUND_VARIANTS.values()];
 export function groundMaterial(defines = groundDefines(Object.keys(ZDEF)), key = 'all') {
   const m = new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: GRAD });
-  m.defines = defines;
+  m.defines = { ...defines, SH_SOFT: '' }; // (soft shadow edges near the camera: getShadow)
   const paint = defines.F_PAINT !== undefined;
   m.onBeforeCompile = sh => {
     sh.uniforms.uSkyHor = U.uSkyHor; sh.uniforms.uSkyZen = U.uSkyZen; sh.uniforms.uWet = U.uWet; sh.uniforms.uSakWet = U.uSakWet; sh.uniforms.uNight = U.uNight; sh.uniforms.uSunDir = U.uSunDir; sh.uniforms.uSunCol = U.uSunCol;

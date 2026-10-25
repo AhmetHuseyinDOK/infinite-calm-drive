@@ -2,6 +2,32 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-25 · 18:xx — Gap 4: soft painted shadow edges, and a lighter golden hour
+- **The car's shadow and the cherry avenue's crown shadows have clean, soft edges, as painted** (they showed the shadow
+  map's texels as stair-steps; the car's own shadow edge was a jagged pixel line). On the ground near the camera each
+  shadow lookup is a tent over 3×3 texels from four filtered taps (Castaño's optimised PCF, as in The Witness); further
+  out, where a texel spans under two pixels, it eases into one tap without a seam. The guardrail's long staircase shadow
+  at golden hour is a soft band. A forced re-aim of the shadow camera on the coast at golden hour now jumps half as many
+  pixels (0.66% → 0.30%).
+- **Golden hour's shadow pass costs less again.** With the low sun along the road (step 23) the square shadow box drew
+  the scenery 220 m ahead; now it keeps its texel grid but takes only the rows and depth that hold what can be seen
+  within 62 m of its centre and what can shadow that (the city's tall buildings: 80 m). No far shadow in view goes
+  missing (golden hour in the city, the avenue, the coast, the mountain and the snow, against live).
+- How: `materials.js` (the tent in `getShadow` for the ground's materials, `SH_SOFT`, its reach from `shadow.radius`;
+  faces turned from the sun skip the lookup), `main.js` (`SH_FIT`: the box's rows as a viewport of the map, its near plane
+  and its bias each frame; the sun's radius from its texels on screen; the car's own map soft everywhere). Test switches
+  `st.shsoft`, `st.shfit`; the `?pcf` hook is gone. Assets: none. World: the same layout. Programs: 62 / 61.
+- Cost (the shared box's Vega; the desktop machine was down), per-draw timers over coast drives: golden hour, the shadow
+  pass desktop 4.20 → 3.50 ms (pairs −0.75 / −0.65) and phone 3.30 → 2.68 (−0.46 / −0.77), the ground's tent +0.68 desktop
+  (+0.54 / +0.82) and +0.29 phone: golden hour net about even on desktops and −0.3 ms on phones; noon, the ground +0.22
+  desktop (+1.02 / −0.59; the subagent's in-page toggle +0.30 desktop, +0.27 ± 0.07 phone), the shadow pass the same.
+  0 shader errors in all six zones on the desktop and phone tiers and at q=low; no console errors at q=low, mid and
+  high; none compiled through sunset, night, rain or drives; embed starts on tap; start-up the same (medians 3.23 vs
+  3.15 s over three interleaved loads each).
+- Left over: walls, props and crowns keep one tap (the tent there cost ~0.5 ms more on desktops): the shopfronts' canopy
+  shadows still show steps; golden-hour shadows end ~125 m ahead; the avenue's shadows are darker and denser than
+  painted.
+
 ## 2026-10-25 · 16:xx — Gap 3: the sun where the paintings have it
 - **The sun stands by the road, ahead and to its left, as in all four paintings.** At noon it is 70° left of ahead, so
   the car's, the trees' and the poles' shadows fall to the right and back towards us, as painted (they fell ahead and to

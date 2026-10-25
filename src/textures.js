@@ -804,6 +804,74 @@ function plainUpper(A, a, e, w, h, wood, lit) {
   if (lit) { rect(e, x, y, ww, wh, '#ffcf8f'); rect(e, x + ww / 2 - 3 * k, y, 6 * k, wh, '#000'); }
   grain(a, A, w, h, 0.12);
 }
+/** The city painting's tall pale blocks behind the shophouses (props.js block): two floors of one 3.4 m bay (40 px/m),
+ *  pale concrete drawn soft (each block's vertex tint gives it its own cream, white or grey). kind A: a ribbon of blue
+ *  glass across the bay on each floor (offices); B: two punched windows a floor; C: flats' balconies (a white parapet, the
+ *  sliding window in the shade behind it); D: an end wall, plain but for a small window. lit: the windows' lamplight
+ *  (the names end in L: a home's window, switching on at its own moment at dusk) */
+const BLOCK_KINDS = ['A', 'B', 'C', 'D'];
+function blockFace(A, a, e, w, h, kind, lit, seed) {
+  const q = rng(seed), fh = h / 2, k = w / 136;
+  const pane = (x, y, ww, hh, tone) => { // blue glass with the sky in it: darker at the top, a pale sheen across
+    vgrad(a, x, y, ww, hh, tone ? [[0, '#5d80b8'], [1, '#9ab8de']] : [[0, '#6f95c9'], [0.6, '#a8c3e6'], [1, '#c9dbf0']]);
+    a.save(); a.beginPath(); a.rect(x, y, ww, hh); a.clip(); a.fillStyle = 'rgba(255,255,255,0.22)';
+    const sx = x + ww * q(); a.beginPath(); a.moveTo(sx, y); a.lineTo(sx + ww * 0.22, y); a.lineTo(sx - ww * 0.18, y + hh); a.lineTo(sx - ww * 0.4, y + hh); a.fill(); a.restore();
+    if (lit) { const warm = q() < 0.75; rect(e, x, y, ww, hh, warm ? '#ffc98a' : '#dfe6f4'); vgrad(e, x, y + hh * 0.55, ww, hh * 0.45, [[0, 'rgba(0,0,0,0)'], [1, 'rgba(0,0,0,0.35)']]); }
+  };
+  rect(a, 0, 0, w, h, '#efeae1');
+  for (let f = 0; f < 2; f++) {
+    const y = f * fh;
+    vgrad(a, 0, y, w, fh, [[0, 'rgba(255,255,255,0.08)'], [1, 'rgba(70,60,50,0.07)']]);
+    if (kind === 'A') { // the ribbon: glass across the whole bay, slim mullions, a pale spandrel under it
+      const y0 = y + fh * 0.2, gh = fh * 0.5; pane(0, y0, w, gh, 0);
+      for (const x of [0, w / 3, (2 * w) / 3]) rect(a, x, y0, 3 * k, gh, '#d6d2ca');
+      rect(a, 0, y0 + gh, w, 3 * k, '#f7f4ee'); rect(a, 0, y0 - 2 * k, w, 2 * k, 'rgba(60,55,50,0.25)');
+    } else if (kind === 'B') { // two punched windows in light frames, now and then a curtain drawn
+      for (const x0 of [0.13, 0.55]) {
+        const x = w * x0, ww = w * 0.32, y0 = y + fh * 0.22, gh = fh * 0.48;
+        rect(a, x - 3 * k, y0 - 3 * k, ww + 6 * k, gh + 6 * k, '#d9d5cd'); pane(x, y0, ww, gh, 1);
+        if (q() < 0.35) { rect(a, x, y0, ww * 0.45, gh, '#efe7d6'); if (lit) rect(e, x, y0, ww * 0.45, gh, '#ffdcae'); }
+        rect(a, x - 3 * k, y0 + gh + 3 * k, ww + 6 * k, 3 * k, 'rgba(60,55,50,0.18)');
+      }
+    } else if (kind === 'C') { // a balcony: the recess in shade, its sliding window, the white parapet in front
+      rect(a, 0, y, w, fh * 0.66, '#c4bdb2'); vgrad(a, 0, y, w, fh * 0.2, [[0, 'rgba(60,55,60,0.35)'], [1, 'rgba(60,55,60,0)']]);
+      pane(w * 0.1, y + fh * 0.12, w * 0.8, fh * 0.52, 1); rect(a, w * 0.5 - 2 * k, y + fh * 0.12, 4 * k, fh * 0.52, '#cfcac2');
+      if (q() < 0.4) { rect(a, w * 0.12, y + fh * 0.36, w * (0.3 + q() * 0.4), 3 * k, '#9a948c'); for (let x = w * 0.16; x < w * 0.7; x += w * 0.14) rect(a, x, y + fh * 0.37, w * 0.09, fh * 0.15, q() < 0.5 ? '#f4f1ea' : '#a9c4dc'); } // (washing)
+      rect(a, 0, y + fh * 0.62, w, fh * 0.38, '#f5f2ec'); rect(a, 0, y + fh * 0.62, w, 3 * k, '#ffffff');
+      vgrad(a, 0, y + fh * 0.62, w, fh * 0.38, [[0, 'rgba(255,255,255,0.0)'], [1, 'rgba(60,55,50,0.1)']]);
+      rect(a, 0, y + fh - 3 * k, w, 3 * k, 'rgba(60,55,50,0.22)');
+    } else { // an end wall: panel joints, one small window a floor, a downpipe
+      rect(a, 0, y + fh - 2 * k, w, 2 * k, 'rgba(70,65,60,0.14)'); rect(a, w * 0.5, y, 1.5 * k, fh, 'rgba(70,65,60,0.08)');
+      const x = w * 0.6, ww = w * 0.22, y0 = y + fh * 0.3, gh = fh * 0.3; rect(a, x - 2 * k, y0 - 2 * k, ww + 4 * k, gh + 4 * k, '#d9d5cd'); pane(x, y0, ww, gh, 1);
+      rect(a, w * 0.08, y, 4 * k, fh, '#d2cec6');
+    }
+  }
+  grain(a, A, w, h, 0.1);
+}
+/** neon tubes along the shophouses' eaves and canopies, as in the city painting (pink, violet, mint green): a strip of
+ *  glowing glass, its core near white; across the cell its section (the quads stretch it along the eave). Named 'vs…': the
+ *  neon light code, bright by day too (props.js litOf), so the bloom gives each its soft halo */
+const NEON_TUBES = [['vsNp', '#ff4fc8'], ['vsNv', '#a95cff'], ['vsNg', '#38f0b8']];
+function neonTube(A, a, e, w, h, col) {
+  for (const c of [a, e]) {
+    rect(c, 0, 0, w, h, col);
+    vgrad(c, 0, 0, w, h, [[0, 'rgba(255,255,255,0)'], [0.35, 'rgba(255,240,252,0.75)'], [0.55, 'rgba(255,250,255,0.9)'], [0.8, 'rgba(255,255,255,0.1)'], [1, 'rgba(0,0,0,0.15)']]);
+  }
+}
+/** the canopies' eave (props.js machiya): its round tile ends (軒丸瓦) face on, a bold scalloped edge along the street as the
+ *  city painting draws them: 15 ends of 20 cm across ~3 m, each a dark rim, a slate face lit from above and a boss (the gaps
+ *  transparent: the atlas alpha-tests) */
+function eaveEnds(A, a, e, w, h) {
+  a.clearRect(0, 0, w, h);
+  const n = 15, tw = w / n, r = Math.min(tw, h) * 0.47;
+  for (let i = 0; i < n; i++) {
+    const cx = (i + 0.5) * tw, cy = h * 0.5;
+    a.fillStyle = '#1c2340'; a.beginPath(); a.arc(cx, cy, r, 0, 7); a.fill();
+    const g = a.createLinearGradient(0, cy - r, 0, cy + r); g.addColorStop(0, '#8593b8'); g.addColorStop(0.45, '#4d5a86'); g.addColorStop(1, '#283154');
+    a.fillStyle = g; a.beginPath(); a.arc(cx, cy, r * 0.78, 0, 7); a.fill();
+    a.fillStyle = '#262f52'; a.beginPath(); a.arc(cx, cy, r * 0.26, 0, 7); a.fill();
+  }
+}
 /** the cells' sizes in rows of 2048 px, as Atlas.add lays them out: the y under the last one */
 function flowEnd(sizes) {
   let x = 0, y = 0, rowH = 0;
@@ -821,7 +889,10 @@ export function buildPaintedAtlas(main, tier, fa, ha) {
   BIG_SIGNS.forEach((spec, i) => signs.push(['vsB' + i, VS, (A, a, e, w, h) => bigSign(A, a, e, w, h, spec)]));
   // (in this order the narrow signs fill the rows' ends: 2340 rows on desktops instead of 2432)
   const list = [...shops.slice(0, 5), signs[0], ...shops.slice(5, 10), signs[1], shops[10], ...uppers.slice(0, 4), signs[2], ...uppers.slice(4, 9), signs[3], uppers[9], ...signs.slice(4),
-    ['hsN_洋品店', NB, (A, a, e, w, h) => navyBoard(A, a, e, w, h, '洋品店')], ['kawaraC', [240, 256], canopyTiles]];
+    ['hsN_洋品店', NB, (A, a, e, w, h) => navyBoard(A, a, e, w, h, '洋品店')], ['kawaraC', [240, 256], canopyTiles],
+    // (the tall blocks' faces and the neon tubes: in the canopy tiles' row, which had room for them: the atlas keeps its size)
+    ...BLOCK_KINDS.flatMap((kd, i) => [false, true].map(lit => ['wb' + kd + (lit ? 'L' : ''), [136, 248], (A, a, e, w, h) => blockFace(A, a, e, w, h, kd, lit, 7700 + i)])),
+    ...NEON_TUBES.map(([n, col]) => [n, [96, 24], (A, a, e, w, h) => neonTube(A, a, e, w, h, col)]), ['kawaraE', [300, 24], eaveEnds]];
   const end = flowEnd(list.map(c => c[1])), H = Math.ceil((end + (ha ? 16 + ha.rows : 4)) / 4) * 4;
   const P = new Atlas(H, 2, main.cells);
   for (const [n, [w, h], f] of list) P.add(n, w, h, (a, e, cw, ch) => f(P, a, e, cw, ch));

@@ -873,33 +873,41 @@ export class World {
         if (s + w > s1) { if (s1 - s < 5 || type === 'konbini') break; w = s1 - s - 0.2; }
         { const k1 = s < c0 ? k0 : k0 + 2, gap = k1 * 150 - mouthA(k1); // never build into the next opening
           if (s + w > gap - 0.1) { if (gap - 0.1 - s < 4) { s = k1 * 150 + mouthB(k1) + 0.05; continue; } w = gap - 0.1 - s; } }
-        const sm = s + w / 2, e = road(sm), tint = r.pick(P.TINTS), litP = 0.42, plaster = type === 'machiya' && r() < 0.6;
+        // (the opening view's near-right shophouse is plastered, as the painting's beside the car: one random number, as before)
+        const sm = s + w / 2, e = road(sm), tint = r.pick(P.TINTS), litP = 0.42, plaster = type === 'machiya' && (r() < 0.6 || (side > 0 && s < 150 && s + w > 132));
         {
           const M = matAt(sm, side * front, e + 0.15);
           const spec = { type, w, at: sm, side, d: type === 'apt' ? r.range(10, 14) : r.range(8, 12), // (at, side: where it stands, for the opening view)
-            floors: type === 'shop' ? r.int(2, 4) : type === 'machiya' ? (r() < 0.7 ? 2 : 3) : type === 'apt' ? r.int(4, 9) : 2, tint: plaster ? P.PLASTER[Math.floor(r() * P.PLASTER.length)] : tint, litP, plaster, fence: type === 'house' && r() < 0.5 ? 1.2 : 0 };
+            floors: type === 'shop' ? r.int(2, 4) : type === 'machiya' ? (r() < 0.45 ? 2 : 3) : type === 'apt' ? r.int(4, 9) : 2, tint: plaster ? P.PLASTER[Math.floor(r() * P.PLASTER.length)] : tint, litP, plaster, fence: type === 'house' && r() < 0.5 ? 1.2 : 0 };
           P.building(G, M, r, spec);
           if (type !== 'house' && r() < 0.28) P.vendingMachine(G, matAt(sm + (r() - 0.5) * (w - 1.2), side * (front - 0.42), e + 0.15), r);
           if ((type === 'shop' || type === 'konbini' || type === 'machiya') && r() < 0.3) for (let b = 0; b < 1 + r() * 3; b++) P.bicycle(G, matAt(sm - w / 2 + 0.8 + b * 0.55, side * (front - 0.75), e + 0.15, Math.PI / 2 + 0.1), r);
           if (type === 'house' && r() < 0.6) for (let p = 0; p < 2 + r() * 3; p++) P.pottedPlant(G, matAt(sm + 1 + p * 0.5, side * (front - 0.3), e + 0.15), r);
-          if (r() < 0.03) for (let k = 0; k < 3; k++) P.cone(G, matAt(sm + k * 0.9, side * (rw + 0.35), e));
+          if (r() < 0.03 && (sm < 120 || sm > 170)) for (let k = 0; k < 3; k++) P.cone(G, matAt(sm + k * 0.9, side * (rw + 0.35), e)); // (none in the opening view: the painting's kerb is clear)
         }
         s += w + r.range(0.05, 0.5);
         yield;
       }
-      // second row: taller buildings peeking over the street (a denser row right behind the shophouses closed the far end
-      // of the street as in the city painting, but cost ~1.9 ms a frame over a city drive on the Vega iGPU)
-      for (let s2 = s0 + r() * 10; s2 < s1 - 8; s2 += r.range(14, 26)) {
-        if (zoneW(s2).city < 0.7 || zoneW(s2).mountain > 0.1 || r() < 0.3 || nearX(s2, 18) || nearSide(s2, 15)) continue;
-        const rw = rwAt(s2), M = matAt(s2, side * (rw + 3.2 + r.range(14, 20)), road(s2) + 0.1);
-        P.building(G, M, r, { type: r() < 0.6 ? 'apt' : 'office', w: r.range(12, 18), d: 12, floors: r.int(6, 11), tint: r.pick(P.TINTS), litP: 0.4 });
+      // second row: the city painting's tall pale blocks (6–12 storeys) right behind the shophouses, almost unbroken, so the
+      // street runs into a canyon of them from the middle distance on and the sky is a narrow V between them (it was a block
+      // of flats every 14–26 m, a third of them left out, and far towers 55–150 m out: the sky opened wide over an even
+      // two-storey row and the street's far end was a low haze). Plain painted boxes (props.js block), ~50 quads each (a
+      // denser row of the old flats, ~400 quads each with their balconies, cost 1.9 ms a frame). Each stays inside its chunk
+      // (the chunk's last one reaches its end), so neighbouring chunks never overlap; none in a side street's mouth, where
+      // its own houses stand. The blocks draw their own random numbers; outside the city the old row's are drawn as before,
+      // so every other zone's layout stays as it was
+      if (Math.max(zoneW(s0).city, zoneW(s1).city) < 0.7) { for (let s2 = s0 + r() * 10; s2 < s1 - 8; s2 += r.range(14, 26)); continue; }
+      const br = rng(Math.floor(hash2(Math.round(s0 / CH), side > 0 ? 2741 : 2749) * 4294967295));
+      for (let s2 = s0 + 0.3; s2 < s1 - 6;) {
+        let w = br.range(10, 18); if (s1 - 0.3 - (s2 + w) < 9) w = s1 - 0.3 - s2;
+        const sm = s2 + w / 2, c0 = 300 * Math.round(sm / 300), wz = zoneW(sm);
+        if (Math.min(zoneW(s2).city, zoneW(s2 + w).city) < 0.7 || wz.mountain > 0.1 || nearX(sm, 14 + w / 2) || (s2 < c0 + 14 && s2 + w > c0 - 14)) { s2 += 6; continue; }
+        const rw = rwAt(sm), u = rw + 3.15 + 12.6 + br() * 2.5, t = br(), fl = t < 0.2 ? 6 : t < 0.5 ? 8 : t < 0.8 ? 10 : 12, kd = br();
+        P.building(G, matAt(sm, side * u, road(sm) + 0.1), br, { type: 'block', w, d: br.range(10, 16), floors: fl, tint: br.pick(P.BLOCK_TINTS), litP: 0.4, near: -side,
+          kind: kd < 0.35 ? 'A' : kd < 0.65 ? 'B' : 'C', endKind: br() < 0.7 ? 'D' : kd < 0.35 ? 'A' : 'B' });
+        s2 += w + br.range(0.3, 2.5);
       }
-      // far towers for a skyline
-      if (zoneW(s0 + 30).city > 0.7 && zoneW(s0 + 30).mountain < 0.1 && r() < 0.65) {
-        const sm = s0 + r() * CH; if (nearX(sm, 24) || nearSide(sm, 20)) continue;
-        const M = matAt(sm, side * r.range(55, 150), road(sm));
-        P.building(G, M, r, { type: 'tower', w: r.range(16, 26), d: r.range(16, 22), floors: r.int(12, 26), tint: r.pick(P.TINTS), litP: 0.45 });
-      }
+      yield;
     }
     // side streets and alleys; signs and mirrors at the crossings
     const k0 = Math.ceil(s0 / 150), k1 = Math.floor((s1 - 0.01) / 150);

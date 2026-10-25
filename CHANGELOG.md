@@ -2,6 +2,36 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-25 · 20:xx — Gap 5: the shopping street's canyon, its canopies and neon, as painted
+- **The street runs into a canyon of tall pale blocks, as in the city painting.** An almost unbroken row of 6- to
+  12-storey pale concrete blocks stands right behind the shophouses on both sides (ribbon and punched windows, flats'
+  balconies, plain end walls), so from the middle distance on the street is closed and the sky is a narrow V down to its
+  far end; it was a block of flats every 14–26 m and far towers, the sky open wide over an even row. At dusk the blocks'
+  windows light one by one. The canyon holds along the drive (judged at s = 140 and 900).
+- **The opening view's far end and sky are the painting's:** the street ends in the far city's pale towers in haze (it
+  was a green hill); the cumulus stand either side of the V with the blue between; on a bright day the city's haze is
+  thinner. Sky 10.4% → 7.2% of the frame (painting 7.4%); far street ΔE 17.8 → 11.1; the painting's top-centre sky box
+  77.4 → 4.2; cloud shade 26.1 → 14.5; right upper floors 9.5 → 6.0.
+- **Shophouses of varied heights** (55% three storeys, were 30%: the roofs step along the street), **canopies as
+  painted** (steeper, 44°, a deep band of blue-grey tiles with round tile ends along the eave) and **neon tubes** in pink,
+  violet and mint along the eaves and canopies, bright by day and glowing at night.
+- Worse at the painting's frame: the left upper floors 11.3 → 20.3 (the near canopy now fills that box), the shops
+  6.7 → 10.3 and 17.2 → 26.7 (a lit bakery window at the right edge; the interiors are still too orange).
+- How: `props.js` (`block`, `neonTube`, the canopy and its eave ends; the unused `office` / `tower` builders removed),
+  `textures.js` (`blockFace` cells `wbA…wbD` and lit twins, `vsNp/vsNv/vsNg`, `kawaraE`, all in the canopy tiles' row: the
+  desktop atlas keeps its size, the phone's grows 1216 → 1468 rows), `chunks.js` (the block row with its own random
+  numbers; outside the city the old draws are kept, so the other five zones' starts are pixel-identical to live),
+  `main.js` (`CITY_HAZE`, the clouds' 'flank' opening and `band.hero` for a city start, the shadow fit's city casters
+  43 m). Assets: none. Programs: 62 / 61. Triangles at the start −22% (426k → 331k desktop).
+- Cost (the shared box's Vega; the desktop machine down): less over drives. City drives desktop 21.16 / 20.68 →
+  20.84 / 19.72 ms, phone 13.10 / 12.84 → 11.58 / 10.85; per-draw timers at golden hour +0.4–0.6 ms on desktops (the
+  blocks' long shadows). Phone-profile flat-out world-build spikes 20 / 24 (worst 40 ms) → 8 / 7 (29 ms). 0 shader errors
+  in all six zones (desktop; the phone tier at noon and night; q=low); no console errors at q=low, mid and high; none
+  compiled through sunset, night, rain or drives; embed starts on tap; start-up about the same (medians 2.89 vs 3.15 s
+  over seven interleaved loads each on a box at load 7–9, one ~5.3 s load in each build).
+- Left over: painted block façades (they are procedural paint), the shops' orange interiors, the blocks' alpha-tested
+  shadow pass, the canyon's far end once driving (the band is fixed in the world).
+
 ## 2026-10-25 · 18:xx — Gap 4: soft painted shadow edges, and a lighter golden hour
 - **The car's shadow and the cherry avenue's crown shadows have clean, soft edges, as painted** (they showed the shadow
   map's texels as stair-steps; the car's own shadow edge was a jagged pixel line). On the ground near the camera each

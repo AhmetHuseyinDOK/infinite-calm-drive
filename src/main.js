@@ -90,7 +90,8 @@ async function main() {
   // the shadow pass drew the scenery 220 m ahead, mostly for shadows nobody sees. The box keeps its width (its columns) and
   // its texel grid, but takes only the rows that hold the shadow receivers within SH_FIT.R of its centre (up to HH above it
   // and HL below), drawn into that many rows of the map (a viewport: the same texels, less to fill); and its near plane
-  // reaches out towards the sun only as far as a caster HC tall standing beyond those receivers (the city's towers: HC 80 m).
+  // reaches out towards the sun only as far as a caster HC tall standing beyond those receivers (the city's tall blocks, 12
+  // storeys and a stair house: HC 43 m; it was 80 for the far towers they replaced).
   // At noon it is the old box. Both are refitted every frame without moving a texel (the rows are whole texels from the
   // box's snapped centre, the near plane only clips), so the stair-steps' layout is the old box's wherever both reach
   const SH_FIT = { R: SH_HALF, HH: 25, HL: 10, HC: 15 }, SH_BIAS_M = 0.0004 * 419; // (the depth bias in metres: −0.0004 of the old 419 m range)
@@ -275,6 +276,7 @@ async function main() {
   const keyAt = (L, f, b, out) => { const hm = Math.hypot(L.x, L.z), sd = L.x * f.z - L.z * f.x < 0 ? -1 : 1, cb = Math.cos(b) * hm, sb = Math.sin(b) * hm * sd;
     return out.set(f.x * cb + f.z * sb, L.y, f.z * cb - f.x * sb).transformDirection(camera.matrixWorldInverse); };
   const glowV = new THREE.Vector3(), HAZE_GLOW = QS.has('haze') ? parseFloat(QS.get('haze')) : 1; // (test hook: ?haze=0 off)
+  const CITY_HAZE = 0.0009; // the city's haze thinned on a bright day (exp² density; 0.0022 at dusk, at night and under grey skies)
   const rig = makeCrossingRig(); scene.add(rig.group);
   const train = makeTrain(); scene.add(train.group);
   const weather = makeWeather(QS), rain = makeRain(), snowfall = makeSnow(); scene.add(rain.mesh, snowfall.mesh);
@@ -338,9 +340,12 @@ async function main() {
     const pcAtlas = await pcLoad;
     pclouds = pcAtlas ? makePaintedClouds(pcAtlas, post) : null; if (pclouds) scene.add(pclouds.mesh);
     clouds = !pclouds || CLOUDS === 'both' ? makeClouds(paintClouds(renderer)) : null; if (clouds) scene.add(clouds.group);
-    if (pclouds) pclouds.opening = ['sakura', 'city'].includes(zoneAt(st.s)) ? 'center' : 'flank'; // (a narrow sky over the road: one tower over it)
+    // (the avenue's narrow sky over the road: one tower over it; the city's, a V between its tall blocks: the cumulus either
+    // side of it, the blue between, as in the city painting)
+    if (pclouds) pclouds.opening = zoneAt(st.s) === 'sakura' ? 'center' : 'flank';
     const bandAtlas = await bandLoad;
     band = bandAtlas ? makePaintedBand(bandAtlas, post, scene.fog.color) : null; if (band) scene.add(band.mesh);
+    if (band && zoneAt(st.s) === 'city') band.hero = 0.5; // (the street's far end: the far city's pale towers in haze, its second painting, not the first's green hill)
     renderer.setRenderTarget(post.composer.readBuffer); renderer.compile(scene, camera); renderer.setRenderTarget(null);
     if (pcAtlas) renderer.initTexture(pcAtlas.tex); if (bandAtlas) renderer.initTexture(bandAtlas.tex);
   }
@@ -681,7 +686,7 @@ async function main() {
       { const se = shadowDir.y, ce = Math.hypot(shadowDir.x, shadowDir.z), half = sun.shadow.mapSize.y / 2;
         const zm = Math.max(zoneWeight(st.s + 26, 'mountain') + zoneWeight(st.s + 26, 'snow'), zoneWeight(st.s + 110, 'mountain') + zoneWeight(st.s + 110, 'snow'));
         const zc = Math.max(zoneWeight(st.s + 26, 'city'), zoneWeight(st.s + 110, 'city'));
-        const hh = SH_FIT.HH + 15 * zm + 3, hl = SH_FIT.HL + 20 * zm + 3, hc = SH_FIT.HC + 65 * zc + 25 * zm; // (+3: the pivot's 3 m steps)
+        const hh = SH_FIT.HH + 15 * zm + 3, hl = SH_FIT.HL + 20 * zm + 3, hc = SH_FIT.HC + 28 * zc + 25 * zm; // (+3: the pivot's 3 m steps)
         const sy = vx * shY.x + vz * shY.z, sz = vx * shadowDir.x + vz * shadowDir.z, ky = Math.max(0.05, ce + sy);
         let kHi = half, kLo = half, near = 1;
         if (st.shfit) {
@@ -746,7 +751,8 @@ async function main() {
       }
     }
     scene.fog.color.copy(TOD.fog);
-    const fogD = (w.city * 0.0022 + w.sakura * 0.0019 + w.coast * 0.0011 + w.country * 0.0014 + w.mountain * 0.0017 + w.snow * 0.0021) * (1 + TOD.night * 0.25);
+    // (the city on a bright day: a thinner haze, so its canyon of tall blocks reads to the street's far end, as painted)
+    const fogD = (w.city * (0.0022 - CITY_HAZE * TOD.bright) + w.sakura * 0.0019 + w.coast * 0.0011 + w.country * 0.0014 + w.mountain * 0.0017 + w.snow * 0.0021) * (1 + TOD.night * 0.25);
     scene.fog.near = fogD * (1 + 0.55 * ov + 0.45 * rn); scene.fog.far = world.ahead * 0.92;
     U.uSkyHor.value.copy(TOD.horizon); U.uSkyZen.value.copy(TOD.zenith); U.uTime.value = t;
     U.uWet.value = wet * (1 - w.snow);

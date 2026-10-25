@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { GRAD, GRAD_SOFT, withGloss } from './materials.js';
+import { GRAD_CAR, U, withGloss } from './materials.js';
 
 function plateTexture() {
   const c = document.createElement('canvas'); c.width = 256; c.height = 128;
@@ -19,6 +19,7 @@ function plateTexture() {
 // window, 3 a sliding-door window — each tinted, with the cabin showing through as dark shapes: the rear seat's backrest
 // and headrests through the rear window (always in view behind the car), a headrest in each side window
 const GLASS_CELLS = 4;
+const HALO_W = 0.37, HALO_H = 0.61; // the tail lamps' glow cards (m)
 function glassTexture() {
   const W = 128, H = 128, c = document.createElement('canvas'); c.width = W * GLASS_CELLS; c.height = H;
   const g = c.getContext('2d');
@@ -55,22 +56,38 @@ export function makeCar() {
   // along the paint and the glass (the two nearest lamps, set each frame in view space; w = strength, 0 = none)
   const lamps = [new THREE.Vector4(), new THREE.Vector4()];
   const lampCol = new THREE.Color(1.0, 0.8, 0.52);
-  const LAMPS = { uniforms: { uCarLamp: { value: lamps }, uCarLampCol: { value: lampCol } }, pars: '\nuniform vec4 uCarLamp[2]; uniform vec3 uCarLampCol;', apply: /* glsl */`
+  const LAMPS = { uniforms: { uCarLamp: { value: lamps }, uCarLampCol: { value: lampCol }, uCarKey: U.uCarKey }, pars: '\nuniform vec4 uCarLamp[2]; uniform vec3 uCarLampCol, uCarKey;', apply: /* glsl */`
   for (int i = 0; i < 2; i++) {
     vec3 L = uCarLamp[i].xyz + vViewPosition; float d2 = max(dot(L, L), 1e-4); L *= inversesqrt(d2);
     float att = uCarLamp[i].w / (1.0 + 0.045 * d2);
     outgoingLight += uCarLampCol * att * (diffuseColor.rgb * max(dot(nV, L), 0.0) + pow(max(dot(nV, normalize(L + vV)), 0.0), 60.0) * 1.5 * gm);
   }` };
-  const mPaint = withGloss(new THREE.MeshToonMaterial({ color: '#ffffff', vertexColors: true, gradientMap: GRAD_SOFT }), 0.85, 0.06, 'paint-l', LAMPS); // (the soft ramp: a rounded body shades in gradients, not bands)
+  // every lit part of the car is lit by the painter's sun (CAR_KEY, materials.js), on the car's own ramp (GRAD_CAR)
+  const carLit = m => { m.defines = { CAR_KEY: '' }; return m; };
+  // the painter's fill: in every painting the car's shade is lit by a bright light (sky blue by day; ref/tod/: grey-violet
+  // at golden hour and sunset, moonlit blue-grey at night): uCarFill, added where the sun doesn't reach (lf: the share of
+  // the sun's light a pixel gets); and its whole shade, sky and fill, fades from the waist (1.2 m) to 0.6× by the sills
+  // (0.35 m): the road and the car's own shadow below, where the paintings' hatch darkens towards the bumper
+  const FILL = /* glsl */`
+#include <lights_fragment_end>
+{ vec3 bd = BRDF_Lambert(diffuseColor.rgb); // (the toon's direct light is ramp × shadow × sun × paint in each channel)
+  float lf = clamp(reflectedLight.directDiffuse.g / max(directionalLights[0].color.g * bd.g, 1e-7), 0.0, 1.0);
+  reflectedLight.indirectDiffuse = (reflectedLight.indirectDiffuse + bd * uCarFill * (1.0 - lf)) * (0.6 + 0.4 * clamp((vWP.y - uCarPos.y + 0.45) / 0.85, 0.0, 1.0)); }`;
+  const PAINT = { uniforms: { ...LAMPS.uniforms, uCarFill: U.uCarFill }, pars: LAMPS.pars + '\nuniform vec3 uCarFill;', apply: LAMPS.apply };
+  const mPaint = carLit(withGloss(new THREE.MeshToonMaterial({ color: '#ffffff', vertexColors: true, gradientMap: GRAD_CAR }), 0.85, 0.06, 'paint-l', PAINT));
+  { const ob = mPaint.onBeforeCompile; mPaint.onBeforeCompile = sh => { ob(sh); sh.fragmentShader = sh.fragmentShader.replace('#include <lights_fragment_end>', FILL); }; }
   const part = (hex, gloss) => Object.assign(new THREE.Color(hex), { gloss });
   const mBody = part('#9fd8c8', 1), mRoof = part('#eeece4', 0.6), mTrim = part('#2a2c33', 0.35), mTyre = part('#1b1c20', 0.04), mHub = part('#c8ccd2', 0.8), mChrome = part('#d4d8de', 1.3);
   const paint = (g, c) => { const n = g.attributes.position.count, a = new Float32Array(n * 4); for (let i = 0; i < n; i++) a.set([c.r, c.g, c.b, c.gloss], i * 4); g.setAttribute('color', new THREE.Float32BufferAttribute(a, 4)); return g; };
-  const mGlass = withGloss(new THREE.MeshToonMaterial({ color: '#ffffff', map: glassTexture(), gradientMap: GRAD }), 1.2, 0.08, 'glass-l', LAMPS);
-  const mTail = new THREE.MeshToonMaterial({ color: '#c8303a', emissive: '#ff2a2a', emissiveIntensity: 0.4, gradientMap: GRAD });
-  const mTailBar = new THREE.MeshToonMaterial({ color: '#ff9a9a', emissive: '#ff4a40', emissiveIntensity: 1, gradientMap: GRAD }); // the LED bar in each lamp (mTail's program)
-  const mStop = new THREE.MeshToonMaterial({ color: '#4a1216', emissive: '#ff2a2a', emissiveIntensity: 0, gradientMap: GRAD }); // high-mount stop lamp (same program as mTail)
-  const mAmber = new THREE.MeshToonMaterial({ color: '#f0a040', emissive: '#ff9a30', emissiveIntensity: 0.2, gradientMap: GRAD });
-  const mLamp = new THREE.MeshToonMaterial({ color: '#dfe4ea', emissive: '#fff4dc', emissiveIntensity: 0.15, gradientMap: GRAD }); // headlamps (mTail's program)
+  const mGlass = carLit(withGloss(new THREE.MeshToonMaterial({ color: '#ffffff', map: glassTexture(), gradientMap: GRAD_CAR }), 1.2, 0.08, 'glass-l', LAMPS));
+  // the lamps (one program): lit by the painter's sun too
+  const lampKey = sh => { sh.uniforms.uCarKey = U.uCarKey; sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform vec3 uCarKey;'); };
+  const lamp = o => { const m = carLit(new THREE.MeshToonMaterial({ ...o, gradientMap: GRAD_CAR })); m.onBeforeCompile = lampKey; m.customProgramCacheKey = () => 'car-lamp'; return m; };
+  const mTail = lamp({ color: '#c8303a', emissive: '#ff2a2a', emissiveIntensity: 0.4 });
+  const mTailBar = lamp({ color: '#ffb8a0', emissive: '#ffd3a6', emissiveIntensity: 1 }); // the light guide in each lamp (mTail's program)
+  const mStop = lamp({ color: '#b02030', emissive: '#ff2a2a', emissiveIntensity: 0.55 }); // high-mount stop lamp (same program as mTail)
+  const mAmber = lamp({ color: '#f0a040', emissive: '#ff9a30', emissiveIntensity: 0.35 });
+  const mLamp = lamp({ color: '#dfe4ea', emissive: '#fff4dc', emissiveIntensity: 0.15 }); // headlamps (mTail's program)
   const mPlate = new THREE.MeshBasicMaterial({ map: plateTexture() });
   // collect parts per material, then merge → ~9 draw calls for the whole car
   const parts = new Map(), wheels = []; let unsprung = false;
@@ -84,6 +101,19 @@ export function makeCar() {
     parts.get(mat).push(g);
   };
   const mDark = part('#16171b', 0), mSeam = part('#2b3134', 0.15), mRim = part('#b9bfc6', 0.9), mDish = part('#4d5258', 0.4), mRefl = part('#9a1c22', 0.6);
+  const mNavy = part('#3a4462', 0.5), mLampRim = part('#6a1820', 0.9); // the lower bumper's navy plastic (city.png and coast.png; the valance in the other two)
+  /** a flat capsule-shaped loop (w × h outside, wi × hi inside), facing +Z */
+  const capsule = (w, h, wi, hi) => {
+    const cap = (p, w, h) => { const r = w / 2, y = h / 2 - r; p.moveTo(r, -y); p.lineTo(r, y); p.absarc(0, y, r, 0, Math.PI, false); p.lineTo(-r, -y); p.absarc(0, -y, r, Math.PI, Math.PI * 2, false); return p; };
+    const sh = cap(new THREE.Shape(), w, h); sh.holes.push(cap(new THREE.Path(), wi, hi));
+    return new THREE.ShapeGeometry(sh, 6);
+  };
+  /** a part in two colours, split across by height (per triangle, so the line is crisp): lo below ySplit, hi above */
+  const split = (geo, lo, hi, ySplit, x, y, z) => {
+    const g = (geo.index ? geo.toNonIndexed() : geo).translate(x, y, z), P = g.attributes.position, col = new Float32Array(P.count * 4);
+    for (let t = 0; t < P.count; t += 3) { const c = (P.getY(t) + P.getY(t + 1) + P.getY(t + 2)) / 3 < ySplit ? lo : hi; for (let k = 0; k < 3; k++) col.set([c.r, c.g, c.b, c.gloss], (t + k) * 4); }
+    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 4)); add(g, mPaint, 0, 0, 0);
+  };
   // ---- the body: one smooth shell lofted along the car (it was two stacked rounded boxes, a step at the waist and box
   // edges all round). Every cross-section is a rounded rectangle from the sills to the roof; the roof drops over a raked
   // windscreen to a short bonnet, the cabin leans in above the waist, and both ends round off like a soap bar (over each
@@ -130,10 +160,14 @@ export function makeCar() {
     // (the loft's winding: if a flank's normal points inwards, turn every triangle round)
     { const nr = g.attributes.normal, q = n * 10 + 12; if (nr.getX(q) < 0) { for (let k = 0; k < idx.length; k += 3) { const t = idx[k + 1]; idx[k + 1] = idx[k + 2]; idx[k + 2] = t; } g.setIndex(idx); g.computeVertexNormals(); } }
     g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array((pos.length / 3) * 2), 2));
-    // two-tone: the roof and its rounded shoulders white, the rest the body colour (per triangle, so the line is crisp)
-    const ng = g.toNonIndexed(), P = ng.attributes.position, col = new Float32Array(P.count * 4);
+    // two-tone: the roof and its rounded shoulders white, the rest the body colour, crisp: by the loft's quads (both of a
+    // quad's triangles alike), so the line runs straight along a section line. (Per triangle it was a zigzag: a row of white
+    // teeth along the shoulders, the hairy band under the roof cap seen from behind and the saw-teeth over the side windows)
+    const ng = g.toNonIndexed(), P = ng.attributes.position, col = new Float32Array(P.count * 4), nq = (rings.length - 1) * n * 6;
     for (let t = 0; t < P.count; t += 3) {
-      const cy = (P.getY(t) + P.getY(t + 1) + P.getY(t + 2)) / 3, cz = (P.getZ(t) + P.getZ(t + 1) + P.getZ(t + 2)) / 3, c = cy > 1.665 && cz < 0.84 && cz > -1.52 ? mRoof : mBody; // (not round the hatch's top edge: the roof cap covers it)
+      const t0 = t < nq ? t - (t % 6) : t, m = t < nq ? 6 : 3; // (a quad's six corners, or an end cap's triangle)
+      let cy = 0, cz = 0; for (let k = 0; k < m; k++) { cy += P.getY(t0 + k); cz += P.getZ(t0 + k); }
+      cy /= m; cz /= m; const c = cy > 1.665 && cz < 0.84 && cz > -1.52 ? mRoof : mBody; // (not round the hatch's top edge: the roof cap covers it)
       for (let k = 0; k < 3; k++) col.set([c.r, c.g, c.b, c.gloss], (t + k) * 4);
     }
     ng.setAttribute('color', new THREE.Float32BufferAttribute(col, 4));
@@ -172,10 +206,11 @@ export function makeCar() {
     }
     add(new RoundedBoxGeometry(0.1, 0.12, 0.2, 2, 0.04), mBody, s * 0.83, 1.24, 1.02);
     add(new THREE.BoxGeometry(0.07, 0.035, 0.05), mTrim, s * 0.775, 1.2, 1.03); // (the mirror's stalk)
-    // combination lamps: tall capsules in chrome bezels with a brighter LED bar down the middle, the amber indicator below
-    add(new RoundedBoxGeometry(0.16, 0.4, 0.05, 3, 0.075), mChrome, s * 0.56, 0.95, -1.703);
+    // combination lamps: tall capsules in a dark red rim, a pale light guide looping round inside each red lens (as the
+    // paintings' lamps: a red rim, a cream ring, a red core), the amber indicator below
+    add(new RoundedBoxGeometry(0.16, 0.4, 0.05, 3, 0.075), mLampRim, s * 0.56, 0.95, -1.703);
     add(new RoundedBoxGeometry(0.13, 0.37, 0.05, 3, 0.062), mTail, s * 0.56, 0.95, -1.716);
-    add(new RoundedBoxGeometry(0.036, 0.27, 0.02, 2, 0.016), mTailBar, s * 0.56, 0.95, -1.742);
+    add(capsule(0.11, 0.346, 0.08, 0.316), mTailBar, s * 0.56, 0.95, -1.7425, 0, Math.PI, 0);
     add(new RoundedBoxGeometry(0.11, 0.06, 0.04, 2, 0.02), mAmber, s * 0.56, 0.69, -1.707);
   }
   // the rear window on the hatch: a rounded trapezoid (the cabin leans in), the rear seats behind it
@@ -198,9 +233,14 @@ export function makeCar() {
   add(new RoundedBoxGeometry(0.25, 0.034, 0.03, 2, 0.013), mChrome, 0, 0.9, -1.708);
   for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.01, 0.56, 0.006), mSeam, s * 0.47, 0.85, -1.703);
   add(new THREE.BoxGeometry(0.95, 0.01, 0.006), mSeam, 0, 0.565, -1.703);
-  add(new RoundedBoxGeometry(1.5, 0.2, 0.26, 3, 0.08), mBody, 0, 0.44, -1.6);
+  // the bumper: the body colour over its top, navy below (the paintings' dark lower bumper and valance), the reflectors on
+  // the navy; a dark lip under it
+  split(new RoundedBoxGeometry(1.5, 0.2, 0.26, 3, 0.08), mNavy, mBody, 0.455, 0, 0.44, -1.6);
   add(new RoundedBoxGeometry(1.38, 0.08, 0.22, 2, 0.03), mTrim, 0, 0.33, -1.61);
-  for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.13, 0.035, 0.01), mRefl, s * 0.56, 0.44, -1.731);
+  for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.13, 0.032, 0.01), mRefl, s * 0.56, 0.425, -1.731);
+  // a chrome emblem on the hatch, under the rear window (city.png)
+  add(new THREE.TorusGeometry(0.034, 0.0065, 4, 20), mChrome, 0, 1.035, -1.704, 0, Math.PI, 0);
+  for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.009, 0.042, 0.006), mChrome, s * 0.011, 1.035, -1.706, 0, 0, s * 0.42);
   add(new THREE.CylinderGeometry(0.036, 0.036, 0.12, 12), mChrome, 0.46, 0.29, -1.68, Math.PI / 2, 0, 0);
   add(new THREE.CylinderGeometry(0.024, 0.024, 0.124, 10), mDark, 0.46, 0.29, -1.68, Math.PI / 2, 0, 0);
   // the front (it is what the X card's film camera shows coming down the road): round headlamps in dark surrounds at the
@@ -265,6 +305,24 @@ export function makeCar() {
   { const q = [];
     for (const x of [-0.56, 0.56]) { const g = new THREE.PlaneGeometry(0.22, 1.5); g.rotateX(-Math.PI / 2); g.translate(x, 0.035, -1.72 - 0.75); q.push(g); }
     const st = new THREE.Mesh(mergeGeometries(q), streakMat); st.renderOrder = 3; st.visible = false; car.add(st); streakMat.mesh = st; }
+  // the tail lamps' glow: in every painting, by day too, a soft red halo spills from each lamp over the paint around it. A
+  // painted glow card per lamp, added to the frame (the bloom runs only at dusk and at night, and the card stays far under
+  // its threshold); its strength is set each frame (update): softer at night, where the bloom draws the glow; up when braking
+  const haloMat = (() => {
+    const W = 40, H = 64, c = document.createElement('canvas'); c.width = W; c.height = H;
+    const g = c.getContext('2d'), img = g.createImageData(W, H);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const px = Math.abs(((x + 0.5) / W - 0.5) * HALO_W), py = Math.abs(((y + 0.5) / H - 0.5) * HALO_H);
+      const d = Math.hypot(px, Math.max(0, py - 0.12)) - 0.065; // (from the lamp's capsule, 0.13 × 0.37 m: < 0 inside)
+      const a = d < 0 ? 0.2 + 0.8 * sst(-0.03, -0.002, d) : Math.exp(-((d / 0.06) ** 2)); // (light inside: the lens keeps its red)
+      const i4 = (y * W + x) * 4; img.data[i4] = img.data[i4 + 1] = img.data[i4 + 2] = Math.round(255 * a); img.data[i4 + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+    return new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), color: new THREE.Color(1, 0.2, 0.16), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+  })();
+  { const q = [];
+    for (const x of [-0.56, 0.56]) { const g = new THREE.PlaneGeometry(HALO_W, HALO_H); g.rotateY(Math.PI); g.translate(x, 0.95, -1.765); q.push(g); }
+    const m = new THREE.Mesh(mergeGeometries(q), haloMat); m.renderOrder = 3; inner.add(m); }
   // rear wiper (its own mesh so it can sweep when it rains)
   const wiperPivot = new THREE.Group(); wiperPivot.position.set(0.02, 1.19, -1.716); inner.add(wiperPivot);
   const wg = new THREE.BoxGeometry(0.52, 0.026, 0.02); wg.translate(0.27, 0, 0);
@@ -290,9 +348,14 @@ export function makeCar() {
       }
       // brake lights: the combination lamps brighten and the high-mount stop lamp comes on (they switch in ~0.1 s)
       S.br += ((m ? m.brake : 0) - S.br) * Math.min(1, dt * 14);
-      mTail.emissiveIntensity = 0.35 + night * 3.2 + S.br * (1.7 + night * 2.0); mStop.emissiveIntensity = S.br * (2.4 + night * 1.6);
-      mTailBar.emissiveIntensity = 1 + night * 3 + S.br * (2 + night * 2);
-      streakMat.opacity = wet * Math.min(1, 0.22 + mTail.emissiveIntensity * 0.22); streakMat.mesh.visible = streakMat.opacity > 0.01;
+      // (by day the lamps glow as the paintings': a bright red lens round a cream light guide, the high-mount lamp a dim red;
+      // at night the light guide burns red and the bloom draws their glow, as before, round a lens that stays red: at its old
+      // 3.5× the tone curve washed it out to a pinkish white, where the paintings' lamps keep their red)
+      mTail.emissiveIntensity = 0.85 + night * 0.35 + S.br * (1.7 + night * 2.0); mStop.emissiveIntensity = 0.55 + S.br * (2.4 + night * 1.6);
+      { const r = Math.min(1, night + S.br * 0.7); mTailBar.emissive.setRGB(1, 0.69 + (0.1 - 0.69) * r, 0.39 + (0.07 - 0.39) * r); }
+      mTailBar.emissiveIntensity = 0.95 + night * 3.05 + S.br * (2 + night * 2);
+      haloMat.opacity = (0.36 + 0.3 * S.br) * (1 - 0.2 * night);
+      streakMat.opacity = wet * Math.min(1, 0.22 + (0.35 + night * 3.2 + S.br * (1.7 + night * 2.0)) * 0.22); streakMat.mesh.visible = streakMat.opacity > 0.01; // (as before: by the lamps' old strength)
       if (rain > 0.15 || wiperT % 2.6 > 0.01) {
         wiperT += dt;
         const p = (wiperT % 2.6) / 2.6, sm = x => x * x * (3 - 2 * x);

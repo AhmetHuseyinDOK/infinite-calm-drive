@@ -2,6 +2,49 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-25 · 10:xx — Gap 2: the car as painted
+- **The car's back is in the shade, as in every painting:** a deeper teal (CIELAB L* 69–84 → 66–67; the paintings
+  55–68) with a navy lower bumper and glowing lamps. The car's body against the paintings, ΔE: the city 24.8 → 12.3, the
+  avenue 42.4 → 23.0 (a light-blue car there), the coast 23.3 → 7.8, the country 19.3 → 17.7 (a two-tone van there).
+- **Why it read lit:** the noon sun stood 84–124° round from the car's heading at the four paintings' places (to its
+  left, level with it or behind), and 84–170° over whole drives, so the hatch faced it; the car's soft ramp also gave a
+  face turned a quarter away from the sun half its light. The paintings' sun is 60–80° ahead-left at noon (by the car's
+  shadow) and straight ahead in their evening repaints. (So the world's sun is a gap of its own: the next step.)
+- **The painter's sun:** the car alone is lit by the sun swung round to ahead of it (as it is within 80° of ahead;
+  beyond, pulled forward on its own side, smoothly), on a ramp of its own (no light on a face turned from the sun, a
+  narrow soft edge). The shadows it casts and receives stay the real sun's. On the mountain's curves the hatch's colour
+  now moves at most 12 levels from one frame to the next (it jumped up to 58 as the back swung in and out of the sun).
+  **The painter's fill:** its shade takes a bright sky-blue light, darker towards the sills, read per hour from the
+  paintings and their repaints.
+- **Tail lamps as painted:** a cream light guide looping round inside a red lens with a dark red rim (was a pale bar in
+  chrome), a soft red halo on the paint round them by day too, the high-mount stop lamp a dim red (it still lights up
+  when braking); at night the lens keeps its red (it washed out to a pinkish white). Lamps ΔE at noon 12.6–37.0 →
+  5.5–27.4, at night 42.5–46.9 → 22.8–25.4.
+- **A navy lower bumper** (the reflectors on it), **a chrome emblem** on the hatch, and **the white roof's line runs
+  straight** (it was a row of white teeth along the shoulders: the hairy band under the roof cap from behind, the
+  saw-teeth over the side windows).
+- **The evening:** the hatch against the repaints, ΔE golden hour 38.5 → 11.0, sunset 35.7 → 9.2, night 31.1 → 16.3 (it
+  was a sunlit olive at golden hour and a khaki at sunset). Rain and grey skies keep the old light (no fill), so the back
+  is a darker teal there.
+- Worse: the bumper in the avenue and the country (their painted bumpers are body-coloured: 36.7 → 73.5, 8.7 → 75.1),
+  the roof's back edge at noon (13.8–17.4 → 19.6–21.3).
+- How: `materials.js` (`CAR_KEY` in the lights chunk: the car's direct light and glint from `U.uCarKey`, its own
+  shadows where the real sun reaches; `GRAD_CAR`), `car.js` (the fill after `lights_fragment_end`, `U.uCarFill`; the
+  lamps' program; capsule light guides; glow cards; the split bumper; the emblem; the two-tone by quads), `main.js`
+  (`KEY_A`, the key per frame in view space; `CF_T` per-hour fill × `paintSky()`). Test switch `st.carkey`. Assets: none.
+  World: the same layout. Programs: 62 on desktops, 61 on phones. The car: 12 → 13 meshes, 14,778 → 14,474 triangles.
+- Cost (the shared box's Vega; the desktop machine is off limits), per-draw GPU timers, the car's draws against the
+  sky's in the same runs: the subagent's calm runs desktop +6.3% (+8.4 / +5.2 / +6.2 / +5.2; ~0.08 ms; live against
+  itself +0.5%), phone +4.7% (~0.04 ms); the main agent's, on a busy box, desktop −0.6% (−8.6 / +6.4 / −7.7 / +7.3; live
+  against itself +0.7 / −5.8), phone +7.0% (−4.5 / +20.9 / +0.9 / +10.7; 0.99 → 1.07 ms), the coast at night +6.6%; the
+  car's shadow draws the same. Over city drives: desktop 19.98 / 19.74 → 18.16 / 18.10 ms, phone 12.18 / 12.22 → 11.41
+  / 12.49 (the iGPU's clock steps). 0 shader errors in all six zones on the desktop and phone tiers at noon, sunset and
+  night (and the low tier at night); no console errors at q=low, mid and high; none compiled through sunset, night, rain
+  or drives in rain and snow; embed starts on tap; start-up the same (medians 3.02 vs 2.94 s over three interleaved
+  loads each).
+- Left over: the world's sun (the car's and the trees' shadows still fall ahead-right; the paintings' fall back-right),
+  the roof's lit lip, the night car's moonlit roof, the city's round lamps and the country's two-tone (one car for all).
+
 ## 2026-10-25 · 08:xx — Gap audit 1: the coast's and the country's road, and the cherry blossom, as painted
 - **A gap audit** (`ref/GAPS.md`): the game's closest frame to each painting at noon (the city at s = 140, the avenue
   300, the coast 1100, the country 600, at each painting's own size), compared region by region (CIELAB ΔE of the

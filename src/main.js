@@ -242,6 +242,10 @@ async function main() {
   const R_DAY = { n: [0.46, 0.53, 0.68], f: [0.95, 1.05, 1.3] }, R_GOLD = { n: [0.55, 0.55, 0.7], f: [0.85, 0.62, 0.75] };
   const R_SUNSET = { n: [0.4, 0.8, 1.2], f: [1.1, 1.5, 1.4] }, R_NIGHT = { n: [1, 1, 1], f: [1, 1, 1] };
   const ROAD_T = todKeys(R_NIGHT, R_SUNSET, R_DAY, R_GOLD);
+  // the painter's fill in the car's shade (car.js; linear light): the mean of the paintings' cars (city, coast, country; the
+  // avenue's is another paint) at noon and repainted at golden hour, sunset and night (ref/tod/), their hatch under the
+  // window and beside the plate, on our paint and the game's grade at each hour (~/cdtest/car22/tools/fitfill.py)
+  const CF_T = todKeys({ f: [0.2, 0.32, 0.55] }, { f: [0.84, 0.40, 0.59] }, { f: [1.04, 1.28, 1.59] }, { f: [0.65, 0.34, 0.54] });
   // the cherry blossom's rose (m, sRGB; materials.js uBlMid) and where its pale petal tips begin on the atlas's key (w;
   // higher, more of each flower keeps the rose): on a bright day the painting's (its crowns' pink pixels: CIELAB L*
   // median 57, three quarters under 69; with the old ramp ours were 64–68 and 77–78), the old ramp at golden hour,
@@ -249,6 +253,8 @@ async function main() {
   const BLM_OLD = { m: [205, 105, 150], w: [0.3, 0, 0] }, BLM_DAY = { m: [188, 88, 132], w: [0.47, 0, 0] }, BLM_T = todKeys(BLM_OLD, BLM_OLD, BLM_DAY, BLM_OLD), blMid = new THREE.Color();
   const BL_TIP = new THREE.Color().setRGB(1, 232 / 255, 242 / 255, THREE.SRGBColorSpace); // (the petal tips' pale pink, (255, 232, 242) as before)
   const LIGHTS_ON = QS.has('lightson') ? parseFloat(QS.get('lightson')) : -1; // (test hook)
+  // the car's painter's sun (CAR_KEY): the real sun pulled round to within KEY_A of the car's heading (see the frame loop)
+  const KEY_A = 1.4, carKey = new THREE.Vector3();
   const glowV = new THREE.Vector3(), HAZE_GLOW = QS.has('haze') ? parseFloat(QS.get('haze')) : 1; // (test hook: ?haze=0 off)
   const rig = makeCrossingRig(); scene.add(rig.group);
   const train = makeTrain(); scene.add(train.group);
@@ -261,7 +267,7 @@ async function main() {
   // speed: the zone's cruising speed × mult (0.4 … 5.5, so up to ~190–265 km/h); uHome: the lane the car settles back
   // into when nobody steers — wherever the player last steered it (it used to always drift back to the left lane)
   const MULT_MIN = 0.4, MULT_MAX = 5.5;
-  const st = { s: Math.max(100, parseFloat(QS.get('s')) || 140), u: -1.65, uHome: -1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, spray: QS.has('nospray') ? 0 : 1 /* test switch */, grass: 1 /* test switch: the meadow's blades */, pclouds: 1 /* test switch: painted clouds (0: the procedural ones, with ?clouds=both) */, band: 1 /* test switch: the painted horizon (0: the mountain rings) */, waves: 1 /* test switch: the painted sea's waves (0: its flat tones) */, shore: 1 /* test switch: the waves and foam along the sea wall (0: the open sea's colour there) */, surf: 1 /* test switch: the spray over the tetrapods */, tetra: 1 /* test switch: the tetrapods */, bark: 1 /* test switch: the bark's painted tones (0: the old colours, lit) */, trunks: 1 /* test switch: the painted trees' bark (0: hidden) */, todpaint: 1 /* test switch: the painted look at golden hour, sunset and night (0: only on a bright day, as before) */, road: 1 /* test switch: the coast's and the country's painted asphalt (0: the old warm grey) */, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
+  const st = { s: Math.max(100, parseFloat(QS.get('s')) || 140), u: -1.65, uHome: -1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, spray: QS.has('nospray') ? 0 : 1 /* test switch */, grass: 1 /* test switch: the meadow's blades */, pclouds: 1 /* test switch: painted clouds (0: the procedural ones, with ?clouds=both) */, band: 1 /* test switch: the painted horizon (0: the mountain rings) */, waves: 1 /* test switch: the painted sea's waves (0: its flat tones) */, shore: 1 /* test switch: the waves and foam along the sea wall (0: the open sea's colour there) */, surf: 1 /* test switch: the spray over the tetrapods */, tetra: 1 /* test switch: the tetrapods */, bark: 1 /* test switch: the bark's painted tones (0: the old colours, lit) */, trunks: 1 /* test switch: the painted trees' bark (0: hidden) */, todpaint: 1 /* test switch: the painted look at golden hour, sunset and night (0: only on a bright day, as before) */, road: 1 /* test switch: the coast's and the country's painted asphalt (0: the old warm grey) */, carkey: 1 /* test switch: the car lit by the painter's sun (0: by the real sun) */, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
   let started = false;
   status('building the road…');
   await new Promise(r => setTimeout(r, 10));
@@ -650,6 +656,23 @@ async function main() {
     carSun.target.position.set(car.group.position.x, car.group.position.y + 0.9, car.group.position.z);
     carSun.position.copy(carSun.target.position).addScaledVector(TOD.lightDir, 12);
     hemi.color.copy(TOD.hemiSky); hemi.groundColor.copy(TOD.hemiGround); hemi.intensity = TOD.hemiI / dayExp;
+    { // the painter's sun for the car (materials.js CAR_KEY): in all four paintings, and in their repaints at golden hour,
+      // sunset and night, the light comes from ahead of the car (at noon 60–80° to its left, by its shadow), so its back is
+      // in the shade, its lamps glowing out of it. Here the sun stood 84–124° round from the car's heading at the four
+      // paintings' places, lighting its back. The car takes the real sun's light and height, swung round towards its
+      // heading: as it is while within KEY_A (80°) of ahead; beyond that pulled forward on its own side, the further behind
+      // the more (straight behind: straight ahead), so it never jumps. The shadows it casts and receives stay the real sun's
+      const h = car.group.rotation.y, fx = Math.sin(h), fz = Math.cos(h), L = TOD.lightDir;
+      const a = L.x * fx + L.z * fz, b = L.x * fz - L.z * fx, hm = Math.hypot(a, b); // ahead, and to the car's left (+X)
+      let ph = Math.atan2(b, a); const x = Math.abs(ph);
+      if (x > KEY_A && st.carkey) ph = Math.sign(ph) * KEY_A * (Math.PI - x) / (Math.PI - KEY_A);
+      const ca = Math.cos(ph) * hm, cb = Math.sin(ph) * hm;
+      carKey.set(fx * ca + fz * cb, L.y, fz * ca - fx * cb);
+      camera.updateMatrixWorld(); U.uCarKey.value.copy(carKey).transformDirection(camera.matrixWorldInverse);
+    }
+    { // …and the painter's fill in the car's shade (car.js CAR_FILL), by the time of day under a clear sky (grey skies: none)
+      const c = CF_T.at(TOD.t).rgb('f'), k = paintSky() * st.carkey; U.uCarFill.value.set(c[0] * k, c[1] * k, c[2] * k);
+    }
     { // aerial perspective has a direction: looking towards a low sun the haze glows with it (the sky dome's broad sun glow
       // at the horizon, averaged across the view), looking away it stays cool. Worked out once per frame on the CPU and
       // folded into the shared fog colour — shading it per vertex or per pixel measured +0.3–1.7 ms, this costs nothing

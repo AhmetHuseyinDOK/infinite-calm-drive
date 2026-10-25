@@ -43,6 +43,11 @@ THREE.ShaderChunk.lights_fragment_begin = THREE.ShaderChunk.lights_fragment_begi
   /#pragma unroll_loop_start\s*for \( int i = 0; i < NUM_DIR_LIGHTS; i \+\+ \) \{[\s\S]*?#pragma unroll_loop_end/, /* glsl */`
 	directionalLight = directionalLights[ 0 ];
 	getDirectionalLightInfo( directionalLight, directLight );
+	#ifdef CAR_KEY
+	// the car is lit by the painter's sun (car.js, main.js): the sun swung round to ahead of the car, so its back is in the
+	// shade as in every painting; the shadows it casts and receives stay the real sun's
+	vec3 sunV = directLight.direction; directLight.direction = uCarKey;
+	#endif
 	#if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
 	if ( directLight.visible && receiveShadow ) {
 		directionalLightShadow = directionalLightShadows[ 0 ];
@@ -54,7 +59,11 @@ THREE.ShaderChunk.lights_fragment_begin = THREE.ShaderChunk.lights_fragment_begi
 		#if NUM_DIR_LIGHT_SHADOWS > 1
 		// surfaces turning away from the sun keep just the toon ramp: the sharp map would cut their wrapped light
 		// into jagged bands (the car shadowing its own back)
+		#ifdef CAR_KEY
+		float nl = smoothstep( 0.0, 0.2, dot( geometryNormal, sunV ) ); // (the car's own shadows: where the real sun reaches)
+		#else
 		float nl = smoothstep( 0.0, 0.2, dot( geometryNormal, directLight.direction ) );
+		#endif
 		if ( nl > 0.0 ) { directionalLightShadow = directionalLightShadows[ 1 ];
 			sh = min( sh, mix( 1.0, getShadow( directionalShadowMap[ 1 ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ 1 ] ), nl ) ); }
 		#endif
@@ -103,6 +112,8 @@ export const U = {
   uTunB: { value: new THREE.Vector3(0, -1e4, 0) },
   uTunR: { value: 4.6 },
   uCarPos: { value: new THREE.Vector3() }, uCarFwd: { value: new THREE.Vector3(0, 0, 1) }, uHead: { value: 0 },
+  uCarKey: { value: new THREE.Vector3(0, 1, 0) }, // the car's painter's sun, in view space (main.js; CAR_KEY above)
+  uCarFill: { value: new THREE.Vector3() },       // …and the painter's fill in its shade (car.js CAR_FILL; main.js, by the time of day)
   uWind: { value: 1 },
   uNoiseTex: { value: makeNoiseTex() },
   uCloudTex: { value: null },                  // the drifting cloud shadows, painted each frame (makeCloudMap)
@@ -119,6 +130,15 @@ function gradTex(vals) {
 // toon ramp: away from the sun → only sky light (blue shadows); grazing → mid; facing → full sun
 export const GRAD = gradTex([16, 16, 16, 70, 200, 255, 255, 255]);
 export const GRAD_SOFT = gradTex([28, 40, 70, 130, 200, 240, 255, 255]);
+// the car's ramp: the paintings' terminator — no sun on a face turned from it, a narrow soft edge, flat light beyond (linear
+// filtering over 64 texels: a rounded body shades without bands). GRAD_SOFT gave a face turned a quarter away half the sun
+export const GRAD_CAR = (() => {
+  const N = 64, v = new Uint8Array(N);
+  for (let i = 0; i < N; i++) { const nl = ((i + 0.5) / N) * 2 - 1, t = Math.min(1, Math.max(0, (nl + 0.03) / 0.25)); v[i] = Math.round(255 * t * t * (3 - 2 * t)); }
+  const t = new THREE.DataTexture(v, N, 1, THREE.RedFormat);
+  t.minFilter = t.magFilter = THREE.LinearFilter; t.generateMipmaps = false; t.needsUpdate = true;
+  return t;
+})();
 
 // value noise from a 256² random texture: one (mip-mapped, so distant patterns don't sparkle) texture read instead of
 // four procedural hashes — the per-pixel noise was the single biggest GPU cost on the ground and the foliage
@@ -912,7 +932,11 @@ const glossApply = (amt, f0, more = '') => /* glsl */`
   float fr = ${f0.toFixed(3)} + ${(1 - f0).toFixed(3)} * pow(1.0 - clamp(dot(nV, vV), 0.0, 1.0), 5.0);
   outgoingLight = mix(outgoingLight, env, clamp(fr * gm, 0.0, 1.0));
   float lit = clamp(dot(reflectedLight.directDiffuse, vec3(0.3, 0.59, 0.11)) * 3.0, 0.0, 1.0);
+  #ifdef CAR_KEY
+  vec3 H = normalize(uCarKey + vV); // (the car's glint: from the painter's sun that lights it)
+  #else
   vec3 H = normalize(normalize((viewMatrix * vec4(uSunDir, 0.0)).xyz) + vV);
+  #endif
   outgoingLight += uSunCol * pow(max(dot(nV, H), 0.0), 90.0) * 1.6 * gm * lit;
   ${more}
 }`;

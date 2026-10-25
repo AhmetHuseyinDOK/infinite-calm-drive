@@ -1,6 +1,6 @@
 // The world is built in 60 m chunks along the infinite road; each chunk merges its contents into a handful of meshes.
 import * as THREE from 'three';
-import { zoneMix, zoneW, zoneAt, zparam, groundOffsetMix, SEA, WALL_U, crossingS, crossingValid, crossingNear, XING, XOFF, riverS, riverValid, riverNear, riverBank, RIV, ROFF, RIVER_DROP, tunnelNear, T_HALF, T_RIDGE, RAISE, ridgeHr, tubeHalf } from './path.js';
+import { zoneMix, zoneW, zoneAt, zparam, groundOffsetMix, SEA, WALL_U, crossingS, crossingValid, crossingNear, XING, XOFF, riverS, riverValid, riverNear, riverBank, RIV, ROFF, RIVER_DROP, tunnelNear, borderNear, REGION, T_HALF, T_RIDGE, RAISE, ridgeHr, tubeHalf } from './path.js';
 import { xingPosts } from './crossing.js';
 import { GB } from './geom.js';
 import * as P from './props.js';
@@ -33,6 +33,10 @@ const mouthA = k => (bigX(k) ? 4.4 : ALLEY + 0.9), mouthB = k => (bigX(k) ? 3.4 
 const nearSide = (s, m) => Math.abs(s - Math.round(s / 300) * 300) < m;
 /** true within m metres of a tunnel's centre (keeps roadside things out of the ridge and the tube) */
 const nearT = (s, m) => { const t = tunnelNear(s); return !!t && Math.abs(s - t.s) < m; };
+/** true within m metres of a border tunnel's middle (path.js borderNear: where the route passes from one region to the next) */
+const nearB = (s, m) => { const b = borderNear(s); return !!b && Math.abs(s - b.s) < m; };
+/** a zone weight's sum for the ground's coast channel: the coast's or the Bosphorus's (they never meet; materials.js Z_BOS) */
+const wSea = w => w.coast + w.bosphorus;
 /** true within m metres of a river (keeps houses, poles and trees out of the channel) */
 const nearR = (s, m) => { const r = riverNear(s); return !!r && Math.abs(s - r.s) < m; };
 
@@ -147,7 +151,7 @@ export class World {
 
     // ---------- helpers ----------
     const H = (s, u) => { path.at(s, f2); const rw = zparam(s, 'rw'); return f2.y + groundOffsetMix(s, u, f2.y, rw); };
-    const zw4 = s => { const w = zoneW(s); return [w.city, w.sakura, w.coast, w.country, w.snow]; };
+    const zw4 = s => { const w = zoneW(s); return [w.city, w.sakura, wSea(w), w.country, w.snow]; };
     const world = (s, u, y) => { path.at(s, f); return [f.x + f.rx * u - ox, y, f.z + f.rz * u - oz]; };
     const matAt = (s, u, y, extraYaw = 0, faceRoad = true) => {
       path.at(s, f);
@@ -158,7 +162,7 @@ export class World {
     const onGround = (s, u, dy = 0, extraYaw = 0, faceRoad = true) => { const h = H(s, u), m = matAt(s, u, h + dy, extraYaw, faceRoad); m.groundY = h; return m; };
     const road = s => path.at(s, f2).y;
     const rwAt = s => zparam(s, 'rw');
-    const walkW = s => { const w = zoneW(s); return w.city + w.sakura > 0.5 ? (w.city >= w.sakura ? 3.0 : 2.6) : 0; };
+    const walkW = s => { const w = zoneW(s); return w.city + w.sakura > 0.5 && !nearB(s, T_HALF + 2) ? (w.city >= w.sakura ? 3.0 : 2.6) : 0; };
 
     // ---------- terrain ----------
     {
@@ -246,6 +250,7 @@ export class World {
     yield* this.placeCity(G, r, s0, s1, matAt, onGround, road, rwAt, walkW, H, ground, ox, oz);
     yield* this.placeSakura(G, r, s0, s1, matAt, onGround, road, rwAt, H);
     yield* this.placeCoast(G, r, c, s0, s1, matAt, onGround, rwAt, shore, world);
+    yield* this.placeBosphorus(G, c, s0, s1, matAt, onGround, road, rwAt, world, ox, oz);
     yield;
     yield* this.placeCountry(G, r, s0, s1, matAt, onGround, road, rwAt, H);
     yield* this.placeMountain(G, r, s0, s1, matAt, onGround, road, rwAt, H);
@@ -258,8 +263,9 @@ export class World {
     const add = (geo, mat, cast, recv, order = 0, detail) => { if (!geo) return null; const m = new THREE.Mesh(geo, mat); m.castShadow = cast; m.receiveShadow = recv; m.renderOrder = order; if (detail) m.userData.detail = detail; grp.add(m); return m; };
     const zset = new Set();
     for (const sq of [s0, s0 + 20, s0 + 40, s1]) { const m = zoneMix(sq); zset.add(m.a); if (m.t > 0) zset.add(m.b); }
+    { const b = borderNear(s0 + CH / 2); if (b && b.s + 2 * T_RIDGE + CH > s0 && b.s - 2 * T_RIDGE - CH < s1) { zset.clear(); zset.add(b.a); zset.add(b.b); zset.add('border'); } }
     add(ground.build(), groundMaterialFor([...zset]), false, true); yield;
-    { const m = add(G.atlas.build(), this.M.atlas, true, true); if (m) m.customDepthMaterial = this.M.atlasDepth; } yield; // (the painted cells' outlines in the shadow pass too)
+    { const W = G.atlas.world, m = add(G.atlas.build(), W ? this.M.atlasW : this.M.atlas, true, true); if (m) m.customDepthMaterial = W ? this.M.atlasWDepth : this.M.atlasDepth; } yield; // (the painted cells' outlines in the shadow pass too; the world atlas's cells in its variant)
     { const m = add(G.color.build(), this.M.color, true, true); if (m) m.customDepthMaterial = PROP_DEPTH; } yield; // (wires cast no shadow)
     add(G.tetra.build(), this.M.tetra, true, true); // (the tetrapods: their shadows from the plain depth material)
     add(G.bark.build(), this.M.bark, true, true, 0, 'leaf'); yield; // (the trees' bark: shown as far as their crowns; plain depth material too)
@@ -297,7 +303,7 @@ export class World {
     const s = k * POLE_SP + 6, z = zoneAt(s);
     if (z === 'sakura' || nearX(s, 6) || nearR(s, 34) || nearT(s, T_RIDGE + 12)) return null;
     const rw = zparam(s, 'rw');
-    const u = z === 'city' ? rw + 0.45 : z === 'coast' ? rw + 1.35 : z === 'mountain' ? -(rw + 1.45) : z === 'snow' ? rw + 2.9 : rw + 2.35;
+    const u = z === 'city' ? rw + 0.45 : z === 'coast' ? rw + 1.35 : z === 'bosphorus' ? rw + 1.3 : z === 'mountain' ? -(rw + 1.45) : z === 'snow' ? rw + 2.9 : rw + 2.35;
     return { s, u, z };
   }
   *placePoles(c, s0, s1, r, G, matAt, H, world, road, rwAt) {
@@ -307,7 +313,7 @@ export class World {
       const y = p.z === 'city' ? road(p.s) + 0.15 : H(p.s, p.u);
       const M = matAt(p.s, p.u, y);
       const pr = rng(Math.floor(hash2(k, 31) * 4294967295));
-      const anchors = P.utilityPole(G, M, pr, { trans: pr() < 0.45 });
+      const anchors = P.utilityPole(G, M, pr, { trans: pr() < 0.45, tr: REGION[p.z] === 'tr' });
       if (p.z === 'city' && (k % 2 === 0)) P.poleLamp(G, M, -0.11);
       if (k % 2) yield;
       const q = this.poleSpec(k + 1);
@@ -348,7 +354,7 @@ export class World {
   /** a city intersection (bigX): side streets lined with houses and wires, traffic signals, 止まれ markings, now and
    *  then a 歩道橋. Elsewhere a narrow alley (路地) between the shopfronts, with houses and a pole or two down it. */
   *intersection(G, r, sc, k, matAt, road, rwAt, walkW, ground, ox, oz) {
-    const f0 = this.path.at(sc, {}), e = road(sc), rw = rwAt(sc), sw = walkW(sc) || 3.0, cs = sc - 0.5, w = zoneW(sc), w4 = [w.city, w.sakura, w.coast, w.country];
+    const f0 = this.path.at(sc, {}), e = road(sc), rw = rwAt(sc), sw = walkW(sc) || 3.0, cs = sc - 0.5, w = zoneW(sc), w4 = [w.city, w.sakura, wSea(w), w.country];
     const xw = (ds, u, y) => [f0.x + f0.fx * (ds - 0.5) + f0.rx * u - ox, y, f0.z + f0.fz * (ds - 0.5) + f0.rz * u - oz];
     const front = rw + sw + 0.15, big = bigX(k), hw = big ? 3.0 : ALLEY;
     for (const side of [-1, 1]) {
@@ -392,7 +398,7 @@ export class World {
   /** level crossing: gravel bed + sleepers (shader), rails, rubber crossing panels, catenary, alarm posts, signs */
   *placeCrossing(G, ground, sx, matAt, road, rwAt, H, walkW, ox, oz) {
     const f0 = this.path.at(sx, {}), e = f0.y, rw = rwAt(sx), sw = walkW(sx), edge = rw + sw + 0.2, L = 150, bedY = e + 0.18;
-    const w = zoneW(sx), w4 = [w.city, w.sakura, w.coast, w.country];
+    const w = zoneW(sx), w4 = [w.city, w.sakura, wSea(w), w.country];
     const xw = (ds, u, y) => [f0.x + f0.fx * ds + f0.rx * u - ox, y, f0.z + f0.fz * ds + f0.rz * u - oz];
     const DS = [7.6, 4.7, -4.7, -7.6];
     for (const [ua, ub] of [[-L, -edge], [edge, L]]) {
@@ -450,7 +456,7 @@ export class World {
 
   /** river crossing: flowing water, levee-top paths, a bridge with railings and named stone posts, trees on the banks */
   *placeRiver(G, ground, sr, matAt, road, rwAt, H, walkW, ox, oz, r, river) {
-    const f0 = this.path.at(sr, {}), e = f0.y, rw = rwAt(sr), sw = walkW(sr), w = zoneW(sr), w4 = [w.city, w.sakura, w.coast, w.country];
+    const f0 = this.path.at(sr, {}), e = f0.y, rw = rwAt(sr), sw = walkW(sr), w = zoneW(sr), w4 = [w.city, w.sakura, wSea(w), w.country];
     const sak = w.sakura > 0.5, L = 222, edge = rw + sw + 0.5, wy = e - RIVER_DROP;
     const xw = (ds, u, y) => [f0.x + f0.fx * ds + f0.rx * u - ox, y, f0.z + f0.fz * ds + f0.rz * u - oz];
     // water surface (su = (Δs, u) so the shader can flow it along the channel)
@@ -535,13 +541,14 @@ export class World {
   /** トンネル: the cap of the ridge over the road, the tube (walls, walkways, arch), sodium lamps, evacuation lights,
    *  jet fans, the two portal faces with their name plates, and trees on the ridge */
   *placeTunnel(G, ground, t, s0, s1, matAt, onGround, H, rwAt, ox, oz, r) {
-    const f0 = this.path.at(t.s, {}), e = f0.y, rw = rwAt(t.s), WT = rw + 1.4, w = zoneW(t.s), w4 = [w.city, w.sakura, w.coast, w.country];
+    const f0 = this.path.at(t.s, {}), e = f0.y, rw = rwAt(t.s), WT = rw + 1.4, w = zoneW(t.s), w4 = [w.city, w.sakura, wSea(w), w.country];
     const M = matAt(t.s, 0, e, 0, false), c = G.color;              // local X = along the road (ds), local Z = across (u)
     const xa = Math.max(s0, t.s - T_HALF) - t.s, xb = Math.min(s1, t.s + T_HALF) - t.s;
     if (xb > xa + 0.01) {
       const rows = Math.max(2, Math.ceil((xb - xa) / 3) + 1), cols = [-(rw + 1.5), -rw, -rw * 0.5, 0, rw * 0.5, rw, rw + 1.5];
       ground.gridN(rows, cols.length, (i, j) => {
         const ds = xa + ((xb - xa) * i) / (rows - 1), s = t.s + ds, u = cols[j], y = e + ridgeHr(ds, u);
+        if (t.border) { const wr = zoneW(s); return [f0.x + f0.fx * ds + f0.rx * u - ox, y, f0.z + f0.fz * ds + f0.rz * u - oz, 0, 1, 0, mod(s, S_WRAP), u, wr.city, wr.sakura, wSea(wr), wr.country, rw, 0, -1, wr.snow]; }
         return [f0.x + f0.fx * ds + f0.rx * u - ox, y, f0.z + f0.fz * ds + f0.rz * u - oz, 0, 1, 0, mod(s, S_WRAP), u, w4[0], w4[1], w4[2], w4[3], rw, 0, -1];
       });
       // the tube, seen from inside (faces point inwards)
@@ -577,11 +584,13 @@ export class World {
     const hk = (a, b) => { const h = Math.sin(a * 12.9898 + b * 78.233 + t.k * 37.719) * 43758.5453; return h - Math.floor(h); };
     const mix3 = (p, q, k) => [p[0] + (q[0] - p[0]) * k, p[1] + (q[1] - p[1]) * k, p[2] + (q[2] - p[2]) * k];
     const CB = [0.5, 0.5, 0.47], BEAM = [0.55, 0.53, 0.47], CAP = [0.6, 0.6, 0.57], RING = [0.58, 0.58, 0.55], mulRing = [0.42, 0.42, 0.4];
-    const cellCol = (zi, yi) => { const h = hk(zi, yi); return autumnT ? mix3([0.26, 0.29, 0.08], [0.42, 0.3, 0.09], h) : mix3([0.22, 0.29, 0.08], [0.36, 0.36, 0.12], h); };
+    let snowP = false; // (a border tunnel's mouth in the snow country)
+    const cellCol = (zi, yi) => { const h = hk(zi, yi); return snowP ? mix3([0.86, 0.88, 0.93], [0.74, 0.77, 0.83], h) : autumnT ? mix3([0.26, 0.29, 0.08], [0.42, 0.3, 0.09], h) : mix3([0.22, 0.29, 0.08], [0.36, 0.36, 0.12], h); };
     const autumnT = w.mountain > 0.5, HW = WT + 2.6, LAT = 2.6;
     for (const sd of [-1, 1]) {
       const sp = t.s + sd * T_HALF, xp = sd * (T_HALF + 0.08);
       if (sp < s0 || sp >= s1) continue;
+      snowP = !!t.border && zoneW(sp).snow > 0.5;
       const zs = [];
       for (const o of NEAR) if (o >= 1.44) zs.push(rw + o, -(rw + o));
       for (const a of FAR) if (a > rw + 3.5 && a < rw + 21) zs.push(a, -a);
@@ -659,6 +668,7 @@ export class World {
         if (sd < 0) c.quad([xp, oy1, oz1], [xp, oy0, oz0], [xo, oy0, oz0], [xo, oy1, oz1], RING); else c.quad([xp, oy0, oz0], [xp, oy1, oz1], [xo, oy1, oz1], [xo, oy0, oz0], RING);
       }
       for (const zz of [-1, 1]) c.box(Math.min(xp, xo), 0.2, zz > 0 ? WT : -WT * 1.12, Math.max(xp, xo), 3.2, zz > 0 ? WT * 1.12 : -WT, RING); // its legs down to the walkway
+      if (t.border && REGION[zoneAt(sp)] !== 'jp') continue; // (the plate's name is Japanese: none on the Turkish mouth yet)
       G.atlas.setM(M);
       const pw = 1.9, py0 = 7.05, py1 = 7.85, xq = xp + sd * 0.03, cell = P.uvOf('tunnel' + (w.coast > 0.5 ? 1 : Math.abs(t.k) % 2 ? 2 : 0));
       if (sd < 0) G.atlas.quad([xq, py0, -pw], [xq, py0, pw], [xq, py1, pw], [xq, py1, -pw], [1, 1, 1], cell);
@@ -671,7 +681,8 @@ export class World {
       const minU = Math.abs(s - t.s) > T_HALF - 4 ? 17 : 4;   // not on the faces of the approach cutting
       for (const side of [-1, 1]) {
         const u = side * (rw + r.range(minU, 50)), q = r();
-        P.tree(G, onGround(s, u, -0.3, r() * 6, false), autumn ? (q < 0.5 ? 'maple' : q < 0.8 ? 'cedar' : 'ginkgo') : (q < 0.65 ? 'pine' : 'broad'), r, r.range(0.9, 1.3));
+        const kind = autumn ? (q < 0.5 ? 'maple' : q < 0.8 ? 'cedar' : 'ginkgo') : t.border && zoneW(s).snow > 0.5 ? (q < 0.65 ? 'snowcedar' : 'birch') : (q < 0.65 ? 'pine' : 'broad');
+        P.tree(G, onGround(s, u, -0.3, r() * 6, false), kind, r, r.range(0.9, 1.3));
       }
     }
   }
@@ -682,7 +693,7 @@ export class World {
     if (sw(s0) < 0.3 && sw(s1) < 0.3) return;
     for (const side of [-1, 1]) {
       for (let s = s0 + r() * 20; s < s1; s += r.range(22, 40)) { // farmhouses with steep, snow-laden roofs
-        if (sw(s) < 0.6 || r() < 0.5) continue;
+        if (sw(s) < 0.6 || nearB(s, T_RIDGE + 30) || r() < 0.5) continue;
         const u = side * r.range(18, 90);
         P.building(G, onGround(s, u, -0.3), r, { type: 'house', w: r.range(9, 12.5), d: r.range(8, 10), floors: r() < 0.5 ? 2 : 1, tint: r.pick(P.TINTS), litP: 0.62, fence: 0, snow: true });
         for (let k = 0; k < 2 + r() * 3; k++) P.tree(G, onGround(s + r.range(-9, 9), u + side * r.range(7, 15), -0.3, r() * 6, false), r() < 0.6 ? 'snowcedar' : 'birch', r, r.range(0.9, 1.25));
@@ -697,7 +708,7 @@ export class World {
     }
     // 矢羽根: striped poles with a downward arrow over the road edge, so the plough knows where the road is
     for (let s = Math.ceil(s0 / 36) * 36; s < s1; s += 36) {
-      if (sw(s) < 0.55) continue;
+      if (sw(s) < 0.55 || nearB(s, T_RIDGE + 10)) continue;
       const rw = rwAt(s);
       { const a = matAt(s, -(rw + 0.95), road(s) + 1.3), b = matAt(s + 18, rw + 0.95, road(s + 18) + 1.3); a.groundY = road(s); b.groundY = road(s + 18);
         P.snowPole(G, a, 1); P.snowPole(G, b, -1); }
@@ -820,6 +831,7 @@ export class World {
         if (z === 'country') { u = rw + r.range(2.05, 2.8); dens = 0.25; fl = 0.35; } // (behind the bank, at the field's edge)
         else if (z === 'sakura') { u = rw + 2.68 + r() * 1.3; dens = 0.55; fl = 0.3; }
         else if (z === 'coast') { if (side < 0) continue; u = rw + 0.95 + r() * 1.7; dens = 0.75; fl = 0.18; }
+        else if (z === 'bosphorus') { if (side < 0) continue; u = rw + 4.25 + r() * 0.3; dens = 0.35; fl = 0.25; } // (at the foot of the gardens' railings)
         else if (z === 'snow') continue;
         else if (z === 'mountain') { u = side < 0 ? rw + 1.0 + r() * 0.35 : rw + 0.25 + r() * 0.2; dens = side < 0 ? 0.55 : 0.18; fl = 0.12; sc = 0.85; }
         else { if (nearSide(s, 5)) continue; u = rw + 3.02 + r() * 0.1; dens = 0.1; fl = 0.08; sc = 0.65; }
@@ -859,7 +871,7 @@ export class World {
     for (const side of [-1, 1]) {
       let s = s0 + r() * 2;
       while (s < s1 - 2) {
-        { const wz = zoneW(s); if (wz.city < 0.62 || wz.mountain > 0.1) { s += 4; continue; } } // not into the mountain's rising slope
+        { const wz = zoneW(s); if (wz.city < 0.62 || wz.mountain > 0.1 || nearB(s, T_HALF + 6)) { s += 4; continue; } } // not into the mountain's rising slope, nor a border tunnel's mouth
         { const cx = crossingNear(s + 6); if (cx && s < cx.s + 8.5 && s + 14 > cx.s - 8.5) { s = Math.max(s + 1, cx.s + 8.5); continue; } }
         const k0 = 2 * Math.round(s / 300), c0 = k0 * 150; // (the nearest opening)
         if (s > c0 - mouthA(k0) && s < c0 + mouthB(k0)) { s = c0 + mouthB(k0) + 0.05; continue; } // a side street or an alley opens here
@@ -901,7 +913,7 @@ export class World {
       for (let s2 = s0 + 0.3; s2 < s1 - 6;) {
         let w = br.range(10, 18); if (s1 - 0.3 - (s2 + w) < 9) w = s1 - 0.3 - s2;
         const sm = s2 + w / 2, c0 = 300 * Math.round(sm / 300), wz = zoneW(sm);
-        if (Math.min(zoneW(s2).city, zoneW(s2 + w).city) < 0.7 || wz.mountain > 0.1 || nearX(sm, 14 + w / 2) || (s2 < c0 + 14 && s2 + w > c0 - 14)) { s2 += 6; continue; }
+        if (Math.min(zoneW(s2).city, zoneW(s2 + w).city) < 0.7 || wz.mountain > 0.1 || nearX(sm, 14 + w / 2) || (s2 < c0 + 14 && s2 + w > c0 - 14) || nearB(s2, T_RIDGE + 15)) { s2 += 6; continue; }
         const rw = rwAt(sm), u = rw + 3.15 + 12.6 + br() * 2.5, t = br(), fl = t < 0.2 ? 6 : t < 0.5 ? 8 : t < 0.8 ? 10 : 12, kd = br();
         P.building(G, matAt(sm, side * u, road(sm) + 0.1), br, { type: 'block', w, d: br.range(10, 16), floors: fl, tint: br.pick(P.BLOCK_TINTS), litP: 0.4, near: -side,
           kind: kd < 0.35 ? 'A' : kd < 0.65 ? 'B' : 'C', endKind: br() < 0.7 ? 'D' : kd < 0.35 ? 'A' : 'B' });
@@ -912,7 +924,7 @@ export class World {
     // side streets and alleys; signs and mirrors at the crossings
     const k0 = Math.ceil(s0 / 150), k1 = Math.floor((s1 - 0.01) / 150);
     for (let k = k0; k <= k1; k++) {
-      const sc = k * 150; if (!openX(k) || zoneAt(sc) !== 'city' || zoneW(sc).mountain > 0.1) continue;
+      const sc = k * 150; if (!openX(k) || zoneAt(sc) !== 'city' || zoneW(sc).mountain > 0.1 || nearB(sc, T_RIDGE + 40)) continue;
       const rw = rwAt(sc);
       yield* this.intersection(G, r, sc, k, matAt, road, rwAt, walkW, ground, ox, oz);
       if (!bigX(k)) continue; // (an alley has no signs)
@@ -984,6 +996,8 @@ export class World {
    *  and not where a tunnel's headland runs out into the sea (its spur stands above the water to ~T_RIDGE + 7 m from the
    *  tunnel's middle) */
   coastWall(s) { return zoneW(s).coast >= 0.7 && !nearT(s, T_RIDGE + 14); }
+  /** …and where the water along a sea wall runs: the coast's, or the Bosphorus's (it has no tetrapods) */
+  seaWall(s) { const w = zoneW(s); return w.coast + w.bosphorus >= 0.7 && !nearT(s, T_RIDGE + 14); }
   /** 消波ブロック: chunk c's heaps of tetrapods at the foot of the sea wall (their own random numbers, so the rest of the
    *  layout is unchanged): every 12–26 m, 4.5–11 m long, two or three rows deep. Cached: the water strip's foam gathers
    *  round the heaps of the chunks either side as well */
@@ -1042,8 +1056,8 @@ export class World {
     rs.sort((p, q) => p - q);
     for (let i = 0; i < rs.length; i++) {
       const s = rs[i]; if (i > 0 && s - rs[i - 1] < 0.6) continue;
-      if (!this.coastWall(s)) { if (shore.rows.length) break; continue; } // (one run: a gap only comes with a tunnel or a zone's end)
-      let ef = 1; for (let k = 1; k <= 3; k++) if (!this.coastWall(s - 2 * k) || !this.coastWall(s + 2 * k)) { ef = (k - 1) / 3; break; }
+      if (!this.seaWall(s)) { if (shore.rows.length) break; continue; } // (one run: a gap only comes with a tunnel or a zone's end)
+      let ef = 1; for (let k = 1; k <= 3; k++) if (!this.seaWall(s - 2 * k) || !this.seaWall(s + 2 * k)) { ef = (k - 1) / 3; break; }
       const rw = rwAt(s), row = new Float32Array(SHORE_D.length * 7);
       SHORE_D.forEach((d, j) => {
         const p = world(s, -(rw + WALL_U + d), SEA + 0.03);
@@ -1102,6 +1116,118 @@ export class World {
     if (lh >= s0 && lh < s1 && zoneAt(lh) === 'coast' && !nearT(lh, T_RIDGE * 1.6)) P.lighthouse(G, matAt(lh, -(rwAt(lh) + 75), SEA - 1, 0, false));
   }
 
+  /** 海峡 / Boğaz (W2): the Bosphorus shore road at Arnavutköy, as its concept painting has it. The strait's side: the sea
+   *  wall (path.js; its stone in materials.js Z_BOS) with an iron railing along its top, the water along it (placeCoast's
+   *  strip: no tetrapods here), a city ferry out on the strait now and then. The land side: the verge's long grass with bushes
+   *  in white flower, the stone pavement, the gardens' railings between stone posts, and the wooden houses climbing the
+   *  slope in rows among round trees and cypresses; utility poles with their wires (placePoles), lamps, a flag on a tall pole
+   *  now and then, Turkish road signs. On random numbers of its own (Japan's chunks never draw them) */
+  *placeBosphorus(G, c, s0, s1, matAt, onGround, road, rwAt, world, ox, oz) {
+    const bw = s => zoneW(s).bosphorus;
+    if (bw(s0) < 0.25 && bw(s1) < 0.25) return;
+    const path = this.path, f = {}, br = rng(Math.floor(hash2(c, 6101) * 4294967295));
+    const ok = (s, m = 6) => bw(s) > 0.6 && !nearT(s, T_RIDGE + m);
+    const offPole = (s, m) => Math.abs(s - 6 - Math.round((s - 6) / POLE_SP) * POLE_SP) >= m; // (the poles stand at s = 6 + 32k)
+    for (let s = s0; s < s1; s += 4) { if (ok(s + 2, 4)) this.ironRailing(G, s, Math.min(s + 4, s1), world, road, rwAt); if (s - s0 === 28) yield; }
+    yield;
+    { const sm = Math.round((s0 + CH / 2) / 2.6) * 2.6; this.gardenFence(G, s0, sm, world, road, rwAt, s => ok(s, 4)); yield; this.gardenFence(G, sm, s1, world, road, rwAt, s => ok(s, 4)); }
+    yield;
+    // the verge: clumps of long grass along the asphalt, bushes in white flower (and a few plain ones) standing out of it
+    G.leaf.setM(IDENT);
+    const step = P.bankStep() * 1.3;
+    for (let s = s0 + br() * step; s < s1; s += step * br.range(0.75, 1.25)) {
+      if (!ok(s) || !offPole(s, 0.9)) continue;
+      path.at(s, f); const rw = rwAt(s), u = rw + 0.75 + (br() - 0.5) * 0.3, y = f.y + groundOffsetMix(s, u, f.y, rw);
+      const a = (br() - 0.5) * 0.8, ca = Math.cos(a), sa = Math.sin(a);
+      P.bank(G, f.x + f.rx * u - ox, y, f.z + f.rz * u - oz, f.rx * ca + f.fx * sa, f.rz * ca + f.fz * sa, br, br.range(0.6, 0.8), 'bankC');
+    }
+    for (let s = s0 + br() * 6; s < s1; s += br.range(4.5, 9)) {
+      if (!ok(s) || !offPole(s, 1.4)) continue;
+      const m = onGround(s, rwAt(s) + br.range(0.75, 1.15), 0, br() * 6.28, false);
+      if (br() < 0.75) P.flowerBush(G, m, br, br.range(0.95, 1.3)); else P.bush(G, m, br, br.range(0.45, 0.6));
+    }
+    yield;
+    // the houses: a row behind the gardens' railings, then rows up the slope, each house its own width, wood and plaster;
+    // gardens with a round tree or a cypress between them now and then. Each stays inside its chunk (no overlaps)
+    // (u0, its spread, the share of gardens, the chance of a third floor)
+    // (on phones, P.bankStep() > 1: the upper rows mostly gardens and fewer trees between the houses — the houses, their
+    // shadows and the crowns cost ~2.7 ms a frame more than the coast there, per draw over drives)
+    const ROWS = [[7.8, 1.6, 0.25, 0.45], [19.5, 3, 0.3, 0.5], [32.5, 4, 0.4, 0.4], [47, 6, 0.5, 0.25]], lite = P.bankStep() > 1;
+    let nh = 0;
+    for (const [u0, du, gap, p3] of ROWS) {
+      for (let s = s0 + 0.3 + br() * 2; s < s1 - 6;) {
+        const w = br.range(6.5, 9.5), rw = rwAt(s), u = rw + u0 + br() * du;
+        if (s + w > s1 - 0.3) break;
+        if (!ok(s, 12) || !ok(s + w, 12) || br() < gap + (lite && u0 > 25 ? 0.3 : 0)) { // a garden: a round tree, or a cypress
+          const t = br();
+          if (ok(s + w / 2, 12)) P.tree(G, onGround(s + w / 2, u + br.range(1, 5), 0, br() * 6), t < 0.55 ? 'broad' : 'cypress', br, br.range(0.85, 1.2));
+          s += w * 0.8; continue;
+        }
+        const floors = br() < p3 ? 3 : 2, wood = Math.floor(br() * 4), plaster = Math.floor(br() * 3), pastel = br() < 0.25 ? Math.floor(br() * 4) : -1;
+        P.ottomanHouse(G, onGround(s + w / 2, u, 0), br, { w, d: br.range(7.5, 9.5), floors, wood, plaster, stone: br() < 0.45, pastel, cumba: br() < 0.6, gable: br() < 0.4, litP: 0.5, flag: u0 < 10 && br() < 0.12 });
+        if (u0 < 10 && br() < 0.45) { const m = onGround(s + br.range(1, w - 1), rw + br.range(5.3, 6.6), 0, br() * 6.28, false); if (br() < 0.6) P.flowerBush(G, m, br, br.range(0.8, 1.1)); else P.bush(G, m, br, br.range(0.5, 0.7)); } // (the front garden)
+        if (br() < (lite ? 0.3 : 0.55)) P.tree(G, onGround(s + w + 0.8, u + br.range(1, 6), 0, br() * 6), br() < 0.35 ? 'cypress' : 'broad', br, br.range(0.8, 1.2)); // (round trees and cypresses between the houses, as the concept's)
+        s += w + br.range(1.0, 3.5);
+        if (++nh % 2 === 0) yield; // (two houses a step: a row at once made long world-build steps on phones)
+      }
+      yield;
+    }
+    // the hill's top beyond the houses: round trees and cypresses (half of each: the painted crowns are the dearer, ~1.6 ms
+    // a frame more than the coast's on desktops with three in four of them round)
+    for (let s = s0 + br() * 8; s < s1; s += br.range(7, 13)) {
+      if (!ok(s, 12)) continue;
+      P.tree(G, onGround(s, rwAt(s) + br.range(62, 110), -0.3, br() * 6, false), br() < 0.5 ? 'broad' : 'cypress', br, br.range(1.0, 1.4));
+    }
+    yield;
+    // lamps along the pavement; the flag on its pole; the speed limit and the next places' sign (traffic keeps right: on the right)
+    for (let s = Math.ceil((s0 - 18) / 40) * 40 + 18; s < s1; s += 40) if (ok(s, 4) && offPole(s, 2)) P.streetLamp(G, onGround(s, rwAt(s) + 1.75), br);
+    { const sf = Math.floor((s0 + CH / 2) / 360) * 360 + 140; if (sf >= s0 && sf < s1 && ok(sf, 10) && offPole(sf, 3)) P.flagPole(G, onGround(sf, rwAt(sf) + 3.4), 9.5); }
+    { const sl = Math.floor((s0 + CH / 2) / 420) * 420 + 60; if (sl >= s0 && sl < s1 && ok(sl, 10) && offPole(sl, 2)) P.trSign(G, matAt(sl, rwAt(sl) + 1.9, road(sl) + 0.12), 'trSign50', 2.2, 0.62, 0.62); }
+    { const sd = Math.floor((s0 + CH / 2) / 1500) * 1500 + 330; if (sd >= s0 && sd < s1 && ok(sd, 10) && offPole(sd, 3)) P.trSign(G, matAt(sd, rwAt(sd) + 2.2, road(sd) + 0.12), 'trSignDir', 2.9, 2.2, 1.1); }
+    // out on the strait: a city ferry now and then, small boats
+    if (hash2(c, 6131) < 0.14 && ok(s0 + 30, 20)) { const s = s0 + 30; P.ferry(G, matAt(s, -(rwAt(s) + br.range(140, 360)), SEA - 0.3, br() < 0.5 ? 0 : Math.PI, false), br); }
+    if (br() < 0.3 && ok(s0 + 20, 20)) { const s = s0 + br() * CH; P.boat(G, matAt(s, -(rwAt(s) + br.range(40, 160)), SEA - 0.25, br() * 6, false), br); }
+  }
+  /** the Bosphorus's iron railing along the sea wall's top: square posts every 2 m, a top rail and a middle rail (thin boxes
+   *  following the road), dark iron */
+  ironRailing(G, sa, sb, world, road, rwAt) {
+    const c = G.color; c.setM(IDENT);
+    const n = Math.max(1, Math.round((sb - sa) / 2)), IRON = [0.16, 0.17, 0.19], UW = 1.78;
+    for (let i = 0; i < n; i++) {
+      const s = sa + ((sb - sa) * i) / n, t = sa + ((sb - sa) * (i + 1)) / n;
+      const ua = -(rwAt(s) + UW), ub = -(rwAt(t) + UW), ya = road(s) - 0.04, yb = road(t) - 0.04;
+      for (const [h, th, tw] of [[1.04, 0.05, 0.028], [0.56, 0.035, 0.018]]) {
+        const P0 = (sv, u, y) => world(sv, u, y);
+        c.quad(P0(s, ua + tw, ya + h - th), P0(t, ub + tw, yb + h - th), P0(t, ub + tw, yb + h), P0(s, ua + tw, ya + h), IRON); // (the road's side)
+        c.quad(P0(t, ub - tw, yb + h - th), P0(s, ua - tw, ya + h - th), P0(s, ua - tw, ya + h), P0(t, ub - tw, yb + h), IRON); // (the strait's)
+        c.quad(P0(s, ua + tw, ya + h), P0(t, ub + tw, yb + h), P0(t, ub - tw, yb + h), P0(s, ua - tw, ya + h), IRON); // (its top)
+      }
+      const q = world(s, ua, ya); c.box(q[0] - 0.028, ya, q[2] - 0.028, q[0] + 0.028, ya + 1.06, q[2] + 0.028, IRON);
+    }
+  }
+  /** the gardens' railings along the pavement's back edge (u = rw + 4.6–4.9): a low dressed-stone kerb, stone posts with caps
+   *  every 2.6 m, iron bars between them (faces to the road only, casting no shadow: they are finer than its texels) */
+  gardenFence(G, s0, s1, world, road, rwAt, ok) {
+    const c = G.color; c.setM(IDENT);
+    const STONE = [0.8, 0.76, 0.68], CAP = [0.86, 0.83, 0.76], IRON = [0.17, 0.18, 0.2], U0 = 4.62, U1 = 4.92, Y0 = 0.12;
+    // (panels on a 2.6 m grid of posts, clipped to [s0, s1): the pieces either side of a chunk's edge meet there)
+    for (let p = Math.floor(s0 / 2.6) * 2.6; p < s1; p += 2.6) {
+      const s = Math.max(p, s0), t = Math.min(p + 2.6, s1); if (t - s < 0.05 || !ok(s) || !ok(t)) continue;
+      const ra = rwAt(s), rb = rwAt(t), ya = road(s) + Y0, yb = road(t) + Y0, kh = 0.28;
+      c.quad(world(t, rb + U0, yb), world(s, ra + U0, ya), world(s, ra + U0, ya + kh), world(t, rb + U0, yb + kh), STONE); // (the kerb's face to the road)
+      c.quad(world(s, ra + U1, ya + kh), world(t, rb + U1, yb + kh), world(t, rb + U0, yb + kh), world(s, ra + U0, ya + kh), CAP); // (its top)
+      if (p >= s0) { const q = world(p, ra + (U0 + U1) / 2, ya); // (a post on the grid)
+        c.box(q[0] - 0.17, ya, q[2] - 0.17, q[0] + 0.17, ya + 1.25, q[2] + 0.17, STONE); c.box(q[0] - 0.21, ya + 1.25, q[2] - 0.21, q[0] + 0.21, ya + 1.33, q[2] + 0.21, CAP); }
+      c.noShadow = true;
+      const um = (U0 + U1) / 2;
+      for (let x = p + 0.3; x < p + 2.4; x += 0.17) { if (x < s || x >= t) continue; // the bars (on the posts' grid)
+        const ru = rwAt(x), y = road(x) + Y0 + kh;
+        c.quad(world(x + 0.012, ru + um, y), world(x - 0.012, ru + um, y), world(x - 0.012, ru + um, y + 0.85), world(x + 0.012, ru + um, y + 0.85), IRON);
+      }
+      c.quad(world(t, rb + um - 0.02, yb + kh + 0.8), world(s, ra + um - 0.02, ya + kh + 0.8), world(s, ra + um - 0.02, ya + kh + 0.88), world(t, rb + um - 0.02, yb + kh + 0.88), IRON); // (the top rail)
+      c.noShadow = false;
+    }
+  }
   *placeCountry(G, r, s0, s1, matAt, onGround, road, rwAt, H) {
     for (const side of [-1, 1]) {
       yield;

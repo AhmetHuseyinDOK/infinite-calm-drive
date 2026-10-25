@@ -35,16 +35,33 @@ export const TOD = {
   t: 0.4, // the time of day (the painted palettes by time of day key on it: painted.js todTones)
   head: null, // the road's heading the sun and the moon stand by (null: fixed in the world, the old sky; see skyDirs)
 };
-/** t: the time of day; head: the road's smoothed heading (main.js; the sun's and the moon's bearings follow it), or null
- *  for a sky fixed in the world */
-export function updateTOD(t, head = null) {
-  TOD.t = t; TOD.head = head;
-  let k = 0; while (k < KEYS.length - 2 && KEYS[k + 1][0] <= t) k++;
-  const a = KEYS[k], b = KEYS[k + 1], f = smooth(clamp((t - a[0]) / (b[0] - a[0]), 0, 1));
+/** each region's own palette by the time of day (path.js REGION): a key table laid out as KEYS, or null for Japan's. A
+ *  region's is blended in by its weight at the camera (main.js: path.js regionWeight), so a new sky arrives inside a border
+ *  tunnel. Turkey's Bosphorus keeps Japan's (its concept painting's sky is the coast painting's deep azure and white
+ *  cumulus); Cappadocia's steppe will want its own dry, dusty one */
+export const REGION_KEYS = { tr: null };
+const _RT = { zenith: new THREE.Color(), horizon: new THREE.Color(), sunCol: new THREE.Color(), sunI: 1, hemiSky: new THREE.Color(), hemiGround: new THREE.Color(), hemiI: 1,
+  fog: new THREE.Color(), cLit: new THREE.Color(), cShade: new THREE.Color(), cRim: new THREE.Color(), night: 0, warm: 0 };
+const RK_C = ['zenith', 'horizon', 'sunCol', 'hemiSky', 'hemiGround', 'fog', 'cLit', 'cShade', 'cRim'], RK_V = ['sunI', 'hemiI', 'night', 'warm'];
+/** a palette's colours and levels at time of day t into o (TOD, or the region's scratch) */
+function keysAt(K, t, o) {
+  let k = 0; while (k < K.length - 2 && K[k + 1][0] <= t) k++;
+  const a = K[k], b = K[k + 1], f = smooth(clamp((t - a[0]) / (b[0] - a[0]), 0, 1));
   const lc = (i, out) => out.copy(a[i]).lerp(b[i], f);
-  lc(1, TOD.zenith); lc(2, TOD.horizon); lc(3, TOD.sunCol); TOD.sunI = lerp(a[4], b[4], f);
-  lc(5, TOD.hemiSky); lc(6, TOD.hemiGround); TOD.hemiI = lerp(a[7], b[7], f); lc(8, TOD.fog);
-  lc(9, TOD.cLit); lc(10, TOD.cShade); lc(11, TOD.cRim); TOD.night = lerp(a[12], b[12], f); TOD.warm = lerp(a[13], b[13], f);
+  lc(1, o.zenith); lc(2, o.horizon); lc(3, o.sunCol); o.sunI = lerp(a[4], b[4], f);
+  lc(5, o.hemiSky); lc(6, o.hemiGround); o.hemiI = lerp(a[7], b[7], f); lc(8, o.fog);
+  lc(9, o.cLit); lc(10, o.cShade); lc(11, o.cRim); o.night = lerp(a[12], b[12], f); o.warm = lerp(a[13], b[13], f);
+}
+/** t: the time of day; head: the road's smoothed heading (main.js; the sun's and the moon's bearings follow it), or null
+ *  for a sky fixed in the world; rk / rw: a region's palette (REGION_KEYS) and its weight here */
+export function updateTOD(t, head = null, rk = null, rw = 0) {
+  TOD.t = t; TOD.head = head;
+  keysAt(KEYS, t, TOD);
+  if (rk && rw > 0) {
+    keysAt(rk, t, _RT);
+    for (let i = 0; i < RK_C.length; i++) TOD[RK_C[i]].lerp(_RT[RK_C[i]], rw);
+    for (let i = 0; i < RK_V.length; i++) TOD[RK_V[i]] = lerp(TOD[RK_V[i]], _RT[RK_V[i]], rw);
+  }
   TOD.sunEl = skyDirs(t, TOD.sunDir, TOD.moonDir, TOD.lightDir, head);
 }
 // The sun rises at 06:00 (t 0.25), climbs to ~62° at noon and sets at 18:00 (t 0.75). The light used for shading is the

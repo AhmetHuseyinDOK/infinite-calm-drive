@@ -12,7 +12,7 @@
 import * as THREE from 'three';
 import { GLSL_NOISE, U as MU, S_WRAP } from './materials.js';
 import { TOD } from './sky.js';
-import { SEA, ZONE_LEN, TRANS, zoneWeight } from './path.js';
+import { SEA, ZONE_LEN, TRANS, seaWeight } from './path.js';
 import { todTones, mixTones, paintSky } from './painted.js';
 
 /** the waves along the coast's sea wall, shared by the water there (shoreMaterial) and the surf over the tetrapods
@@ -102,6 +102,24 @@ const SEA_TONES = todTones([
   [0.3, PAINT], [0.62, PAINT], [0.7, PAINT_GOLD], [0.75, PAINT_SUNSET], [0.765, { ...mixTones(PAINT_SUNSET, PAINT_NIGHT, 0.25), pk: [0, 0, 0] }],
   [0.8, { ...mixTones(PAINT_SUNSET, PAINT_NIGHT, 0.55), pk: [0, 0, 0] }], [0.86, PAINT_NIGHT], [1.0, PAINT_NIGHT],
 ]);
+// the Bosphorus (W2): its concept painting's strait (ref/world/istanbul_bosphorus.png, measured as the coast's tones: by
+// distance band and lightness percentile, ~/cdtest/w1): a deeper, darker teal-navy than the coast painting's azure, paling
+// to a soft blue at the far shore. The other hours keep the coast's tones (no repaints of the strait yet). Blended in by
+// Turkey's weight (makeSea's update: bos), so Japan's sea is as it was
+const PAINT_BOS = { ...PAINT,
+  trough: [28, 90, 132], mid: [40, 109, 150], face: [56, 121, 161], lite: [136, 180, 206],
+  midD: [27, 93, 134], midM: [41, 123, 173], midF: [46, 129, 181], midL: [62, 141, 190],
+  farD: [34, 82, 116], far: [60, 147, 200], farF: [96, 160, 205], farL: [129, 185, 222], hz: [101, 163, 200],
+  wBack: [20, 80, 125], wFace: [60, 128, 168], wLite: [110, 165, 200], wTurq: [45, 120, 150],
+};
+const BOS_TONES = todTones([
+  [0.0, PAINT_NIGHT], [0.2, { ...mixTones(PAINT_NIGHT, PAINT_SUNSET, 0.25), pk: [0, 0, 0] }], [0.245, mixTones(PAINT_SUNSET, PAINT_GOLD, 0.35)],
+  [0.3, PAINT_BOS], [0.62, PAINT_BOS], [0.7, PAINT_GOLD], [0.75, PAINT_SUNSET], [0.765, { ...mixTones(PAINT_SUNSET, PAINT_NIGHT, 0.25), pk: [0, 0, 0] }],
+  [0.8, { ...mixTones(PAINT_SUNSET, PAINT_NIGHT, 0.55), pk: [0, 0, 0] }], [0.86, PAINT_NIGHT], [1.0, PAINT_NIGHT],
+]);
+const _c2 = new THREE.Color();
+/** tone n of the coast's palette P, or as much of the Bosphorus's Q as k, ungraded into out */
+const tn = (P, Q, k, g, n, out) => { P.ug(g, n, out); if (k > 0) out.lerp(Q.ug(g, n, _c2), k); return out; };
 /** GLSL: the open sea's colour at a world position (before the zones' fade-in) */
 const SEA_PARS = /* glsl */`
 uniform float uTime, uNight, uFogD, uVis, uSpecK, uBright, uPaint, uWaves, uPathK; uniform vec3 uCam, uSunDir, uSunCol, uHorizon, uZenith, uFog;
@@ -226,8 +244,8 @@ export function makeSea(lite = false) {
   return {
     mesh, u,
     /** grade: the grade pass's uniforms (the painted colours are its inverse); path, s: the road and where we are on it
-     *  (the painted waves come in square to the coast in view) */
-    update(cam, time, fogD, vis = 1, grade = null, path = null, s = 0) {
+     *  (the painted waves come in square to the coast in view); bos: how much the strait's tones (Turkey's weight here) */
+    update(cam, time, fogD, vis = 1, grade = null, path = null, s = 0, bos = 0) {
       mesh.position.x = cam.x; mesh.position.z = cam.z;
       if (path && vis > 0) coastDir(path, s, u.uSeaDir.value);
       u.uTime.value = time; u.uCam.value.copy(cam); u.uNight.value = TOD.night; u.uBright.value = TOD.bright; u.uFogD.value = fogD; u.uVis.value = vis; u.uSpecK.value = 1 - TOD.overcast * 0.85;
@@ -241,14 +259,15 @@ export function makeSea(lite = false) {
       u.uFoamShade.value.setRGB(hs.r * hi * 0.9 * kl, hs.g * hi * 0.9 * kl, hs.b * hi * 0.9 * kl);
       u.uPathK.value = 0;
       if (paint > 0) {
-        const P = SEA_TONES.at(TOD.t), g = grade;
-        P.ug(g, 'trough', u.uPTrough.value); P.ug(g, 'mid', u.uPMid.value); P.ug(g, 'face', u.uPFace.value); P.ug(g, 'lite', u.uPLite.value);
-        P.ug(g, 'midD', u.uPMidD.value); P.ug(g, 'midM', u.uPMidM.value); P.ug(g, 'midF', u.uPMidF.value); P.ug(g, 'midL', u.uPMidL.value);
-        P.ug(g, 'farD', u.uPFarD.value); P.ug(g, 'far', u.uPFar.value); P.ug(g, 'farF', u.uPFarF.value); P.ug(g, 'farL', u.uPFarL.value); P.ug(g, 'hz', u.uPHz.value);
+        const P = SEA_TONES.at(TOD.t), g = grade, k = bos, Q = k > 0 ? BOS_TONES.at(TOD.t) : null;
+        tn(P, Q, k, g, 'trough', u.uPTrough.value); tn(P, Q, k, g, 'mid', u.uPMid.value); tn(P, Q, k, g, 'face', u.uPFace.value); tn(P, Q, k, g, 'lite', u.uPLite.value);
+        tn(P, Q, k, g, 'midD', u.uPMidD.value); tn(P, Q, k, g, 'midM', u.uPMidM.value); tn(P, Q, k, g, 'midF', u.uPMidF.value); tn(P, Q, k, g, 'midL', u.uPMidL.value);
+        tn(P, Q, k, g, 'farD', u.uPFarD.value); tn(P, Q, k, g, 'far', u.uPFar.value); tn(P, Q, k, g, 'farF', u.uPFarF.value); tn(P, Q, k, g, 'farL', u.uPFarL.value); tn(P, Q, k, g, 'hz', u.uPHz.value);
         u.uFoamLit.value.lerp(P.ug(g, 'foam', _c), paint); u.uFoamShade.value.lerp(P.ug(g, 'foamShade', _c), paint); P.ug(g, 'spark', u.uPSpark.value);
         // (the waves' tones along the wall as offsets from the open sea's middle tone there: they ride on its wavelets)
-        ugD2(P, g, 'wBack', u.uPWBack.value, u.uPMid.value); ugD2(P, g, 'wFace', u.uPWFace.value, u.uPMid.value);
-        ugD2(P, g, 'wLite', u.uPWLite.value, u.uPMid.value); ugD2(P, g, 'wTurq', u.uPWTurq.value, u.uPMid.value);
+        if (k > 0) for (let i = 0; i < 4; i++) { const n = WAVE_N[i], o = WAVE_U[i]; tn(P, Q, k, g, n, o); o.r -= u.uPMid.value.r; o.g -= u.uPMid.value.g; o.b -= u.uPMid.value.b; }
+        else { ugD2(P, g, 'wBack', u.uPWBack.value, u.uPMid.value); ugD2(P, g, 'wFace', u.uPWFace.value, u.uPMid.value);
+          ugD2(P, g, 'wLite', u.uPWLite.value, u.uPMid.value); ugD2(P, g, 'wTurq', u.uPWTurq.value, u.uPMid.value); }
         // the low sun's path on the water while it is up (sets), then the moon's while it is low (as the paintings draw it:
         // a column from the horizon; a high moon's would wash the near water pale)
         const L = TOD.sunEl > -0.04 ? TOD.sunDir : TOD.moonDir, hi = Math.min(Math.max((L.y - 0.3) / 0.3, 0), 1);
@@ -258,7 +277,7 @@ export function makeSea(lite = false) {
     },
   };
 }
-const _c = new THREE.Color();
+const _c = new THREE.Color(), WAVE_N = ['wBack', 'wFace', 'wLite', 'wTurq'], WAVE_U = [SEA_U.uPWBack.value, SEA_U.uPWFace.value, SEA_U.uPWLite.value, SEA_U.uPWTurq.value];
 /** a painted tone's offset from another (ungraded) colour: out = ungrade(tone n of palette P) − m (three's Color.sub would
  *  clamp it at 0) */
 const ugD2 = (P, grade, n, out, m) => { P.ug(grade, n, out); out.r -= m.r; out.g -= m.g; out.b -= m.b; };
@@ -271,7 +290,7 @@ function coastDir(path, s, out) {
   // (the sea shows from 150 m before a coast zone's transition to 800 m past it: only one coast zone is ever that close)
   const z0 = Math.floor((s - 150) / ZONE_LEN), z1 = Math.floor((s + 800) / ZONE_LEN) + 1;
   for (let zi = z0; zi <= z1; zi++) {
-    if (zoneWeight(zi * ZONE_LEN + ZONE_LEN / 2, 'coast') < 0.99) continue;
+    if (seaWeight(zi * ZONE_LEN + ZONE_LEN / 2) < 0.99) continue; // (the coast's sea, or the Bosphorus)
     if (zi !== CD.zone) {
       let h = 0, n = 0;
       for (let q = zi * ZONE_LEN - TRANS; q <= (zi + 1) * ZONE_LEN; q += 25) { path.at(Math.max(q, 0), _f); h += _f.h; n++; }

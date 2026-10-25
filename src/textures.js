@@ -900,6 +900,142 @@ export function buildPaintedAtlas(main, tier, fa, ha) {
   P.houses = !!ha && paintHouses(P, ha);
   return P;
 }
+// ------------------------------------------------------------------ the world atlas (the regions after Japan)
+// The regions' own cells (path.js REGION; Turkey's so far: its flag, its road signs, the Bosphorus's wooden houses' bays and
+// their roof tiles), in a texture pair of their own: its cells' u is offset by 4 (materials.js worldAtlas reads uWMap for
+// them), so Japan's two atlases keep every texel where it was. Painted here, on the painted atlas's tiers.
+const TR_FONT = '"Helvetica Neue","Arial","DejaVu Sans","Liberation Sans",sans-serif';
+// the Bosphorus's wooden houses (Arnavutköy, as the concept painting has them): their upper floors in boards stained
+// walnut, honey, a weathered grey and painted cream; their ground floors plastered cream, ochre or a stone grey
+const TR_WOOD = ['#8c6a51', '#a28366', '#8f867c', '#e8dcc5']; // (warm brown, light brown, grey-brown, painted cream: the concept's, lit)
+const TR_PLASTER = ['#efe4c8', '#dfc89c', '#d6cfbf'];
+// …and the pastel plastered houses' upper floors (no footing): cream, pale yellow, pale rose, a pale blue-grey
+const TR_PASTEL = ['#f1e7cf', '#ecd9a4', '#ecd2c6', '#d3dadb'];
+/** one upper floor's bay of a wooden house (2.6 m wide, 3 m tall) or a plastered ground floor's: the boards (or the plaster
+ *  and its stone footing), a tall white sash window of six panes with its cornice and sill (on wood, a pair of shutters
+ *  folded back now and then); lit: its room glowing at night */
+function trBay(A, a, e, w, h, col, lit, seed, wood, footing = true, frameCol = '#f4f1ea') {
+  const r = rng(seed), m = w / 2.6;
+  rect(a, 0, 0, w, h, col);
+  if (wood) { // boards ~14 cm, each its own shade, a dark shadow line under each
+    const bh = m * 0.14;
+    for (let y = 0; y < h; y += bh) { a.fillStyle = `rgba(${r() < 0.5 ? '255,240,220' : '40,25,15'},${0.03 + r() * 0.06})`; a.fillRect(0, y, w, bh); rect(a, 0, y + bh - 1.5, w, 1.5, 'rgba(35,22,12,0.32)'); }
+    rect(a, 0, 0, m * 0.12, h, 'rgba(40,25,15,0.18)'); rect(a, w - m * 0.12, 0, m * 0.12, h, 'rgba(40,25,15,0.18)'); // corner boards
+    rect(a, 0, h - m * 0.16, w, m * 0.16, 'rgba(40,25,15,0.22)'); // the floor's band
+  } else {
+    vgrad(a, 0, 0, w, h, [[0, 'rgba(255,255,255,0.08)'], [1, 'rgba(0,0,0,0.08)']]);
+    if (footing) { // a stone footing
+      rect(a, 0, h - m * 0.42, w, m * 0.42, '#b9b0a0');
+      for (let x = 0; x < w; x += m * 0.6) rect(a, x, h - m * 0.42, 1.5, m * 0.42, 'rgba(0,0,0,0.18)');
+      rect(a, 0, h - m * 0.42, w, 1.5, 'rgba(0,0,0,0.2)');
+    } else { rect(a, 0, h - m * 0.12, w, m * 0.12, 'rgba(255,255,255,0.35)'); rect(a, 0, h - m * 0.02, w, m * 0.02, 'rgba(0,0,0,0.25)'); } // (a moulding at the floor)
+  }
+  const ww = m * 0.92, wh = m * (wood ? 1.6 : 1.45), wx = (w - ww) / 2, wy = h - m * (wood ? 0.85 : 1.05) - wh;
+  if (wood && r() < 0.45) for (const sx of [wx - ww * 0.52, wx + ww + ww * 0.04]) { // shutters folded back
+    rect(a, sx, wy, ww * 0.48, wh, '#5e3f2a'); for (let y = wy + 3; y < wy + wh; y += m * 0.07) rect(a, sx + 2, y, ww * 0.48 - 4, 1.2, 'rgba(255,235,210,0.18)');
+  }
+  rect(a, wx - m * 0.12, wy - m * 0.24, ww + m * 0.24, m * 0.12, frameCol); rect(a, wx - m * 0.12, wy - m * 0.13, ww + m * 0.24, m * 0.03, 'rgba(0,0,0,0.25)'); // cornice
+  frame(a, wx, wy, ww, wh, m * 0.07, frameCol);
+  const pw = ww / 2, ph = wh / 3;
+  for (let i = 0; i < 2; i++) for (let j = 0; j < 3; j++) glass(a, wx + i * pw + 2, wy + j * ph + 2, pw - 4, ph - 4, r, 1);
+  rect(a, wx - m * 0.1, wy + wh + m * 0.04, ww + m * 0.2, m * 0.08, frameCol); // sill
+  if (r() < 0.35) { curtain(a, wx + 2, wy + 2, ww * 0.3, wh - 4, r() < 0.5 ? '#efe6d2' : '#f2dcd2'); }
+  if (lit) { litRoom(e, wx, wy, ww, wh, r() < 0.3 ? '#ffe7c0' : '#ffc77e', r); for (let i = 1; i < 2; i++) rect(e, wx + i * pw - 2, wy, 4, wh, '#000'); for (let j = 1; j < 3; j++) rect(e, wx, wy + j * ph - 2, ww, 4, '#000'); }
+  grain(a, A, w, h, 0.12);
+}
+/** a ground floor of grey stone blocks (the hillside houses' footings), a window behind an iron grille; lit: its room */
+function trStone(A, a, e, w, h, lit, seed) {
+  const r = rng(seed), m = w / 2.6, bh = m * 0.42;
+  rect(a, 0, 0, w, h, '#a49c8f');
+  for (let y = 0, row = 0; y < h; y += bh, row++) for (let x = (row % 2) * -m * 0.45; x < w; x += m * 0.9) {
+    const k = 0.86 + r() * 0.22; a.fillStyle = `rgb(${Math.round(170 * k)},${Math.round(162 * k)},${Math.round(150 * k)})`; a.fillRect(x + 1.5, y + 1.5, m * 0.9 - 3, bh - 3);
+  }
+  const ww = m * 0.85, wh = m * 1.2, wx = (w - ww) / 2, wy = h - m * 1.05 - wh;
+  rect(a, wx - m * 0.08, wy - m * 0.08, ww + m * 0.16, wh + m * 0.16, '#d9d2c4');
+  glass(a, wx, wy, ww, wh, r, 1);
+  if (lit) litRoom(e, wx, wy, ww, wh, '#ffc77e', r);
+  a.fillStyle = '#2a2a2e'; for (let x = wx + ww / 6; x < wx + ww; x += ww / 6) a.fillRect(x - 1, wy, 2.5, wh); a.fillRect(wx, wy + wh * 0.5, ww, 2.5); // the grille
+  if (lit) { e.fillStyle = '#000'; for (let x = wx + ww / 6; x < wx + ww; x += ww / 6) e.fillRect(x - 1, wy, 2.5, wh); }
+  grain(a, A, w, h, 0.16);
+}
+/** a plastered ground floor's door bay: a panelled double door of dark wood under a fanlight, two steps */
+function trDoor(A, a, e, w, h) {
+  const m = w / 2.6, col = TR_PLASTER[0];
+  rect(a, 0, 0, w, h, col); vgrad(a, 0, 0, w, h, [[0, 'rgba(255,255,255,0.08)'], [1, 'rgba(0,0,0,0.08)']]);
+  rect(a, 0, h - m * 0.42, w, m * 0.42, '#b9b0a0');
+  const dw = m * 1.2, dh = m * 2.15, dx = (w - dw) / 2, dy = h - m * 0.3 - dh;
+  rect(a, dx - m * 0.1, dy - m * 0.1, dw + m * 0.2, dh + m * 0.1, '#ece6da');
+  a.fillStyle = '#6f4a30'; a.fillRect(dx, dy, dw, dh);
+  for (const [x0, x1] of [[dx + 3, dx + dw / 2 - 2], [dx + dw / 2 + 2, dx + dw - 3]]) for (let j = 0; j < 3; j++) { rect(a, x0 + 3, dy + 6 + j * (dh / 3), x1 - x0 - 6, dh / 3 - 12, 'rgba(0,0,0,0.18)'); rect(a, x0 + 3, dy + 6 + j * (dh / 3), x1 - x0 - 6, 2, 'rgba(255,230,200,0.15)'); }
+  a.fillStyle = '#f2eee6'; a.beginPath(); a.arc(w / 2, dy - m * 0.05, dw / 2 + m * 0.08, Math.PI, 0); a.fill();
+  const g = a.createLinearGradient(0, dy - dw / 2, 0, dy); g.addColorStop(0, '#5f86c0'); g.addColorStop(1, '#bcd2ea');
+  a.fillStyle = g; a.beginPath(); a.arc(w / 2, dy - m * 0.05, dw / 2 - m * 0.02, Math.PI, 0); a.fill();
+  rect(a, dx - m * 0.2, h - m * 0.3, dw + m * 0.4, m * 0.15, '#cfc8ba'); rect(a, dx - m * 0.3, h - m * 0.15, dw + m * 0.6, m * 0.15, '#c2baa9');
+  grain(a, A, w, h, 0.1);
+}
+/** the roof's tiles (alaturka kiremit): courses of terracotta barrel tiles, each rounded (lit on one side), its lower lip
+ *  shading the course below, now and then an older, darker or paler one; 8 tiles across, 6 courses */
+function kiremit(A, a, e, w, h) {
+  const r = rng(971), cw = w / 8, rh = h / 6;
+  rect(a, 0, 0, w, h, '#8e3b28');
+  for (let j = 0; j < 6; j++) for (let i = 0; i < 8; i++) {
+    const x = i * cw, y = j * rh, t = r(), k = 0.86 + 0.22 * t;
+    const sh = (c, f) => `rgb(${Math.round(c[0] * f)},${Math.round(c[1] * f)},${Math.round(c[2] * f)})`;
+    const base = r() < 0.12 ? [146, 96, 78] : [182, 104, 76]; // (a muted terracotta, as painted; now and then an older tile)
+    const g = a.createLinearGradient(x, 0, x + cw, 0);
+    g.addColorStop(0, sh(base, 0.8 * k)); g.addColorStop(0.32, sh(base, 1.12 * k)); g.addColorStop(0.7, sh(base, 0.86 * k)); g.addColorStop(1, sh(base, 0.58 * k));
+    a.fillStyle = g; a.fillRect(x + 1, y, cw - 2, rh);
+    rect(a, x + 1, y + rh * 0.84, cw - 2, rh * 0.16, 'rgba(60,18,8,0.4)');
+    rect(a, x + 1, y, cw - 2, rh * 0.06, 'rgba(255,220,190,0.18)');
+  }
+  grain(a, A, w, h, 0.14);
+}
+/** the Turkish flag (Türk Bayrağı Kanunu's proportions: G its height; the crescent's circles at 0.5 G and 0.5625 G from the
+ *  hoist, 0.25 G and 0.2 G across; the star's circle 0.125 G, its middle at 0.729 G, a point towards the hoist) */
+function trFlag(a, e, w, h) {
+  const G = h, RED = '#e30a17';
+  rect(a, 0, 0, w, h, RED);
+  a.fillStyle = '#fff'; a.beginPath(); a.arc(0.5 * G, 0.5 * G, 0.25 * G, 0, 7); a.fill();
+  a.fillStyle = RED; a.beginPath(); a.arc(0.5625 * G, 0.5 * G, 0.2 * G, 0, 7); a.fill();
+  const cx = 0.7292 * G, cy = 0.5 * G, R = 0.125 * G, ri = R * 0.382;
+  a.fillStyle = '#fff'; a.beginPath();
+  for (let i = 0; i < 10; i++) { const t = Math.PI + (i * Math.PI) / 5, q = i % 2 ? ri : R; a.lineTo(cx + Math.cos(t) * q, cy + Math.sin(t) * q); }
+  a.closePath(); a.fill();
+  // (a cloth's soft folds)
+  const g = a.createLinearGradient(0, 0, w, 0); for (let i = 0; i <= 6; i++) g.addColorStop(i / 6, i % 2 ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.06)');
+  a.fillStyle = g; a.fillRect(0, 0, w, h);
+}
+/** Turkish road signs: a speed limit (a white disc, a red ring, black figures; its corners cut out of the alpha) */
+function trSpeed(A, a, e, w, h, v) {
+  a.clearRect(0, 0, w, h);
+  const c = w / 2, R = w * 0.48;
+  a.fillStyle = '#d42a20'; a.beginPath(); a.arc(c, c, R, 0, 7); a.fill();
+  a.fillStyle = '#fbfbf8'; a.beginPath(); a.arc(c, c, R * 0.74, 0, 7); a.fill();
+  a.fillStyle = '#1b1b1d'; a.font = `700 ${Math.round(w * 0.42)}px ${TR_FONT}`; a.textAlign = 'center'; a.textBaseline = 'middle'; a.fillText(String(v), c, c + w * 0.02);
+}
+/** …and a blue direction sign (white border and lettering, an arrow ahead): the shore road's next places */
+function trDirSign(A, a, e, w, h, lines) {
+  const m = h / 8;
+  rect(a, 0, 0, w, h, '#f2f2ee'); rect(a, m * 0.4, m * 0.4, w - m * 0.8, h - m * 0.8, '#1d4f9a');
+  a.fillStyle = '#fff'; a.textAlign = 'left'; a.textBaseline = 'middle';
+  lines.forEach((t, i) => { a.font = `700 ${Math.round(m * 2.1)}px ${TR_FONT}`; a.fillText(t, w * 0.27, h * (0.32 + 0.38 * i)); });
+  a.fillStyle = '#fff'; a.beginPath(); // the arrow, straight on
+  const ax = w * 0.13; a.moveTo(ax, m * 1.3); a.lineTo(ax + m * 1.4, m * 3.1); a.lineTo(ax + m * 0.5, m * 3.1); a.lineTo(ax + m * 0.5, h - m * 1.3); a.lineTo(ax - m * 0.5, h - m * 1.3); a.lineTo(ax - m * 0.5, m * 3.1); a.lineTo(ax - m * 1.4, m * 3.1); a.closePath(); a.fill();
+}
+/** Builds the world atlas for a tier ('hi' or 'lo': half the px). `main`: the procedural atlas, whose cell list it shares */
+export function buildWorldAtlas(main, tier) {
+  const k = tier === 'hi' ? 1 : 0.5, B = [Math.round(208 * k), Math.round(240 * k)], list = [];
+  TR_WOOD.forEach((col, i) => { for (const lit of [false, true]) list.push(['trW' + i + (lit ? 'L' : ''), B, (A, a, e, w, h) => trBay(A, a, e, w, h, col, lit, 900 + i, true, true, i === 3 ? '#f4f1ea' : '#5a3f2c')]); }); // (stained wood: dark frames)
+  TR_PLASTER.forEach((col, i) => { for (const lit of [false, true]) list.push(['trS' + i + (lit ? 'L' : ''), B, (A, a, e, w, h) => trBay(A, a, e, w, h, col, lit, 950 + i, false)]); });
+  TR_PASTEL.forEach((col, i) => { for (const lit of [false, true]) list.push(['trP' + i + (lit ? 'L' : ''), B, (A, a, e, w, h) => trBay(A, a, e, w, h, col, lit, 970 + i, false, false)]); });
+  for (const lit of [false, true]) list.push(['trSt' + (lit ? 'L' : ''), B, (A, a, e, w, h) => trStone(A, a, e, w, h, lit, 990)]);
+  list.push(['trDoor', B, trDoor], ['trTile', [Math.round(256 * k), Math.round(256 * k)], kiremit], ['trFlag', [Math.round(192 * k), Math.round(128 * k)], (A, a, e, w, h) => trFlag(a, e, w, h)],
+    ['trSign50', [Math.round(128 * k), Math.round(128 * k)], (A, a, e, w, h) => trSpeed(A, a, e, w, h, 50)],
+    ['trSignDir', [Math.round(256 * k), Math.round(128 * k)], (A, a, e, w, h) => trDirSign(A, a, e, w, h, ['Bebek', 'Sarıyer'])]);
+  const H = Math.ceil((flowEnd(list.map(c => c[1])) + 8) / 4) * 4, W = new Atlas(H, 4, main.cells);
+  for (const [n, [w, h], f] of list) W.add(n, w, h, (a, e, cw, ch) => f(W, a, e, cw, ch));
+  return W;
+}
 /** the atlas rows the painted houses take (assets/houses/houses2.json lists its own: pack.py), per tier: a cell's px are its
  *  tile's (48 px/m on desktops, 32 on phones and in the X card) */
 export const HOUSE_ROWS = { hi: 1152, lo: 512 };

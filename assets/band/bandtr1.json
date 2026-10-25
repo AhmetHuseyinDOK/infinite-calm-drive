@@ -1,0 +1,52 @@
+{
+ "period": 180.0,
+ "files": {
+  "hi": "bandtr1_hi.webp",
+  "lo": "bandtr1_lo.webp"
+ },
+ "bytes": {
+  "hi": 159986,
+  "lo": 59396
+ },
+ "size": {
+  "hi": [
+   5760,
+   344
+  ],
+  "lo": [
+   2880,
+   176
+  ]
+ },
+ "zones": {
+  "hi": {
+   "bosphorus": {
+    "v0": 0.04069767441860461,
+    "v1": 0.9651162790697675,
+    "e0": 0.0,
+    "e1": 9.9375,
+    "tiles": [
+     "wbt1c.png",
+     "wbt3.png (mirrored)",
+     "wbt2.png",
+     "wbt4.png (mirrored)"
+    ]
+   }
+  },
+  "lo": {
+   "bosphorus": {
+    "v0": 0.051136363636363646,
+    "v1": 0.9545454545454546,
+    "e0": 0.0,
+    "e1": 9.9375,
+    "tiles": [
+     "wbt1c.png",
+     "wbt3.png (mirrored)",
+     "wbt2.png",
+     "wbt4.png (mirrored)"
+    ]
+   }
+  }
+ },
+ "encode": "WebP q50, alpha_quality 90 method 6 from the lossless master (~/cdtest/w1/band/masters, bandtr.py)"
+}

@@ -1,42 +1,117 @@
 // The infinite road: a centre-line integrated from smooth curvature noise, plus the zone schedule.
 import { clamp, lerp, smooth, sstep, noise1, fbm1 } from './util.js';
 
-export const ZONES = ['city', 'sakura', 'coast', 'country', 'mountain', 'snow'];
+// ---- the world's route: regions of zones, ZONE_LEN each, driven in order and round again
+// Japan's six zones (as they always were), then through the border tunnel into Turkey, then back through another border
+// tunnel to Japan's first. Turkey so far: the Bosphorus shore road at Arnavutköy (W2). PLANNED lists the next regions'
+// zones in their order (W3–W6: the Galata Bridge, a typical Turkish town, Cappadocia's Göreme → Uçhisar road and the
+// Paşabağ fairy chimneys; then Tokyo, Osaka and a Japanese coastal city): each joins its region's list once it is built
+// (its ZINFO entry, its look in chunks.js / materials.js / painted.js), and the route grows with it. A start in a planned
+// zone (?env=galata …) begins at its region's first built zone.
+export const JAPAN = ['city', 'sakura', 'coast', 'country', 'mountain', 'snow'];
+export const TURKEY = ['bosphorus'];
+export const ZONES = [...JAPAN, ...TURKEY];
+export const PLANNED = { tr: ['galata', 'town', 'uchisar', 'pasabag'], jp2: ['tokyo', 'osaka', 'jpcoast'] };
+/** each zone's region: its traffic side, its border crossings, its zone card's language */
+export const REGION = {};
+for (const z of JAPAN) REGION[z] = 'jp';
+for (const z of [...TURKEY, ...PLANNED.tr]) REGION[z] = 'tr';
+/** which side of the road the traffic keeps to: Japan keeps left, Turkey right */
+export const SIDE = { jp: -1, tr: 1 };
+// (loc: the zone card's first line, in the region's language; en: its second)
 export const ZINFO = {
-  city:    { jp: '街の灯',     en: 'City Streets',          curv: 1 / 1500, hill: 1.2, base: 4.0, rw: 3.1, speed: 10.5 },
-  sakura:  { jp: '桜並木',     en: 'Cherry Blossom Avenue', curv: 1 / 520,  hill: 2.5, base: 4.5, rw: 3.3, speed: 11.5 },
+  city:    { loc: '街の灯',     en: 'City Streets',          curv: 1 / 1500, hill: 1.2, base: 4.0, rw: 3.1, speed: 10.5 },
+  sakura:  { loc: '桜並木',     en: 'Cherry Blossom Avenue', curv: 1 / 520,  hill: 2.5, base: 4.5, rw: 3.3, speed: 11.5 },
   // (the coast road runs low along its sea wall, about a metre above the water, as in the reference art, where the
   // tetrapods at its foot stand higher than the guardrail: it was 4–7 m up, over a beach)
-  coast:   { jp: '海沿いの道', en: 'Coastal Road',          curv: 1 / 300,  hill: 0.25, base: 1.05, rw: 3.4, speed: 13.5 },
-  country: { jp: '田舎道',     en: 'Country Road',          curv: 1 / 260,  hill: 7.0, base: 6.0, rw: 3.1, speed: 12.5 },
-  mountain: { jp: '紅葉の峠',   en: 'Autumn Mountain Pass',  curv: 1 / 150,  hill: 11,  base: 14,  rw: 3.0, speed: 10 },
-  snow:     { jp: '雪国',       en: 'Snow Country',          curv: 1 / 380,  hill: 3.5, base: 9,   rw: 3.0, speed: 9.5 },
+  coast:   { loc: '海沿いの道', en: 'Coastal Road',          curv: 1 / 300,  hill: 0.25, base: 1.05, rw: 3.4, speed: 13.5 },
+  country: { loc: '田舎道',     en: 'Country Road',          curv: 1 / 260,  hill: 7.0, base: 6.0, rw: 3.1, speed: 12.5 },
+  mountain: { loc: '紅葉の峠',   en: 'Autumn Mountain Pass',  curv: 1 / 150,  hill: 11,  base: 14,  rw: 3.0, speed: 10 },
+  snow:     { loc: '雪国',       en: 'Snow Country',          curv: 1 / 380,  hill: 3.5, base: 9,   rw: 3.0, speed: 9.5 },
+  // Istanbul: the Bosphorus shore road at Arnavutköy (Arnavutköy–Bebek Caddesi): two lanes along the European shore, the
+  // strait on the left behind a stone sea wall and an iron railing, the Asian shore's hills across it, the wooden houses
+  // up the slope on the right. It winds gently with the shore and runs ~1.4 m above the water
+  bosphorus: { loc: 'Boğaziçi', en: 'Bosphorus · Arnavutköy', curv: 1 / 420, hill: 0.3, base: 1.4, rw: 3.3, speed: 11.5 },
+  // (planned, not on the route yet: names only)
+  galata:  { loc: 'Galata Köprüsü', en: 'Galata Bridge' }, town: { loc: 'Mahalle', en: 'A Turkish Town' },
+  uchisar: { loc: 'Uçhisar Yolu', en: 'Göreme → Uçhisar' }, pasabag: { loc: 'Paşabağ', en: 'Fairy Chimneys' },
 };
 export const ZONE_LEN = 1500, TRANS = 260, SEA = 0;
 /** the coast: the sea wall's face stands WALL_U past the road's edge; its foot is SEA_FOOT under the water */
 export const WALL_U = 2.0, SEA_FOOT = -2.2;
+/** where two regions meet the drive goes through the border tunnel (borderNear): the zones blend over B_TRANS metres
+ *  (TRANS elsewhere), all inside its tube (T_HALF either side of its middle), so nothing is seen to change */
+export const B_TRANS = 150;
+/** the zones whose shore is the sea's (the painted sea, the water along the wall, the sea wall: sea.js, chunks.js) */
+export const SEA_ZONES = ['coast', 'bosphorus'];
 
 let START = 0;
-export function setStartZone(key) { START = Math.max(0, ZONES.indexOf(key)); }
+/** where the drive starts: a zone's key (an unknown key: Japan's first; a planned one: its region's first built zone) */
+export function setStartZone(key) {
+  let i = ZONES.indexOf(key);
+  if (i < 0 && REGION[key]) i = ZONES.findIndex(z => REGION[z] === REGION[key]);
+  START = Math.max(0, i);
+}
+export const startZone = () => ZONES[START];
+const zkey = i => ZONES[(((i + START) % ZONES.length) + ZONES.length) % ZONES.length];
+/** the blend's length from zone a into the next zone b */
+const transOf = (a, b) => (REGION[a] !== REGION[b] ? B_TRANS : TRANS);
 
 export function zoneMix(s) {
-  const z = Math.floor(s / ZONE_LEN), l = s - z * ZONE_LEN;
-  const t = smooth(clamp((l - (ZONE_LEN - TRANS)) / TRANS, 0, 1));
-  const n = ZONES.length;
-  return { a: ZONES[(((z + START) % n) + n) % n], b: ZONES[(((z + START + 1) % n) + n) % n], t };
+  const z = Math.floor(s / ZONE_LEN), l = s - z * ZONE_LEN, a = zkey(z), b = zkey(z + 1), tr = transOf(a, b);
+  const t = smooth(clamp((l - (ZONE_LEN - tr)) / tr, 0, 1));
+  return { a, b, t };
 }
 export function zoneW(s) {
-  const m = zoneMix(s), w = { city: 0, sakura: 0, coast: 0, country: 0, mountain: 0, snow: 0 };
+  const m = zoneMix(s), w = { city: 0, sakura: 0, coast: 0, country: 0, mountain: 0, snow: 0, bosphorus: 0 };
   w[m.a] += 1 - m.t; w[m.b] += m.t;
   return w;
 }
 export const zoneAt = s => { const m = zoneMix(s); return m.t < 0.5 ? m.a : m.b; };
 /** zoneW(s)[key] without the garbage (for every frame) */
 export function zoneWeight(s, key) {
-  const z = Math.floor(s / ZONE_LEN), l = s - z * ZONE_LEN, t = smooth(clamp((l - (ZONE_LEN - TRANS)) / TRANS, 0, 1)), n = ZONES.length;
-  return (ZONES[(((z + START) % n) + n) % n] === key ? 1 - t : 0) + (ZONES[(((z + START + 1) % n) + n) % n] === key ? t : 0);
+  const z = Math.floor(s / ZONE_LEN), l = s - z * ZONE_LEN, a = zkey(z), b = zkey(z + 1), tr = transOf(a, b);
+  const t = smooth(clamp((l - (ZONE_LEN - tr)) / tr, 0, 1));
+  return (a === key ? 1 - t : 0) + (b === key ? t : 0);
+}
+/** a region's weight at s (its zones' sum: 1 inside it, changing over a border's blend) */
+export function regionWeight(s, reg) { const m = zoneMix(s); return (REGION[m.a] === reg ? 1 - m.t : 0) + (REGION[m.b] === reg ? m.t : 0); }
+/** the sea's zones' weight at s (the coast's and the Bosphorus's: their water, wall and shore look) */
+export const seaWeight = s => { const m = zoneMix(s); return (SEA_ZONES.includes(m.a) ? 1 - m.t : 0) + (SEA_ZONES.includes(m.b) ? m.t : 0); };
+/** the traffic's side at s: −1 (keep left: Japan) … +1 (keep right: Turkey), changing over a border's blend (in its tube) */
+export function trafficSide(s) {
+  const m = zoneMix(s), a = SIDE[REGION[m.a]], b = SIDE[REGION[m.b]];
+  return a === b ? a : lerp(a, b, m.t);
 }
 export function zparam(s, key) { const m = zoneMix(s); return lerp(ZINFO[m.a][key], ZINFO[m.b][key], m.t); }
+/** the zones seen `ahead` metres on from s (the far horizon's: painted.js band), except round a border: there the camera's
+ *  own, so the next region's horizon only takes over while the camera is inside the border tunnel */
+export function viewMix(s, ahead) {
+  const b = borderNear(s);
+  return b && Math.abs(s - b.s) < B_TRANS / 2 + ahead ? zoneMix(s) : zoneMix(s + ahead);
+}
+/** the zone sets a chunk's ground can hold (materials.js groundMaterialFor; warmed up at load): each zone, each pair of
+ *  neighbours on the route, and at a border both sides with 'border' (the tunnel's ridge over the tube: chunks.js) */
+export function zoneSets() {
+  const out = [], n = ZONES.length;
+  for (let i = 0; i < n; i++) {
+    const a = ZONES[i], b = ZONES[(i + 1) % n];
+    out.push([a]);
+    if (n > 1) out.push(REGION[a] !== REGION[b] ? [a, b, 'border'] : [a, b]);
+  }
+  return out;
+}
+
+// ---- the border tunnels: where the route passes from one region to the next, centred on the zones' blend (B_TRANS long,
+// at the end of the outgoing zone): from the outside each mouth shows its own region only. Never at the start of the drive
+/** the border tunnel nearest to s, if there is one there ({ k, s, border: true, a, b }: a the outgoing zone, b the incoming) */
+export function borderNear(s) {
+  const k = Math.round((s + B_TRANS / 2) / ZONE_LEN);
+  if (k < 1) return null;
+  const a = zkey(k - 1), b = zkey(k);
+  if (REGION[a] === REGION[b]) return null;
+  return memo(MEMO.b, k, () => ({ k: 10000 + k, s: k * ZONE_LEN - B_TRANS / 2, border: true, a, b }));
+}
 
 // ---- railway level crossings (踏切): every XING metres, where the road runs through city or countryside
 export const XING = 650, XOFF = 375;
@@ -44,11 +119,12 @@ export const crossingS = k => k * XING + XOFF;
 export function crossingValid(sx) {
   if (sx < 300) return false;
   for (const d of [-70, 0, 70]) { const w = zoneW(sx + d); if (Math.max(w.city, w.country) < 0.9) return false; }
-  return true;
+  const b = borderNear(sx); // (not at a border tunnel's mouth)
+  return !(b && Math.abs(sx - b.s) < 2 * T_RIDGE + 80);
 }
 /** the crossing nearest to s, if that one exists */
 // the *Near() lookups run for every ground vertex — memoise them per candidate index (each validity test samples zones)
-const MEMO = { x: new Map(), r: new Map(), t: new Map() };
+const MEMO = { x: new Map(), r: new Map(), t: new Map(), b: new Map() };
 function memo(m, k, fn) { let v = m.get(k); if (v === undefined) { v = fn(); m.set(k, v); if (m.size > 2000) m.clear(); } return v; }
 export function crossingNear(s) { const k = Math.round((s - XOFF) / XING); return memo(MEMO.x, k, () => { const sx = crossingS(k); return crossingValid(sx) ? { k, s: sx } : null; }); }
 /** 1 within ±8 m of a crossing, easing to 0 by ±45 m — the road is levelled and straightened there */
@@ -60,8 +136,8 @@ export const riverS = k => k * RIV + ROFF;
 export function riverValid(sr) {
   if (sr < 400) return false;
   for (const d of [-90, 0, 90]) { const w = zoneW(sr + d); if (w.country + w.sakura < 0.9) return false; }
-  const c = crossingNear(sr);
-  return !(c && Math.abs(c.s - sr) < 170);
+  const c = crossingNear(sr), b = borderNear(sr);
+  return !(c && Math.abs(c.s - sr) < 170) && !(b && Math.abs(sr - b.s) < 2 * T_RIDGE + 100);
 }
 export function riverNear(s) { const k = Math.round((s - ROFF) / RIV); return memo(MEMO.r, k, () => { const sr = riverS(k); return riverValid(sr) ? { k, s: sr } : null; }); }
 /** 1 on the bridge, easing to 0 by ±70 m — the road is level and straight across a river */
@@ -82,9 +158,16 @@ export const tunnelS = k => k * TUN + TOFF;
 export function tunnelValid(st) {
   if (st < 300) return false;
   for (const d of [-170, 0, 170]) { const w = zoneW(st + d); if (Math.max(w.mountain, w.coast) < 0.95) return false; }
-  return true;
+  const b = borderNear(st); // (never into a border tunnel's ridge: no region's route has the mountain or the coast at a border yet)
+  return !(b && Math.abs(b.s - st) < 2 * T_RIDGE + 60);
 }
-export function tunnelNear(s) { const k = Math.round((s - TOFF) / TUN); return memo(MEMO.t, k, () => { const st = tunnelS(k); return tunnelValid(st) ? { k, s: st } : null; }); }
+/** the tunnel nearest to s, if that one exists: through the mountain pass's ridges and the coast's headlands (every TUN
+ *  metres where those zones run long enough), or a border tunnel (borderNear) */
+export function tunnelNear(s) {
+  const k = Math.round((s - TOFF) / TUN), g = memo(MEMO.t, k, () => { const st = tunnelS(k); return tunnelValid(st) ? { k, s: st } : null; });
+  const b = borderNear(s);
+  return !b ? g : !g || Math.abs(s - b.s) < Math.abs(s - g.s) ? b : g;
+}
 /** 1 through the tunnel and its approaches — the road runs straight and level there */
 export function tunnelW(s) { const t = tunnelNear(s); return t ? 1 - sstep(T_HALF + 20, T_RIDGE + 25, Math.abs(s - t.s)) : 0; }
 /** how much the tunnel's ridge raised the ground at the last groundOffsetMix() call (for the ground shader) */
@@ -166,6 +249,19 @@ export function groundOffset(zone, s, u, e, rw) {
       // the water among the tetrapods (SEA_FOOT), and the sea floor shelves off from there (absolute heights: sea level 0)
       return SEA_FOOT - Math.min(a - (rw + 2.0), 40) * 0.13 - e;
     }
+    case 'bosphorus': {
+      // the strait's side is the coast's (its shoulder, the sea wall's top, the wall dropping into the water); on the land
+      // side, as in the concept painting: a grass verge at the road's level, a stone pavement a kerb higher, the gardens'
+      // railings, then the houses' plots climbing the steep slope (~45 m up at 75 m from the road, the wooded ridge beyond)
+      if (u < 0) return groundOffset('coast', s, u, e, rw);
+      if (a < rw + 1.6) return -0.06;
+      if (a < rw + 5) return 0.12;
+      // (an even slope from the gardens up, ~0.8 m a metre: each row of houses stands 9–11 m over the one in front, its
+      // upper floors and roofs over the front row's, as the concept's climb the hill; even, so the ground's coarse far
+      // columns follow it)
+      const t = Math.min(a - rw - 5, 75), k = 0.85 + 0.15 * noise1(s / 150, 83);
+      return 0.12 + (t < 6 ? (t * t) / 12 : t - 3) * 0.8 * k + sstep(rw + 80, 220, a) * 14;
+    }
     case 'mountain': {
       if (u > 0) { // uphill: gutter, then a concrete-framed slope face (法面), then the forest slope
         if (a < rw + 0.5) return -0.06;
@@ -204,7 +300,7 @@ export function groundOffsetMix(s, u, e, rw) {
   // zone's land half-way through the transition, its trees and houses standing in the sea. There the land holds on, and
   // gives way to the sea over the coast's half of the blend)
   let tm = m.t;
-  if (u < 0 && tm > 0) { if (m.b === 'coast') tm = sstep(0.25, 0.9, tm); else if (m.a === 'coast') tm = sstep(0.1, 0.75, tm); }
+  if (u < 0 && tm > 0) { if (SEA_ZONES.includes(m.b)) tm = sstep(0.25, 0.9, tm); else if (SEA_ZONES.includes(m.a)) tm = sstep(0.1, 0.75, tm); }
   const base = m.t > 0 ? lerp(a, groundOffset(m.b, s, u, e, rw), tm) : a;
   RAISE = 0;
   const r = riverNear(s);
@@ -221,9 +317,12 @@ export function groundOffsetMix(s, u, e, rw) {
   if (ad >= 2 * T_RIDGE) return base;
   // a ridge across the road: highest over the middle of the tunnel, a spur falling away to the valley / the sea
   const au = Math.abs(u), hr = ridgeHr(ds, u);
+  // (a border tunnel's mouth into the shopping street: its cutting stands back behind the sidewalk and the shopfronts, so
+  // the street runs up to the portal)
+  const cut = t.border && ad >= T_HALF && zoneAt(s) === 'city' ? rw + 3.05 : rw + 1.0;
   let y;
   if (ad < T_HALF) y = au <= rw + 1.46 ? -0.25 : Math.max(base, hr);  // over the tube (the strip under the walkways stays low; a cap covers it)
-  else y = Math.max(base, Math.min(hr, au < rw + 1.0 ? -0.06 : au - (rw + 1.0))); // the approach cutting, 45° faces
+  else y = Math.max(base, Math.min(hr, au < cut ? -0.06 : au - cut)); // the approach cutting, 45° faces
   RAISE = Math.max(0, y - base);
   return y;
 }

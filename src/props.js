@@ -54,8 +54,8 @@ export function poleAnchors(M) { return POLE_ANCH.map(p => new THREE.Vector3(p[0
 export function utilityPole(G, M, r, opt = {}) {
   const c = G.color; c.setM(M);
   const H = 11.2;
-  c.cyl(0, 0, 0, 0.17, 0.12, H, 10, PAL.pole);
-  for (let i = 0; i < 5; i++) c.cyl(0, 0.25 + i * 0.3, 0, 0.185, 0.185, 0.15, 10, i % 2 ? PAL.black : PAL.yellow, false);
+  c.cyl(0, 0, 0, 0.17, 0.12, H, 10, opt.tr ? TR_POLE : PAL.pole);
+  if (!opt.tr) for (let i = 0; i < 5; i++) c.cyl(0, 0.25 + i * 0.3, 0, 0.185, 0.185, 0.15, 10, i % 2 ? PAL.black : PAL.yellow, false); // (Japan's yellow-and-black bands)
   c.box(-0.05, H - 0.65, -0.95, 0.05, H - 0.53, 0.95, PAL.metal);
   c.box(-0.05, H - 1.75, -0.8, 0.05, H - 1.65, 0.8, PAL.metal);
   const A1 = [-0.85, -0.3, 0.3, 0.85], A2 = [-0.7, 0, 0.7];
@@ -531,7 +531,8 @@ export function treeGhibliSakura(G, M, r, s = 1, ave = false) {
 // trees are built once per (kind, variant) and then stamped — much cheaper than rebuilding every tree. 'sakuraAve': the
 // avenue's cherry trees, built facing the road (chunks.js placeSakura)
 const TREE_BUILDERS = { broad: (G, M, r, s) => (GHIBLI.cells ? treeGhibli : treeBroad)(G, M, r, s), sakura: (G, M, r, s) => (GHIBLI.bcells ? treeGhibliSakura(G, M, r, s) : treeSakura(G, M, r, s)),
-  sakuraAve: (G, M, r, s) => (GHIBLI.bcells ? treeGhibliSakura(G, M, r, s, true) : treeSakura(G, M, r, s)), pine: treePine, cedar: treeCedar, maple: treeMaple, ginkgo: treeGinkgo, birch: treeBirch, snowcedar: treeSnowCedar };
+  sakuraAve: (G, M, r, s) => (GHIBLI.bcells ? treeGhibliSakura(G, M, r, s, true) : treeSakura(G, M, r, s)), pine: treePine, cedar: treeCedar, maple: treeMaple, ginkgo: treeGinkgo, birch: treeBirch, snowcedar: treeSnowCedar,
+  cypress: treeCypress };
 const TCACHE = {};
 function treeTemplate(kind, v) {
   const key = kind + v;
@@ -1233,4 +1234,154 @@ export function smallShrine(G, M, r) {
   c.quad([0.8, 1.4, 0.6], [-0.8, 1.4, 0.6], [-0.8, 1.95, 1.35], [0.8, 1.95, 1.35], C('#4d5468'));
   c.quad([-0.8, 1.4, 2.1], [0.8, 1.4, 2.1], [0.8, 1.95, 1.35], [-0.8, 1.95, 1.35], C('#4d5468'));
   torii(G, sub(M, 0, 0, -0.3, Math.PI / 2), 0.75, 2.2);
+}
+
+// ------------------------------------------------------------------ Istanbul: the Bosphorus shore road (Arnavutköy)
+const TR_POLE = C('#8b8379'); // (a weathered concrete pole, without Japan's bands)
+/** servi: an Italian cypress, the tall dark spindle that stands over Istanbul's gardens and graveyards */
+export function treeCypress(G, M, r, s = 1) {
+  const h = r.range(10, 15) * s, R = r.range(0.85, 1.1) * s;
+  G.color.setM(M); G.color.cyl(0, 0, 0, 0.16 * s, 0.12 * s, h * 0.12, 6, PAL.trunkDark);
+  G.foliage.setM(M); // (a tall narrow flame: a lumpy spindle, its top drawn out to a soft point)
+  G.foliage.blob(0, h * 0.42, 0, R, C('#3a6a43'), C('#18392a'), 1, (h * 0.42) / R);
+  G.foliage.blob(0, h * 0.78, 0, R * 0.62, C('#467a4c'), C('#1f4430'), 2, (h * 0.22) / (R * 0.62));
+}
+// a lit window's moment at dusk for the world atlas's cells (its names aren't the procedural atlas's 'win…L')
+const trLit = (a, cell, lit, x, y) => { a.litV = lit ? homeLit(a, x, y) : 0; return lit ? cell + 'L' : cell; };
+/** a roof's tiles: one sloping face, from its eave line (e0 → e1) up to its top line (t0 → t1: the ridge, or a hip's apex),
+ *  laid in strips about 2.2 m wide each carrying the whole tile cell (alaturka kiremit at their real size) */
+function tileFace(a, e0, e1, t0, t1, cell) {
+  const len = Math.hypot(e1[0] - e0[0], e1[2] - e0[2]), n = Math.max(1, Math.round(len / 2.2)), L = (p, q, k) => [p[0] + (q[0] - p[0]) * k, p[1] + (q[1] - p[1]) * k, p[2] + (q[2] - p[2]) * k];
+  for (let i = 0; i < n; i++) { const k0 = i / n, k1 = (i + 1) / n; a.quad(L(e0, e1, k0), L(e0, e1, k1), L(t0, t1, k1), L(t0, t1, k0), W1, uv(cell)); }
+}
+/** an Ottoman wooden house of the Bosphorus (Arnavutköy), as the concept painting has them: a ground floor of grey stone or
+ *  plaster, one or two upper floors jutting out over it on a sloping soffit, most with a bay window (cumba) standing out
+ *  further over the street, a tall sash window in every ~2 m bay (dark frames on stained wood, white on paint and plaster:
+ *  the world atlas's trW / trS / trSt / trP cells, their rooms lit one by one at dusk), the upper floors in stained boards or
+ *  (pastel) plaster, wide eaves and a hipped roof of terracotta barrel tiles or a gable to the street; now and then a flag
+ *  out of an upper window. Local frame as every building's: x along the road, the front facing −z, its
+ *  depth +z. s: w, d, floors (2–3), wood (0–3), plaster (0–2), stone (a ground floor of grey stone blocks), pastel (−1:
+ *  wood; else 0–3), cumba, gable (the roof's gable to the street, as the concept's nearest houses, instead of hipped), litP,
+ *  flag */
+export function ottomanHouse(G, M, r, s) {
+  const { w, d, floors } = s, a = G.atlas, c = G.color, fh = 3.0, jut = 0.6, H = floors * fh, o = 0.75;
+  a.setM(M); c.setM(M); a.world = true; // (the world atlas's cells: the chunk takes the atlas material's world variant)
+  const nb = Math.max(2, Math.round(w / 2.1)), bw = w / nb, pastel = s.pastel ?? -1, up = pastel >= 0 ? 'trP' + pastel : 'trW' + s.wood, gf = s.stone ? 'trSt' : 'trS' + s.plaster, litP = s.litP ?? 0.55;
+  const door = Math.floor(r() * nb);
+  for (let i = 0; i < nb; i++) { // the ground floor's front: a door, windows
+    const x0 = -w / 2 + i * bw, x1 = x0 + bw, cell = i === door ? 'trDoor' : trLit(a, gf, r() < litP, x0, 0);
+    fq(a, x0, x1, 0, fh, 0, cell); a.litV = 0;
+  }
+  const segs = Math.max(1, Math.round(d / 2.7)), sd = d / segs;
+  for (const sx of [-1, 1]) for (let j = 0; j < segs; j++) { // its sides
+    const cell = trLit(a, gf, r() < litP * 0.6, sx * w + j, 0); (sx > 0 ? pxq : nxq)(a, (sx * w) / 2, j * sd, (j + 1) * sd, 0, fh, cell); a.litV = 0;
+  }
+  // the bay window: the middle one or two bays of the upper floors standing out a further cj over the street
+  const nc = s.cumba ? (nb >= 4 ? 2 : 1) : 0, c0 = Math.floor((nb - nc) / 2), cj = 0.6, xc0 = -w / 2 + c0 * bw, xc1 = xc0 + nc * bw;
+  const WOODC = pastel >= 0 ? C(['#e2d6bd', '#dbc794', '#dbc1b5', '#c1c9cb'][pastel]) : C(['#6e4a33', '#93704a', '#7c7062', '#d8ccb2'][s.wood]);
+  for (let f = 1; f < floors; f++) { // the upper floors
+    const y0 = f * fh, y1 = y0 + fh;
+    for (let i = 0; i < nb; i++) { const x0 = -w / 2 + i * bw, inC = i >= c0 && i < c0 + nc, cell = trLit(a, up, r() < (inC ? litP + 0.15 : litP), x0, y0); fq(a, x0, x0 + bw, y0, y1, inC ? -jut - cj : -jut, cell); a.litV = 0; }
+    if (nc) { // the bay's two sides, plain boards
+      c.quad([xc0, y0, -jut - cj], [xc0, y0, -jut], [xc0, y1, -jut], [xc0, y1, -jut - cj], mulC(WOODC, 0.85)); // (facing −x)
+      c.quad([xc1, y0, -jut], [xc1, y0, -jut - cj], [xc1, y1, -jut - cj], [xc1, y1, -jut], mulC(WOODC, 0.85)); // (facing +x)
+    }
+    const segU = Math.max(1, Math.round((d + jut) / 2.7)), su = (d + jut) / segU;
+    for (const sx of [-1, 1]) for (let j = 0; j < segU; j++) {
+      const cell = trLit(a, up, r() < litP * 0.6, sx * w + j, y0); (sx > 0 ? pxq : nxq)(a, (sx * w) / 2, -jut + j * su, -jut + (j + 1) * su, y0, y1, cell); a.litV = 0;
+    }
+  }
+  // the soffit under the jut: sloping in from the jut's edge to the ground floor's wall, and its two ends; the bay's underside
+  c.quad([w / 2, fh - 0.4, 0], [-w / 2, fh - 0.4, 0], [-w / 2, fh, -jut], [w / 2, fh, -jut], mulC(WOODC, 0.7));
+  for (const sx of [-1, 1]) { const x = (sx * w) / 2; if (sx > 0) c.quad([x, fh - 0.4, 0], [x, fh, -jut], [x, fh, -jut], [x, fh, 0], mulC(WOODC, 0.8)); else c.quad([x, fh, -jut], [x, fh - 0.4, 0], [x, fh, 0], [x, fh, 0], mulC(WOODC, 0.8)); }
+  if (nc) c.quad([xc1, fh, -jut], [xc0, fh, -jut], [xc0, fh, -jut - cj], [xc1, fh, -jut - cj], mulC(WOODC, 0.6));
+  c.quad([-w / 2, 0, d], [w / 2, 0, d], [w / 2, H, d], [-w / 2, H, d], mulC(WOODC, 0.8)); // (the back: never seen from the road; closes the box for the shadows)
+  const SOF = mulC(WOODC, 0.62), zw = -jut; // (zw: the main front wall the eaves stand out from; over a bay window they cover its top)
+  let chX = 0, chY = H + 1, chZ = d / 2;
+  if (!s.gable) {
+    // the roof: hipped, its eaves o out all round (their undersides painted), the ridge along the road, ~33° (from the street
+    // its tiles show over the eaves)
+    const zf = -jut - (nc ? cj : 0) - o, zb = d + o, xw = w / 2 + o, yE = H - 0.2, rh = Math.min(3.6, (zb - zf) * 0.33), zc = (zf + zb) / 2, hd = (zb - zf) / 2, xl = Math.min(0, -xw + hd), xr = -xl, yR = H + rh;
+    const E0 = [-xw, yE, zf], E1 = [xw, yE, zf], E2 = [xw, yE, zb], E3 = [-xw, yE, zb], R0 = [xl, yR, zc], R1 = [xr, yR, zc];
+    tileFace(a, E1, E0, R1, R0, 'trTile'); tileFace(a, E3, E2, R0, R1, 'trTile'); // front, back (each from its eave's right end, seen from outside)
+    tileFace(a, E2, E1, R1, R1, 'trTile'); tileFace(a, E0, E3, R0, R0, 'trTile'); // the hips at either end
+    c.noShadow = true; // (the eaves' undersides: high up, in the roof's shadow anyway)
+    c.quad([-xw, yE, zf], [xw, yE, zf], [w / 2, yE, zw], [-w / 2, yE, zw], SOF); c.quad([xw, yE, zb], [-xw, yE, zb], [-w / 2, yE, d], [w / 2, yE, d], SOF);
+    c.quad([xw, yE, zf], [xw, yE, zb], [w / 2, yE, d], [w / 2, yE, zw], SOF); c.quad([-xw, yE, zb], [-xw, yE, zf], [-w / 2, yE, zw], [-w / 2, yE, d], SOF);
+    c.noShadow = false;
+    chX = xr * 0.4; chY = yR; chZ = zc;
+  } else {
+    // …or its gable to the street: the ridge running back from the street, ~36°, the eaves and the gable's rake standing out
+    // o all round; the gable's triangle in the upper floors' boards (or plaster), a little round window in it
+    const zf = zw - o, zb = d + o, xw = w / 2 + o, yE = H - 0.2, k = 0.72, yR = yE + xw * k, yW = yE + o * k;
+    tileFace(a, [-xw, yE, zf], [-xw, yE, zb], [0, yR, zf], [0, yR, zb], 'trTile'); tileFace(a, [xw, yE, zb], [xw, yE, zf], [0, yR, zb], [0, yR, zf], 'trTile');
+    const GC = mulC(WOODC, 0.95);
+    c.quad([w / 2, H, zw], [-w / 2, H, zw], [-w / 2, yW, zw], [w / 2, yW, zw], GC); // (the gable's foot, up to the roof at the walls)
+    c.quad([w / 2, yW, zw], [-w / 2, yW, zw], [0, yR - 0.1, zw], [0, yR - 0.1, zw], GC); // its triangle, facing the street
+    c.quad([-w / 2, H, d], [w / 2, H, d], [w / 2, yW, d], [-w / 2, yW, d], GC); c.quad([-w / 2, yW, d], [w / 2, yW, d], [0, yR - 0.1, d], [0, yR - 0.1, d], GC); // (the back's)
+    c.box(-0.32, (yW + yR) / 2 - 0.32, zw - 0.04, 0.32, (yW + yR) / 2 + 0.32, zw, C('#f1ece2')); c.box(-0.22, (yW + yR) / 2 - 0.22, zw - 0.06, 0.22, (yW + yR) / 2 + 0.22, zw - 0.04, C('#3c4a64')); // (its little window)
+    c.noShadow = true; // the undersides: the eaves along the sides, the rake over the gables
+    for (const sx of [-1, 1]) {
+      const x0 = sx * xw, x1 = sx * (w / 2);
+      if (sx > 0) c.quad([x0, yE, zf], [x0, yE, zb], [x1, yE, zb], [x1, yE, zf], SOF); else c.quad([x0, yE, zb], [x0, yE, zf], [x1, yE, zf], [x1, yE, zb], SOF);
+      for (const [za, zb2] of [[zf, zw], [d, zb]]) { // (the rake: from the eave's corner up to the ridge, its underside)
+        const P0 = [x0, yE - 0.01, za], P1 = [x0, yE - 0.01, zb2], P2 = [0, yR - 0.01, zb2], P3 = [0, yR - 0.01, za];
+        if (sx > 0) c.quad(P0, P1, P2, P3, SOF); else c.quad(P1, P0, P3, P2, SOF); // (facing down and out under its slope)
+      }
+    }
+    c.noShadow = false;
+    chX = w * 0.18; chY = yE + (xw - w * 0.18) * k; chZ = d * 0.6;
+  }
+  if (r() < 0.5) c.box(chX - 0.3, chY - 0.9, chZ + 0.6, chX + 0.3, chY + 0.7, chZ + 1.2, C('#b8ad9b')); // a chimney
+  if (s.flag) { // a flag out of an upper window, on a pole at 40°
+    const x = -w / 2 + bw * 0.5, y = H - 1.0, z = -jut - 0.05, L = 1.9, tip = [x, y + L * 0.64, z - L * 0.77];
+    c.rod([x, y, z], tip, 0.025, 0.02, 4, PAL.white);
+    flagCloth(G, M, tip, 1.0, 0.77, -1);
+  }
+}
+/** a flag's cloth hanging from the top of its pole (top: the pole's tip, in the prop's frame) out along ±x (dir), its height
+ *  hh, length 1.5 hh, in three panels with a gentle wave; both faces (the back shows it mirrored, as cloth does) */
+export function flagCloth(G, M, top, hh, sway = 0.6, dir = 1) {
+  const a = G.atlas, cl = uv('trFlag'); a.setM(M); a.noShadow = false; a.world = true;
+  const L = hh * 1.5, n = 3, P = k => [top[0] + dir * L * k, top[1] - 0.05 - hh * 0.06 * k, top[2] + Math.sin(k * 5.2) * 0.12 * sway * k];
+  for (let i = 0; i < n; i++) {
+    const k0 = i / n, k1 = (i + 1) / n, p0 = P(k0), p1 = P(k1), u0 = cl.u0 + (cl.u1 - cl.u0) * k0, u1 = cl.u0 + (cl.u1 - cl.u0) * k1;
+    const b0 = [p0[0], p0[1] - hh, p0[2]], b1 = [p1[0], p1[1] - hh, p1[2]], q = { u0, u1, v0: cl.v0, v1: cl.v1 };
+    if (dir > 0) { a.quad(b0, b1, p1, p0, W1, q); a.quad(b1, b0, p0, p1, W1, { u0: u1, u1: u0, v0: cl.v0, v1: cl.v1 }); }
+    else { a.quad(b1, b0, p0, p1, W1, { u0: u1, u1: u0, v0: cl.v0, v1: cl.v1 }); a.quad(b0, b1, p1, p0, W1, q); }
+  }
+}
+/** a tall flagpole with the Turkish flag (on the pavement, on a stone plinth) */
+export function flagPole(G, M, h = 9) {
+  const c = G.color; c.setM(M);
+  c.box(-0.35, 0, -0.35, 0.35, 0.45, 0.35, C('#cfc6b2'));
+  c.cyl(0, 0.45, 0, 0.07, 0.045, h - 0.45, 8, C('#e8e8e4'));
+  c.cyl(0, h, 0, 0.08, 0.08, 0.14, 8, C('#d6b24a'));
+  flagCloth(G, M, [0, h - 0.1, 0], 1.5, 1, 1);
+}
+/** a road sign on a post (the world atlas's Turkish signs), facing the drive (local −x: back along the road) */
+export function trSign(G, M, cell, h = 2.4, w = 0.7, hgt = 0.7) {
+  G.color.setM(M); G.color.cyl(0, 0, 0, 0.04, 0.04, h + hgt / 2, 6, PAL.metal);
+  G.atlas.setM(M); G.atlas.world = true; nxq(G.atlas, -0.05, -w / 2, w / 2, h - hgt / 2, h + hgt / 2, cell);
+  G.color.quad([-0.06, h - hgt / 2, w / 2], [-0.06, h - hgt / 2, -w / 2], [-0.06, h + hgt / 2, -w / 2], [-0.06, h + hgt / 2, w / 2], C('#9a9ea4')); // (its back)
+}
+/** an Istanbul city ferry (Şehir Hatları vapuru), as the concept painting has it: a white hull with a navy boot-top, two
+ *  decks of windows, a yellow funnel with a black top, the flag at the stern. ~44 m, local x its length (bow at +x) */
+export function ferry(G, M, r) {
+  const c = G.color; c.setM(M);
+  const WH = C('#f4f4f0'), NAVY = C('#23304a'), WIN = C('#33405a'), DECK = C('#e6e4dc');
+  const L = 22, B = 4.6;
+  c.box(-L, -0.8, -B, L - 6, 1.2, B, NAVY, null, { py: WH }); c.box(-L, 1.2, -B, L - 6, 2.6, B, WH);
+  for (const sz of [-1, 1]) { // the bow's two sides
+    const p = (x, y, z) => [x, y, z];
+    if (sz < 0) { c.quad(p(L + 2, -0.8, 0), p(L - 6, -0.8, -B), p(L - 6, 2.6, -B), p(L + 3, 2.6, 0), WH); }
+    else { c.quad(p(L - 6, -0.8, B), p(L + 2, -0.8, 0), p(L + 3, 2.6, 0), p(L - 6, 2.6, B), WH); }
+  }
+  c.quad([L - 6, 2.6, B], [L + 3, 2.6, 0], [L + 3, 2.6, 0], [L - 6, 2.6, -B], DECK);
+  c.box(-L + 2, 2.6, -B + 0.3, L - 8, 5.0, B - 0.3, WH); c.box(-L + 2.2, 3.4, -B + 0.25, L - 8.2, 4.4, B - 0.25, WIN);
+  c.box(-L + 5, 5.0, -B + 0.8, L - 12, 7.2, B - 0.8, WH); c.box(-L + 5.2, 5.7, -B + 0.75, L - 12.2, 6.6, B - 0.75, WIN);
+  c.box(L - 15, 7.2, -2.2, L - 11, 9.0, 2.2, WH); c.box(L - 14.8, 7.9, -2.25, L - 11.2, 8.6, 2.25, WIN); // the wheelhouse
+  c.cyl(-4, 7.2, 0, 1.3, 1.2, 3.2, 10, C('#e9b730')); c.cyl(-4, 10.4, 0, 1.2, 1.18, 0.9, 10, PAL.black); // the funnel
+  c.rod([L - 13, 9, 0], [L - 13, 12.5, 0], 0.08, 0.06, 5, PAL.white);
+  flagCloth(G, M, [-L + 0.5, 6.4, 0], 0.9, 1, -1);
 }

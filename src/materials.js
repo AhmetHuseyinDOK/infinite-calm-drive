@@ -517,6 +517,43 @@ vec3 coastGround(float s, float u, float rw){
   vec3 sand = mix(L(vec3(0.94, 0.87, 0.71)), L(vec3(0.85, 0.77, 0.62)), fbm2(p*0.2));
   return mix(sand, L(vec3(0.6, 0.55, 0.46)), 0.6*(1.0 - smoothstep(0.0, 0.9, vWY)));
 }
+#ifdef Z_BOS
+// the Bosphorus shore road at Arnavutköy, as its concept painting has it (drawn in the coast's channel: the two never meet).
+// The strait's side: the asphalt's shoulder, then the sea wall of pale dressed stone, its top a course of long blocks and
+// its face (the steep ground between the wall's top and the water) blocks in courses, darker and wet low down. The land
+// side: long grass on the verge right up to the asphalt, a pavement of grey stone slabs a kerb higher, and beyond the
+// gardens' railings the gardens' grass (the painted meadow in the coast's colours)
+vec3 bosGround(float s, float u, float rw){
+  vec2 p = vec2(s, u); float a = abs(u);
+  if (u > 0.0) {
+#ifdef F_PAINT
+    vec3 g = fieldTex(1.25) * uFieldCo;
+#else
+    vec3 g = grassCol(p, L(vec3(0.31, 0.60, 0.25)), L(vec3(0.52, 0.79, 0.32)));
+#endif
+    if (a < rw + 1.6) return g * mix(0.55, 0.92, smoothstep(rw + 0.1, rw + 1.3, a));
+    if (a < rw + 4.6) {
+      // slabs ~0.9 × 0.6 m in courses along the road, each its own grey, the joints dark; a dressed kerb along the verge
+      float row = floor((a - rw - 1.6) / 0.6), q = s / 0.9 + 0.5 * mod(row, 2.0), fx = fract(q), fy = fract((a - rw - 1.6) / 0.6);
+      vec3 c = mix(L(vec3(0.67, 0.65, 0.61)), L(vec3(0.58, 0.57, 0.54)), hash12(vec2(floor(q), row)));
+      c *= 1.0 - 0.28 * max(step(fx, 0.035), step(fy, 0.05));
+      if (a < rw + 1.85) c = L(vec3(0.82, 0.80, 0.76)) * (0.9 + 0.1 * vnoise(p * vec2(0.5, 4.0)));
+      return c * (0.92 + 0.12 * fbm2(p * 0.7));
+    }
+    return g * (1.0 + 0.55 * (vnoise(p * 0.035 + 9.1) - 0.5) * vec3(1.8, 1.0, 0.2));
+  }
+  if (a < rw + 1.45) return L(vec3(0.58, 0.58, 0.6)) * (0.9 + 0.1 * fbm2(p));
+  if (vWN.y > 0.6) { // the wall's top: long blocks, their joints across it
+    if (a < rw + 2.08) return L(vec3(0.82, 0.79, 0.72)) * (0.88 + 0.12 * vnoise(p * vec2(0.6, 6.0))) * (1.0 - 0.3 * step(fract(s / 1.6), 0.025));
+    return mix(L(vec3(0.6, 0.55, 0.46)), L(vec3(0.85, 0.77, 0.62)), smoothstep(0.0, 0.9, vWY)); // (under the water)
+  }
+  // the face: courses 0.45 m high, the blocks 1.1 m long, each course's joints half a block on
+  float cr = floor(vWY / 0.45), q = s / 1.1 + 0.5 * cr, fy = fract(vWY / 0.45);
+  vec3 c = mix(L(vec3(0.78, 0.75, 0.68)), L(vec3(0.66, 0.64, 0.60)), hash12(vec2(floor(q), cr)));
+  c *= 1.0 - 0.3 * max(step(fract(q), 0.03), step(fy, 0.07));
+  return c * (0.45 + 0.55 * smoothstep(0.1, 1.0, vWY));
+}
+#endif
 vec3 countryGround(float s, float u, float rw){
   vec2 p = vec2(s, u); float a = abs(u);
   // the verge under its bank of tall grass (the clump cards, chunks.js placeBanks): dense grass in its own shade right
@@ -625,7 +662,11 @@ vec3 groundAlbedo(){
   if (vZW.y > 0.004) c += vZW.y * sakuraGround(s, u, rw);
 #endif
 #ifdef Z_COAST
+#ifdef Z_BOS
+  if (vZW.z > 0.004) c += vZW.z * bosGround(s, u, rw);
+#else
   if (vZW.z > 0.004) c += vZW.z * coastGround(s, u, rw);
+#endif
 #endif
 #ifdef Z_COUNTRY
   if (vZW.w > 0.004) c += vZW.w * countryGround(s, u, rw);
@@ -647,6 +688,9 @@ vec3 groundAlbedo(){
 #endif
 #ifdef K_RIDGE
   c = mix(c, ridgeCol(s, u, wMtn), rdg);
+#endif
+#if defined(K_BORDER) && defined(Z_SNOW)
+  if (vZS > 0.004 && rdg > 0.0) c = mix(c, snowGround(s, u, rw), vZS * rdg); // (a border tunnel's ridge in the snow country: under snow)
 #endif
   return c * (0.92 + 0.16*fbm2(vec2(s, u)*0.015));
 }
@@ -709,7 +753,7 @@ if (uWet > 0.01 || wetS > 0.01) {
 
 // zones → shader defines. Each chunk's ground uses a variant compiled with only the zones (and features) it contains:
 // one uber-shader with every zone's code ran ~4× slower even when the branches were skipped.
-const ZDEF = { city: 'Z_CITY', sakura: 'Z_SAKURA', coast: 'Z_COAST', country: 'Z_COUNTRY', mountain: 'Z_MTN', snow: 'Z_SNOW' };
+const ZDEF = { city: 'Z_CITY', sakura: 'Z_SAKURA', coast: 'Z_COAST', country: 'Z_COUNTRY', mountain: 'Z_MTN', snow: 'Z_SNOW', bosphorus: 'Z_BOS' };
 /** The painted meadow's texture (painted.js loadFieldTexture), once it has loaded: set it before the world is built, and
  *  the ground variants with the country, the coast or the cherry avenue take it (F_PAINT); without it the country keeps
  *  its procedural paddies, and the coast's slope and the avenue's lawns their procedural grass. */
@@ -723,11 +767,15 @@ export const FIELD = {
 };
 export function groundDefines(zones) {
   const d = {};
-  for (const z of zones) d[ZDEF[z]] = '';
+  for (const z of zones) if (ZDEF[z]) d[ZDEF[z]] = '';
+  // (the Bosphorus is drawn in the coast's weight channel, in its own look (Z_BOS): the two zones never meet. 'border': the
+  // chunks round a border tunnel (path.js borderNear), its ridge over the tube (K_RIDGE), under snow on the snow's side)
+  if (zones.includes('bosphorus')) d.Z_COAST = '';
+  if (zones.includes('border')) d.K_BORDER = '';
   if (zones.includes('city') || zones.includes('country')) d.K_XING = '';
   if (zones.includes('country') || zones.includes('sakura')) d.K_RIVER = '';
-  if (zones.includes('mountain') || zones.includes('coast')) d.K_RIDGE = '';
-  if (FIELD.tex && (zones.includes('country') || zones.includes('coast') || zones.includes('sakura'))) d.F_PAINT = '';
+  if (zones.includes('mountain') || zones.includes('coast') || zones.includes('border')) d.K_RIDGE = '';
+  if (FIELD.tex && (zones.includes('country') || zones.includes('coast') || zones.includes('sakura') || zones.includes('bosphorus'))) d.F_PAINT = '';
   return d;
 }
 const GROUND_VARIANTS = new Map();
@@ -1092,22 +1140,42 @@ if (!gCull) {
  *  so the albedo and the glow are read from its textures instead: one read each, in a branch that every pixel of a
  *  triangle takes the same way (a cell lies in one atlas or the other), so the reads keep their mip level and anisotropy
  *  (explicit gradients would cost more on phones). `alpha`: the shadow pass, albedo only. */
-function paintedAtlas(sh, P, alpha = false) {
-  sh.uniforms.uPMap = { value: P.map };
-  if (!alpha) sh.uniforms.uPEm = { value: P.emissive };
+// The world atlas (textures.js buildWorldAtlas: the regions after Japan, Turkey's cells) the same way, in the atlas material's
+// world variant (M.atlasW: the chunks that hold any of its cells): a cell whose u is 4 or more is one of its cells (uWMap,
+// uWEm). (Japan's chunks keep the plain variant: with the third read in it, sub-pixel cells at the far end of the shopping
+// street read other mips)
+function paintedAtlas(sh, P, alpha = false, Wt = null) {
+  const W = !!Wt;
+  sh.uniforms.uPMap = { value: P.map }; if (W) sh.uniforms.uWMap = { value: Wt.map };
+  if (!alpha) { sh.uniforms.uPEm = { value: P.emissive }; if (W) sh.uniforms.uWEm = { value: Wt.emissive }; }
   sh.fragmentShader = sh.fragmentShader
-    .replace('#include <common>', `#include <common>\nuniform sampler2D uPMap;${alpha ? '' : ' uniform sampler2D uPEm;'}`)
+    .replace('#include <common>', `#include <common>\nuniform sampler2D uPMap;${alpha ? '' : ' uniform sampler2D uPEm;'}${W ? `\nuniform sampler2D uWMap;${alpha ? '' : ' uniform sampler2D uWEm;'}` : ''}`)
     .replace('#include <map_fragment>', /* glsl */`
 bool pgP = vMapUv.x > 1.5;
 vec4 sampledDiffuseColor;
 if (pgP) sampledDiffuseColor = texture2D(uPMap, vMapUv - vec2(2.0, 0.0));
-else sampledDiffuseColor = texture2D(map, vMapUv);
+else sampledDiffuseColor = texture2D(map, vMapUv);${W ? `
+bool pgW = vMapUv.x > 3.5;
+if (pgW) sampledDiffuseColor = texture2D(uWMap, vMapUv - vec2(4.0, 0.0));` : ''}
 diffuseColor *= sampledDiffuseColor;`);
   if (!alpha) sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', /* glsl */`
 vec4 emissiveColor;
 if (pgP) emissiveColor = texture2D(uPEm, vEmissiveMapUv - vec2(2.0, 0.0));
-else emissiveColor = texture2D(emissiveMap, vEmissiveMapUv);
+else emissiveColor = texture2D(emissiveMap, vEmissiveMapUv);${W ? `
+if (pgW) emissiveColor = texture2D(uWEm, vEmissiveMapUv - vec2(4.0, 0.0));` : ''}
 totalEmissiveRadiance *= emissiveColor.rgb;`);
+}
+/** the atlas material's world variant (M.atlasW) and its shadow-pass twin: for the chunks holding any of the world atlas's
+ *  cells (Turkey's). Made once the rest of the scene is (their ids draw random numbers: made earlier they moved every
+ *  falling petal of a seeded capture) */
+export function makeAtlasW(M, worldTex) {
+  const P = M.ptex;
+  M.atlasW = M.atlas.clone();
+  M.atlasW.onBeforeCompile = sh => { contactAO(sh); windowLights(sh); worldShade(sh); paintedAtlas(sh, P, false, worldTex); };
+  M.atlasW.customProgramCacheKey = () => 'atlasw-v1';
+  M.atlasWDepth = new THREE.MeshDepthMaterial();
+  M.atlasWDepth.onBeforeCompile = sh => paintedAtlas(sh, P, true, worldTex);
+  M.atlasWDepth.customProgramCacheKey = () => 'atlaswdepth-v1';
 }
 export function makeMaterials(atlasTex, folTex, paintTex) {
   const M = {};

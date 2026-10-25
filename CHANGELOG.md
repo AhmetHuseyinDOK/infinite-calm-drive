@@ -2,6 +2,73 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-25 · 23:xx — World 1: beyond Japan, through the border tunnel to the Bosphorus
+- **The drive leaves Japan.** After the snow country the road runs into a long tunnel at the border (国境の長いトンネル,
+  the other way round) and comes out on the Bosphorus at Arnavutköy, Istanbul: the first of the world's regions after
+  Japan. Inside the tunnel the scenery changes over (the two zones blend over 150 m, all inside the 170 m tube), the far
+  horizon and the sea's colours with it, and the car moves across to the right-hand lane: Turkey keeps right (the car's
+  home lane is kept towards the kerb of the side the traffic keeps to). From outside each mouth shows its own country only:
+  a snowy cutting with snow-laden cedars on the ridge on the Japanese side, a wooded headland running into the strait on
+  the Turkish side, the Bosphorus Bridge framed in the exit. After 1.5 km of the Bosphorus a second border tunnel, through
+  a headland, brings the drive back into Japan's shopping street (the street runs right up to its portal), and round again.
+- **The Bosphorus shore road, as its concept painting has it** (ref/world/istanbul_bosphorus.png): the strait on the left
+  behind a sea wall of pale dressed stone with an iron railing along its top, its water the concept's deep teal-navy (open
+  water ΔE 18.5 → 0.4, by the wall 22.8 → 2.7) with rows of white crests along the wall; across it the Asian shore, a new
+  painted horizon (the Bosphorus Bridge, a mosque with its minarets and the waterfront yalıs, the old fortress, a lighthouse
+  village: four Grok paintings anchored on the concept and the real photo, in a light haze as painted); a city ferry and
+  small boats out on the water. On the right a verge of long grass with bushes in white flower, a pavement of grey stone
+  slabs, the gardens' railings between stone posts, and Ottoman wooden houses climbing the steep hill in rows: stone or
+  plastered ground floors, jutting upper floors of stained boards or pastel plaster, bay windows (cumba), tall sash
+  windows lit one by one at dusk, gables to the street or hipped roofs of terracotta tiles; cypresses and round trees
+  between them, plain utility poles and their wires, lamps, the Turkish flag on a tall pole now and then and out of some
+  windows, Turkish road signs on the right (a 50 limit, a blue sign for Bebek and Sarıyer). Against the concept (region
+  medians, CIELAB ΔE): 17.1 → 8.2 over the build.
+- **Start anywhere:** ?env=bosphorus starts on the Bosphorus (a planned zone's key starts at its region's first built
+  zone); the title card has two links, 日本 · Japan and Türkiye. The zone card speaks the region's language (Boğaziçi /
+  Bosphorus · Arnavutköy).
+- **Japan is unchanged:** all six starts pixel-identical to live at noon and golden hour (seeded captures re-seeded at the
+  first frame; the few 1-level pixels left differ between two loads of live too); the first 9 km from a city start keep
+  their layout chunk for chunk up to s = 8700, where live's blend into the shopping street began and the border tunnel's
+  approach now stands.
+- **The structure for the next regions:** path.js's route is a list of regions' zones (JAPAN, TURKEY; PLANNED: the Galata
+  Bridge, a Turkish town, Cappadocia's Uçhisar road and Paşabağ, then Tokyo, Osaka, a Japanese coastal city, named in
+  ZINFO): a zone joins the route once it is built, a border tunnel stands wherever two regions meet, and each region has its
+  traffic side, its zone-card language, its horizon atlas (a band per atlas), its sea palette and its sky palette
+  (sky.js REGION_KEYS, blended by the region's weight; Turkey keeps Japan's for now, as the concept's sky is the coast
+  painting's).
+- How: path.js (the route, REGION, SIDE, PLANNED, B_TRANS; borderNear and tunnelNear; trafficSide, regionWeight,
+  seaWeight, viewMix, zoneSets; the Bosphorus's ground profile; a border tunnel's cutting standing back behind a street),
+  materials.js (Z_BOS: the Bosphorus drawn in the coast's weight channel, as they never meet; K_BORDER: a border ridge
+  under snow on the snow country's side; the atlas material's world variant M.atlasW, for chunks with world-atlas cells,
+  so Japan's atlas program is untouched), textures.js (buildWorldAtlas: a third texture pair for the regions' own cells —
+  the flag, signs, the houses' bays, stone, doors and kiremit tiles), props.js (ottomanHouse, flagPole/flagCloth, ferry,
+  trSign, treeCypress, a plain pole for Turkey), chunks.js (placeBosphorus, ironRailing, gardenFence; chunks round a
+  border on their own ground variant; border portals and ridge trees by side; the city and snow builders kept out of a
+  border tunnel), painted.js (loadBandAtlas(name), a band's alias and bright-day haze), sea.js (the strait's palette),
+  sky.js (REGION_KEYS), main.js (the lane by the traffic's side; the band, the sea and the palettes across a border; the
+  title card's links), audio.js and birds.js (the Bosphorus's gulls and water).
+- Assets: assets/band/bandtr1.json, bandtr1_hi.webp (160 KB), bandtr1_lo.webp (59 KB): WebP q50 from lossless masters
+  (~/cdtest/w1/band/masters, bandtr.py). If they fail the Bosphorus borrows the coast's far shore.
+- Programs: 66 desktop / 65 phone tiers (were 62 / 61): the Bosphorus's ground variant and the two border variants (the
+  snow-and-city pair is gone), the atlas's world variant and its shadow twin.
+- Cost (the shared box's Vega; the desktop machine down): Japan's draws are unchanged (the city on phones, every draw
+  group timed over drives: 14.03 → 13.90 ms; frame-level city drives read desktop 20.71 / 20.56 → 19.85 / 20.16 ms and
+  phone 12.03 / 11.83 → 12.79 / 12.68, then 12.58 / 12.34 → 11.59 / 11.10: the iGPU's clock steps). The Bosphorus costs
+  about what the coast does over drives (desktop 20.58 / 20.67 ms against the coast's 22.37 / 23.37, phone 10.44 / 11.44
+  against 10.79 / 10.65; timed per draw +1.3–1.5 ms: the houses, their shadows, more crowns; phones get sparser upper rows
+  and fewer trees). Start-up a little longer, as Turkey's band and world atlas load and four more programs compile at
+  every start: warm desktop loads median 3.41 → 3.68 s, a 3 Mbps phone's first visit 6.72 → 6.94 s, the first visit
+  +181 KB on desktops and +83 KB on phones. 0 shader errors in all seven zones on the desktop, phone and low tiers; no
+  console errors at q=low, mid and high; none compiled through sunset, night, rain, drives, or either border on either
+  tier; embed starts on tap; with Turkey's band missing the Bosphorus borrows the coast's far shore, no errors.
+- Left over: the Galata Bridge, the Turkish town and Cappadocia (W3–W6; the Turkish leg is one 1.5 km zone for now); the
+  houses are procedural paint (Grok-painted Ottoman façades next) and stand close to the road where the concept's climb
+  the hill; the near water keeps the coast's rows of surf (the concept's is calm); the ferry doesn't move; the verge is
+  greener than painted; Istanbul's evening and night borrow the coast's palettes; the Turkish tunnel mouth has no name
+  plate, and one border tunnel's wall shows a darker patch; Turkey's band, atlas and programs load at every start (load
+  them only near the border or for a Turkish start). The title card's blurb and the page's description now mention the
+  Bosphorus.
+
 ## 2026-10-25 · 20:xx — Gap 5: the shopping street's canyon, its canopies and neon, as painted
 - **The street runs into a canyon of tall pale blocks, as in the city painting.** An almost unbroken row of 6- to
   12-storey pale concrete blocks stands right behind the shophouses on both sides (ribbon and punched windows, flats'

@@ -435,11 +435,11 @@ export function makePaintedClouds(atlas, post, seed = 5) {
  *  of pale high-rise flats in haze, ~/cdtest/hb2/scripts/band2.py): 'hi' (32 px/°) or 'lo' (16 px/°, phones). Resolves to
  *  null (never rejects) when the JSON or the image is missing, broken or too slow: the caller then keeps the procedural
  *  mountain rings. */
-export async function loadBandAtlas(tier, timeoutMs = 15000) {
+export async function loadBandAtlas(tier, timeoutMs = 15000, name = 'band3') {
   const base = ASSETS + 'band/';
   return orNull((async () => {
-    const r = await fetch(base + 'band3.json');
-    if (!r.ok) throw new Error('band3.json ' + r.status);
+    const r = await fetch(base + name + '.json');
+    if (!r.ok) throw new Error(name + '.json ' + r.status);
     const J = await r.json();
     const { tex, file } = await paintedTexture(base, J, tier);
     const zones = {};
@@ -469,9 +469,12 @@ const BAND_R = 2500, BAND_LO = -8; // ring radius (m) and its bottom (degrees: f
 const _bc = new THREE.Vector3(), _bn = new THREE.Color(), NOON_SUN = new THREE.Color('#fff5dd').multiplyScalar(3.35), NOON_SKY = new THREE.Color('#8fb1ec').multiplyScalar(1.35 * 2);
 
 /** The painted horizon. `atlas` from loadBandAtlas; `post` for the grade's uniforms; `fog` the scene's fog colour (the
- *  3D world fades into it at its far edge). update(camera, mix) each frame, with mix = { a, b, t } from path.zoneMix;
- *  returns how much of the view's far horizon the band covers (0…1), for the procedural rings to give way. */
-export function makePaintedBand(atlas, post, fog) {
+ *  3D world fades into it at its far edge); `alias`: zones without a row that borrow another's ({ zone: its stand-in });
+ *  `haze0`: the haze its far shores stand in on a bright day (Turkey's: the concept painting's Asian shore is a hazy one).
+ *  update(camera, mix) each frame, with mix = { a, b, t } from path.zoneMix; returns how much of the view's far horizon
+ *  the band covers (0…1), for the procedural rings to give way. Each region's bands are an atlas of their own (Japan's
+ *  band3, Turkey's bandtr1: main.js draws one band per atlas, each fading the zones it has in and out) */
+export function makePaintedBand(atlas, post, fog, alias = null, haze0 = 0) {
   const Z = atlas.zones, top = Math.max(...Object.values(Z).map(v => v.w)), N = 192, per = 360 / atlas.period;
   const pos = new Float32Array((N + 1) * 6), uv = new Float32Array((N + 1) * 4), idx = [];
   const yLo = Math.tan((BAND_LO * Math.PI) / 180), yHi = top + 0.004;
@@ -580,7 +583,7 @@ export function makePaintedBand(atlas, post, fog) {
     /** m: { a, b, t } from path.zoneMix; camH: the camera's height above the ground; fogD / fogFar: the scene fog's
      *  exp² density and draw distance */
     update(camera, m, camH = 2.8, fogD = 0.0014, fogFar = 700) {
-      const A = Z[m.a], B = Z[m.b], t = m.t;
+      const A = Z[m.a] || (alias && Z[alias[m.a]]), B = Z[m.b] || (alias && Z[alias[m.b]]), t = m.t;
       // how much band: a zone without one fades it out and leaves the far horizon to the rings
       let w = 0;
       if (A && B) { u.uRowA.value.copy(A); u.uRowB.value.copy(B); u.uMix.value = A === B ? 0 : t; w = 1; }
@@ -610,6 +613,7 @@ export function makePaintedBand(atlas, post, fog) {
       // (alpha-tested, without MSAA: a passing haze while one zone's skyline gives way to the next, or to the rings)
       const k2 = Math.max(4 * u.uMix.value * (1 - u.uMix.value), Math.min(1, 2 * (1 - w))), fade = a2c ? 0 : 0.45 * k2 * k2 * k2;
       u.uHaze.value = 1 - (1 - (1 - (1 - 0.12 * TOD.warm - 0.25 * TOD.night) * (1 - 0.55 * TOD.overcast) * (1 - 0.6 * TOD.rain)) * (1 - paint)) * (1 - fade);
+      if (haze0 > 0) u.uHaze.value = Math.max(u.uHaze.value, haze0 * paint);
       return w;
     },
   };

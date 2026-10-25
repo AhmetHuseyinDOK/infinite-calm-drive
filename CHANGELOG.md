@@ -2,6 +2,48 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-25 · 08:xx — Gap audit 1: the coast's and the country's road, and the cherry blossom, as painted
+- **A gap audit** (`ref/GAPS.md`): the game's closest frame to each painting at noon (the city at s = 140, the avenue
+  300, the coast 1100, the country 600, at each painting's own size), compared region by region (CIELAB ΔE of the
+  medians, share of the frame, fine detail) and ranked. First the coast's and the country's asphalt, then the car, the
+  cherry crowns, the city's canyon and shopfronts, the avenue's shadows, the coast's slope, the country's verges, the far
+  shore and the coast's house. The two that a material can fix are fixed here; the rest is the plan for the next steps.
+- **The coast's and the country's road is the paintings' cool blue-grey** in the sun, darkest by the car and paler and
+  bluer with distance (it was a warm light grey everywhere). The road in the sun against the painting, ΔE: the coast
+  23.2 → 5.2, the country 19.5 → 3.0. Golden hour and sunset have their own tones, read against `ref/tod/` (spots on the
+  road: the coast 10.4 → 9.8 and 18.7 → 9.8, the country 22.0 → 12.3 and 22.7 → 11.3). The night, grey skies and rain
+  keep the old road. The shade on it (the car's shadow, already matched) keeps its navy.
+- **Every road's grain is a painted aggregate**, a mottled grain with pale chips and dark pits that fades to its mean
+  with distance, where it was a blocky mosaic of 4.5 cm squares. The road's fine detail (painting): the coast
+  0.45 → 0.82 (1.25), the country 0.60 → 0.89 (0.90), the city 0.83 → 1.13 (1.95). A recorded drive shows no crawl: the
+  frame-to-frame change on the road ahead is the same or lower (the coast 0.64 → 0.52 at 10–20 m, 0.97 → 0.85 beyond).
+- **The cherry blossom keeps more of a deeper rose** before its pale petal tips on a bright day. The pink pixels'
+  lightness (10th / 25th / 50th / 75th / 90th percentile, CIELAB L*): 46 / 55 / 68 / 78 / 82 → 37 / 46 / 59 / 73 / 79
+  (the painting 43 / 50 / 57 / 69 / 83), chroma 36 → 42 (40). Crowns' ΔE: median 21.0 → 10.7, lit 7.2 → 5.5, shade
+  12.8 → 11.6 (now a little deeper and redder than the painting's). Golden hour, sunset, night and grey skies keep the
+  old ramp.
+- How: `materials.js roadCol` (the grain from the mip-filtered `vnoise`; on the coast and in the country the road's
+  direct light is tinted by `gRoadT`, `U.uRoadN` → `U.uRoadF` over 3–22 m from the camera, after `lights_fragment_end`),
+  set per frame in `main.js` from `ROAD_T` (per-hour keys × `paintSky()`); the blossom ramp's rose and tips (`U.uBlMid` /
+  `uBlTip`, worked out on the CPU from `BLM_T`, so the crowns' many alpha-tested layers pay no extra operations). Test
+  switch `st.road`. Assets: none. World: the same layout. Programs: 62 on desktops, 61 on phones.
+- Cost (the shared box's Vega; the desktop machine is off limits), per-draw GPU timers against the sky's draw in the
+  same runs: the coast's ground +1.9% on desktops (+0.1 / +3.5 / +3.0 / +1.2% over four pairs; ~0.17 ms) and +5.0% on
+  phones (+2.7 / +5.8 / +5.2 / +6.3%; ~0.17 ms); the country's ground at golden hour +1.5% on desktops, at noon on
+  phones +4.4% (+5.0 / +3.9 / +3.9 / +4.7%; ~0.14 ms); the city's ground (the grain only) +1.1%; the blossom −0.2%
+  desktop, +0.1% phone; the avenue's ground −0.6% / +0.4%. Over drives: the coast desktop 22.16 / 22.67 → 20.82 / 21.22
+  ms (the iGPU's clock steps), phone 9.71 / 9.94 → 9.45 / 10.30; the country phone 9.52 → 10.17 ms (means of 13 and 9
+  interleaved runs; live alone, as an A/A, spans 9.13–9.86, and every draw of such a drive timed one by one sums to the
+  same, 13.78 vs 13.82 ms: most of it is the iGPU's clock steps, the work is the ground's ~0.14 ms). 0 shader errors in
+  all six zones on both tiers (noon and sunset on phones); no console errors at q=low, mid and high; none compiled
+  through sunset, night, rain or a drive on either tier; embed starts on tap; start-up the same within the box's noise
+  (medians 3.09 vs 3.20 s over seven interleaved loads each; live 2.93–4.57, staging 3.04–3.42). With the painted meadow
+  missing the procedural ground draws with the new road, 0 shader errors.
+- Left over: the night road is the old one (its targets want a darker blue-grey; the headlights' pool lights it); the
+  mountain and snow roads keep the old warm grey (the coast's tint fades across the zone blend); the avenue's road is
+  unchanged (its gap is the shadows, gap 6); the blossom's shade a little deep; the road tint's distance could be worked
+  out per vertex to save the coast's ~0.17 ms. Next: the car (gap 2).
+
 ## 2026-10-25 · 05:xx — Finish 3: phones' evening glow at under a third of the cost
 - **Nothing visible changes.** On phones and in the X card the glow at sunset and night (the city's neon and lit
   shopfronts, lamps, lanterns, tail lamps) comes from a lighter bloom that spreads the same light over the same widths.

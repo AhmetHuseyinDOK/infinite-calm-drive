@@ -235,6 +235,19 @@ async function main() {
   const BK_N = ['s', 'm', 'l', 's2', 'm2', 'l2'], BK_U = [U.uBkS.value, U.uBkM.value, U.uBkL.value, U.uBkS2.value, U.uBkM2.value, U.uBkL2.value];
   const todKeys = (N, S, D, G) => todTones([[0, N], [0.2, mixTones(N, S, 0.3)], [0.245, mixTones(S, G, 0.4)], [0.3, D], [0.62, D], [0.7, G], [0.75, S], [0.765, mixTones(S, N, 0.25)], [0.8, mixTones(S, N, 0.55)], [0.86, N], [1, N]]);
   const TP_T = todKeys(TP_NIGHT, TP_SUNSET, TP_DAY, TP_GOLD), BK_T = todKeys(BK_NIGHT, BK_SUNSET, BK_DAY, BK_GOLD);
+  // the coast's and the country's asphalt (materials.js roadCol): its tint near the eye (n) and from ~22 m on (f), read
+  // against coast.png and country.png (a cool blue-grey, darker than the old warm grey near the car: CIELAB L* 43–51 there,
+  // paler and bluer with distance: 56–60 at 15–25 m, 64 beyond) and the paintings repainted at golden hour and sunset;
+  // the night keeps the old asphalt (the headlights' and lamps' pools light it)
+  const R_DAY = { n: [0.46, 0.53, 0.68], f: [0.95, 1.05, 1.3] }, R_GOLD = { n: [0.55, 0.55, 0.7], f: [0.85, 0.62, 0.75] };
+  const R_SUNSET = { n: [0.4, 0.8, 1.2], f: [1.1, 1.5, 1.4] }, R_NIGHT = { n: [1, 1, 1], f: [1, 1, 1] };
+  const ROAD_T = todKeys(R_NIGHT, R_SUNSET, R_DAY, R_GOLD);
+  // the cherry blossom's rose (m, sRGB; materials.js uBlMid) and where its pale petal tips begin on the atlas's key (w;
+  // higher, more of each flower keeps the rose): on a bright day the painting's (its crowns' pink pixels: CIELAB L*
+  // median 57, three quarters under 69; with the old ramp ours were 64–68 and 77–78), the old ramp at golden hour,
+  // sunset and night (their tones were read against ref/tod/ with it)
+  const BLM_OLD = { m: [205, 105, 150], w: [0.3, 0, 0] }, BLM_DAY = { m: [188, 88, 132], w: [0.47, 0, 0] }, BLM_T = todKeys(BLM_OLD, BLM_OLD, BLM_DAY, BLM_OLD), blMid = new THREE.Color();
+  const BL_TIP = new THREE.Color().setRGB(1, 232 / 255, 242 / 255, THREE.SRGBColorSpace); // (the petal tips' pale pink, (255, 232, 242) as before)
   const LIGHTS_ON = QS.has('lightson') ? parseFloat(QS.get('lightson')) : -1; // (test hook)
   const glowV = new THREE.Vector3(), HAZE_GLOW = QS.has('haze') ? parseFloat(QS.get('haze')) : 1; // (test hook: ?haze=0 off)
   const rig = makeCrossingRig(); scene.add(rig.group);
@@ -248,7 +261,7 @@ async function main() {
   // speed: the zone's cruising speed × mult (0.4 … 5.5, so up to ~190–265 km/h); uHome: the lane the car settles back
   // into when nobody steers — wherever the player last steered it (it used to always drift back to the left lane)
   const MULT_MIN = 0.4, MULT_MAX = 5.5;
-  const st = { s: Math.max(100, parseFloat(QS.get('s')) || 140), u: -1.65, uHome: -1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, spray: QS.has('nospray') ? 0 : 1 /* test switch */, grass: 1 /* test switch: the meadow's blades */, pclouds: 1 /* test switch: painted clouds (0: the procedural ones, with ?clouds=both) */, band: 1 /* test switch: the painted horizon (0: the mountain rings) */, waves: 1 /* test switch: the painted sea's waves (0: its flat tones) */, shore: 1 /* test switch: the waves and foam along the sea wall (0: the open sea's colour there) */, surf: 1 /* test switch: the spray over the tetrapods */, tetra: 1 /* test switch: the tetrapods */, bark: 1 /* test switch: the bark's painted tones (0: the old colours, lit) */, trunks: 1 /* test switch: the painted trees' bark (0: hidden) */, todpaint: 1 /* test switch: the painted look at golden hour, sunset and night (0: only on a bright day, as before) */, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
+  const st = { s: Math.max(100, parseFloat(QS.get('s')) || 140), u: -1.65, uHome: -1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, spray: QS.has('nospray') ? 0 : 1 /* test switch */, grass: 1 /* test switch: the meadow's blades */, pclouds: 1 /* test switch: painted clouds (0: the procedural ones, with ?clouds=both) */, band: 1 /* test switch: the painted horizon (0: the mountain rings) */, waves: 1 /* test switch: the painted sea's waves (0: its flat tones) */, shore: 1 /* test switch: the waves and foam along the sea wall (0: the open sea's colour there) */, surf: 1 /* test switch: the spray over the tetrapods */, tetra: 1 /* test switch: the tetrapods */, bark: 1 /* test switch: the bark's painted tones (0: the old colours, lit) */, trunks: 1 /* test switch: the painted trees' bark (0: hidden) */, todpaint: 1 /* test switch: the painted look at golden hour, sunset and night (0: only on a bright day, as before) */, road: 1 /* test switch: the coast's and the country's painted asphalt (0: the old warm grey) */, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
   let started = false;
   status('building the road…');
   await new Promise(r => setTimeout(r, 10));
@@ -721,6 +734,10 @@ async function main() {
       U.uBkK.value = U.uTpK.value * st.bark;
       if (U.uBkK.value > 0) { const P = BK_T.at(TOD.t); for (let i = 0; i < 6; i++) P.ug(g, BK_N[i], BK_U[i]); }
     }
+    { // the coast's and the country's painted asphalt, under a clear sky (grey skies and rain keep the old one)
+      const P = ROAD_T.at(TOD.t), n = P.rgb('n'), f = P.rgb('f'), k = paintSky() * st.road;
+      U.uRoadN.value.set(lerp(1, n[0], k), lerp(1, n[1], k), lerp(1, n[2], k)); U.uRoadF.value.set(lerp(1, f[0], k), lerp(1, f[1], k), lerp(1, f[2], k));
+    }
     // the painted meadow's tint: the reference art's light lime on a bright day, the repainted hours' tints at golden hour,
     // sunset and night (FIELD_T); the paddies' old, deeper green under grey skies (the day's lime turned the fields ochre at
     // sunset)
@@ -738,6 +755,11 @@ async function main() {
     // crowns' shade purple
     { for (let i = 0; i < 3; i++) BL_DAY.b[i] = lerp(BL_SHADE_DIM[i], BL_SHADE_DAY[i], 1 - TOD.warm);
       const b = BL_T.at(TOD.t).rgb('b'), k = 1 - ov; U.uBlShade.value.set(lerp(BL_SHADE_DIM[0], b[0], k), lerp(BL_SHADE_DIM[1], b[1], k), lerp(BL_SHADE_DIM[2], b[2], k)); }
+    { // …and its flowers' rose under a clear sky (grey skies keep the old one)
+      const P = BLM_T.at(TOD.t), m = P.rgb('m'), o = BLM_OLD.m, k = paintSky();
+      blMid.setRGB(lerp(o[0], m[0], k) / 255, lerp(o[1], m[1], k) / 255, lerp(o[2], m[2], k) / 255, THREE.SRGBColorSpace);
+      const e = lerp(BLM_OLD.w[0], P.rgb('w')[0], k); // (the tips' edge: as scale and offset, and the step to them, for the shader)
+      U.uBlMid.value.set(blMid.r, blMid.g, blMid.b, 1 / (1 - e)); U.uBlTip.value.set(BL_TIP.r - blMid.r, BL_TIP.g - blMid.g, BL_TIP.b - blMid.b, -e / (1 - e)); }
     // home lights come on one by one over the two hours after sunset (18:00 → ~20:00 on the clock, ~40 s of driving) and
     // go off one by one at dawn; on a dark rainy day some are on in the daytime too
     U.uLightsOn.value = LIGHTS_ON >= 0 ? LIGHTS_ON : Math.max(sstep(0.02, 0.75, TOD.night), 0.3 * ov);

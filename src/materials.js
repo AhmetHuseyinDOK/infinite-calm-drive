@@ -91,6 +91,14 @@ export const U = {
   uBkK: { value: 0 }, uBkS: { value: new THREE.Color() }, uBkM: { value: new THREE.Color() }, uBkL: { value: new THREE.Color() },
   uBkS2: { value: new THREE.Color() }, uBkM2: { value: new THREE.Color() }, uBkL2: { value: new THREE.Color() },
   uBlShade: { value: new THREE.Vector3(7.5, 3, 2.3) },    // …and the cherry blossom's: a bright rose-magenta on a bright day
+  // …and its flowers' rose (uBlMid.rgb, linear; BLOSSOM_RAMP, main.js by the time of day), from it to their pale petal tips
+  // (uBlTip.rgb) and where on the atlas's key the tips begin (w: 1 / (1 − edge) and −edge / (1 − edge); the edge 0.3 is
+  // the old ramp, higher keeps more of each flower in the rose): the painting's on a bright day. (The CPU does the sums a
+  // constant ramp left to the compiler: the crowns are many layers deep, and three more operations a pixel cost ~3%)
+  uBlMid: { value: new THREE.Vector4(0.6105, 0.1413, 0.3050, 1 / 0.7) }, uBlTip: { value: new THREE.Vector4(1 - 0.6105, 0.8070 - 0.1413, 0.8879 - 0.3050, -0.3 / 0.7) },
+  // the coast's and the country's asphalt as painted (roadCol; main.js, by the time of day under a clear sky, 1 under grey
+  // skies): its tint near the eye and from ~22 m on
+  uRoadN: { value: new THREE.Vector3(1, 1, 1) }, uRoadF: { value: new THREE.Vector3(1, 1, 1) },
   uTunA: { value: new THREE.Vector3(0, -1e4, 0) },  // the current tunnel's axis (portal to portal, at road level)
   uTunB: { value: new THREE.Vector3(0, -1e4, 0) },
   uTunR: { value: 4.6 },
@@ -246,7 +254,10 @@ float petalsAt(vec2 p, float dens){
 vec3 roadCol(float s, float u, float rw){
   float a = abs(u); vec2 p = vec2(s, u);
   vec3 c = L(vec3(0.58, 0.57, 0.57));
-  c *= 0.90 + 0.14*fbm2(p*0.45) + 0.10*(hash12(floor(p*22.0)) - 0.5);
+  // the aggregate: a fine mottled grain with pale chips and dark pits, a little longer along the road (it was square
+  // 4.5 cm cells of hashed noise, a blocky mosaic up close); mip-filtered, so it fades to its mean with distance
+  float ag = vnoise(p * vec2(26.0, 44.0) + 3.1);
+  c *= 0.90 + 0.14*fbm2(p*0.45) + 0.12*(ag - 0.5) + 0.16*smoothstep(0.66, 0.9, ag) - 0.08*smoothstep(0.32, 0.1, ag);
   float d1 = (abs(u + 1.6) - 0.75) / 0.22, d2 = (abs(u - 1.6) - 0.75) / 0.22; // (pow() of a negative base is NaN on many mobile GPUs)
   float tr = exp(-d1 * d1) + exp(-d2 * d2);
   c *= 1.0 - 0.08*tr;
@@ -271,6 +282,13 @@ vec3 roadCol(float s, float u, float rw){
   float city = vZW.x, paint = 0.0, mtn = clamp(1.0 - dot(vZW, vec4(1.0)) - vZS, 0.0, 1.0);
 #ifdef Z_CITY
   c *= mix(vec3(1.0), vec3(0.70, 0.68, 0.80), city); // the shopping street's asphalt: darker, a violet grey, as in the city painting
+#endif
+#if defined(Z_COAST) || defined(Z_COUNTRY)
+  // the coast's and the country's asphalt as painted: in the sun a cool blue-grey, darkest near the eye and paler and
+  // bluer with distance (uRoadN → uRoadF over 3–22 m; by the time of day under a clear sky, 1 under grey skies). It tints
+  // the sunlight on it only (gRoadT, after the lights): its shade keeps the painted navy it had
+  float wR = vZW.z + vZW.w;
+  if (wR > 0.004) gRoadT = mix(vec3(1.0), mix(uRoadN, uRoadF, smoothstep(3.0, 22.0, distance(vWP, cameraPosition))), wR);
 #endif
   paint += step(abs(a - (rw - 0.28)), 0.07);
   paint += (1.0 - step(0.5, mtn)) * step(a, 0.07) * step(fract(s/10.0), 0.55); // (the dashed centre line: in the city too, as in its painting)
@@ -674,7 +692,7 @@ export function groundMaterial(defines = groundDefines(Object.keys(ZDEF)), key =
   const paint = defines.F_PAINT !== undefined;
   m.onBeforeCompile = sh => {
     sh.uniforms.uSkyHor = U.uSkyHor; sh.uniforms.uSkyZen = U.uSkyZen; sh.uniforms.uWet = U.uWet; sh.uniforms.uSakWet = U.uSakWet; sh.uniforms.uNight = U.uNight; sh.uniforms.uSunDir = U.uSunDir; sh.uniforms.uSunCol = U.uSunCol;
-    for (const k of ['uReflTex', 'uReflOn', 'uReflRes', 'uHorizon', 'uReflK']) sh.uniforms[k] = U[k];
+    for (const k of ['uReflTex', 'uReflOn', 'uReflRes', 'uHorizon', 'uReflK', 'uRoadN', 'uRoadF']) sh.uniforms[k] = U[k];
     if (paint) { sh.uniforms.uFieldTex = { value: FIELD.tex }; for (const k of ['uFieldK', 'uFieldC', 'uFieldCo', 'uFieldSa', 'uFieldM']) sh.uniforms[k] = FIELD[k]; }
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
@@ -683,15 +701,18 @@ varying vec2 vSU; varying vec4 vZW; varying vec2 vRK; varying float vWY; varying
       .replace('#include <begin_vertex>', `#include <begin_vertex>
 vSU = su; vZW = zw; vRK = rk; vRV = rv; vZS = zs; vWY = (modelMatrix * vec4(position, 1.0)).y; vWN = normalize(mat3(modelMatrix) * objectNormal);`);
     worldShade(sh, `
-uniform vec3 uSkyHor, uSkyZen, uSunDir, uSunCol; uniform float uWet, uSakWet, uNight;
+uniform vec3 uSkyHor, uSkyZen, uSunDir, uSunCol, uRoadN, uRoadF; uniform float uWet, uSakWet, uNight;
 uniform sampler2D uReflTex; uniform vec2 uReflRes; uniform float uReflOn, uHorizon, uReflK;
 varying vec2 vSU; varying vec4 vZW; varying vec2 vRK; varying float vWY; varying float vRV; varying vec3 vWN; varying float vZS;
-float gWater = 0.0;
+float gWater = 0.0; vec3 gRoadT = vec3(1.0);
 ${GROUND}`, WET + MIRROR, false);
     sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
-diffuseColor.rgb *= groundAlbedo();`);
+diffuseColor.rgb *= groundAlbedo();`).replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+#if defined(Z_COAST) || defined(Z_COUNTRY)
+reflectedLight.directDiffuse *= gRoadT;
+#endif`);
   };
-  m.customProgramCacheKey = () => 'ground-v20-' + key + (paint ? '-fp' : '');
+  m.customProgramCacheKey = () => 'ground-v21-' + key + (paint ? '-fp' : '');
   return m;
 }
 
@@ -1114,7 +1135,8 @@ function billboard(sh, depth) {
 // are a dark bark brown, the gaps between flowers (~0.3) a deep rose, and the flowers run from a rose pink to the pale,
 // nearly white pink of the petals in full sun (1). Shade and light then come from each flower's own normal
 const bl = (r, g, b) => { const c = new THREE.Color().setRGB(r / 255, g / 255, b / 255, THREE.SRGBColorSpace); return `vec3(${c.r.toFixed(4)}, ${c.g.toFixed(4)}, ${c.b.toFixed(4)})`; };
-const BLOSSOM_RAMP = `diffuseColor.rgb *= mix(${bl(62, 38, 34)}, mix(${bl(205, 105, 150)}, ${bl(255, 232, 242)}, smoothstep(0.3, 1.0, gTx.b)), smoothstep(0.1, 0.26, gTx.b));`;
+const BLOSSOM_RAMP = `float blT = clamp(gTx.b * uBlMid.w + uBlTip.w, 0.0, 1.0); // (smoothstep(edge, 1, b): the edge's maths done on the CPU)
+diffuseColor.rgb *= mix(${bl(62, 38, 34)}, uBlMid.rgb + uBlTip.rgb * (blT * blT * (3.0 - 2.0 * blT)), smoothstep(0.1, 0.26, gTx.b));`;
 /** The crowns' material (`tex`: the cluster atlas, ghibli.js). Every cluster lights its own painted leaves: its normal is
  *  the crown's (from the crown's centre, per vertex) mixed with the cluster's own from the atlas, so each lobe of the
  *  crown gets its lit cap and its shade under the real sun. Returns { mat, depth } (depth: the shadow pass's twin). */
@@ -1128,7 +1150,7 @@ export function makeGhibliLeaf(tex, { blossom = false } = {}) {
     worldShade(sh); backlit(sh);
     billboard(sh, false); // (uTime comes with the vertex cloud shadows)
     sh.uniforms.uGhShade = blossom ? U.uBlShade : U.uGhShade; // (blossom: its own shade, a bright rose-magenta)
-    if (!blossom) sh.uniforms.uGhTint = U.uGhTint;
+    if (!blossom) sh.uniforms.uGhTint = U.uGhTint; else { sh.uniforms.uBlMid = U.uBlMid; sh.uniforms.uBlTip = U.uBlTip; }
     // the sun's shadow is looked up from the cluster's sunward surface (~1.1 × its half-width out), so a cluster never
     // shadows itself (its sun-facing depth twin cuts through its middle) while the lobes above and toward the sun still
     // shade the ones below. The crown's core (marked by a straight-down normal) looks it up 2.5 m deeper into the crown:
@@ -1138,7 +1160,7 @@ worldPosition.xyz += uSunDir * mix(-2.5, length(aOff) * 1.11, step(-0.97, object
 #endif
 #include <shadowmap_vertex>`);
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform vec3 uGhShade;' + (blossom ? '' : ' uniform vec3 uGhTint;'))
+      .replace('#include <common>', '#include <common>\nuniform vec3 uGhShade;' + (blossom ? ' uniform vec4 uBlMid, uBlTip;' : ' uniform vec3 uGhTint;'))
       .replace('#include <map_fragment>', `
 vec4 gTx = texture2D(map, vMapUv);
 vec2 gN2 = gTx.rg * 2.0 - 1.0;
@@ -1155,7 +1177,7 @@ reflectedLight.indirectDiffuse = hemisphereLights[0].skyColor * BRDF_Lambert(dif
 #endif
 #include <aomap_fragment>`);
   };
-  m.customProgramCacheKey = () => (blossom ? 'gblossom-v1' : 'gleaf-v1');
+  m.customProgramCacheKey = () => (blossom ? 'gblossom-v2' : 'gleaf-v1');
   const d = new THREE.MeshDepthMaterial();
   d.onBeforeCompile = sh => billboard(sh, true);
   d.customProgramCacheKey = () => 'gleaf-depth-v1';

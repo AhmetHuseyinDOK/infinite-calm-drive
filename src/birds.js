@@ -81,9 +81,9 @@ export function makeBirds() {
     update(dt, t, cam, fwd, right, w, light, rain, carPos) {
       mat.uniforms.uTime.value = t; mat.uniforms.uCam.value.copy(cam);
       const calm = light > 0.35 && rain < 0.3, dusk = TOD.warm > 0.25 && TOD.sunEl < 0.6 && light > 0.2;
-      if (calm && (timers.small -= dt) < 0) { timers.small = 22 + Math.random() * 35; if (w.coast + w.bosphorus < 0.6) spawn('small', cam, fwd, right); }
+      if (calm && (timers.small -= dt) < 0) { timers.small = 22 + Math.random() * 35; if (w.coast + w.bosphorus + w.galata < 0.6) spawn('small', cam, fwd, right); }
       if ((dusk || (calm && w.city + w.country > 0.6 && Math.random() < 0.0004)) && (timers.crow -= dt) < 0) { timers.crow = dusk ? 14 + Math.random() * 18 : 60; spawn('crow', cam, fwd, right); }
-      if (w.coast + w.bosphorus > 0.6 && calm) gulls(cam, fwd, right, 1); // (the coast's and the Bosphorus's gulls)
+      if (w.coast + w.bosphorus + w.galata > 0.6 && calm) gulls(cam, fwd, right, 1); // (the coast's, the Bosphorus's and the Golden Horn's gulls)
       const silhouette = [0.1 + 0.08 * light, 0.11 + 0.09 * light, 0.15 + 0.1 * light];
       let k = 0;
       for (let i = flocks.length - 1; i >= 0; i--) {
@@ -91,7 +91,7 @@ export function makeBirds() {
         if (f.kind === 'gull') {
           // circle over the beach, drifting along with the car; leave when the coast ends
           f.c.lerp(v.copy(carPos).addScaledVector(fwd, 60).addScaledVector(right, -42).setY(carPos.y + 16), Math.min(1, dt * 0.25));
-          if (w.coast + w.bosphorus < 0.4 || !calm) { f.life = Math.min(f.life, 8); f.c.y += dt * 6; }
+          if (w.coast + w.bosphorus + w.galata < 0.4 || !calm) { f.life = Math.min(f.life, 8); f.c.y += dt * 6; }
         } else f.c.addScaledVector(f.vel, dt);
         f.life -= dt;
         if (f.life < 0 || (f.kind !== 'gull' && f.c.distanceTo(cam) > 300)) { flocks.splice(i, 1); continue; }

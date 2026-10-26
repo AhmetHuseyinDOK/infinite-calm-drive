@@ -1,0 +1,52 @@
+{
+ "period": 180.0,
+ "files": {
+  "hi": "bandtr2_hi.webp",
+  "lo": "bandtr2_lo.webp"
+ },
+ "bytes": {
+  "hi": 179600,
+  "lo": 71252
+ },
+ "size": {
+  "hi": [
+   5760,
+   584
+  ],
+  "lo": [
+   2880,
+   296
+  ]
+ },
+ "zones": {
+  "hi": {
+   "galata": {
+    "v0": 0.020547945205479423,
+    "v1": 0.9794520547945206,
+    "e0": 0.0,
+    "e1": 17.5,
+    "ahead": 0.5,
+    "tiles": [
+     "gt4",
+     "gh1_cyl",
+     "gt2"
+    ]
+   }
+  },
+  "lo": {
+   "galata": {
+    "v0": 0.027027027027026973,
+    "v1": 0.972972972972973,
+    "e0": 0.0,
+    "e1": 17.5,
+    "ahead": 0.5,
+    "tiles": [
+     "gt4",
+     "gh1_cyl",
+     "gt2"
+    ]
+   }
+  }
+ },
+ "encode": "WebP q50, alpha_quality 90 method 6 from the lossless master (~/cdtest/w3/band/masters, bandgal.py)"
+}

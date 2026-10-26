@@ -449,13 +449,14 @@ export async function loadBandAtlas(tier, timeoutMs = 15000, name = 'band3') {
     if (!r.ok) throw new Error(name + '.json ' + r.status);
     const J = await r.json();
     const { tex, file } = await paintedTexture(base, J, tier);
-    const zones = {};
+    const zones = {}, ahead = {};
     for (const [z, m] of Object.entries((J.zones && J.zones[file]) || {})) {
       if (m.v1 > m.v0 && m.e1 > m.e0) zones[z] = new THREE.Vector4(m.v0, m.v1, Math.tan((m.e0 * Math.PI) / 180), Math.tan((m.e1 * Math.PI) / 180));
+      if (zones[z] && m.ahead !== undefined) ahead[z] = m.ahead; // (a row that faces the road: the u of its view ahead, W3)
     }
     if (!Object.keys(zones).length) throw new Error('no zones listed');
     tex.wrapS = THREE.RepeatWrapping; // (each zone's row is one seamless loop)
-    return { tex, zones, period: J.period || 120, tier: file };
+    return { tex, zones, ahead, period: J.period || 120, tier: file };
   })(), timeoutMs, 'painted horizon unavailable, keeping the mountain rings:');
 }
 
@@ -475,15 +476,22 @@ const BAND_R = 2500, BAND_LO = -8; // ring radius (m) and its bottom (degrees: f
 // the light the paintings stand in: the clear noon's sun and twice its sky light (sky.js KEYS at t = 0.45)
 const _bc = new THREE.Vector3(), _bn = new THREE.Color(), NOON_SUN = new THREE.Color('#fff5dd').multiplyScalar(3.35), NOON_SKY = new THREE.Color('#8fb1ec').multiplyScalar(1.35 * 2);
 
-/** The painted horizon. `atlas` from loadBandAtlas; `post` for the grade's uniforms; `fog` the scene's fog colour (the
- *  3D world fades into it at its far edge); `alias`: zones without a row that borrow another's ({ zone: its stand-in });
- *  `haze0`: the haze its far shores stand in on a bright day (Turkey's: the concept painting's Asian shore is a hazy one);
- *  `winZone`: the zone whose row's light pixels take lit windows at night (Japan's far city; Turkey's Asian shore).
- *  update(camera, mix) each frame, with mix = { a, b, t } from path.zoneMix; returns how much of the view's far horizon
- *  the band covers (0…1), for the procedural rings to give way. Each region's bands are an atlas of their own (Japan's
- *  band3, Turkey's bandtr1: main.js draws one band per atlas, each fading the zones it has in and out) */
+/** The painted horizon. `atlas` from loadBandAtlas (or a list of them, of one period: a region's rows from files of their own,
+ *  each row read from its own texture); `post` for the grade's uniforms; `fog` the scene's fog colour (the 3D world fades
+ *  into it at its far edge); `alias`: zones without a row that borrow another's ({ zone: its stand-in }); `haze0`: the haze
+ *  its far shores stand in on a bright day (Turkey's: the concept painting's Asian shore is a hazy one), or per zone
+ *  ({ zone: haze }); `winZone`: the zone (or zones) whose row's light pixels take lit windows at night (Japan's far city;
+ *  Turkey's Asian shore and old city). update(camera, mix) each frame, with mix = { a, b, t } from path.zoneMix; returns how
+ *  much of the view's far horizon the band covers (0…1), for the procedural rings to give way. Each region's bands are an
+ *  atlas (or atlases) of their own (Japan's band3, Turkey's bandtr1 and bandtr2: main.js draws one band per region, each
+ *  fading the zones it has in and out). A row can be turned to face a road (rot: { zone: the u straight ahead along a
+ *  heading … }: the Galata Bridge's old city ahead down the bridge, W3); the rest keep the turn of the band's first view */
 export function makePaintedBand(atlas, post, fog, alias = null, haze0 = 0, winZone = 'city') {
-  const Z = atlas.zones, top = Math.max(...Object.values(Z).map(v => v.w)), N = 192, per = 360 / atlas.period;
+  const AL = (Array.isArray(atlas) ? atlas : [atlas]).filter(Boolean), Z = {}, ZT = {}, AH = {};
+  for (const at of AL) for (const z in at.zones) { Z[z] = at.zones[z]; ZT[z] = at.tex; if (at.ahead && at.ahead[z] !== undefined) AH[z] = at.ahead[z]; }
+  atlas = AL[0];
+  const top = Math.max(...Object.values(Z).map(v => v.w)), N = 192, per = 360 / atlas.period;
+  const wins = new Set(Array.isArray(winZone) ? winZone : [winZone]), hz0 = z => (typeof haze0 === 'number' ? haze0 : (haze0 && haze0[z]) || 0);
   const pos = new Float32Array((N + 1) * 6), uv = new Float32Array((N + 1) * 4), idx = [];
   const yLo = Math.tan((BAND_LO * Math.PI) / 180), yHi = top + 0.004;
   for (let i = 0; i <= N; i++) {
@@ -499,12 +507,12 @@ export function makePaintedBand(atlas, post, fog, alias = null, haze0 = 0, winZo
   const mat = new THREE.ShaderMaterial({
     fog: false, side: THREE.DoubleSide, alphaToCoverage: a2c, defines: a2c ? { A2C: 1 } : {},
     uniforms: {
-      map: { value: atlas.tex }, uRowA: { value: new THREE.Vector4() }, uRowB: { value: new THREE.Vector4() }, uMix: { value: 0 }, uAlpha: { value: 1 }, uRot: { value: 0 },
+      map: { value: atlas.tex }, mapB: { value: atlas.tex }, uRowA: { value: new THREE.Vector4() }, uRowB: { value: new THREE.Vector4() }, uMix: { value: 0 }, uAlpha: { value: 1 }, uRot: { value: 0 }, uRotAB: { value: new THREE.Vector2() },
       uLightC: { value: new THREE.Color(1, 1, 1) }, uPaint: { value: 1 }, uFogC: { value: fog }, uHaze: { value: 0 }, uHz: { value: Math.tan(0.8 * D2) },
       uGnd: { value: new THREE.Vector3(2.8, 0.0014, 700) }, uSpan: { value: new THREE.Vector2(yLo, yHi) }, ...gradeUniforms(post),
       // under a clear sky at golden hour, sunset and night: the painting in the time of day's tones (display sRGB: shade,
       // middle and light by its painted lightness, and how much of its own colour it keeps), and the far city's lit windows
-      uTone: { value: 0 }, uBS: { value: new THREE.Vector3() }, uBM: { value: new THREE.Vector3() }, uBH: { value: new THREE.Vector3() }, uBCh: { value: 0 },
+      uTone: { value: 0 }, uBS: { value: new THREE.Vector3() }, uBM: { value: new THREE.Vector3() }, uBH: { value: new THREE.Vector3() }, uBCh: { value: 0 }, uSkirt: { value: 1 },
       uWin: { value: new THREE.Vector2() }, uLightsOn: MU.uLightsOn,
     },
     // the ring is trimmed every frame to what can show (uSpan: tan of its bottom and top elevation): from just under the
@@ -516,24 +524,28 @@ export function makePaintedBand(atlas, post, fog, alias = null, haze0 = 0, winZo
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position.x, y * ${BAND_R.toFixed(1)}, position.z, 1.0);
       }`,
     fragmentShader: UNGRADE + /* glsl */`
-      uniform sampler2D map; uniform vec4 uRowA, uRowB; uniform float uMix, uAlpha, uRot, uHaze, uHz, uPaint; uniform vec3 uLightC, uFogC, uGnd;
-      uniform float uTone, uBCh, uLightsOn; uniform vec3 uBS, uBM, uBH; uniform vec2 uWin;
+      uniform sampler2D map, mapB; uniform vec4 uRowA, uRowB; uniform float uMix, uAlpha, uRot, uHaze, uHz, uPaint; uniform vec3 uLightC, uFogC, uGnd;
+      uniform float uTone, uBCh, uLightsOn, uSkirt; uniform vec3 uBS, uBM, uBH; uniform vec2 uWin, uRotAB;
       varying vec2 vUv;
       // a zone's row: x = v of its bottom edge, y = v of its top edge, z / w = tan(elevation) there. Above it, sky (the
       // top rows fade out: coarse mips bleed the next row's fields into them); below it, its bottom row (opaque far
-      // fields, hazed into the fog: the skirt under the painting). Sampled in uniform control flow (mip selection)
-      vec4 band(vec4 r){
+      // fields, hazed into the fog: the skirt under the painting). Sampled in uniform control flow (mip selection). m: its
+      // texture, o: its own turn (0 but for a row facing a road)
+      vec4 band(vec4 r, sampler2D m, float o){
         float t = (vUv.y - r.z) / (r.w - r.z);
-        return texture2D(map, vec2(vUv.x + uRot, mix(r.x, r.y, clamp(t, 0.0, 1.0)))) * (1.0 - smoothstep(0.96, 0.995, t));
+        return texture2D(m, vec2(vUv.x + uRot + o, mix(r.x, r.y, clamp(t, 0.0, 1.0)))) * (1.0 - smoothstep(0.96, 0.995, t));
       }
       void main(){
-        vec4 t = band(uRowA);
+        vec4 t = band(uRowA, map, uRotAB.x);
         if (uMix > 0.001) { // the next zone's band (premultiplied: ridges dissolve into each other)
-          vec4 b = band(uRowB);
+          vec4 b = band(uRowB, mapB, uRotAB.y);
           t = vec4(mix(t.rgb * t.a, b.rgb * b.a, uMix), mix(t.a, b.a, uMix));
           t.rgb /= max(t.a, 1e-4);
         }
         float a = t.a * uAlpha;
+        // (a row over water without its skirt: the sea plane behind it shows, W3; but for the sliver between the horizon and
+        // the plane's far edge, beyond the camera's far plane, where its own water's row shows unhazed: below)
+        if (vUv.y < -0.0025 && uSkirt < 0.5) discard;
         #ifdef A2C
         if (a < 0.02) discard; // (the rest: coverage from alpha, resolved by MSAA into a soft edge or a cross-fade)
         #else
@@ -570,8 +582,8 @@ export function makePaintedBand(atlas, post, fog, alias = null, haze0 = 0, winZo
         // camera's height above it, the fog density, the draw distance, where the world fades out completely), so the
         // band's foot meets the world's far edge in its colour, and from a high camera the skirt reads as far fields;
         // above it the mountains' feet stand in haze; and more haze all over at dusk, under grey skies and in rain
-        float e = vUv.y, hz = 1.0 - smoothstep(0.0, uHz, e);
-        if (e < 0.0) { float d = uGnd.x / max(-e, 1e-5), fd = d * uGnd.y; hz = max(1.0 - exp(-fd * fd), smoothstep(uGnd.z * 0.8, uGnd.z, d)); }
+        float e = vUv.y, hz = (1.0 - smoothstep(0.0, uHz, e)) * uSkirt; // (a row over water: its quays crisp at the water)
+        if (e < 0.0) { float d = uGnd.x / max(-e, 1e-5), fd = d * uGnd.y; hz = max(1.0 - exp(-fd * fd), smoothstep(uGnd.z * 0.8, uGnd.z, d)) * uSkirt; }
         c = mix(c, uFogC, max(uHaze, hz));
         #ifdef A2C
         gl_FragColor = vec4(c, a);
@@ -584,20 +596,30 @@ export function makePaintedBand(atlas, post, fog, alias = null, haze0 = 0, winZo
   mesh.frustumCulled = false; mesh.renderOrder = 999; // (with the sea and the mountain rings: after the world, before the sky)
   const u = mat.uniforms, fw = new THREE.Vector3();
   let first = true;
-  return {
+  /** a row's own turn against the band's (uRot): 0, or for a row turned to face a road (rot[z]) the difference, in 0…1 */
+  const rotOf = z => { const r = api.rot[z]; if (r === undefined) return 0; const d = r - u.uRot.value; return d - Math.floor(d); };
+  const api = {
     mesh, zones: Z,
     /** the zones without a row of their own that borrow another's (it can change: Turkey's band loads later, main.js) */
     alias,
     /** the opening view: where in its loop the band starts, straight ahead (0.125: the middle of its first painting) */
     hero: 0.125,
+    /** the rows turned to face a road: { zone: the turn (its u ahead + the road's heading's share of the loop) }; ahead[z]:
+     *  the u of a row's view ahead (its file lists it), for main.js to turn it with: turnTo(z, heading) */
+    rot: {}, ahead: AH,
+    /** rows without the skirt under their foot (the far fields, hazed into the world's far edge) and without the haze over it:
+     *  over open water the sea plane runs on up to them instead ({ zone: true }: the Golden Horn up to the old city's quays) */
+    noSkirt: {},
+    turnTo(z, h) { if (AH[z] === undefined) return; const r = AH[z] + (h / (Math.PI * 2)) * per; this.rot[z] = r - Math.floor(r); },
     /** m: { a, b, t } from path.zoneMix; camH: the camera's height above the ground; fogD / fogFar: the scene fog's
      *  exp² density and draw distance */
     update(camera, m, camH = 2.8, fogD = 0.0014, fogFar = 700) {
-      const al = this.alias, A = Z[m.a] || (al && Z[al[m.a]]), B = Z[m.b] || (al && Z[al[m.b]]), t = m.t;
+      const al = this.alias, za = Z[m.a] ? m.a : al && Z[al[m.a]] ? al[m.a] : null, zb = Z[m.b] ? m.b : al && Z[al[m.b]] ? al[m.b] : null;
+      const A = za && Z[za], B = zb && Z[zb], t = m.t;
       // how much band: a zone without one fades it out and leaves the far horizon to the rings
       let w = 0;
-      if (A && B) { u.uRowA.value.copy(A); u.uRowB.value.copy(B); u.uMix.value = A === B ? 0 : t; w = 1; }
-      else if (A || B) { u.uRowA.value.copy(A || B); u.uMix.value = 0; w = A ? 1 - t : t; }
+      if (A && B) { u.uRowA.value.copy(A); u.uRowB.value.copy(B); u.map.value = ZT[za]; u.mapB.value = ZT[zb]; u.uMix.value = A === B ? 0 : t; w = 1; }
+      else if (A || B) { u.uRowA.value.copy(A || B); u.map.value = ZT[za || zb]; u.uMix.value = 0; w = A ? 1 - t : t; }
       u.uAlpha.value = w;
       mesh.visible = w > 0.002;
       if (!mesh.visible) return 0;
@@ -609,6 +631,7 @@ export function makePaintedBand(atlas, post, fog, alias = null, haze0 = 0, winZo
         camera.getWorldDirection(fw);
         u.uRot.value = this.hero + (Math.atan2(fw.x, fw.z) / (Math.PI * 2)) * per; first = false;
       }
+      u.uRotAB.value.set(rotOf(A ? za : zb), rotOf(zb)); // (the rows' own turns: 0 but for a row facing a road)
       // the light now against the light at noon (sun + sky), and the haze: none on a bright clear day, some at dusk and
       // night, more under grey skies, most in rain; the painting itself on a bright day
       _bn.copy(TOD.sunCol).multiplyScalar(TOD.sunI); _bc.set(_bn.r, _bn.g, _bn.b);
@@ -619,12 +642,14 @@ export function makePaintedBand(atlas, post, fog, alias = null, haze0 = 0, winZo
       u.uTone.value = paintSky() * (1 - paint);
       if (u.uTone.value > 0) { const P = BAND_TONES.at(TOD.t); u.uBS.value.fromArray(P.rgb('shade')).divideScalar(255); u.uBM.value.fromArray(P.rgb('mid')).divideScalar(255); u.uBH.value.fromArray(P.rgb('lit')).divideScalar(255); u.uBCh.value = P.rgb('ch')[0]; }
       const nk = Math.min(Math.max((TOD.night - 0.15) / 0.65, 0), 1), wn = nk * nk * (3 - 2 * nk) * (1 - 0.6 * TOD.overcast);
-      u.uWin.value.set(m.a === winZone ? wn * PAINT_TOD.on : 0, m.b === winZone ? wn * PAINT_TOD.on : 0); // (Turkey's: the Asian shore's houses)
+      u.uWin.value.set(wins.has(m.a) ? wn * PAINT_TOD.on : 0, wins.has(m.b) ? wn * PAINT_TOD.on : 0); // (Turkey's: the Asian shore's houses, the old city's)
       // (alpha-tested, without MSAA: a passing haze while one zone's skyline gives way to the next, or to the rings)
       const k2 = Math.max(4 * u.uMix.value * (1 - u.uMix.value), Math.min(1, 2 * (1 - w))), fade = a2c ? 0 : 0.45 * k2 * k2 * k2;
       u.uHaze.value = 1 - (1 - (1 - (1 - 0.12 * TOD.warm - 0.25 * TOD.night) * (1 - 0.55 * TOD.overcast) * (1 - 0.6 * TOD.rain)) * (1 - paint)) * (1 - fade);
-      if (haze0 > 0) u.uHaze.value = Math.max(u.uHaze.value, haze0 * paint);
+      { const h0 = A && B ? hz0(za) + (hz0(zb) - hz0(za)) * t : hz0(za || zb); if (h0 > 0) u.uHaze.value = Math.max(u.uHaze.value, h0 * paint); }
+      u.uSkirt.value = (A && B ? (t < 0.5 ? this.noSkirt[za] : this.noSkirt[zb]) : this.noSkirt[za || zb]) ? 0 : 1;
       return w;
     },
   };
+  return api;
 }

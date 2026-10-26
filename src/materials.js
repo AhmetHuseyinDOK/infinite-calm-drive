@@ -335,11 +335,15 @@ vec3 roadCol(float s, float u, float rw){
 #ifdef Z_CITY
   c *= mix(vec3(1.0), vec3(0.70, 0.68, 0.80), city); // the shopping street's asphalt: darker, a violet grey, as in the city painting
 #endif
-#if defined(Z_COAST) || defined(Z_COUNTRY)
+#if defined(Z_COAST) || defined(Z_COUNTRY) || defined(Z_GAL)
   // the coast's and the country's asphalt as painted: in the sun a cool blue-grey, darkest near the eye and paler and
   // bluer with distance (uRoadN → uRoadF over 3–22 m; by the time of day under a clear sky, 1 under grey skies). It tints
-  // the sunlight on it only (gRoadT, after the lights): its shade keeps the painted navy it had
+  // the sunlight on it only (gRoadT, after the lights): its shade keeps the painted navy it had. (The Galata Bridge's too:
+  // the concept's road is the same blue-grey)
   float wR = vZW.z + vZW.w;
+#ifdef Z_GAL
+  wR += vZW.y;
+#endif
   if (wR > 0.004) gRoadT = mix(vec3(1.0), mix(uRoadN, uRoadF, smoothstep(3.0, 22.0, distance(vWP, cameraPosition))), wR);
 #endif
   paint += step(abs(a - (rw - 0.28)), 0.07);
@@ -442,7 +446,22 @@ vec3 snowGround(float s, float u, float rw){
   if (a > rw + 2.7 && a < 125.0) c *= 1.0 - 0.06 * max(step(fq.x, 0.02), step(fq.y, 0.03));   // buried paddy ridges
   return c;
 }
+#ifdef Z_GAL
+// the Galata Bridge's walkway (W3): pale grey concrete slabs, 1.2 × 0.6 m, each its own grey, a course of kerb stones along
+// the road (the concept's walkway; the city's tactile strip and beige slabs are Japan's)
+vec3 galWalk(float s, float u, float rw){
+  float d = abs(u) - rw;
+  vec2 t = vec2(s / 1.2 + 0.5 * floor(d / 0.6), d / 0.6), f = fract(t), id = floor(t);
+  vec3 c = mix(L(vec3(0.71, 0.70, 0.73)), L(vec3(0.63, 0.62, 0.66)), hash12(id + 5.0));
+  c *= 1.0 - 0.16 * clamp(step(f.x, 0.025) + step(f.y, 0.04), 0.0, 1.0);
+  if (d < 0.24) c = L(vec3(0.8, 0.79, 0.78)) * (1.0 - 0.15 * step(fract(s / 0.9), 0.03));
+  return c * (0.92 + 0.12 * fbm2(vec2(s, u) * 0.8));
+}
+#endif
 vec3 sidewalkCol(float s, float u, float rw){
+#ifdef Z_GAL
+  if (vZW.y > 0.5) return galWalk(s, u, rw);
+#endif
   float d = abs(u) - rw;
   vec2 t = vec2(s, d) / 0.3, f = fract(t), id = floor(t);
   vec3 base = mix(L(vec3(0.90, 0.85, 0.81)), L(vec3(0.82, 0.77, 0.73)), hash12(id));
@@ -557,6 +576,57 @@ vec3 bosGround(float s, float u, float rw){
   return c * (0.45 + 0.55 * smoothstep(0.1, 1.0, vWY));
 }
 #endif
+#ifdef Z_GAL
+// the Galata Bridge (W3), as its concept painting has it (drawn in the cherry avenue's weight channel: the two never meet).
+// Its deck: under the walkway's and the kerb strip's slabs (chunks.js) plain concrete; on the right, past the tram line's
+// railing, its reserve (two tracks of rusty rails let into grey concrete slabs, the space between each track's rails a little
+// darker), the second railing's footing, the far carriageway (the road's own paint, its own lanes) and its kerb. Beyond either
+// edge the deck's face down to the water: the edge girder's grey-blue band, under it the lower level's arcade (piers and dark
+// openings), wet at the water; under the water, nothing to see (the sea draws over it). Where the shore road hands over to it,
+// the hill turning away beyond the deck: its quay wall and grass (path.js groundOffsetMix)
+float galRail(float d, float fw){ return crackLine(d, 0.036, fw); }
+vec3 galGround(float s, float u, float rw){
+  vec2 p = vec2(s, u); float a = abs(u), edge = u < 0.0 ? rw + 2.65 : 18.0;
+  if (a > edge + 0.6) {
+    if (vWY < 0.0) return L(vec3(0.35, 0.36, 0.33));
+    if (vWN.y < 0.6) return L(vec3(0.68, 0.65, 0.6)) * (0.7 + 0.3 * smoothstep(0.0, 2.0, vWY)) * (0.9 + 0.1 * vnoise(p * vec2(0.4, 2.0)));
+#if defined(Z_BOS) && defined(F_PAINT)
+    return fieldTex(1.25) * uFieldBo;
+#else
+    return grassCol(p, L(vec3(0.31, 0.60, 0.25)), L(vec3(0.52, 0.79, 0.32)));
+#endif
+  }
+  if (vWN.y < 0.6) {
+    if (vWY > 5.05) return L(vec3(0.5, 0.55, 0.6)) * (0.88 + 0.12 * vnoise(p * vec2(0.5, 4.0))) * (1.0 - 0.25 * step(fract(s / 2.6), 0.04));
+    if (vWY > 0.35) {
+      float q = fract(s / 5.2), pier = step(q, 0.2) + step(4.6, vWY);
+      return mix(L(vec3(0.15, 0.16, 0.19)), L(vec3(0.66, 0.64, 0.6)) * (0.85 + 0.15 * vnoise(p * 1.3)), clamp(pier, 0.0, 1.0));
+    }
+    return L(vec3(0.28, 0.3, 0.29));
+  }
+  if (u < 0.0 || a < rw + 0.7) return L(vec3(0.7, 0.7, 0.68));
+  if (a < 11.4) {
+    // the tram line's reserve: slabs 1.5 m long, the rails' heads ~7 cm wide (a rusty brown, their running surface a worn
+    // steel), each with its groove beside it
+    vec2 t = vec2(s / 1.5, (a - rw - 0.7) / 1.7), f = fract(t);
+    vec3 c = mix(L(vec3(0.5, 0.42, 0.38)), L(vec3(0.43, 0.37, 0.34)), hash12(floor(t) + 9.0)) * (1.0 - 0.14 * max(step(f.x, 0.02), step(f.y, 0.03))); // (the concept's rust-brown bed)
+    float fw = fwidth(a) + 0.3 * fwidth(s), rails = 0.0, run = 0.0, inner = 0.0;
+    for (int k = 0; k < 2; k++) {
+      float tc = k == 0 ? 6.3 : 9.7, dc = a - tc;
+      inner += 1.0 - smoothstep(0.62, 0.7, abs(dc));
+      rails += galRail(abs(dc) - 0.7175, fw);
+      run += crackLine(abs(dc) - 0.7175 + 0.012, 0.014, fw);
+      rails += 0.6 * crackLine(abs(dc) - 0.66, 0.02, fw);
+    }
+    c *= 1.0 - 0.1 * inner;
+    c = mix(c, L(vec3(0.33, 0.22, 0.16)), clamp(rails, 0.0, 1.0));
+    return mix(c, L(vec3(0.74, 0.7, 0.66)), clamp(run, 0.0, 1.0) * 0.8);
+  }
+  if (a < 11.75) return L(vec3(0.76, 0.75, 0.72));
+  if (a < edge - 0.55) return roadCol(s, a - (11.75 + edge - 0.55) * 0.5, (edge - 0.55 - 11.75) * 0.5);
+  return L(vec3(0.74, 0.74, 0.72)) * (0.9 + 0.1 * fbm2(p));
+}
+#endif
 vec3 countryGround(float s, float u, float rw){
   vec2 p = vec2(s, u); float a = abs(u);
   // the verge under its bank of tall grass (the clump cards, chunks.js placeBanks): dense grass in its own shade right
@@ -664,6 +734,9 @@ vec3 groundAlbedo(){
 #ifdef Z_SAKURA
   if (vZW.y > 0.004) c += vZW.y * sakuraGround(s, u, rw);
 #endif
+#ifdef Z_GAL
+  if (vZW.y > 0.004) c += vZW.y * galGround(s, u, rw);
+#endif
 #ifdef Z_COAST
 #ifdef Z_BOS
   if (vZW.z > 0.004) c += vZW.z * bosGround(s, u, rw);
@@ -756,7 +829,7 @@ if (uWet > 0.01 || wetS > 0.01) {
 
 // zones → shader defines. Each chunk's ground uses a variant compiled with only the zones (and features) it contains:
 // one uber-shader with every zone's code ran ~4× slower even when the branches were skipped.
-const ZDEF = { city: 'Z_CITY', sakura: 'Z_SAKURA', coast: 'Z_COAST', country: 'Z_COUNTRY', mountain: 'Z_MTN', snow: 'Z_SNOW', bosphorus: 'Z_BOS' };
+const ZDEF = { city: 'Z_CITY', sakura: 'Z_SAKURA', coast: 'Z_COAST', country: 'Z_COUNTRY', mountain: 'Z_MTN', snow: 'Z_SNOW', bosphorus: 'Z_BOS', galata: 'Z_GAL' };
 /** The painted meadow's texture (painted.js loadFieldTexture), once it has loaded: set it before the world is built, and
  *  the ground variants with the country, the coast or the cherry avenue take it (F_PAINT); without it the country keeps
  *  its procedural paddies, and the coast's slope and the avenue's lawns their procedural grass. */
@@ -772,8 +845,9 @@ export const FIELD = {
 export function groundDefines(zones) {
   const d = {};
   for (const z of zones) if (ZDEF[z]) d[ZDEF[z]] = '';
-  // (the Bosphorus is drawn in the coast's weight channel, in its own look (Z_BOS): the two zones never meet. 'border': the
-  // chunks round a border tunnel (path.js borderNear), its ridge over the tube (K_RIDGE), under snow on the snow's side)
+  // (the Bosphorus is drawn in the coast's weight channel, in its own look (Z_BOS): the two zones never meet; the Galata Bridge
+  // in the cherry avenue's (Z_GAL: they never meet either). 'border': the chunks round a border tunnel (path.js borderNear),
+  // its ridge over the tube (K_RIDGE), under snow on the snow's side)
   if (zones.includes('bosphorus')) d.Z_COAST = '';
   if (zones.includes('border')) d.K_BORDER = '';
   if (zones.includes('city') || zones.includes('country')) d.K_XING = '';
@@ -812,7 +886,7 @@ float gWater = 0.0; vec3 gRoadT = vec3(1.0);
 ${GROUND}`, WET + MIRROR, false);
     sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
 diffuseColor.rgb *= groundAlbedo();`).replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
-#if defined(Z_COAST) || defined(Z_COUNTRY)
+#if defined(Z_COAST) || defined(Z_COUNTRY) || defined(Z_GAL)
 reflectedLight.directDiffuse *= gRoadT;
 #endif`);
   };

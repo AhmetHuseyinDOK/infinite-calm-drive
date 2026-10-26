@@ -1031,6 +1031,32 @@ function trTunnelPlate(A, a, w, h, name) {
   a.fillText(name, w / 2, h * 0.42);
   a.font = `600 ${Math.round(13 * m)}px ${TR_FONT}`; a.fillStyle = '#d8e2f0'; a.fillText('L = 170 m', w / 2, h * 0.8);
 }
+/** the Galata Bridge's cast-iron railing panels (W3; alpha-tested, see-through): a panel between two posts, 2.6 m long and its
+ *  infill ~1 m tall, a flat bar along its top and its foot. The walkway's (blue-grey, as the concept paints it): diagonal bars
+ *  crossing at 45° with a ring round every crossing; the tram line's (brown, its own pattern in the concept and the real
+ *  bridge): a lattice of octagons with small squares between them, each outlined as a bar. Lit from above (a light upper
+ *  edge on every bar). Each its own rng-free geometry, so the panels tile seamlessly along the bridge */
+function galRail(A, a, w, h, kind) {
+  a.clearRect(0, 0, w, h);
+  const k = h / 100, lw = 3.4 * k, col = kind ? '#36261d' : '#4a6588', hi = kind ? 'rgba(210,170,140,0.32)' : 'rgba(200,220,242,0.5)';
+  a.lineCap = 'round'; a.lineJoin = 'round';
+  const stroke = path => { a.strokeStyle = col; a.lineWidth = lw; path(); a.stroke(); a.save(); a.translate(0, -lw * 0.3); a.strokeStyle = hi; a.lineWidth = lw * 0.35; path(); a.stroke(); a.restore(); };
+  const y0 = 6 * k, y1 = h - 7 * k;
+  a.save(); a.beginPath(); a.rect(0, y0, w, y1 - y0); a.clip();
+  if (!kind) {
+    const P = w / 8; // (eight diamonds a panel: the bars 45° apart, a ring at each crossing)
+    stroke(() => { a.beginPath(); for (let x = -h; x < w + h; x += P) { a.moveTo(x, y0); a.lineTo(x + (y1 - y0), y1); a.moveTo(x, y1); a.lineTo(x + (y1 - y0), y0); } });
+    stroke(() => { a.beginPath(); const cy = (y0 + y1) / 2; for (let x = -P; x < w + P; x += P) for (const yy of [cy - P / 2, cy + P / 2, cy - (3 * P) / 2, cy + (3 * P) / 2]) { const xx = x + (Math.abs(yy - cy) % P > 1 ? P / 2 : 0); a.moveTo(xx + 0.32 * P, yy); a.arc(xx, yy, 0.32 * P, 0, 6.2832); } });
+  } else {
+    const P = w / 7, r = P / 2, c = r * Math.tan(Math.PI / 8); // (octagons P across, small squares between their corners)
+    stroke(() => { a.beginPath(); const cy = (y0 + y1) / 2;
+      for (let x = P / 2; x < w + P; x += P) for (const yy of [cy - P, cy, cy + P]) for (let i = 0; i <= 8; i++) { const t = (i + 0.5) * (Math.PI / 4), px = x + Math.cos(t) * r / Math.cos(Math.PI / 8), py = yy + Math.sin(t) * r / Math.cos(Math.PI / 8); if (i) a.lineTo(px, py); else a.moveTo(px, py); } });
+    stroke(() => { a.beginPath(); const cy = (y0 + y1) / 2;
+      for (let x = 0; x < w + P; x += P) for (const yy of [cy - P / 2, cy + P / 2, cy - (3 * P) / 2, cy + (3 * P) / 2]) { a.moveTo(x - c, yy); a.lineTo(x, yy - c); a.lineTo(x + c, yy); a.lineTo(x, yy + c); a.closePath(); } });
+  }
+  a.restore();
+  for (const [y, t] of [[0, 6 * k], [h - 7 * k, 7 * k]]) { rect(a, 0, y, w, t, col); rect(a, 0, y, w, t * 0.3, hi); }
+}
 /** Builds the world atlas for a tier ('hi' or 'lo': half the px). `main`: the procedural atlas, whose cell list it shares;
  *  `th`: the Bosphorus's painted houses (painted.js loadTrHouseAtlas), in rows of their own (.trHouses: whether they are in);
  *  with them the procedural houses' bays and tiles aren't painted (only their fallback, props.js ottomanHouse, uses them) */
@@ -1047,8 +1073,14 @@ export function buildWorldAtlas(main, tier, th = null) {
     ['trSign50', [Math.round(128 * k), Math.round(128 * k)], (A, a, e, w, h) => trSpeed(A, a, e, w, h, 50)],
     ['trSignDir', [Math.round(256 * k), Math.round(128 * k)], (A, a, e, w, h) => trDirSign(A, a, e, w, h, ['Bebek', 'Sarıyer'])],
     // the border tunnels' Turkish mouths: their name plates (a Turkish highway's blue, white lettering), through the cape at
-    // Arnavutköy (Akıntıburnu) and the headland towards Kuruçeşme
-    ...['AKINTIBURNU TÜNELİ', 'KURUÇEŞME TÜNELİ'].map((name, i) => ['trTunnel' + i, [Math.round(360 * k), Math.round(80 * k)], (A, a, e, w, h) => trTunnelPlate(A, a, w, h, name)]));
+    // Arnavutköy (Akıntıburnu) and (since W3: it was the headland towards Kuruçeşme) the headland at Eminönü at the Galata
+    // Bridge's end
+    ...['AKINTIBURNU TÜNELİ', 'EMİNÖNÜ TÜNELİ'].map((name, i) => ['trTunnel' + i, [Math.round(360 * k), Math.round(80 * k)], (A, a, e, w, h) => trTunnelPlate(A, a, w, h, name)]),
+    // the Galata Bridge (W3): its railings' panels, and the blue sign for the old city's places ahead. (In the first row's free
+    // width, no taller than its cells: the painted houses' rows below keep their places)
+    ['galRailL', [Math.round(224 * k), Math.round(100 * k)], (A, a, e, w, h) => galRail(A, a, w, h, 0)],
+    ['galRailR', [Math.round(224 * k), Math.round(100 * k)], (A, a, e, w, h) => galRail(A, a, w, h, 1)],
+    ['trSignGal', [Math.round(200 * k), Math.round(100 * k)], (A, a, e, w, h) => trDirSign(A, a, e, w, h, ['Eminönü', 'Sirkeci'])]);
   const H = Math.ceil((flowEnd(list.map(c => c[1])) + (th ? 16 + th.rows : 0) + 8) / 4) * 4, W = new Atlas(H, 4, main.cells);
   for (const [n, [w, h], f] of list) W.add(n, w, h, (a, e, cw, ch) => f(W, a, e, cw, ch));
   W.trHouses = !!th && paintHouses(W, th);

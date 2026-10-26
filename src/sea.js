@@ -61,6 +61,8 @@ export const SEA_U = {
   // a city ferry out on the Bosphorus (ferry.js): its bow (x, z: absolute world), its heading, how much of its wake (0: none,
   // in Japan); its length, beam, speed
   uFerry: { value: new THREE.Vector4(0, 0, 0, 0) }, uFerryB: { value: new THREE.Vector4(47, 9.2, 6, 0) },
+  // …and a second one's, on the Golden Horn by the Galata Bridge (W3: two ferries out there at once; 0 elsewhere)
+  uFerry2: { value: new THREE.Vector4(0, 0, 0, 0) },
   // the low sun's (or the moon's) path on the painted water: its tones, where the light is, and how strong (0: none)
   uPPath: { value: new THREE.Color() }, uPGlint: { value: new THREE.Color() }, uPathDir: { value: new THREE.Vector3(0, 1, 0) }, uPathK: { value: 0 },
   uPSpark: { value: new THREE.Color(1, 1, 1) }, // (the open sea's glints: by day the foam's white)
@@ -130,22 +132,37 @@ const BOS_TONES = todTones([
   [0.3, PAINT_BOS], [0.62, PAINT_BOS], [0.7, BOS_GOLD], [0.75, BOS_SUNSET], [0.765, { ...mixTones(BOS_SUNSET, BOS_NIGHT, 0.25), pk: [0, 0, 0] }],
   [0.8, { ...mixTones(BOS_SUNSET, BOS_NIGHT, 0.55), pk: [0, 0, 0] }], [0.86, BOS_NIGHT], [1.0, BOS_NIGHT],
 ]);
+// the Golden Horn under the Galata Bridge (W3): its concept painting's water (ref/world/istanbul_galata.png, measured as the
+// Bosphorus's: by distance band and lightness percentile, ~/cdtest/w3): a clearer azure than the strait's teal-navy, deep and
+// saturated right out to the far shore's quays (the old city ~1 km off: no paling into a far haze as the open strait's). Its
+// evening and night keep the Bosphorus's (Istanbul's repaints)
+const PAINT_GAL = { ...PAINT_BOS,
+  trough: [16, 82, 138], mid: [31, 105, 164], face: [52, 127, 187], lite: [76, 147, 203],
+  midD: [39, 113, 173], midM: [51, 126, 186], midF: [61, 135, 193], midL: [78, 146, 203],
+  farD: [55, 110, 164], far: [59, 128, 184], farF: [88, 141, 184], farL: [144, 180, 214], hz: [68, 135, 191],
+  spark: [150, 192, 228], // (its glints a light azure: the concept's water has few white ones)
+};
+const GAL_TONES = todTones([
+  [0.0, BOS_NIGHT], [0.2, { ...mixTones(BOS_NIGHT, BOS_SUNSET, 0.25), pk: [0, 0, 0] }], [0.245, mixTones(BOS_SUNSET, BOS_GOLD, 0.35)],
+  [0.3, PAINT_GAL], [0.62, PAINT_GAL], [0.7, BOS_GOLD], [0.75, BOS_SUNSET], [0.765, { ...mixTones(BOS_SUNSET, BOS_NIGHT, 0.25), pk: [0, 0, 0] }],
+  [0.8, { ...mixTones(BOS_SUNSET, BOS_NIGHT, 0.55), pk: [0, 0, 0] }], [0.86, BOS_NIGHT], [1.0, BOS_NIGHT],
+]);
 const _c2 = new THREE.Color();
-/** tone n of the coast's palette P, or as much of the Bosphorus's Q as k, ungraded into out */
-const tn = (P, Q, k, g, n, out) => { P.ug(g, n, out); if (k > 0) out.lerp(Q.ug(g, n, _c2), k); return out; };
+/** tone n of the coast's palette P, or as much of the Bosphorus's Q as k (and of the Golden Horn's R as kg), ungraded into out */
+const tn = (P, Q, k, g, n, out, R = null, kg = 0) => { P.ug(g, n, out); if (k > 0) out.lerp(Q.ug(g, n, _c2), k); if (kg > 0) out.lerp(R.ug(g, n, _c2), kg); return out; };
 /** GLSL: the open sea's colour at a world position (before the zones' fade-in) */
 const SEA_PARS = /* glsl */`
 uniform float uTime, uNight, uFogD, uVis, uSpecK, uBright, uPaint, uWaves, uPathK; uniform vec3 uCam, uSunDir, uSunCol, uHorizon, uZenith, uFog;
 uniform vec3 uPTrough, uPMid, uPFace, uPLite, uPMidD, uPMidM, uPMidF, uPMidL, uPFarD, uPFar, uPFarF, uPFarL, uPHz, uFoamLit, uFoamShade, uPPath, uPGlint, uPathDir, uPSpark;
-uniform vec2 uOrigin, uSeaDir; uniform vec4 uFerry, uFerryB;
+uniform vec2 uOrigin, uSeaDir; uniform vec4 uFerry, uFerryB, uFerry2;
 ${GLSL_NOISE}${NOISE4}
 vec4 vnoise4g(vec2 p, vec2 gx, vec2 gy){ vec2 i = floor(p), f = fract(p); vec2 w = f*f*(3.0-2.0*f); return textureGrad(uNoiseTex, (i + w + 0.5) / 256.0, gx / 256.0, gy / 256.0); }
 // a ferry's wake (ferry.js; the Bosphorus), as the concept paints it: white water cushioned at its bow and thrown off along
 // its hull, a churned trail behind its stern widening and breaking up, the two arms of its V (Kelvin's 19.5°) spreading
 // out behind it in streaks, all fading behind it. p: the sea's point (absolute), px / py: p's footprint on screen (the noise
 // is read with explicit gradients: this runs only near the ferry)
-float ferryWake(vec2 p, vec2 px, vec2 py){
-  vec2 q = p - uFerry.xy, d = vec2(sin(uFerry.z), cos(uFerry.z)), e = vec2(d.y, -d.x);
+float ferryWake(vec4 F, vec2 p, vec2 px, vec2 py){
+  vec2 q = p - F.xy, d = vec2(sin(F.z), cos(F.z)), e = vec2(d.y, -d.x);
   float t = -dot(q, d), sd = abs(dot(q, e)), L = uFerryB.x, B = uFerryB.y * 0.5;   // (t: behind its bow; sd: off its keel line)
   if (t < -3.0 || t > 300.0 || sd > B + 3.0 + t * 0.4) return 0.0;
   vec2 a1 = d * -0.21, a2 = e * 0.55;
@@ -258,10 +275,11 @@ vec3 seaColour(vec3 w){
     pc = mix(pc, uPHz, smoothstep(1500.0, 4000.0, dist) * 0.7);
     col = mix(col, pc, uPaint);
   }
-  if (uFerry.w > 0.001) { // (a ferry's wake: the Bosphorus only)
+  if (uFerry.w + uFerry2.w > 0.001) { // (a ferry's wake: Turkey only; a second one's by the Galata Bridge)
     vec2 px = dFdx(p), py = dFdy(p);
-    float fw = ferryWake(p, px, py);
-    if (fw > 0.0) col = mix(col, uFoamLit, fw * uFerry.w * (1.0 - smoothstep(450.0, 950.0, dist)));
+    float fw = uFerry.w > 0.001 ? ferryWake(uFerry, p, px, py) * uFerry.w : 0.0;
+    if (uFerry2.w > 0.001) fw = max(fw, ferryWake(uFerry2, p, px, py) * uFerry2.w);
+    if (fw > 0.0) col = mix(col, uFoamLit, fw * (1.0 - smoothstep(450.0, 950.0, dist)));
   }
   return col;
 }`;
@@ -282,8 +300,9 @@ export function makeSea(lite = false) {
   return {
     mesh, u,
     /** grade: the grade pass's uniforms (the painted colours are its inverse); path, s: the road and where we are on it
-     *  (the painted waves come in square to the coast in view); bos: how much the strait's tones (Turkey's weight here) */
-    update(cam, time, fogD, vis = 1, grade = null, path = null, s = 0, bos = 0) {
+     *  (the painted waves come in square to the coast in view); bos: how much the strait's tones (Turkey's weight here); gal:
+     *  how much of those the Golden Horn's (the Galata Bridge's weight, W3) */
+    update(cam, time, fogD, vis = 1, grade = null, path = null, s = 0, bos = 0, gal = 0) {
       mesh.position.x = cam.x; mesh.position.z = cam.z;
       if (path && vis > 0) coastDir(path, s, u.uSeaDir.value);
       u.uCalm.value = bos; // (the strait's water along the wall: calm)
@@ -298,11 +317,11 @@ export function makeSea(lite = false) {
       u.uFoamShade.value.setRGB(hs.r * hi * 0.9 * kl, hs.g * hi * 0.9 * kl, hs.b * hi * 0.9 * kl);
       u.uPathK.value = 0;
       if (paint > 0) {
-        const P = SEA_TONES.at(TOD.t), g = grade, k = bos, Q = k > 0 ? BOS_TONES.at(TOD.t) : null;
-        tn(P, Q, k, g, 'trough', u.uPTrough.value); tn(P, Q, k, g, 'mid', u.uPMid.value); tn(P, Q, k, g, 'face', u.uPFace.value); tn(P, Q, k, g, 'lite', u.uPLite.value);
-        tn(P, Q, k, g, 'midD', u.uPMidD.value); tn(P, Q, k, g, 'midM', u.uPMidM.value); tn(P, Q, k, g, 'midF', u.uPMidF.value); tn(P, Q, k, g, 'midL', u.uPMidL.value);
-        tn(P, Q, k, g, 'farD', u.uPFarD.value); tn(P, Q, k, g, 'far', u.uPFar.value); tn(P, Q, k, g, 'farF', u.uPFarF.value); tn(P, Q, k, g, 'farL', u.uPFarL.value); tn(P, Q, k, g, 'hz', u.uPHz.value);
-        u.uFoamLit.value.lerp(P.ug(g, 'foam', _c), paint); u.uFoamShade.value.lerp(P.ug(g, 'foamShade', _c), paint); P.ug(g, 'spark', u.uPSpark.value);
+        const P = SEA_TONES.at(TOD.t), g = grade, k = bos, Q = k > 0 ? BOS_TONES.at(TOD.t) : null, kg = gal, R = kg > 0 ? GAL_TONES.at(TOD.t) : null;
+        tn(P, Q, k, g, 'trough', u.uPTrough.value, R, kg); tn(P, Q, k, g, 'mid', u.uPMid.value, R, kg); tn(P, Q, k, g, 'face', u.uPFace.value, R, kg); tn(P, Q, k, g, 'lite', u.uPLite.value, R, kg);
+        tn(P, Q, k, g, 'midD', u.uPMidD.value, R, kg); tn(P, Q, k, g, 'midM', u.uPMidM.value, R, kg); tn(P, Q, k, g, 'midF', u.uPMidF.value, R, kg); tn(P, Q, k, g, 'midL', u.uPMidL.value, R, kg);
+        tn(P, Q, k, g, 'farD', u.uPFarD.value, R, kg); tn(P, Q, k, g, 'far', u.uPFar.value, R, kg); tn(P, Q, k, g, 'farF', u.uPFarF.value, R, kg); tn(P, Q, k, g, 'farL', u.uPFarL.value, R, kg); tn(P, Q, k, g, 'hz', u.uPHz.value, R, kg);
+        u.uFoamLit.value.lerp(P.ug(g, 'foam', _c), paint); u.uFoamShade.value.lerp(P.ug(g, 'foamShade', _c), paint); tn(P, Q, k, g, 'spark', u.uPSpark.value, R, kg);
         // (the waves' tones along the wall as offsets from the open sea's middle tone there: they ride on its wavelets)
         if (k > 0) for (let i = 0; i < 4; i++) { const n = WAVE_N[i], o = WAVE_U[i]; tn(P, Q, k, g, n, o); o.r -= u.uPMid.value.r; o.g -= u.uPMid.value.g; o.b -= u.uPMid.value.b; }
         else { ugD2(P, g, 'wBack', u.uPWBack.value, u.uPMid.value); ugD2(P, g, 'wFace', u.uPWFace.value, u.uPMid.value);

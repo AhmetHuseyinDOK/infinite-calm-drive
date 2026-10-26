@@ -3,7 +3,8 @@
 // on the left in the middle distance. Its wake is painted into the sea itself (sea.js ferryWake: the white water at its bow
 // and along its hull, the churned trail behind its stern, the two arms of its V spreading out behind it). A Turkish start
 // finds it where the concept has it; then, each time it has fallen behind or gone far off, the next one comes into view
-// ahead after a while. Shown only on the Bosphorus.
+// ahead after a while. Shown only on the Bosphorus and (W3) on the Golden Horn either side of the Galata Bridge, where a second
+// one plies too (its concept has three in view).
 import * as THREE from 'three';
 import { GB } from './geom.js';
 import * as P from './props.js';
@@ -43,42 +44,57 @@ export function makeFerry(M, sea) {
   const group = new THREE.Group(); group.visible = false;
   for (const [g, m] of [[G.color, M.color], [G.atlas, M.atlasW]]) { const geo = g.build(); if (geo) { const o = new THREE.Mesh(geo, m); o.frustumCulled = true; group.add(o); } }
   // (its position in absolute world coordinates, its heading ψ (its bow towards (sin ψ, cos ψ), as the road's), its pause
-  // before the next one comes into view)
-  const st = { x: 0, z: 0, psi: 0, on: false, wait: 0, r: rng(613) };
-  /** puts it sRel metres ahead of s, u off the road's middle (negative: out on the strait), heading phi round from the road's
-   *  direction towards the strait (0: along the road, 90°: straight out, 180°: back towards us) */
-  function place(path, s, sRel, u, phi) {
+  // before the next one comes into view; its wake's uniform)
+  const st = { x: 0, z: 0, psi: 0, on: false, wait: 0, r: rng(613), g: group, w: sea.u.uFerry, gal: false };
+  // a second one (W3), out on the Golden Horn by the Galata Bridge only (its concept has three in view): the same meshes, a
+  // wake of its own, random numbers of its own (so the first one's comings and goings on the Bosphorus are as before)
+  const group2 = new THREE.Group(); group2.visible = false; for (const o of group.children) group2.add(new THREE.Mesh(o.geometry, o.material));
+  const st2 = { x: 0, z: 0, psi: 0, on: false, wait: 5, r: rng(617), g: group2, w: sea.u.uFerry2, gal: true };
+  /** puts ferry F sRel metres ahead of s, u off the road's middle (negative: out on the strait), heading phi round from the
+   *  road's direction towards the strait (0: along the road, 90°: straight out, 180°: back towards us) */
+  function place(F, path, s, sRel, u, phi) {
     path.at(s + sRel, _f);
-    st.x = _f.x + _f.rx * u; st.z = _f.z + _f.rz * u; st.psi = _f.h + phi; st.on = true;
+    F.x = _f.x + _f.rx * u; F.z = _f.z + _f.rz * u; F.psi = _f.h + phi; F.on = true;
+  }
+  function hide(F) { F.g.visible = false; F.w.value.w = 0; }
+  /** one ferry's frame: w its waters' weight at the camera (the Bosphorus's and the Galata Bridge's; the second one's: the
+   *  Golden Horn's only) */
+  function step(F, dt, path, s, origin, w) {
+    if (w < 0.5) { hide(F); F.on = false; F.wait = 2; return; }
+    if (!F.on) { // the next one: ahead, after a pause, where the strait is open (not by a tunnel's headland)
+      if ((F.wait -= dt) > 0) { hide(F); return; }
+      const r = F.r, sRel = r.range(260, 480), gal = zoneWeight(s + sRel, 'galata');
+      if ((F.gal ? 0 : zoneWeight(s + sRel, 'bosphorus')) + gal < 0.95 || (tunnelNear(s + sRel) && Math.abs(s + sRel - tunnelNear(s + sRel).s) < 280)) { F.wait = 3; return; }
+      const along = r() < 0.4, phi = along ? (r() < 0.5 ? r.range(0, 0.12) : Math.PI - r.range(0, 0.12)) : r.range(1.25, 2.0);
+      // (the Golden Horn either side of the bridge: on the right half the time, heading out to the right)
+      const sd = gal > 0.5 && r() < 0.5 ? -1 : 1;
+      place(F, path, s, sRel, -sd * r.range(60, 300), sd * phi);
+    }
+    const dx = Math.sin(F.psi), dz = Math.cos(F.psi);
+    F.x += dx * V * dt; F.z += dz * V * dt;
+    // gone: fallen behind us, or far off (out of sight in the haze)
+    path.at(s, _f);
+    const rx = F.x - _f.x, rz = F.z - _f.z, ahead = rx * _f.fx + rz * _f.fz;
+    if (ahead < -80 || rx * rx + rz * rz > 1300 * 1300) { F.on = false; F.wait = F.r.range(6, 30); hide(F); return; }
+    F.g.visible = true;
+    F.g.position.set(F.x - origin.x, SEA - 0.3, F.z - origin.z); F.g.rotation.set(0, F.psi - Math.PI / 2, 0);
+    // its wake in the sea: from its bow (absolute), its heading; how much (fading in as it comes into view)
+    F.w.value.set(F.x + dx * BOW, F.z + dz * BOW, F.psi, sstep(0.5, 0.8, w));
   }
   const api = {
-    group, st,
-    /** the opening view of a Turkish start: crossing out from our shore ~95 m ahead, ~50 m off it, broadside to us, its bow to
-     *  the left, as the concept painting has it */
-    opening(path, s) { place(path, s, 95, -52, (100 * Math.PI) / 180); },
-    /** dt; path, s: the road and where we are on it; origin: the world's (the scene is drawn relative to it); bos: the
-     *  Bosphorus's weight at the camera (0: hidden, its wake off) */
-    update(dt, path, s, origin, bos) {
-      const u = sea.u;
-      if (bos < 0.5) { group.visible = false; u.uFerry.value.w = 0; st.on = false; st.wait = 2; return; }
-      if (!st.on) { // the next one: ahead, after a pause, where the strait is open (not by a tunnel's headland)
-        if ((st.wait -= dt) > 0) { group.visible = false; u.uFerry.value.w = 0; return; }
-        const r = st.r, sRel = r.range(260, 480);
-        if (zoneWeight(s + sRel, 'bosphorus') < 0.95 || (tunnelNear(s + sRel) && Math.abs(s + sRel - tunnelNear(s + sRel).s) < 280)) { st.wait = 3; return; }
-        const along = r() < 0.4, phi = along ? (r() < 0.5 ? r.range(0, 0.12) : Math.PI - r.range(0, 0.12)) : r.range(1.25, 2.0);
-        place(path, s, sRel, -r.range(60, 300), phi);
-      }
-      const dx = Math.sin(st.psi), dz = Math.cos(st.psi);
-      st.x += dx * V * dt; st.z += dz * V * dt;
-      // gone: fallen behind us, or far off (out of sight in the haze)
-      path.at(s, _f);
-      const rx = st.x - _f.x, rz = st.z - _f.z, ahead = rx * _f.fx + rz * _f.fz;
-      if (ahead < -80 || rx * rx + rz * rz > 1300 * 1300) { st.on = false; st.wait = st.r.range(6, 30); group.visible = false; u.uFerry.value.w = 0; return; }
-      group.visible = true;
-      group.position.set(st.x - origin.x, SEA - 0.3, st.z - origin.z); group.rotation.set(0, st.psi - Math.PI / 2, 0);
-      // its wake in the sea: from its bow (absolute), its heading; how much (fading in as it comes into view)
-      u.uFerry.value.set(st.x + dx * BOW, st.z + dz * BOW, st.psi, sstep(0.5, 0.8, bos));
-      u.uFerryB.value.set(LEN, BEAM, V, 0);
+    group, group2, st, st2,
+    /** the opening view of a Turkish start: on the Bosphorus crossing out from our shore ~95 m ahead, ~50 m off it, broadside to
+     *  us, its bow to the left, as the concept painting has it; on the Galata Bridge (W3) two, heading out across the Golden Horn
+     *  on the left, ~120 m ahead and ~40 m out, and ~210 m ahead and ~70 m out, as its concept has them */
+    opening(path, s, zone = 'bosphorus') {
+      if (zone === 'galata') { place(st, path, s, 120, -40, (80 * Math.PI) / 180); place(st2, path, s, 210, -70, (100 * Math.PI) / 180); }
+      else place(st, path, s, 95, -52, (100 * Math.PI) / 180);
+    },
+    /** dt; path, s: the road and where we are on it; origin: the world's (the scene is drawn relative to it); bos: the ferries'
+     *  waters' weight at the camera (the Bosphorus's and the Galata Bridge's; 0: hidden, its wake off); gal: the Golden Horn's */
+    update(dt, path, s, origin, bos, gal = 0) {
+      step(st, dt, path, s, origin, bos); step(st2, dt, path, s, origin, gal);
+      sea.u.uFerryB.value.set(LEN, BEAM, V, 0);
     },
   };
   return api;

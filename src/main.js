@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Path, zoneW, zoneWeight, zoneAt, zparam, ZINFO, setStartZone, startZone, zoneSets, trafficSide, seaWeight, regionWeight, viewMix, borderNear, nextBorderS, REGION, crossingS, crossingValid, XING, XOFF, riverNear, RIV, ROFF, groundOffsetMix, tunnelNear, T_HALF, T_RIDGE } from './path.js';
+import { Path, zoneW, zoneWeight, zoneAt, zparam, ZINFO, setStartZone, startZone, zoneSets, trafficSide, seaWeight, regionWeight, viewMix, borderNear, nextBorderS, REGION, crossingS, crossingValid, XING, XOFF, riverNear, RIV, ROFF, groundOffsetMix, tunnelNear, T_HALF, T_RIDGE, ZONE_LEN } from './path.js';
 import { makeCrossingRig, makeTrain, xingPosts } from './crossing.js';
 import { buildAtlas, buildFoliage, buildPaintedAtlas, buildWorldAtlas } from './textures.js';
 import { makeMaterials, makeAtlasW, setWorldTex, U, groundMaterialFor, setGrazeFade, makeCloudMap, makeGhibliLeaf, FIELD, tetraMaterial, barkMaterial } from './materials.js';
@@ -78,8 +78,10 @@ async function main() {
   const firstLoads = Promise.race([Promise.all([treeLoad, fieldLoad, frontLoad, houseLoad]), new Promise(r => setTimeout(r, 4000))]);
   const pcLoad = CLOUDS === 'old' ? Promise.resolve(null) : firstLoads.then(() => loadCloudAtlas(TIER));
   const bandLoad = firstLoads.then(() => loadBandAtlas(TIER));
-  // …and Turkey's (the Bosphorus's far shore: one row, ~1/5 of Japan's bytes), with Japan's when it is needed at the start
-  const bandTrLoad = TR_START ? firstLoads.then(() => loadBandAtlas(TIER, 15000, 'bandtr1')) : null;
+  // …and Turkey's (the Bosphorus's far shore; the Galata Bridge's old city, W3: a row each, in files of their own), with Japan's
+  // when it is needed at the start
+  const loadTrBands = () => Promise.all([loadBandAtlas(TIER, 15000, 'bandtr1'), loadBandAtlas(TIER, 15000, 'bandtr2')]);
+  const bandTrLoad = TR_START ? firstLoads.then(loadTrBands) : null;
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0xc6ddf2, 0.0019, 700); // near = exp² density, far = draw distance (see materials.js)
@@ -277,7 +279,8 @@ async function main() {
   // the night keeps the old asphalt (the headlights' and lamps' pools light it)
   const R_DAY = { n: [0.46, 0.53, 0.68], f: [0.95, 1.05, 1.3] }, R_GOLD = { n: [0.55, 0.55, 0.7], f: [0.85, 0.62, 0.75] };
   const R_SUNSET = { n: [0.4, 0.8, 1.2], f: [1.1, 1.5, 1.4] }, R_NIGHT = { n: [1, 1, 1], f: [1, 1, 1] };
-  const ROAD_T = todKeys(R_NIGHT, R_SUNSET, R_DAY, R_GOLD);
+  const ROAD_T = todKeys(R_NIGHT, R_SUNSET, R_DAY, R_GOLD), GAL_RF = [1.4, 1.35, 1.25], galRF = new THREE.Vector3(); // (the Galata Bridge's far road: below)
+  const GAL_ZEN = new THREE.Color('#385a92'); // (the Galata Bridge's zenith on a bright day: below)
   // the painter's fill in the car's shade (car.js; linear light): the mean of the paintings' cars (city, coast, country; the
   // avenue's is another paint) at noon and repainted at golden hour, sunset and night (ref/tod/), their hatch under the
   // window and beside the plate, on our paint and the game's grade at each hour (~/cdtest/car22/tools/fitfill.py)
@@ -324,7 +327,7 @@ async function main() {
   makeAtlasW(M, watlas ? watlas.textures(renderer) : { map: STAND_IN(), emissive: STAND_IN() });
   // the Bosphorus's city ferry (ferry.js: its painted side is a world atlas cell); where the concept has it at a Turkish start
   let ferry = null;
-  if (TR_START) { ferry = makeFerry(M, sea); scene.add(ferry.group); if (zoneAt(st.s) === 'bosphorus') ferry.opening(path, st.s); }
+  if (TR_START) { ferry = makeFerry(M, sea); scene.add(ferry.group, ferry.group2); const z0 = zoneAt(st.s); if (z0 === 'bosphorus' || z0 === 'galata') ferry.opening(path, st.s, z0); }
   world.trReady = TR_START; // (no chunk of Turkey's, or of a border's, is built before its assets are in: chunks.js)
   status('building the road…');
   await new Promise(r => setTimeout(r, 10));
@@ -379,14 +382,35 @@ async function main() {
     // (the avenue's narrow sky over the road: one tower over it; the city's, a V between its tall blocks: the cumulus either
     // side of it, the blue between, as in the city painting)
     if (pclouds) pclouds.opening = zoneAt(st.s) === 'sakura' ? 'center' : 'flank';
-    const bandAtlas = await bandLoad, trAtlas = TR_START ? await bandTrLoad : null;
-    // (Turkey's band: the same program as Japan's. Without it (or until it loads) the Bosphorus borrows the coast's far shore)
-    band = bandAtlas ? makePaintedBand(bandAtlas, post, scene.fog.color, trAtlas ? null : { bosphorus: 'coast' }) : null; if (band) scene.add(band.mesh);
-    bandTr = trAtlas ? makePaintedBand(trAtlas, post, scene.fog.color, null, 0.12, 'bosphorus') : null; if (bandTr) scene.add(bandTr.mesh); // (the Asian shore in a light haze, as painted; its houses' windows lit at night)
+    const bandAtlas = await bandLoad, trAtlases = TR_START ? await bandTrLoad : null;
+    // (Turkey's band: the same program as Japan's. Without its rows (or until they load) Turkey borrows the coast's far shore)
+    band = bandAtlas ? makePaintedBand(bandAtlas, post, scene.fog.color, trAlias(trAtlases)) : null; if (band) scene.add(band.mesh);
+    bandTr = makeTrBand(trAtlases);
     if (band && zoneAt(st.s) === 'city') band.hero = 0.5; // (the street's far end: the far city's pale towers in haze, its second painting, not the first's green hill)
-    if (bandTr) bandTr.hero = 0.208; // (the Bosphorus Bridge's middle 15° left of ahead, as in the concept painting, when its band first shows)
     renderer.setRenderTarget(post.composer.readBuffer); renderer.compile(scene, camera); renderer.setRenderTarget(null);
-    if (pcAtlas) renderer.initTexture(pcAtlas.tex); if (bandAtlas) renderer.initTexture(bandAtlas.tex); if (trAtlas) renderer.initTexture(trAtlas.tex);
+    if (pcAtlas) renderer.initTexture(pcAtlas.tex); if (bandAtlas) renderer.initTexture(bandAtlas.tex); if (trAtlases) for (const a of trAtlases) if (a) renderer.initTexture(a.tex);
+  }
+  /** Turkey's zones without a row of their own (their file failed, or isn't in yet) borrow the coast's from Japan's band */
+  function trAlias(tra) { const has = z => !!tra && tra.some(a => a && a.zones[z]), al = {}; for (const z of ['bosphorus', 'galata']) if (!has(z)) al[z] = 'coast'; return Object.keys(al).length ? al : null; }
+  /** Turkey's band: the Bosphorus's Asian shore in a light haze, as painted (its houses' windows lit at night), and the Galata
+   *  Bridge's old city, crisper (its windows too), its row turned down the bridge (galTurn); null if neither row loaded */
+  function makeTrBand(tra) {
+    if (!tra || !tra.some(Boolean)) return null;
+    const b = makePaintedBand(tra, post, scene.fog.color, null, { bosphorus: 0.12, galata: 0.05 }, ['bosphorus', 'galata']); scene.add(b.mesh);
+    b.hero = 0.208; // (the Bosphorus Bridge's middle 15° left of ahead, as in the concept painting, when its band first shows)
+    b.noSkirt.galata = true; // (the old city's quays crisp at the water's edge, the Golden Horn up to them, as painted)
+    return b;
+  }
+  // the Galata Bridge's skyline (W3) faces down the bridge, as the concept has it (the great mosque ahead-left, the Galata Tower
+  // ahead-right): Turkey's band turns its row to the heading of the bridge in view (straight from its first metre: path.js), once
+  // per bridge
+  let galK = NaN; const galF = {};
+  function galTurn(s) {
+    if (!bandTr || bandTr.ahead.galata === undefined) return;
+    for (let z = Math.max(0, Math.floor((s - 200) / ZONE_LEN)); z <= Math.floor((s + 700) / ZONE_LEN); z++) {
+      if (z === galK || zoneAt(z * ZONE_LEN + 10) !== 'galata') continue;
+      galK = z; bandTr.turnTo('galata', path.at(z * ZONE_LEN, galF).h); return;
+    }
   }
   // ---- Turkey, loaded in the background (a Japanese start, once the drive comes within TR_NEAR of the border): the downloads,
   // then one piece of main-thread work a frame (the world atlas painted, its two textures and the band's uploaded, the ferry
@@ -397,7 +421,7 @@ async function main() {
   async function trLazy() {
     TRL.started = true; TRL.t0 = performance.now();
     const step = n => TRL.steps.push([n, Math.round(performance.now() - TRL.t0)]);
-    const [trAtlas, th] = await Promise.all([loadBandAtlas(TIER, 15000, 'bandtr1'), loadTrHouseAtlas(HTIER)]); step('loaded');
+    const [trAtlases, th] = await Promise.all([loadTrBands(), loadTrHouseAtlas(HTIER)]); step('loaded');
     await nextFrame();
     const wa = buildWorldAtlas(atlas, HTIER, th); if (wa.trHouses) setTrHouses(th.types, th.extras); if (th) th.img.close(); step('atlas');
     await nextFrame();
@@ -405,10 +429,11 @@ async function main() {
     await nextFrame();
     renderer.initTexture(wt.emissive); setWorldTex(wt); step('emissive');
     await nextFrame();
-    if (trAtlas) { bandTr = makePaintedBand(trAtlas, post, scene.fog.color, null, 0.12, 'bosphorus'); bandTr.hero = 0.208; scene.add(bandTr.mesh); renderer.initTexture(trAtlas.tex); if (band) band.alias = null; }
+    for (const a of trAtlases) if (a) { renderer.initTexture(a.tex); await nextFrame(); } // (a texture a frame: each a few tens of ms on a phone)
+    bandTr = makeTrBand(trAtlases); if (band) band.alias = trAlias(trAtlases);
     step('band');
     await nextFrame();
-    ferry = makeFerry(M, sea); scene.add(ferry.group); step('ferry');
+    ferry = makeFerry(M, sea); scene.add(ferry.group, ferry.group2); step('ferry');
     const warm = new THREE.Group(), tri = new THREE.BufferGeometry();
     tri.setAttribute('position', new THREE.Float32BufferAttribute([0, -50, 0, 0.01, -50, 0, 0, -49.99, 0], 3)); tri.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
     for (const zs of zoneSets()) if (trSet(zs)) { const o = new THREE.Mesh(tri, groundMaterialFor(zs)); o.receiveShadow = true; warm.add(o); }
@@ -609,6 +634,9 @@ async function main() {
     // 0.3–1.8°/s at cruising speed (95% of the time; 2.3 on the mountain pass; the old sky swept 0.75°/s all day), and the
     // light keeps within 2–7° of its place against the car (95% of the time; 11° on the mountain pass)
     updateTOD(st.tod, st.sunroad ? path.meanHeading(st.s, SUN_W) : null, REGION_KEYS.tr, REGION_KEYS.tr ? regionWeight(st.s, 'tr') : 0); // (a region's own palette: sky.js REGION_KEYS)
+    // (over the Golden Horn on a bright day the zenith a deeper, greyer blue, as the Galata Bridge's concept paints its sky (its
+    // other concepts' and Japan's paintings' are a brighter azure); by the bridge's weight 150 m on, so it turns as we drive on)
+    { const gz = zoneWeight(st.s + 150, 'galata') * TOD.bright; if (gz > 0) TOD.zenith.lerp(GAL_ZEN, gz); }
     weather.update(dt);
     const ov = weather.W.ov, rn = weather.W.rain;
     applyWeather(ov, rn);
@@ -834,7 +862,7 @@ async function main() {
     }
     scene.fog.color.copy(TOD.fog);
     // (the city on a bright day: a thinner haze, so its canyon of tall blocks reads to the street's far end, as painted)
-    const fogD = (w.city * (0.0022 - CITY_HAZE * TOD.bright) + w.sakura * 0.0019 + w.coast * 0.0011 + w.bosphorus * 0.0011 + w.country * 0.0014 + w.mountain * 0.0017 + w.snow * 0.0021) * (1 + TOD.night * 0.25);
+    const fogD = (w.city * (0.0022 - CITY_HAZE * TOD.bright) + w.sakura * 0.0019 + w.coast * 0.0011 + w.bosphorus * 0.0011 + w.galata * 0.0009 + w.country * 0.0014 + w.mountain * 0.0017 + w.snow * 0.0021) * (1 + TOD.night * 0.25);
     scene.fog.near = fogD * (1 + 0.55 * ov + 0.45 * rn); scene.fog.far = world.ahead * 0.92;
     U.uSkyHor.value.copy(TOD.horizon); U.uSkyZen.value.copy(TOD.zenith); U.uTime.value = t;
     U.uWet.value = wet * (1 - w.snow);
@@ -878,7 +906,7 @@ async function main() {
       if (clouds) { clouds.group.visible = !painted; if (!painted) clouds.update(camera.position, dt); } }
     // the painted horizon of the zone ahead (it changes while the next zone's scenery comes into view), and the mountain
     // rings wherever it doesn't cover the far horizon
-    const vm = viewMix(st.s, 200), camH = Math.max(1, camera.position.y - f.y + 0.45);
+    const vm = viewMix(st.s, 200), camH = Math.max(1, camera.position.y - f.y + 0.45); galTurn(st.s);
     const bandW = Math.max(band && st.band !== 0 ? band.update(camera, vm, camH, scene.fog.near, scene.fog.far) : 0, bandTr && st.band !== 0 ? bandTr.update(camera, vm, camH, scene.fog.near, scene.fog.far) : 0);
     if (band && st.band === 0) band.mesh.visible = false; if (bandTr && st.band === 0) bandTr.mesh.visible = false;
     mountains.update(camera.position, Math.max(w.snow, zoneW(st.s + 600).snow * 0.7), 1 - bandW);
@@ -887,8 +915,8 @@ async function main() {
     let seaW = 0; { const bn = borderNear(st.s), tube = bn && Math.abs(st.s - bn.s) < T_HALF;
       for (const d of [-150, 0, 250, 500, 800]) if (!bn || tube || (st.s + d - bn.s) * (st.s - bn.s) > 0) seaW = Math.max(seaW, seaWeight(st.s + d)); }
     sea.mesh.visible = seaW > 0.001;
-    PAINT_TOD.on = st.todpaint; sea.u.uWaves.value = st.waves; sea.u.uShoreW.value = st.shore; M.surf.visible = st.surf > 0; M.tetra.visible = st.tetra > 0; M.bark.visible = st.trunks > 0; sea.update(camera.position, t, fogD * 0.8, sstep(0.0, 0.35, seaW), post.grade.uniforms, path, st.s, regionWeight(st.s, 'tr')); // (and the shore's foam and surf; the strait's tones in Turkey)
-    if (ferry) ferry.update(dt, path, st.s, world.origin, w.bosphorus * (sea.mesh.visible ? 1 : 0));
+    PAINT_TOD.on = st.todpaint; sea.u.uWaves.value = st.waves; sea.u.uShoreW.value = st.shore; M.surf.visible = st.surf > 0; M.tetra.visible = st.tetra > 0; M.bark.visible = st.trunks > 0; sea.update(camera.position, t, fogD * 0.8, sstep(0.0, 0.35, seaW), post.grade.uniforms, path, st.s, regionWeight(st.s, 'tr'), Math.max(w.galata, zoneWeight(st.s + 150, 'galata'))); // (and the shore's foam and surf; the strait's tones in Turkey, the Golden Horn's by the Galata Bridge)
+    if (ferry) { const sv = sea.mesh.visible ? 1 : 0; ferry.update(dt, path, st.s, world.origin, (w.bosphorus + w.galata) * sv, w.galata * sv); }
     riverMat.uniforms.uTime.value = t; riverMat.uniforms.uFogD.value = scene.fog.near; riverMat.uniforms.uNight.value = TOD.night; riverMat.uniforms.uSpecK.value = 1 - TOD.overcast * 0.85;
     U.uSunDir.value.copy(TOD.lightDir); U.uSunCol.value.copy(TOD.sunCol);
     const nightK = sstep(0.15, 0.8, TOD.night);
@@ -913,9 +941,11 @@ async function main() {
       U.uBkK.value = U.uTpK.value * st.bark;
       if (U.uBkK.value > 0) { const P = BK_T.at(TOD.t); for (let i = 0; i < 6; i++) P.ug(g, BK_N[i], BK_U[i]); }
     }
-    { // the coast's and the country's painted asphalt, under a clear sky (grey skies and rain keep the old one)
-      const P = ROAD_T.at(TOD.t), n = P.rgb('n'), f = P.rgb('f'), k = paintSky() * st.road;
+    { // the coast's and the country's painted asphalt, under a clear sky (grey skies and rain keep the old one); on the Galata
+      // Bridge on a bright day its far stretch paler, as its concept has it (the low sun ahead's sheen on it: GAL_RF)
+      const P = ROAD_T.at(TOD.t), n = P.rgb('n'), f = P.rgb('f'), k = paintSky() * st.road, gk = w.galata * TOD.bright * st.road;
       U.uRoadN.value.set(lerp(1, n[0], k), lerp(1, n[1], k), lerp(1, n[2], k)); U.uRoadF.value.set(lerp(1, f[0], k), lerp(1, f[1], k), lerp(1, f[2], k));
+      if (gk > 0) U.uRoadF.value.multiply(galRF.set(lerp(1, GAL_RF[0], gk), lerp(1, GAL_RF[1], gk), lerp(1, GAL_RF[2], gk)));
     }
     // the painted meadow's tint: the reference art's light lime on a bright day, the repainted hours' tints at golden hour,
     // sunset and night (FIELD_T); the paddies' old, deeper green under grey skies (the day's lime turned the fields ochre at
@@ -995,7 +1025,7 @@ async function main() {
 
     rain.update(camera.position, t, rn * (1 - tunS) * (1 - w.snow), day());
     { // 逃げ水: the road mirage of a hot clear summer day, around midday (mirage.js); not near a tunnel
-      const tq = tunnelNear(st.s + 190), hot = (w.city + w.country + w.coast + w.bosphorus) * (1 - ov) * (1 - wet) * sstep(0.6, 0.9, TOD.sunEl) * (st.mirage ?? 1) * (tq && Math.abs(st.s + 190 - tq.s) < 330 ? 0 : 1);
+      const tq = tunnelNear(st.s + 190), hot = (w.city + w.country + w.coast + w.bosphorus + w.galata) * (1 - ov) * (1 - wet) * sstep(0.6, 0.9, TOD.sunEl) * (st.mirage ?? 1) * (tq && Math.abs(st.s + 190 - tq.s) < 330 ? 0 : 1);
       mirage.update(path, st.s, world.origin.x, world.origin.z, zparam(st.s + 150, 'rw'), hot, t, TOD.horizon);
     }
     { // spray off the tyres on a wet road, powder on a snowy one, exhaust vapour in the cold (spray.js)

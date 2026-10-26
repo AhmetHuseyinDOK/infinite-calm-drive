@@ -1425,3 +1425,104 @@ export function ferry(G, M, r) {
   c.rod([L - 13, 9, 0], [L - 13, 12.5, 0], 0.08, 0.06, 5, PAL.white);
   flagCloth(G, M, [-L + 0.5, 6.4, 0], 0.9, 1, -1);
 }
+
+// ------------------------------------------------------------------ the Galata Bridge (W3)
+// its steel in the concept's green-grey, the lamps' dark housings, the control towers' pale concrete
+const GAL_POLE = C('#5d6b63'), GAL_LAMP = C('#3a403d'), GAL_CONC = C('#cdcbc3'), GAL_JOINT = C('#a9a7a0'), GAL_DARK = C('#34383d'), GAL_WIN = C('#46525e');
+const POOL_UV = { u0: 0, u1: 1, v0: 0, v1: 1 };
+/** a face to −z (towards the road, in a prop's own frame): x0 … x1, y0 … y1 at z */
+const fz = (c, x0, x1, y0, y1, z, col) => c.quad([x1, y0, z], [x0, y0, z], [x0, y1, z], [x1, y1, z], col);
+/** the T1 tram line's portal over its two tracks, in a frame at the road's middle (local x along the road, z across it: +z the
+ *  right), as the bridge's: green-grey steel posts at the reserve's edges (z0 by the road, z1 beyond), a crossbar, drop arms
+ *  over the tracks (tz) holding the contact wires (chunks.js strings them, their anchors returned); the road-side post goes on
+ *  up to a street lamp, its short arm reaching over our right lane (lampZ), as the concept's */
+export function galPortal(G, M, z0, z1, tz, lampZ) {
+  const c = G.color; c.setM(M);
+  c.cyl(0, 0, z0, 0.14, 0.1, 9.0, 8, GAL_POLE); c.cyl(0, 0, z1, 0.13, 0.1, 7.3, 8, GAL_POLE);
+  c.box(-0.09, 6.95, z0, 0.09, 7.22, z1, GAL_POLE); c.box(-0.05, 6.4, z0 + 0.1, 0.05, 6.5, z1 - 0.1, GAL_POLE); // (a truss's two chords)
+  for (let z = z0 + 0.6; z < z1 - 0.3; z += 1.2) c.rod([0, 6.47, z], [0, 6.96, z + 0.6], 0.025, 0.025, 4, GAL_POLE);
+  for (const t of tz) { c.box(-0.035, 5.95, t - 0.035, 0.035, 6.45, t + 0.035, GAL_POLE); c.box(-0.45, 5.92, t - 0.03, 0.45, 5.99, t + 0.03, GAL_POLE); }
+  c.rod([0, 8.75, z0], [0, 8.95, lampZ + 0.35], 0.055, 0.045, 6, GAL_POLE);
+  c.box(-0.22, 8.84, lampZ - 0.4, 0.22, 9.02, lampZ + 0.4, GAL_LAMP);
+  G.lamp.setM(M); G.lamp.box(-0.17, 8.81, lampZ - 0.34, 0.17, 8.84, lampZ + 0.34, W1);
+  lampAt(G, M, 0, 8.7, lampZ, 1.1);
+  G.pool.setM(M); G.pool.quad([-4.2, 0.04, lampZ + 4.2], [4.2, 0.04, lampZ + 4.2], [4.2, 0.04, lampZ - 4.2], [-4.2, 0.04, lampZ - 4.2], W1, POOL_UV);
+}
+/** a lamp post on the bridge's walkway (its own frame: −z to the road): a tall slender post, its arm curving out over the road
+ *  to a flat luminaire */
+export function galLamp(G, M) {
+  const c = G.color; c.setM(M);
+  c.cyl(0, 0, 0, 0.11, 0.075, 8.4, 8, GAL_POLE);
+  c.rod([0, 8.2, 0], [0, 8.72, -0.55], 0.055, 0.05, 6, GAL_POLE); c.rod([0, 8.72, -0.55], [0, 8.86, -1.65], 0.05, 0.045, 6, GAL_POLE);
+  c.box(-0.22, 8.76, -2.2, 0.22, 8.95, -1.5, GAL_LAMP);
+  G.lamp.setM(M); G.lamp.box(-0.17, 8.73, -2.15, 0.17, 8.76, -1.55, W1);
+  lampAt(G, M, 0, 8.62, -1.85, 1.1);
+  G.pool.setM(M); G.pool.quad([-4.2, 0.04, 2.3], [4.2, 0.04, 2.3], [4.2, 0.04, -6.1], [-4.2, 0.04, -6.1], W1, POOL_UV);
+}
+const JACKETS = ['#2f3d5a', '#5b5f3d', '#676c73', '#77482f', '#8a2f2a', '#3d5a6e', '#45474b', '#b9a47c', '#2d4a3a'].map(C);
+const TROUSERS = ['#2b2e36', '#3a3d45', '#4a4238', '#22252b', '#5a5d64'].map(C), SKIN = ['#c99a7a', '#b58463', '#d6a98a'].map(C);
+const CAPS = ['#22252b', '#8a2f2a', '#e6e2d8', '#2f3d5a', '#5b5f3d'].map(C), BUCKETS = ['#2f6fb0', '#e4e4de', '#c9402e', '#e8b93a'].map(C);
+/** a fisherman at the bridge's railing, the bridge's best-known sight (its own frame: −z to the road; he faces +z, out over the
+ *  water): standing, or now and then on a stool; a cap or not; his long rod leaning out over the railing, its line hanging down
+ *  into the Golden Horn `drop` m below his feet; a bucket for his catch beside him now and then */
+export function fisherman(G, M, r, drop) {
+  const c = G.color; c.setM(M);
+  const jk = r.pick(JACKETS), tr = r.pick(TROUSERS), sk = r.pick(SKIN), sit = r() < 0.22, hat = r() < 0.65 ? r.pick(CAPS) : null, s = r.range(0.94, 1.06);
+  const hip = sit ? 0.46 : 0.84 * s, sh = hip + 0.58 * s, lean = sit ? 0.06 : 0.0;
+  if (sit) {
+    c.box(-0.2, 0, -0.18, 0.2, 0.42, 0.18, C('#4a3f36')); // the stool
+    c.box(-0.2, hip - 0.12, -0.05, 0.2, hip, 0.42, tr); c.cyl(-0.11, 0, 0.37, 0.07, 0.075, hip - 0.1, 5, tr); c.cyl(0.11, 0, 0.37, 0.07, 0.075, hip - 0.1, 5, tr); // thighs, shins
+  } else { c.cyl(-0.11, 0, 0, 0.07, 0.085, hip, 5, tr); c.cyl(0.11, 0, 0, 0.07, 0.085, hip, 5, tr); }
+  c.cyl(0, hip - 0.04, lean, 0.21, 0.18, sh - hip + 0.06, 6, jk);                    // the jacket (rounded: a tapered prism)
+  c.cyl(0, sh + 0.02, lean, 0.085, 0.07, 0.04, 6, sk); c.cyl(0, sh + 0.06, lean, 0.1, 0.095, 0.19 * s, 7, sk); // the neck, the head
+  if (hat) { c.cyl(0, sh + 0.19 * s, lean, 0.108, 0.1, 0.075, 7, hat); c.box(-0.08, sh + 0.19 * s, 0.06 + lean, 0.08, sh + 0.21 * s, 0.2 + lean, hat); }
+  const hand = [0.02, sh - 0.3, 0.36 + lean];
+  c.rod([-0.2, sh - 0.06, lean], hand, 0.045, 0.04, 4, jk); c.rod([0.2, sh - 0.06, lean], hand, 0.045, 0.04, 4, jk);
+  // the rod: 4–5 m, 35–50° up, out over the railing (and a little to one side); its line down to the water
+  const L = r.range(4, 5.2), el = r.range(0.6, 0.87), sw = r.range(-0.35, 0.35), tip = [hand[0] + L * Math.cos(el) * sw, hand[1] + L * Math.sin(el), hand[2] + L * Math.cos(el) * Math.cos(sw)];
+  const bt = [hand[0] - 0.08 * sw, hand[1] - 0.35, hand[2] - 0.45];
+  c.noShadow = true; c.rod(bt, tip, 0.022, 0.009, 3, C('#2a2724')); c.rod(tip, [tip[0], -drop, tip[2] + 0.4], 0.004, 0.004, 3, C('#d8d8d0')); c.noShadow = false;
+  if (r() < 0.45) c.cyl(0.45, 0, -0.05, 0.13, 0.15, 0.3, 8, r.pick(BUCKETS));
+}
+/** one of the bridge's control towers by its lifting span, as the concept and the real bridge have them (its own frame: −z to
+ *  the road): a block of pale concrete panels 13 m along the road, 7.5 m deep and 10.5 m tall over the deck, a great round-headed
+ *  arch in its face to the road, small windows in its ends, a hood curving up over the back of its roof; a flag on the roof.
+ *  pier: standing beyond the deck's edge, on a pier of dressed stone that many metres down into the water */
+export function galTower(G, M, pier = 0) {
+  const c = G.color; c.setM(M);
+  const L = 6.5, D = 7.5, H = 10.5;
+  if (pier > 0) c.box(-L - 0.35, -pier, -0.2, L + 0.35, 0.02, D + 0.35, C('#a39d92'), null, { noBottom: true });
+  c.box(-L, 0, 0, L, H, D, GAL_CONC, null, { noBottom: true });
+  c.box(-L - 0.12, H - 0.45, -0.12, L + 0.12, H, D + 0.12, C('#d9d7cf'));       // the cornice
+  // the arch in the face to the road: a dark round-headed opening (6 m high, 4.2 wide) in a frame a shade darker than the wall
+  const R = 2.6, ya = 4.6, z = -0.012, N = 12, arc = (k, rr) => { const t = (k / N) * Math.PI; return [rr * Math.cos(t), ya + rr * Math.sin(t)]; };
+  for (const [rr, col, zz] of [[R + 0.3, GAL_JOINT, z], [R, GAL_DARK, z - 0.01]]) {
+    fz(c, -rr, rr, 0, ya, zz, col);
+    for (let k = 0; k < N; k++) { const [x0, y0] = arc(k, rr), [x1, y1] = arc(k + 1, rr); c.quad([0, ya, zz], [x1, y1, zz], [x0, y0, zz], [x0, y0, zz], col); }
+  }
+  // the panels' joints (on the face, either side of the arch) and the ends' windows, a column of three
+  for (const x of [-5.4, -4.2, -3.0, 3.0, 4.2, 5.4]) fz(c, x - 0.03, x + 0.03, 0.2, H - 0.5, -0.006, GAL_JOINT);
+  for (const y of [3.0, 6.2]) { fz(c, -L + 0.1, -R - 0.35, y - 0.03, y + 0.03, -0.006, GAL_JOINT); fz(c, R + 0.35, L - 0.1, y - 0.03, y + 0.03, -0.006, GAL_JOINT); }
+  for (const sx of [-1, 1]) for (const y of [2.4, 5.2, 8.0]) for (const zc of [2.2, 5.3]) {
+    const x = sx * (L + 0.006), z0 = zc - 0.5, z1 = zc + 0.5;
+    if (sx < 0) c.quad([x, y, z0], [x, y, z1], [x, y + 1.1, z1], [x, y + 1.1, z0], GAL_WIN); else c.quad([x, y, z1], [x, y, z0], [x, y + 1.1, z0], [x, y + 1.1, z1], GAL_WIN);
+  }
+  // the hood over the back of the roof: a quarter round rising 2.4 m from the middle of the roof to its back edge, its ends closed
+  const K = 6, hz = t => D - 3.0 + 3.0 * Math.sin(t), hy = t => H + 2.4 * (1 - Math.cos(t)), HL = L - 0.4, HC = C('#dedcd5');
+  for (let k = 0; k < K; k++) {
+    const t0 = (k / K) * (Math.PI / 2), t1 = ((k + 1) / K) * (Math.PI / 2);
+    c.quad([HL, hy(t0), hz(t0)], [-HL, hy(t0), hz(t0)], [-HL, hy(t1), hz(t1)], [HL, hy(t1), hz(t1)], HC);
+    for (const sx of [-1, 1]) { const p0 = [sx * HL, H, D], p1 = [sx * HL, hy(t0), hz(t0)], p2 = [sx * HL, hy(t1), hz(t1)]; if (sx > 0) c.quad(p0, p1, p2, p2, HC); else c.quad(p0, p2, p1, p1, HC); }
+  }
+  c.quad([-HL, H, D], [HL, H, D], [HL, hy(Math.PI / 2), D], [-HL, hy(Math.PI / 2), D], HC); // (its back)
+  flagPole(G, sub(M, -L + 1.2, H, 1.2), 4.2);
+}
+/** the lifting span's barrier beside a control tower (its own frame: −z to the road): an orange steel gate 5 m long, its
+ *  frame braced with white diagonals, as the concept paints it */
+export function galBarrier(G, M) {
+  const c = G.color; c.setM(M);
+  const OR = C('#e2742c'), WH = C('#f2f0ea'), L = 2.5;
+  for (const x of [-L, 0, L]) c.box(x - 0.07, 0, -0.07, x + 0.07, 1.35, 0.07, OR);
+  c.box(-L, 1.2, -0.06, L, 1.36, 0.06, OR); c.box(-L, 0.18, -0.05, L, 0.3, 0.05, OR);
+  for (const x0 of [-L, 0]) { c.rod([x0 + 0.1, 0.3, 0], [x0 + L - 0.1, 1.2, 0], 0.04, 0.04, 4, WH); c.rod([x0 + 0.1, 1.2, 0], [x0 + L - 0.1, 0.3, 0], 0.04, 0.04, 4, WH); }
+}

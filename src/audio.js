@@ -160,7 +160,7 @@ export function makeAudio() {
       road.g.gain.setTargetAtTime((0.03 + sp * 0.06) * (1 + 1.6 * tun), t, 0.35); road.f.frequency.setTargetAtTime((250 + sp * 500) * (1 + 0.5 * tun), t, 0.35);
       hum.g.gain.setTargetAtTime(tun * 0.07, t, 0.4); wet.gain.setTargetAtTime(0.55 + 0.6 * tun, t, 0.4);
       const swell = 0.5 + 0.5 * Math.sin(t * 0.55) * Math.sin(t * 0.21 + 1);
-      const sea = w.coast + (w.bosphorus || 0); // (the coast's surf and the Bosphorus's water against its wall)
+      const sea = w.coast + (w.bosphorus || 0) + 0.6 * (w.galata || 0); // (the coast's surf, the Bosphorus's water against its wall, the Golden Horn's under the bridge)
       waves.g.gain.setTargetAtTime(sea * (0.012 + swell * 0.05), t, 0.3); waves.f.frequency.setTargetAtTime(400 + swell * 900, t, 0.3);
       // creatures — how often each calls depends on zone, time of day and rain
       const dry = 1 - Math.min(1, rv * 1.4), night = 1 - day, dusk = x.dusk || 0, snow = w.snow || 0, warm = 1 - snow;

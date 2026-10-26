@@ -2,6 +2,91 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-26 · 05:xx — World 3: Istanbul's Galata Bridge as its concept painting has it
+- **The shore road runs on onto the Galata Bridge.** After the Bosphorus the drive goes on through Karaköy and out over the
+  Golden Horn on the Galata Bridge towards Eminönü, a zone of its own before the border tunnel back into Japan's shopping street
+  (… snow → border → Bosphorus → Galata → border → city). The bridge is straight and level, its deck ~6 m over the water, with
+  water on both sides: our two lanes between a walkway on the left and the T1 tram line's reserve on the right, the far
+  carriageway beyond it. `?env=galata` starts on the bridge; its zone card reads Galata Köprüsü / Galata Bridge · Karaköy →
+  Eminönü.
+- **The hand-over:** over the Bosphorus's last 260 m its houses and trees end, the road rises onto the bridge (1.4 → 6.2 m over
+  the water), the sea wall's railing gives way to the bridge's, the hill on the right turns away over the water (its foot a quay
+  running off at ~50°, gone past the ground's edge by the bridge's first metre), and the old city's skyline takes over the
+  horizon ahead.
+- **The bridge as painted** (ref/world/istanbul_galata.png): the walkway's patterned cast-iron railing (blue-grey, diagonal bars
+  with a ring at every crossing) along the deck's edge, casting its lattice's shadow on the walkway; right by our lane the tram
+  line's dark-brown railing (octagons and squares), and beyond it its rust-brown track bed with its rails and a second railing;
+  green-grey tram portals every 30 m with the contact wires and catenary over both tracks, their road-side posts carrying the
+  lamps over our lane; tall lamp posts along the walkway; near the Karaköy end the lifting span's control tower (pale concrete
+  panels, a great arched opening, a hood curving over its roof, a Turkish flag) with its orange-and-white barrier, as the
+  concept has it; flags at the bridge's start, a blue sign for Eminönü and Sirkeci, the 50 limit. **Fishermen** stand all along
+  the walkway's railing in ones, twos and threes, their long rods out over the water, buckets by their feet, now and then on a
+  stool.
+- **The Golden Horn on both sides**: its own painted water, a clearer, deeper azure than the strait's, saturated right up to the
+  old city's quays, few white glints (open water ΔE 5.2 from the concept); **two city ferries** at once (the second one's wake
+  painted into the water too), on either side of the bridge, and small boats. A Galata start finds two heading out on the left,
+  as the concept has them.
+- **The old city ahead**, a new painted horizon: Grok Imagine on the concept's own frame with its foreground painted out,
+  reprojected from the concept's perspective onto the band's cylinder, so the skyline spans the chase view's 78° without a join:
+  the great mosque on the waterfront ahead-left (its dome, semi-domes and four minarets), the old city's waterfront, the Galata
+  hill with its houses and the Galata Tower ahead-right; further round, Sarayburnu with Hagia Sophia among cypresses and the
+  Asian shore on the left, the Süleymaniye on its hill on the right; the loop goes twice round, so the Galata Tower stands behind
+  on the left too. The row turns with the bridge's heading, so the mosque always stands where the concept has it; its quays meet
+  the water crisp (no haze skirt, no foot haze: the Golden Horn runs up to them); its windows light up at night. Over the bridge
+  on a bright day the zenith is the concept's deeper, greyer blue and the far road paler, as painted.
+- At its far end the bridge runs into the headland at Eminönü and the border tunnel back to Japan, its Turkish plate EMİNÖNÜ
+  TÜNELİ (the Kuruçeşme tunnel's, which went with the Bosphorus's old end).
+- Against the concept (region medians, CIELAB ΔE; before = live's ?env=galata, its Bosphorus start): mosque 41.5 → 7.7, the old
+  city's shore 10.0 → 1.8, the right skyline 23.3 → 4.2, open water 8.2 → 5.2, the walkway's railing 10.2 → 8.6, road far
+  12.3 → 4.9, the tram line's railing 37.3 → 14.0 and bed 42.3 → 15.2, the tower 28.7 → 7.9, sky 25.2 → 13.3; mean 21.8 → 10.2.
+  Worse than it could be: the walkway 28.6 (the concept's lies in its railing's shadow under a lower sun). The concept's eye
+  level sits ~2.5° lower in its frame than the game's chase camera: its skyline ~35 px lower at 784.
+- Japan is unchanged: all six seeded starts pixel-identical to live up to load-to-load noise (1–5 one-level pixels, which two
+  loads of live show too). The Bosphorus's start differs only in its open sea's wavelets: their roll is the zone's mean heading,
+  which takes in its last 260 m, now the hand-over (0.001° from before; 1–5 levels over ~4% of the frame, glints flickering
+  differently).
+- How: path.js (TURKEY = ['bosphorus', 'galata'], ZINFO.galata, SEA_ZONES, GAL_R / GAL_WALK / GAL_KERB, the bridge's ground, the
+  hand-over's quay), materials.js (Z_GAL: the bridge drawn in the cherry avenue's weight channel, as they never meet: its deck,
+  tram bed, faces, walkway; the painted asphalt's tint), chunks.js (the walkway and kerb strip, the deck-only terrain, placeGalata,
+  galRailing), props.js (galPortal, galLamp, fisherman, galTower, galBarrier), textures.js (the railings' panels and the sign in
+  the world atlas's first row: nothing else moves; the tunnel plate), painted.js (a band's rows from several files, a row turned
+  to a road's heading, rows without a skirt over water), sea.js (PAINT_GAL / GAL_TONES, a second ferry's wake), ferry.js (a
+  second ferry on the Golden Horn), main.js (Turkey's two band files, the row's turn, the zenith and the far road, the ferries;
+  the lazy load uploads the two band textures a frame apart), audio.js and birds.js (the Golden Horn's water and gulls).
+- Assets: assets/band/bandtr2.json, bandtr2_hi.webp (176 KB), bandtr2_lo.webp (70 KB): WebP q50 from lossless masters
+  (~/cdtest/w3/band/masters, bandgal.py), loaded with Turkey's other assets (at a Turkish start, else lazily near the border).
+  If they fail the bridge borrows the coast's far shore. The Bosphorus keeps bandtr1.* untouched.
+- Programs: a Turkish start 68 desktop / 67 phone (66 / 65: the bridge's own ground and its hand-over's); a Japanese start 63 /
+  62 as before, 68 / 67 once Turkey is in.
+- Cost (the shared box's Vega: the desktop machine was down throughout): the bridge is cheaper to draw than the Bosphorus on
+  desktops and about the same on phones. Over drives, interleaved: desktop Bosphorus 15.50 / 18.24 / 17.62 / 16.61 / 16.92 ms
+  against the bridge's 14.41 / 14.87 / 14.48 / 13.10 / 14.10; phone 9.54 / 9.05 / 9.13 / 9.07 / 8.90 against 9.57 / 9.56 / 9.25
+  / 9.51 / 9.26 (+0.2–0.4). Japan's draws unchanged: on the coast at noon the sea's and the shore's draws (their shader gained
+  the second wake's branch) against the untouched sky's, live 0.146 / 0.145 / 0.146 and 0.885 / 0.880 / 0.887, staging 0.144
+  / 0.147 / 0.147 and 0.893 / 0.882 / 0.888. World build: the bridge's chunks 108 / 119 / 113 ms per 20 against the Bosphorus's
+  139 / 166 / 187 / 142; Japan's (the country) the same (live 171 / 150, staging 162 / 165). Start-up (first visits): a
+  Japanese start +17 KB (the code), desktop medians 3.79 → 3.56 s, a 3 Mbps phone 6.80 → 6.92 s; a Turkish start (live's
+  ?env=galata is its Bosphorus start) +193 KB desktop / +88 KB phone (the band), desktop 4.56 → 3.98 s, a 3 Mbps phone 7.48 →
+  7.63 s. 0 shader errors in all eight zones (desktop), on the phone tier at noon and night (the bridge, the Bosphorus, the
+  snow), q=low, and on the bridge at dusk and night; no console errors at q=low, mid and high; none compiled through sunset,
+  night or rain (the bridge at high and mid, the city), rain drives on the bridge and the Bosphorus, either border (desktop and
+  phone), the hand-over, or the lazy load (a country start driven at 5× through the border onto the bridge: 63 → 68, 62 → 67;
+  no program joined in a slow frame); embed starts on tap.
+- Left over: the bridge fills its whole 1.5 km zone (the real one is 490 m; no Karaköy or Eminönü waterfront; its far end is the
+  border tunnel's green headland); the skyline's joins at ±39°, the chase view's edges on a 16:9 screen, show a hazy patch on the
+  left; the far railings' lattice thins out beyond ~40 m (alpha-tested) and shimmers a little at mid-distance; no tram runs;
+  the fishermen are simple low-poly figures; the tower is plain paint without lit windows, and the concept's only (the real
+  bridge has four); the phone tier ~0.3 ms over the Bosphorus.
+- Verified by the main agent on the shared box (the desktop machine down): Japan's six seeded starts pixel-identical, the
+  Bosphorus's start differing only on the strait (7,264 of 7,265 moved pixels); 0 shader errors in all eight zones on the
+  desktop and phone tiers and q=low; nothing compiled through either border, the hand-over (the car keeps right) or the lazy
+  load (63 → 68 / 62 → 67, 3 km before the border); with the skyline missing the bridge borrows the coast's far shore, no
+  errors. Over drives on staging the bridge 12.65 / 13.27 ms against the Bosphorus's 18.19 / 17.78 (desktop) and 8.99 / 9.23
+  against 9.97 / 9.55 (phone); Japan's city the same (desktop 20.54 / 19.93 → 20.48 / 20.56; on phones, every draw group
+  timed over drives 14.06 → 13.43 ms, the frame-level readings the iGPU's clock steps); start-up of a Japanese start the
+  same (desktop medians 3.47 vs 3.47 s, a 3 Mbps phone 6.94 vs 6.89), a Galata start's 3 Mbps phone first visit 7.35 →
+  7.71 s (the skyline's +88 KB).
+
 ## 2026-10-26 · 02:xx — World 2: Istanbul's Bosphorus as its concept painting has it
 - **A village of wooden houses climbing the hill**, as in the concept (ref/world/istanbul_bosphorus.png): Ottoman houses with
   their gable ends to the lane, the upper floor jutting out on brackets over a stone or plastered ground floor, weathered

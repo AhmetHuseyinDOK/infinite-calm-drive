@@ -19,11 +19,13 @@ const grainC = canvas(256, 256);
 export class Atlas {
   /** h: its rows (the procedural atlas: 4096). uOff: added to its cells' u (the painted atlas: 2, so the atlas material
    *  can tell its cells from the procedural ones by their uv alone, materials.js); cells: the map its cells are listed in
-   *  (the painted atlas lists its cells in the procedural atlas's: one namespace, one uv() for both) */
-  constructor(h = SH, uOff = 0, cells = {}) {
-    const H = (this.H = h);
+   *  (the painted atlas lists its cells in the procedural atlas's: one namespace, one uv() for both). cpu: canvases drawn on
+   *  the CPU (willReadFrequently): Cappadocia's (W5), whose round-capped strokes on the grey ground lost the whole of a
+   *  GPU-drawn canvas in Chrome (ANGLE on Vulkan, this box and the live build alike) */
+  constructor(h = SH, uOff = 0, cells = {}, cpu = false) {
+    const H = (this.H = h), o = cpu ? { willReadFrequently: true } : undefined;
     this.cA = canvas(SW, H); this.cE = canvas(SW / 2, H / 2);
-    this.a = this.cA.getContext('2d'); this.e = this.cE.getContext('2d');
+    this.a = this.cA.getContext('2d', o); this.e = this.cE.getContext('2d', o);
     this.e.fillStyle = '#000'; this.e.fillRect(0, 0, SW / 2, H / 2);
     this.a.fillStyle = '#8a8a8a'; this.a.fillRect(0, 0, SW, H); // opaque padding so alpha-test only cuts the railing cell
     this.x = 0; this.y = 0; this.rowH = 0; this.cells = cells; this.uOff = uOff;
@@ -1215,6 +1217,98 @@ function paintTown(A, ta) {
     });
   } catch (err) { console.warn('the town\'s paintings:', err.message); return false; }
   return true;
+}
+// ---- Cappadocia (W5): its cave openings, dry grass and road sign, in rows of the world atlas of their own (under the town's) ----
+/** a cave's opening cut in the tuff, as the concept's fairy chimneys and castle rock have them: an arched hole (its outline the
+ *  alpha: the atlas alpha-tests at 0.5), dark inside, a little lighter where the jamb catches the light; kind 0 a doorway, 1 a
+ *  window (lit: warm lamplight inside and its glow, a cave house's or a cave hotel's at dusk), 2 a doorway with its old plank door.
+ *  Its own random numbers */
+function uchCave(A, a, e, w, h, kind, lit, seed) {
+  a.clearRect(0, 0, w, h);
+  const hole = (g, x0, y0, x1, y1) => { // (an arch on two jambs, its edge a little ragged; on the context g)
+    const cx = (x0 + x1) / 2, rx = (x1 - x0) / 2, ya = y0 + rx * 0.95, q = rng(seed + 7);
+    g.beginPath(); g.moveTo(x0, y1);
+    for (let i = 0; i <= 12; i++) { const t = i / 12, y = y1 + (ya - y1) * t; g.lineTo(x0 + (q() - 0.5) * rx * 0.08, y); }
+    for (let i = 0; i <= 16; i++) { const th = Math.PI + (i / 16) * Math.PI; g.lineTo(cx + Math.cos(th) * rx * (1 + (q() - 0.5) * 0.08), ya + Math.sin(th) * rx * 0.95 * (1 + (q() - 0.5) * 0.08)); }
+    for (let i = 0; i <= 12; i++) { const t = i / 12, y = ya + (y1 - ya) * t; g.lineTo(x1 + (q() - 0.5) * rx * 0.08, y); }
+    g.closePath();
+  };
+  const m = w * 0.08, x0 = m, x1 = w - m, y0 = h * 0.04, y1 = kind === 1 ? h * 0.96 : h;
+  a.save(); hole(a, x0, y0, x1, y1); a.clip();
+  const gI = a.createLinearGradient(0, y0, 0, y1);
+  gI.addColorStop(0, '#120c0b'); gI.addColorStop(0.55, '#24170f'); gI.addColorStop(1, '#3a2a1e'); // (a lit one too: its lamplight is the emissive's, at dusk)
+  a.fillStyle = gI; a.fillRect(0, 0, w, h);
+  // the jamb on the lit side (the right: the concept's sun) and the soffit's shadow over the opening
+  const gJ = a.createLinearGradient(x1 - (x1 - x0) * 0.22, 0, x1, 0); gJ.addColorStop(0, 'rgba(150,110,80,0)'); gJ.addColorStop(1, 'rgba(150,112,84,0.55)');
+  a.fillStyle = gJ; a.fillRect(0, 0, w, h);
+  if (kind === 2) { // a plank door set back in it, weathered brown-grey
+    const dx0 = x0 + (x1 - x0) * 0.12, dx1 = x1 - (x1 - x0) * 0.12, dy0 = y0 + (x1 - x0) * 0.5;
+    rect(a, dx0, dy0, dx1 - dx0, y1 - dy0, '#5e4636');
+    for (let x = dx0; x < dx1 - 1; x += (dx1 - dx0) / 4) { rect(a, x, dy0, 1.2 * (w / 64), y1 - dy0, '#3e2c22'); }
+    rect(a, dx0, dy0 + (y1 - dy0) * 0.3, dx1 - dx0, w / 40, '#3a2a20'); rect(a, dx0, dy0 + (y1 - dy0) * 0.72, dx1 - dx0, w / 40, '#3a2a20');
+  }
+  a.restore();
+  if (kind === 1 && lit) { e.save(); hole(e, x0, y0, x1, y1); e.fillStyle = '#ffb45e'; e.fill(); e.restore(); } // (the same outline: its own random numbers)
+}
+/** a clump of the steppe's dry grass (W5): fine blades fanning out of a narrow root, deep olive-brown low down, golden straw in the
+ *  light, pale at the tips, as the concept's tufts along its verges; on a transparent ground (twice as wide as tall). Its own random
+ *  numbers (seed) */
+function uchGrass(A, a, e, w, h, seed) {
+  const r = rng(seed); a.clearRect(0, 0, w, h);
+  const pal = ['#2e2924', '#3e362f', '#51473d', '#665a4d', '#7b6d5e', '#908270', '#a49684'];
+  const n = 150, cx = w / 2;
+  for (let layer = 0; layer < 3; layer++) for (let i = 0; i < n / 3; i++) {
+    const bx = cx + (r() - 0.5) * w * 0.5 * Math.sqrt(r()), hh = h * (0.35 + r() * 0.6) * (1 - Math.abs(bx - cx) / (w * 0.42)) * (0.75 + layer * 0.15);
+    if (hh < h * 0.08) continue;
+    const lean = (bx - cx) * (0.9 + r() * 1.4) + (r() - 0.5) * w * 0.12, wB = (2 + r() * 2.6) * (w / 256), tx = bx + lean, ty = h - hh;
+    const k = Math.min(6, Math.max(0, Math.floor(layer * 1.6 + r() * 2.6 + (hh / h) * 1.6)));
+    const gr = a.createLinearGradient(0, h, 0, ty); gr.addColorStop(0, pal[Math.max(0, k - 3)]); gr.addColorStop(0.55, pal[Math.max(0, k - 1)]); gr.addColorStop(1, pal[k]);
+    a.fillStyle = gr; a.beginPath(); a.moveTo(bx - wB / 2, h);
+    a.quadraticCurveTo(bx - wB / 2 + lean * 0.35, h - hh * 0.6, tx, ty); a.quadraticCurveTo(bx + wB / 2 + lean * 0.35, h - hh * 0.55, bx + wB / 2, h); a.fill();
+  }
+  // a few seed heads on long stalks, pale against the clump
+  for (let i = 0; i < 9; i++) {
+    const bx = cx + (r() - 0.5) * w * 0.35, tx = bx + (r() - 0.5) * w * 0.4, ty = h * (0.02 + r() * 0.25);
+    a.strokeStyle = '#c8a663'; a.lineWidth = 1.4 * (w / 256); a.beginPath(); a.moveTo(bx, h); a.quadraticCurveTo((bx + tx) / 2, (h + ty) / 2, tx, ty); a.stroke();
+    a.fillStyle = '#ecd8a2'; a.beginPath(); a.ellipse(tx, ty + 4 * (w / 256), 2.2 * (w / 256), 7 * (w / 256), (tx - bx) / w, 0, 7); a.fill();
+  }
+}
+/** a bare tree's crown of fine twigs (W5), as the concept paints its trees' crowns: twigs branching and branching again from the
+ *  card's foot into a broad dome, a light grey-mauve haze where they are finest (the outer twiglets), darker grey-brown where they
+ *  are thick, on a transparent ground. Its own random numbers */
+function uchTwig(A, a, e, w, h, seed) {
+  const r = rng(seed), k = w / 256; a.clearRect(0, 0, w, h); a.lineCap = 'round';
+  const br = (x, y, ang, len, lw, depth) => {
+    const x2 = x + Math.cos(ang) * len, y2 = y + Math.sin(ang) * len;
+    a.strokeStyle = depth > 3 ? '#bcb0ac' : depth > 1 ? '#918482' : '#6a5d5b'; a.lineWidth = lw;
+    a.beginPath(); a.moveTo(x, y); a.lineTo(x2, y2); a.stroke();
+    if (depth <= 0) return;
+    const n = 2 + (r() < 0.45 ? 1 : 0);
+    for (let i = 0; i < n; i++) {
+      let na = ang + (r() - 0.5) * 1.2 + (i - (n - 1) / 2) * 0.55; na = na * 0.82 + (-Math.PI / 2) * 0.18;
+      br(x2, y2, na, len * (0.66 + r() * 0.18), Math.max(0.9 * k, lw * 0.66), depth - 1);
+    }
+  };
+  for (let i = 0; i < 5; i++) br(w / 2 + (r() - 0.5) * w * 0.12, h * 0.98, -Math.PI / 2 + (i - 2) * 0.42 + (r() - 0.5) * 0.25, h * (0.22 + r() * 0.06), 2.6 * k, 5);
+}
+/** Cappadocia's rows of the world atlas (W5): their cells, as [name, [w, h], painter]; `k` the tier's scale */
+function uchList(k) {
+  const L = [], C = [Math.round(64 * k), Math.round(96 * k)], D = [Math.round(80 * k), Math.round(144 * k)];
+  for (let i = 0; i < 3; i++) L.push(['uchDoor' + i, D, (A, a, e, w, h) => uchCave(A, a, e, w, h, i === 2 ? 2 : 0, false, 7101 + i)]);
+  for (let i = 0; i < 3; i++) for (const lit of [false, true]) L.push(['uchWin' + i + (lit ? 'L' : ''), C, (A, a, e, w, h) => uchCave(A, a, e, w, h, 1, lit, 7111 + i)]);
+  for (let i = 0; i < 3; i++) L.push(['uchGrass' + i, [Math.round(256 * k), Math.round(128 * k)], (A, a, e, w, h) => uchGrass(A, a, e, w, h, 7121 + i)]);
+  L.push(['trSignUch', [Math.round(256 * k), Math.round(128 * k)], (A, a, e, w, h) => trDirSign(A, a, e, w, h, ['Uçhisar', 'Nevşehir'])]);
+  for (let i = 0; i < 2; i++) L.push(['uchTwig' + i, [Math.round(256 * k), Math.round(256 * k)], (A, a, e, w, h) => uchTwig(A, a, e, w, h, 7131 + i)]);
+  return L;
+}
+/** Builds Cappadocia's atlas for a tier (W5: 'hi' or 'lo', half the px): its cells (uchList), all procedural, in a texture pair of
+ *  their own, drawn by a material of their own (materials.js makeCapAtlas), so Turkey's world atlas keeps its size and its program
+ *  (a taller atlas changed its coarse mips, and so the Bosphorus's, the Galata Bridge's and the town's distant façades). `main`:
+ *  the procedural atlas, whose cell list it shares (one namespace; these cells' uv are their own texture's) */
+export function buildCapAtlas(main, tier) {
+  const ul = uchList(tier === 'hi' ? 1 : 0.5), C = new Atlas(Math.ceil((flowEnd(ul.map(c => c[1])) + 8) / 4) * 4, 0, main.cells, true);
+  for (const [n, [w, h], f] of ul) C.add(n, w, h, (a, e, cw, ch) => f(C, a, e, cw, ch));
+  return C;
 }
 /** Builds the world atlas for a tier ('hi' or 'lo': half the px). `main`: the procedural atlas, whose cell list it shares;
  *  `th`: the Bosphorus's painted houses (painted.js loadTrHouseAtlas), in rows of their own (.trHouses: whether they are in);

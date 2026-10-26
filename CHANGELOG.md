@@ -2,6 +2,51 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-26 · 13:xx — World 5: Cappadocia's Göreme → Uçhisar road, as its concept painting has it
+- **Out of the town onto the open Anatolian road.** Turkey's leg now runs Bosphorus → Galata → town → Uçhisar → border →
+  Japan: the town's blocks end half-way through a 260 m hand-over and the dry tuff land begins. `?env=uchisar` starts
+  there; its zone card reads Uçhisar Yolu / Cappadocia · Göreme → Uçhisar.
+- **The land as painted** (ref/world/cappadocia_uchisar.png): a sandy shoulder, the plain thick with dry golden grass (the
+  painted meadow's strokes in straw, dense crossed clumps along the verges), pale cream tuff rising in rounded hummocks near
+  the road and long wavy ridges further out, dry grey-mauve shrubs, bare trees (smooth dark trunks, a light haze of twigs),
+  a Turkish flag flying broadside at the verge, a road sign for Uçhisar.
+- **Fairy chimneys in 3D**: smooth tuff lathes, each with its own lobes and lean, ochre with a pale foot, a few capped
+  pillars, their cave doors and windows towards the road (lit one by one at dusk); in groups near the road, on the ridges
+  and far off. Painted tones by the hour from the concept and its repaints (ref/tod/uchisar_*.png).
+- **The castle rock of Uçhisar at the end of the road**: a new painted horizon (Grok on the concept's far view, the castle
+  half as large again, between four panoramas of the valley), turned slowly with the road so the rock stays at its end;
+  honey at golden hour, rose at sunset, moonlit at night.
+- **Hot-air balloons**: many over the valleys at sunrise, fewer through the morning, a few by day, none in the evening.
+- **The concept's light**: the sun on the right all day (further right at golden hour, the moon on the right at night), a
+  deeper zenith, a thinner haze, a darker warmer road; steppe wind, crows, cicadas, crickets.
+- Against the concept (region medians, CIELAB ΔE; before = live's ?env=uchisar, its Bosphorus start): mean 31.7 → 8.7; sky
+  3.8, castle 2.9, chimneys 4.4 (lit) / 6.1 (shade), tuff 4.3, dry grass 2.3, trunk 5.1.
+- Japan, the Bosphorus, the bridge and the town unchanged: all nine starts identical to live in seeded captures. (Cappadocia's
+  cells have their own small atlas and material, so Turkey's world atlas, its mips and the town's pixels stay as they were;
+  it is drawn on a CPU-backed canvas: in this Chrome a 2D canvas filled opaque and then given round-capped strokes loses all
+  its content.)
+- How: path.js (TURKEY, ZINFO.uchisar, uchTuff / TUFF, the hand-over), materials.js (Z_UCH in the avenue's channel,
+  tuffMaterial, makeCapAtlas), chunks.js (placeUchisar, uchChimney, UCH_FAR, the border's tuff ridge), props.js (fairyChimney,
+  treeBare, dryBush, dryGrass, capSign), textures.js (buildCapAtlas), painted.js (a row's own tones by the hour), balloons.js
+  (new), main.js, audio.js.
+- Assets: assets/band/bandtr4.json, bandtr4_hi.webp (116 KB), bandtr4_lo.webp (42 KB): WebP q50 from lossless masters
+  (~/cdtest/w5/band, bandtr4.py); assets/balloons/balloons1.json, balloons1_hi.webp (56 KB), balloons1_lo.webp (23 KB)
+  (~/cdtest/w5/scripts/balloons.py), loaded with Turkey's. Without them: the country's far hills, no balloons.
+- Programs: a Turkish start 75 desktop / 74 phone (70 / 69); a Japanese start 63 / 62, 75 / 74 once Turkey is in.
+- Cost (the shared box's Vega; the desktop machine down): cheaper than the country on desktops, about the same on phones.
+  Over drives on staging, interleaved: Uçhisar 20.24 / 17.39 / 17.90 ms against the country's 22.28 / 22.00 / 21.22
+  (desktop), 10.03 / 11.08 / 11.25 against 10.23 / 12.45 / 11.78 (phone); Japan's city the same (desktop 21.03 / 20.89 →
+  20.35 / 21.19). World build in the country's range (worst step 14.3 ms on a 4×-throttled phone). Start-up: a Japanese start
+  the same (desktop medians 3.43 vs 3.43 s over four loads each, a 3 Mbps phone 7.56 → 7.12 s; +27 KB of code); a Turkish
+  start's first visit +199 KB desktop / +94 KB phone, a 3 Mbps phone ~0.2–0.7 s slower. Turkey's lazy load from a Japanese
+  start: 63 → 75 / 62 → 74 ~3.1 km before the border; on desktops two programs joined frames slow from world building
+  (13.8 ms; 28.8 ms with 23.4 ms of world build), none on phones. 0 shader errors in all ten zones on the desktop and phone
+  tiers, at dawn and q=low; no console errors at q=low, mid and high; nothing compiled through dawn, sunset, night, rain,
+  the hand-over or either border (the car keeps right, left again in Japan); embed starts on tap; with the band and the
+  balloons missing, no errors.
+- Left over: the castle unlit at night and never nearer (a band, repeating behind); smooth chimneys; the tuff's folds;
+  static grass; dark chimney sides at golden hour.
+
 ## 2026-10-26 · 10:xx — World 4: a Turkish town's high street, as its concept painting has it
 - **Off the Galata Bridge into a Turkish town.** The bridge now lands on a stone quay at Eminönü's end (a square with two
   flags, round trees along the waterfront) and the drive runs on down a typical Turkish town's high street, 1.3 km of it,

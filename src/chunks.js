@@ -1,6 +1,6 @@
 // The world is built in 60 m chunks along the infinite road; each chunk merges its contents into a handful of meshes.
 import * as THREE from 'three';
-import { zoneMix, zoneW, zoneAt, zparam, groundOffsetMix, regionWeight, SEA, WALL_U, crossingS, crossingValid, crossingNear, XING, XOFF, riverS, riverValid, riverNear, riverBank, RIV, ROFF, RIVER_DROP, tunnelNear, borderNear, REGION, T_HALF, T_RIDGE, RAISE, ridgeHr, tubeHalf, GAL_R, GAL_WALK, GAL_KERB, ZONE_LEN, TOWN_SW, townLanding } from './path.js';
+import { zoneMix, zoneW, zoneAt, zparam, groundOffsetMix, regionWeight, SEA, WALL_U, crossingS, crossingValid, crossingNear, XING, XOFF, riverS, riverValid, riverNear, riverBank, RIV, ROFF, RIVER_DROP, tunnelNear, borderNear, REGION, T_HALF, T_RIDGE, RAISE, TUFF, ridgeHr, tubeHalf, GAL_R, GAL_WALK, GAL_KERB, ZONE_LEN, TOWN_SW, townLanding } from './path.js';
 import { TOWN_SHOPS } from './textures.js';
 import { xingPosts } from './crossing.js';
 import { GB } from './geom.js';
@@ -13,6 +13,9 @@ export const CH = 60;
 const WBEAM = [[0.5, 0.055], [0.6, 0.075], [0.67, 0.025], [0.74, 0.075], [0.84, 0.055]]; // guardrail profile (m up, m out)
 const NEAR = [0.7, 0.9, 1.45, 1.5, 1.9, 2.0, 2.1, 2.65, 3.05, 3.4]; // 1.45: just outside a tunnel tube's wall
 const FAR = [7, 9, 11.5, 14.5, 18, 23, 29, 36, 45, 56, 70, 86, 104, 124, 140, 160, 185, 215];
+/** Cappadocia's (W5): the same and as many again between them (FAR's are all among them), for its rounded tuff ridges' outlines.
+ *  Only in chunks clear of a border tunnel's ridge: where a chunk with these meets one with FAR's, the ground there is flat */
+const UCH_FAR = [7, 8, 9, 10.2, 11.5, 13, 14.5, 16.2, 18, 20.5, 23, 26, 29, 32.5, 36, 40.5, 45, 50.5, 56, 63, 70, 78, 86, 95, 104, 114, 124, 140, 160, 185, 215];
 const POLE_SP = 32;
 // the coast's water along its sea wall (placeCoast): how far out from the wall each column of the strip lies (m)
 const SHORE_D = [-0.2, 2.2, 5.5, 10, 17, 27, 38];
@@ -61,6 +64,20 @@ const TW_BAY = 420, TW_BAY0 = 150, TW_BAY_L = 18, TW_BAY_D = 2.4;
  *  (red), a big plane tree by the kerb, a dolmuş at its stop ahead. (At every pass through the town: its layout there) */
 const TW_HERO = [125, 190], TW_HERO_B = { '-1': 143.5, '1': 138 }; // (where its two blocks start, by side: in the chase view's edges)
 const zoneL = s => s - Math.floor(s / ZONE_LEN) * ZONE_LEN;
+/** Cappadocia's fairy chimneys (W5), in bands along each side: [anchors every … m, their jitter, nearest u, how far further out,
+ *  heights (m), the most in a group, the share of anchors left empty, the chance of cave openings] */
+const UCH_BANDS = [[46, 18, 17, 22, 5.5, 9.5, 3, 0.3, 0.6], [30, 12, 42, 60, 7, 13, 4, 0.25, 0.3], [22, 10, 105, 95, 8, 16, 3, 0.3, 0.1]];
+/** its opening view (W5: 125–300 m into the zone, where ?env=uchisar starts), as the concept: [m into the zone, u, kind, …]: the
+ *  big chimney with its caves ahead-left and its smaller neighbours, more along the left ridge and on the right, the flag at the
+ *  left verge, a bare tree before the left ridge and a big one on the right, dry shrubs at the verges */
+const UCH_HERO = [125, 300];
+// (a chimney: its height, its profile, how many cave openings; a tree or a shrub: its turn and its scale; the flag: its height.
+// Placed where the chase camera sees them where the concept paints them: its own camera stands higher, so they stand nearer)
+const UCH_HERO_P = [[157.5, -13.8, 'chim', 5.4, 0, 4], [166, -9.8, 'chim', 4.2, 1, 1], [169, -15.5, 'chim', 3.8, 2, 0], [188, -12.5, 'chim', 4.6, 1, 0], [214, -17, 'chim', 5.6, 0, 0],
+  [256, -14.6, 'chim', 7.9, 0, 0], [258, -8.6, 'chim', 6.2, 2, 1], [165.5, 16.4, 'chim', 4.4, 0, 2], [200, 16.5, 'chim', 5.2, 2, 1], [209, 27.9, 'chim', 7.8, 1, 0], [232, 21, 'chim', 6.4, 0, 0],
+  [150, -6.4, 'tree', 0.6, 0.92], [146.5, 9.4, 'tree', 1.2, 1.15], [196, -7.5, 'tree', 2.0, 0.8], [214, 8.6, 'tree', 4.1, 0.85], [240, 7.8, 'tree', 3.3, 0.8],
+  [143, -5.6, 'bush', 0.3, 1.25], [147, -9.4, 'bush', 1.7, 1.1], [152, 6.2, 'bush', 0.9, 1.0], [158, 12.5, 'bush', 2.2, 1.3], [171, 7.4, 'bush', 2.8, 0.9],
+  [158.5, -5.3, 'flag', 7.2, 0]];
 /** true within m metres of a river (keeps houses, poles and trees out of the channel) */
 const nearR = (s, m) => { const r = riverNear(s); return !!r && Math.abs(s - r.s) < m; };
 
@@ -174,7 +191,9 @@ export class World {
     const G = { atlas: new GB({ uv: true, ao: true, lit: true }), color: new GB({ ao: true }), foliage: new GB(), leaf: new GB({ uv: true }), lamp: new GB({ color: false }), sig: new GB({ color: false }), sodium: new GB({ color: false }), decal: new GB({ uv: true }), pool: new GB({ uv: true, color: false }),
       gleaf: new GB({ uv: true, off: true }), gblossom: new GB({ uv: true, off: true }), // (the broadleaf and cherry crowns' painted clusters, camera-facing)
       tetra: new GB({ uv: true, ao: true, idx: true }), // (the coast's tetrapods, in their own soft concrete; indexed)
-      bark: new GB({ uv: true, ao: true, idx: true }) }; // (the painted trees' trunks and limbs: smooth tubes in their own soft bark)
+      bark: new GB({ uv: true, ao: true, idx: true }), // (the painted trees' trunks and limbs: smooth tubes in their own soft bark)
+      tuff: new GB({ uv: true, idx: true }), // (Cappadocia's fairy chimneys, W5: smooth lathes in their own soft tuff)
+      cap: new GB({ uv: true, ao: true, lit: true }) }; // (…and its own atlas's cells: the caves, the dry grass, the bare crowns, its sign)
     const ground = new GroundB(), shore = { rows: [], puffs: [] }, river = [];
     G.lamps = []; // lights that can light the car: chunk-local x, y, z, power … (props.js lampAt)
     const f = {}, f2 = {};
@@ -183,8 +202,9 @@ export class World {
     const H = (s, u) => { path.at(s, f2); const rw = zparam(s, 'rw'); return f2.y + groundOffsetMix(s, u, f2.y, rw); };
     // (the Galata Bridge in the avenue's channel: materials.js Z_GAL; the Turkish town in the country's, W4: Z_TOWN. Over the
     // bridge's hand-over to the town the ground changes over at the landing itself, not over the blend: path.js townLanding)
+    // (and Cappadocia, W5, in the avenue's: they never meet either)
     const zw4 = s => { const w = zoneW(s), tl = w.town > 0 && w.galata > 0 ? townLanding(s) : null; if (tl) { const g = s < tl.s ? 1 : 0; w.galata = g; w.town = 1 - g; }
-      return [w.city, w.sakura + w.galata, wSea(w), w.country + w.town, w.snow]; };
+      return [w.city, w.sakura + w.galata + w.uchisar, wSea(w), w.country + w.town, w.snow]; };
     const world = (s, u, y) => { path.at(s, f); return [f.x + f.rx * u - ox, y, f.z + f.rz * u - oz]; };
     const matAt = (s, u, y, extraYaw = 0, faceRoad = true) => {
       path.at(s, f);
@@ -204,7 +224,8 @@ export class World {
       // (on the Galata Bridge, W3: a column at its deck's far edge, its face 0.4 m wide; a chunk all on the bridge, away from
       // the border tunnel's headland, has only its deck and its faces down to the water: the open sea draws the rest)
       const gal = Math.max(zoneW(s0).galata, zoneW(s1).galata) > 0, deck = gal && Math.min(zoneW(s0).galata, zoneW(s1).galata) > 0.999 && !nearB(s0 + CH / 2, 2 * T_RIDGE + CH);
-      const far = gal ? [...FAR.filter(v => v <= GAL_R), GAL_R + 0.4, ...FAR.filter(v => v > GAL_R && !deck)] : FAR;
+      const uch = Math.max(zoneW(s0).uchisar, zoneW(s1).uchisar) > 0 && !nearB(s0 + CH / 2, 2 * T_RIDGE + CH);
+      const far = gal ? [...FAR.filter(v => v <= GAL_R), GAL_R + 0.4, ...FAR.filter(v => v > GAL_R && !deck)] : uch ? UCH_FAR : FAR;
       const cols = (() => { const right = [0, ...NEAR]; const out = right.map(n => n); far.forEach(v => out.push(v - rwMid)); return out; })();
       // columns: −far … −rw | rw … far, expressed as offsets from the road edge (a deck: its left side to the walkway's face)
       const offs = deck ? [...cols.filter(v => v <= GAL_WALK + 0.41).reverse().map(v => -v), ...cols] : [...cols.slice().reverse().map(v => -v), ...cols];
@@ -229,8 +250,9 @@ export class World {
           // weight once the face stands 0.5 m proud of the natural ground. (It used to be RAISE / 1.5 everywhere: the bottom ~2 m
           // of every face blended into the beach sand / verge — a white fog smear on the coast's sea side — and the flat verge
           // took a third of the grid colour)
+          // (rv: the river bank's weight, or the ridge's as a negative; else Cappadocia's tuff, W5: path.js TUFF, 0 everywhere else)
           const y = F.y + groundOffsetMix(R.s, u, F.y, R.rw), rg = Math.abs(u) > R.rw + 0.98 ? Math.min(1, RAISE / 0.5) : 0;
-          return [F.x + F.rx * u - ox, y, F.z + F.rz * u - oz, 0, 1, 0, mod(R.s, S_WRAP), u, R.w[0], R.w[1], R.w[2], R.w[3], R.rw, 0, R.rb > 0 ? R.rb : -rg, R.w[4]];
+          return [F.x + F.rx * u - ox, y, F.z + F.rz * u - oz, 0, 1, 0, mod(R.s, S_WRAP), u, R.w[0], R.w[1], R.w[2], R.w[3], R.rw, 0, R.rb > 0 ? R.rb : rg > 0 ? -rg : TUFF, R.w[4]];
         }, gl, gr);
         yield;
       }
@@ -331,6 +353,7 @@ export class World {
     yield* this.placeGalata(G, c, s0, s1, matAt, road, rwAt, world);
     yield;
     yield* this.placeTown(G, c, s0, s1, matAt, road, rwAt);
+    yield* this.placeUchisar(G, c, s0, s1, matAt, onGround, road, rwAt, H, ox, oz);
     yield* this.placeCountry(G, r, s0, s1, matAt, onGround, road, rwAt, H);
     yield* this.placeMountain(G, r, s0, s1, matAt, onGround, road, rwAt, H);
     yield* this.placeSnow(G, r, s0, s1, matAt, onGround, road, rwAt, H);
@@ -348,6 +371,8 @@ export class World {
     { const m = add(G.color.build(), this.M.color, true, true); if (m) m.customDepthMaterial = PROP_DEPTH; } yield; // (wires cast no shadow)
     add(G.tetra.build(), this.M.tetra, true, true); // (the tetrapods: their shadows from the plain depth material)
     add(G.bark.build(), this.M.bark, true, true, 0, 'leaf'); yield; // (the trees' bark: shown as far as their crowns; plain depth material too)
+    if (this.M.tuff) add(G.tuff.build(), this.M.tuff, true, true); // (Cappadocia's fairy chimneys, W5: plain depth material)
+    if (this.M.capAtlas) add(G.cap.build(), this.M.capAtlas, false, true); // (…and its atlas's cards: casting no shadow)
     add(G.foliage.build(), this.M.foliage, true, true);
     add(G.leaf.build(), this.M.leaf, true, true, 0, 'leaf');
     if (this.M.gleaf) { const m = add(G.gleaf.build(), this.M.gleaf, true, true, 0, 'leaf'); if (m) m.customDepthMaterial = this.M.gleafDepth; } // (clusters face the sun in the shadow pass)
@@ -380,7 +405,7 @@ export class World {
   // poles + overhead wires (country / coast / city share the rule so wires connect across zones)
   poleSpec(k) {
     const s = k * POLE_SP + 6, z = zoneAt(s);
-    if (z === 'sakura' || z === 'galata' || z === 'town' || nearX(s, 6) || nearR(s, 34) || nearT(s, T_RIDGE + 12)) return null; // (the Galata Bridge: the tram line's portals carry its lamps; the Turkish town's wires are underground, as the concept's)
+    if (z === 'sakura' || z === 'galata' || z === 'town' || z === 'uchisar' || nearX(s, 6) || nearR(s, 34) || nearT(s, T_RIDGE + 12)) return null; // (the Galata Bridge: the tram line's portals carry its lamps; the Turkish town's wires are underground, as the concept's; Cappadocia's road has none, as its concept)
     const rw = zparam(s, 'rw');
     const u = z === 'city' ? rw + 0.45 : z === 'coast' ? rw + 1.35 : z === 'bosphorus' ? rw + 1.3 : z === 'mountain' ? -(rw + 1.45) : z === 'snow' ? rw + 2.9 : rw + 2.35;
     return { s, u, z };
@@ -627,7 +652,7 @@ export class World {
       const rows = Math.max(2, Math.ceil((xb - xa) / 3) + 1), cols = [-(rw + 1.5), -rw, -rw * 0.5, 0, rw * 0.5, rw, rw + 1.5];
       ground.gridN(rows, cols.length, (i, j) => {
         const ds = xa + ((xb - xa) * i) / (rows - 1), s = t.s + ds, u = cols[j], y = e + ridgeHr(ds, u);
-        if (t.border) { const wr = zoneW(s); return [f0.x + f0.fx * ds + f0.rx * u - ox, y, f0.z + f0.fz * ds + f0.rz * u - oz, 0, 1, 0, mod(s, S_WRAP), u, wr.city, wr.sakura + wr.galata, wSea(wr), wr.country, rw, 0, -1, wr.snow]; }
+        if (t.border) { const wr = zoneW(s); return [f0.x + f0.fx * ds + f0.rx * u - ox, y, f0.z + f0.fz * ds + f0.rz * u - oz, 0, 1, 0, mod(s, S_WRAP), u, wr.city, wr.sakura + wr.galata + wr.uchisar, wSea(wr), wr.country + wr.town, rw, 0, -1, wr.snow]; }
         return [f0.x + f0.fx * ds + f0.rx * u - ox, y, f0.z + f0.fz * ds + f0.rz * u - oz, 0, 1, 0, mod(s, S_WRAP), u, w4[0], w4[1], w4[2], w4[3], rw, 0, -1];
       });
       // the tube, seen from inside (faces point inwards)
@@ -663,13 +688,13 @@ export class World {
     const hk = (a, b) => { const h = Math.sin(a * 12.9898 + b * 78.233 + t.k * 37.719) * 43758.5453; return h - Math.floor(h); };
     const mix3 = (p, q, k) => [p[0] + (q[0] - p[0]) * k, p[1] + (q[1] - p[1]) * k, p[2] + (q[2] - p[2]) * k];
     const CB = [0.5, 0.5, 0.47], BEAM = [0.55, 0.53, 0.47], CAP = [0.6, 0.6, 0.57], RING = [0.58, 0.58, 0.55], mulRing = [0.42, 0.42, 0.4];
-    let snowP = false; // (a border tunnel's mouth in the snow country)
-    const cellCol = (zi, yi) => { const h = hk(zi, yi); return snowP ? mix3([0.86, 0.88, 0.93], [0.74, 0.77, 0.83], h) : autumnT ? mix3([0.26, 0.29, 0.08], [0.42, 0.3, 0.09], h) : mix3([0.22, 0.29, 0.08], [0.36, 0.36, 0.12], h); };
+    let snowP = false, uchP = false; // (a border tunnel's mouth in the snow country; in Cappadocia's tuff, W5)
+    const cellCol = (zi, yi) => { const h = hk(zi, yi); return snowP ? mix3([0.86, 0.88, 0.93], [0.74, 0.77, 0.83], h) : uchP ? mix3([0.8, 0.68, 0.55], [0.7, 0.58, 0.46], h) : autumnT ? mix3([0.26, 0.29, 0.08], [0.42, 0.3, 0.09], h) : mix3([0.22, 0.29, 0.08], [0.36, 0.36, 0.12], h); };
     const autumnT = w.mountain > 0.5, HW = WT + 2.6, LAT = 2.6;
     for (const sd of [-1, 1]) {
       const sp = t.s + sd * T_HALF, xp = sd * (T_HALF + 0.08);
       if (sp < s0 || sp >= s1) continue;
-      snowP = !!t.border && zoneW(sp).snow > 0.5;
+      snowP = !!t.border && zoneW(sp).snow > 0.5; uchP = !!t.border && zoneW(sp).uchisar > 0.5;
       const zs = [];
       for (const o of NEAR) if (o >= 1.44) zs.push(rw + o, -(rw + o));
       for (const a of FAR) if (a > rw + 3.5 && a < rw + 21) zs.push(a, -a);
@@ -762,6 +787,9 @@ export class World {
       for (const side of [-1, 1]) {
         const u = side * (rw + r.range(minU, 50)), q = r();
         const kind = autumn ? (q < 0.5 ? 'maple' : q < 0.8 ? 'cedar' : 'ginkgo') : t.border && zoneW(s).snow > 0.5 ? (q < 0.65 ? 'snowcedar' : 'birch') : (q < 0.65 ? 'pine' : 'broad');
+        // (on Cappadocia's side of its border, W5: its bare trees, sparse, over a ridge of its tuff (the ground shader); their own
+        // random numbers, so every other ridge's trees stay as they were)
+        if (t.border && zoneW(s).uchisar > 0.5) { const ur = rng(Math.floor(hash2(Math.round(s * 10), side > 0 ? 7301 : 7303) * 4294967295)); if (ur() < 0.3) P.tree(G, onGround(s, u, -0.3, ur() * 6, false), 'bare', ur, ur.range(0.85, 1.2)); continue; }
         P.tree(G, onGround(s, u, -0.3, r() * 6, false), kind, r, r.range(0.9, 1.3));
       }
     }
@@ -912,7 +940,7 @@ export class World {
         else if (z === 'sakura') { u = rw + 2.68 + r() * 1.3; dens = 0.55; fl = 0.3; }
         else if (z === 'coast') { if (side < 0) continue; u = rw + 0.95 + r() * 1.7; dens = 0.75; fl = 0.18; }
         else if (z === 'bosphorus') { if (side < 0) continue; u = rw + 4.25 + r() * 0.3; dens = 0.35; fl = 0.25; } // (at the foot of the gardens' railings)
-        else if (z === 'snow' || z === 'galata' || z === 'town') continue;
+        else if (z === 'snow' || z === 'galata' || z === 'town' || z === 'uchisar') continue; // (Cappadocia's: placeUchisar)
         else if (z === 'mountain') { u = side < 0 ? rw + 1.0 + r() * 0.35 : rw + 0.25 + r() * 0.2; dens = side < 0 ? 0.55 : 0.18; fl = 0.12; sc = 0.85; }
         else { if (nearSide(s, 5)) continue; u = rw + 3.02 + r() * 0.1; dens = 0.1; fl = 0.08; sc = 0.65; }
         if (r() > dens) continue;
@@ -1542,6 +1570,103 @@ export class World {
         P.flagPole(G, matAt(sf, side * (rwAt(sf) + 3.2), road(sf) + 0.15), 10);
         for (let u = rwAt(sf) + TOWN_SW + 4 + tr() * 3; u < 75; u += tr.range(7, 11)) P.tree(G, matAt(tl.s + 5 + tr() * 3, side * u, road(sf) + 0.14, tr() * 6, false), 'broad', tr, tr.range(0.95, 1.2));
       } }
+  }
+  /** Kapadokya (W5): the Göreme → Uçhisar road, as its concept painting has it (ref/world/cappadocia_uchisar.png, after the real
+   *  road's Street View): along the verges clumps of dry golden grass and grey-mauve dry shrubs on the sandy plain, bare trees
+   *  near the road and further out, the soft tuff rising in rounded ridges (the ground: path.js uchTuff), and the fairy chimneys
+   *  in groups, near the road (some with their cave doors and windows towards it), further out on the ridges and far off; a
+   *  Turkish flag on its pole by the road now and then, a road sign for Uçhisar. Its opening view (UCH_HERO, where ?env=uchisar
+   *  starts) laid out as the concept: the big chimney with its caves ahead-left, the flag at the left verge, a bare tree before
+   *  the left ridge and a bigger one on the right. On random numbers of its own (Japan's chunks never draw them); the chimneys'
+   *  groups on fixed anchors along the road, each built whole by the chunk its anchor falls in */
+  *placeUchisar(G, c, s0, s1, matAt, onGround, road, rwAt, H, ox, oz) {
+    const uw = s => zoneW(s).uchisar;
+    if (uw(s0) < 0.25 && uw(s1) < 0.25) return;
+    const ur = rng(Math.floor(hash2(c, 7001) * 4294967295)), path = this.path, f = {};
+    // (where it is: out of the town from its weight's half (the town's blocks end there), growing in to its full scenery by 0.9;
+    // clear of the border tunnel's ridge at its far end)
+    const ok = (s, m = 6) => uw(s) > 0.5 && !nearB(s, T_RIDGE + m), dens = s => sstep(0.5, 0.9, uw(s));
+    const z0 = s0 - zoneL(s0), hero = s => { const l = zoneL(s); return l > UCH_HERO[0] && l < UCH_HERO[1] && zoneAt(s) === 'uchisar' && zoneAt(z0 + 10) === 'uchisar'; };
+    // (the chimneys first: their footprints, [s, u, radius], keep the trees, the shrubs and the grass out of them)
+    const foot = [], clear = (s, u, m) => foot.every(([s2, u2, r2]) => Math.hypot(s - s2, u - u2) > r2 + m);
+    // the fairy chimneys, in groups on fixed anchors along the road (each its own random numbers): near the road (some with their
+    // caves), further out on the ridges, and far off
+    G.tuff.setM(IDENT);
+    for (const side of [-1, 1]) {
+      for (const [sp, j, u0, du, hLo, hHi, nMax, skip, caveP] of UCH_BANDS) {
+        for (let k = Math.ceil((s0 - sp) / sp); k * sp - sp < s1; k++) {
+          const q = rng(Math.floor(hash2(k * 4 + (side > 0 ? 1 : 0), 7011 + Math.round(u0)) * 4294967295));
+          const sa = k * sp + (q() - 0.5) * j; if (sa < s0 || sa >= s1) continue;
+          if (q() < skip || !ok(sa, 25) || hero(sa) || q() > dens(sa)) continue;
+          const n = 1 + Math.floor(q() * nMax), ua = u0 + q() * du;
+          for (let i = 0; i < n; i++) {
+            const s = sa + (i ? q.range(-1, 1) * (5 + 2 * i) : 0), u = side * (ua + (i ? q.range(-0.6, 1) * (4 + 2 * i) : 0));
+            if (!ok(s, 25)) continue;
+            const h = q.range(hLo, hHi) * (i ? q.range(0.6, 0.95) : 1);
+            this.uchChimney(G, s, u, h, q, side, caveP, matAt, H, -1, 0, u0 < 40 ? 0 : u0 < 100 ? 1 : 2, foot);
+          }
+        }
+        yield;
+      }
+    }
+    // the opening view, as the concept has it (at every pass: its layout there)
+    if (zoneAt(z0 + 10) === 'uchisar') for (const [l, u, kind, a, b, nc] of UCH_HERO_P) {
+      const s = z0 + l; if (s < s0 || s >= s1) continue;
+      const hq = rng(7051 + Math.round(l * 10));
+      if (kind === 'chim') this.uchChimney(G, s, u, a, hq, Math.sign(u), 0, matAt, H, b, nc, 0, foot);
+      else if (kind === 'tree') P.tree(G, onGround(s, u, -0.15, a, false), 'bare', hq, b);
+      else if (kind === 'bush') P.dryBush(G, onGround(s, u, 0, a, false), hq, b);
+      else if (kind === 'flag') P.flagPole(G, onGround(s, u, 0, -Math.PI / 2), a); // (flying away from the road: seen broadside, as painted)
+    }
+    // the verges: dry grass in clumps on the plain (thickest a metre or three past the sandy shoulder), dry shrubs among them
+    for (const side of [-1, 1]) {
+      G.cap.setM(IDENT);
+      // (as the concept's: the verge thick with them a metre or so past the sandy shoulder, thinning out over the next few metres;
+      // fewer on phones)
+      const gs = P.bankStep() > 1 ? 1.5 : 1;
+      for (let s = s0 + ur() * 0.3; s < s1; s += ur.range(0.16, 0.38) * gs) {
+        if (!ok(s) || ur() > 0.35 + 0.65 * dens(s)) continue;
+        path.at(s, f); const rw = rwAt(s), u = side * (rw + 1.7 + Math.pow(ur(), 1.6) * 10), y = f.y + groundOffsetMix(s, u, f.y, rw);
+        if (!clear(s, u, 0.4)) continue;
+        P.dryGrass(G, f.x + f.rx * u - ox, y, f.z + f.rz * u - oz, ur() * 3.14, ur, ur.range(1.0, 1.6));
+      }
+      for (let s = s0 + ur() * 2; s < s1; s += ur.range(1.2, 2.6) * gs) { // (further out, fewer, as far as the near ridges)
+        if (!ok(s) || ur() > dens(s)) continue;
+        path.at(s, f); const rw = rwAt(s), u = side * (rw + 9 + ur() * 18), y = f.y + groundOffsetMix(s, u, f.y, rw);
+        if (!clear(s, u, 0.4)) continue;
+        P.dryGrass(G, f.x + f.rx * u - ox, y, f.z + f.rz * u - oz, ur() * 3.14, ur, ur.range(1.1, 1.7));
+      }
+      yield;
+      for (let s = s0 + ur() * 6; s < s1; s += ur.range(5, 13)) {
+        if (!ok(s) || hero(s) || ur() > dens(s)) continue;
+        const u = side * (rwAt(s) + 2.2 + Math.pow(ur(), 1.3) * 18); if (!clear(s, u, 1)) continue;
+        P.dryBush(G, onGround(s, u, 0, ur() * 6.28, false), ur, ur.range(0.8, 1.35));
+      }
+      // bare trees: near the road (one every ~20–45 m a side), and a few further out
+      for (let s = s0 + ur() * 20; s < s1; s += ur.range(20, 45)) {
+        if (!ok(s, 10) || hero(s) || ur() > dens(s)) continue;
+        const u = side * (rwAt(s) + ur.range(3.5, 16)); if (!clear(s, u, 2.5)) continue;
+        P.tree(G, onGround(s, u, -0.15, ur() * 6.28, false), 'bare', ur, ur.range(0.85, 1.2));
+      }
+      for (let s = s0 + ur() * 25; s < s1; s += ur.range(25, 55)) {
+        if (!ok(s, 10) || ur() > dens(s)) continue;
+        const u = side * ur.range(24, 110); if (!clear(s, u, 2.5)) continue;
+        P.tree(G, onGround(s, u, -0.2, ur() * 6.28, false), 'bare', ur, ur.range(0.9, 1.3));
+      }
+      yield;
+    }
+    // a flag on its pole at the left verge now and then; the road sign for Uçhisar on the right
+    { const sf = Math.floor((s0 + CH / 2) / 700) * 700 + 470; if (sf >= s0 && sf < s1 && ok(sf, 20) && !hero(sf)) P.flagPole(G, onGround(sf, -(rwAt(sf) + 2.4), 0, -Math.PI / 2), 9.5); }
+    { const sd = Math.floor((s0 + CH / 2) / 1500) * 1500 + 620; if (sd >= s0 && sd < s1 && ok(sd, 20)) P.capSign(G, matAt(sd, rwAt(sd) + 2.2, road(sd) - 0.06), 'trSignUch', 2.9, 2.2, 1.1); }
+  }
+  /** a fairy chimney (props.js fairyChimney) standing on the ground at (s, u): its foot at the lowest of the ground round it (its
+   *  skirt sunk into the rest), facing the road; h its height, caveP the chance of cave openings in it (0: none), v its profile
+   *  (−1: any; a few of those are capped pillars), nc that many openings instead, lod 0 near … 2 far (fewer sides round it) */
+  uchChimney(G, s, u, h, q, side, caveP, matAt, H, v = -1, nc = 0, lod = 0, foot = null) {
+    const R = h * q.range(0.27, 0.36), y = Math.min(H(s, u), H(s - R, u), H(s + R, u), H(s, u - R), H(s, u + R)) - 0.15;
+    if (foot) foot.push([s, u, R * 1.25]);
+    const cap = v < 0 && q() < 0.08, caves = nc || (q() < caveP ? 1 + Math.floor(q() * (h > 8 ? 4 : 3)) : 0);
+    P.fairyChimney(G, matAt(s, u, y, q.range(-0.4, 0.4), true), q, { h, r: R, v: v < 0 ? Math.floor(q() * 3) : v, cap, side, caves, lod });
   }
   *placeCountry(G, r, s0, s1, matAt, onGround, road, rwAt, H) {
     for (const side of [-1, 1]) {

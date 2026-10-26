@@ -138,6 +138,13 @@ export const U = {
   // the coast's and the country's asphalt as painted (roadCol; main.js, by the time of day under a clear sky, 1 under grey
   // skies): its tint near the eye and from ~22 m on
   uRoadN: { value: new THREE.Vector3(1, 1, 1) }, uRoadF: { value: new THREE.Vector3(1, 1, 1) },
+  // Cappadocia's ground (W5, the ground shader's uchGround; main.js, by the time of day): the albedo of its sandy shoulder and plain,
+  // of its dry grass, and of its pale tuff (linear)
+  uUchS: { value: new THREE.Vector3(0.52, 0.43, 0.38) }, uUchG: { value: new THREE.Vector3(0.16, 0.115, 0.075) }, uUchT: { value: new THREE.Vector3(0.95, 0.84, 0.74) },
+  // …and its fairy chimneys' painted tones (tuffMaterial; main.js, ungraded each frame): how much of them (a clear sky), the
+  // ochre tuff's shade, middle and light, the pale tuff of their feet in the light, and the basalt cap's share of them
+  uTfK: { value: 0 }, uTfS: { value: new THREE.Color() }, uTfM: { value: new THREE.Color() }, uTfL: { value: new THREE.Color() }, uTfP: { value: new THREE.Color() },
+  uTfC: { value: new THREE.Vector3(0.42, 0.4, 0.42) },
   uTunA: { value: new THREE.Vector3(0, -1e4, 0) },  // the current tunnel's axis (portal to portal, at road level)
   uTunB: { value: new THREE.Vector3(0, -1e4, 0) },
   uTunR: { value: 4.6 },
@@ -335,13 +342,14 @@ vec3 roadCol(float s, float u, float rw){
 #ifdef Z_CITY
   c *= mix(vec3(1.0), vec3(0.70, 0.68, 0.80), city); // the shopping street's asphalt: darker, a violet grey, as in the city painting
 #endif
-#if defined(Z_COAST) || defined(Z_COUNTRY) || defined(Z_GAL) || defined(Z_TOWN)
+#if defined(Z_COAST) || defined(Z_COUNTRY) || defined(Z_GAL) || defined(Z_TOWN) || defined(Z_UCH)
   // the coast's and the country's asphalt as painted: in the sun a cool blue-grey, darkest near the eye and paler and
   // bluer with distance (uRoadN → uRoadF over 3–22 m; by the time of day under a clear sky, 1 under grey skies). It tints
   // the sunlight on it only (gRoadT, after the lights): its shade keeps the painted navy it had. (The Galata Bridge's too:
-  // the concept's road is the same blue-grey; and the Turkish town's, W4, in the country's channel)
+  // the concept's road is the same blue-grey; and the Turkish town's, W4, in the country's channel; and Cappadocia's, W5, in
+  // the avenue's, as the bridge's)
   float wR = vZW.z + vZW.w;
-#ifdef Z_GAL
+#if defined(Z_GAL) || defined(Z_UCH)
   wR += vZW.y;
 #endif
   if (wR > 0.004) gRoadT = mix(vec3(1.0), mix(uRoadN, uRoadF, smoothstep(3.0, 22.0, distance(vWP, cameraPosition))), wR);
@@ -650,6 +658,38 @@ vec3 galGround(float s, float u, float rw){
   return L(vec3(0.74, 0.74, 0.72)) * (0.9 + 0.1 * fbm2(p));
 }
 #endif
+#ifdef Z_UCH
+// Cappadocia (W5): the Göreme → Uçhisar road's land, as its concept painting has it (drawn in the cherry avenue's weight channel:
+// the two never meet). Beside the asphalt a strip of pale pinkish sand (its shoulder), then the plain of sand under patches of dry
+// golden grass, thicker away from the road (the painted meadow's strokes in straw: their lightness kept, their green gone), and
+// the soft pale tuff rising out of it in rounded ridges, a peach-cream streaked a little down its slopes (vRV: path.js TUFF, its
+// share of the height). The tints by the time of day (uUchS, uUchG, uUchT: main.js)
+uniform vec3 uUchS, uUchG, uUchT;
+vec3 uchTuffCol(vec2 p){
+  float n = vnoise(p * vec2(0.07, 0.05) + 4.1);
+  // runnels down the slopes: a stretched noise along the fall line, weighted in where it is steep enough to have one (read
+  // unconditionally: the noise takes screen derivatives)
+  vec2 fl = vWN.xz; float st = length(fl);
+  float run = vnoise(vec2(dot(vWP.xz, vec2(-fl.y, fl.x)) / max(st, 0.05) * 0.9, vWY * 0.25));
+  return uUchT * (0.92 + 0.14 * n) * (1.0 - 0.22 * smoothstep(0.15, 0.55, st) * smoothstep(0.45, 0.8, run));
+}
+vec3 uchGround(float s, float u, float rw){
+  vec2 p = vec2(s, u); float a = abs(u);
+  vec3 sand = uUchS * (0.9 + 0.2 * vnoise(p * vec2(0.08, 0.12) + 3.3)) * (0.95 + 0.08 * vnoise(p * vec2(1.3, 2.1)));
+  if (a < rw + 0.32) return sand * mix(0.62, 1.0, smoothstep(rw + 0.02, rw + 0.3, a)); // (the asphalt's crumbling edge)
+#ifdef F_PAINT
+  vec3 f = fieldTex(2.5); float fl = dot(f, vec3(0.3, 0.59, 0.11)) * 4.2;
+  vec3 grass = uUchG * (0.4 + 0.75 * clamp(fl, 0.0, 1.3));
+#else
+  float fl = 0.75 + 0.5 * vnoise(p * vec2(2.2, 6.5) + 5.9);
+  vec3 grass = uUchG * fl;
+#endif
+  // (the shoulder bare; the grass in patches from a metre past it, all but covering the plain further out)
+  float gm = smoothstep(0.25, 0.5, vnoise(p * 0.11 + 9.1) * 0.7 + fl * 0.22 + 0.15 * smoothstep(rw + 6.0, rw + 25.0, a)) * smoothstep(rw + 1.4, rw + 2.4, a);
+  vec3 c = mix(sand, grass, gm);
+  return mix(c, uchTuffCol(p), smoothstep(0.05, 0.55, vRV)); // (the tuff's share of the height: vRV, path.js TUFF)
+}
+#endif
 vec3 countryGround(float s, float u, float rw){
   vec2 p = vec2(s, u); float a = abs(u);
   // the verge under its bank of tall grass (the clump cards, chunks.js placeBanks): dense grass in its own shade right
@@ -760,6 +800,9 @@ vec3 groundAlbedo(){
 #ifdef Z_GAL
   if (vZW.y > 0.004) c += vZW.y * galGround(s, u, rw);
 #endif
+#ifdef Z_UCH
+  if (vZW.y > 0.004) c += vZW.y * uchGround(s, u, rw); // (Cappadocia, W5, in the avenue's channel: they never meet)
+#endif
 #ifdef Z_COAST
 #ifdef Z_BOS
   if (vZW.z > 0.004) c += vZW.z * bosGround(s, u, rw);
@@ -793,6 +836,9 @@ vec3 groundAlbedo(){
 #endif
 #if defined(K_BORDER) && defined(Z_SNOW)
   if (vZS > 0.004 && rdg > 0.0) c = mix(c, snowGround(s, u, rw), vZS * rdg); // (a border tunnel's ridge in the snow country: under snow)
+#endif
+#if defined(K_BORDER) && defined(Z_UCH)
+  if (vZW.y > 0.004 && rdg > 0.0) c = mix(c, uchTuffCol(vec2(s, u)), vZW.y * rdg); // (…and in Cappadocia, W5: a ridge of its tuff)
 #endif
   return c * (0.92 + 0.16*fbm2(vec2(s, u)*0.015));
 }
@@ -855,7 +901,7 @@ if (uWet > 0.01 || wetS > 0.01) {
 
 // zones → shader defines. Each chunk's ground uses a variant compiled with only the zones (and features) it contains:
 // one uber-shader with every zone's code ran ~4× slower even when the branches were skipped.
-const ZDEF = { city: 'Z_CITY', sakura: 'Z_SAKURA', coast: 'Z_COAST', country: 'Z_COUNTRY', mountain: 'Z_MTN', snow: 'Z_SNOW', bosphorus: 'Z_BOS', galata: 'Z_GAL', town: 'Z_TOWN' };
+const ZDEF = { city: 'Z_CITY', sakura: 'Z_SAKURA', coast: 'Z_COAST', country: 'Z_COUNTRY', mountain: 'Z_MTN', snow: 'Z_SNOW', bosphorus: 'Z_BOS', galata: 'Z_GAL', town: 'Z_TOWN', uchisar: 'Z_UCH' };
 /** The painted meadow's texture (painted.js loadFieldTexture), once it has loaded: set it before the world is built, and
  *  the ground variants with the country, the coast or the cherry avenue take it (F_PAINT); without it the country keeps
  *  its procedural paddies, and the coast's slope and the avenue's lawns their procedural grass. */
@@ -879,7 +925,7 @@ export function groundDefines(zones) {
   if (zones.includes('city') || zones.includes('country')) d.K_XING = '';
   if (zones.includes('country') || zones.includes('sakura')) d.K_RIVER = '';
   if (zones.includes('mountain') || zones.includes('coast') || zones.includes('border')) d.K_RIDGE = '';
-  if (FIELD.tex && (zones.includes('country') || zones.includes('coast') || zones.includes('sakura') || zones.includes('bosphorus'))) d.F_PAINT = '';
+  if (FIELD.tex && (zones.includes('country') || zones.includes('coast') || zones.includes('sakura') || zones.includes('bosphorus') || zones.includes('uchisar'))) d.F_PAINT = ''; // (Cappadocia's dry grass: its strokes in straw)
   return d;
 }
 const GROUND_VARIANTS = new Map();
@@ -897,6 +943,7 @@ export function groundMaterial(defines = groundDefines(Object.keys(ZDEF)), key =
   m.onBeforeCompile = sh => {
     sh.uniforms.uSkyHor = U.uSkyHor; sh.uniforms.uSkyZen = U.uSkyZen; sh.uniforms.uWet = U.uWet; sh.uniforms.uSakWet = U.uSakWet; sh.uniforms.uNight = U.uNight; sh.uniforms.uSunDir = U.uSunDir; sh.uniforms.uSunCol = U.uSunCol;
     for (const k of ['uReflTex', 'uReflOn', 'uReflRes', 'uHorizon', 'uReflK', 'uRoadN', 'uRoadF']) sh.uniforms[k] = U[k];
+    if (defines.Z_UCH !== undefined) for (const k of ['uUchS', 'uUchG', 'uUchT']) sh.uniforms[k] = U[k];
     if (paint) { sh.uniforms.uFieldTex = { value: FIELD.tex }; for (const k of ['uFieldK', 'uFieldC', 'uFieldCo', 'uFieldSa', 'uFieldM', 'uFieldBo']) sh.uniforms[k] = FIELD[k]; }
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
@@ -912,7 +959,7 @@ float gWater = 0.0; vec3 gRoadT = vec3(1.0);
 ${GROUND}`, WET + MIRROR, false);
     sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
 diffuseColor.rgb *= groundAlbedo();`).replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
-#if defined(Z_COAST) || defined(Z_COUNTRY) || defined(Z_GAL) || defined(Z_TOWN)
+#if defined(Z_COAST) || defined(Z_COUNTRY) || defined(Z_GAL) || defined(Z_TOWN) || defined(Z_UCH)
 reflectedLight.directDiffuse *= gRoadT;
 #endif`);
   };
@@ -1104,6 +1151,54 @@ if (uBkK > 0.001) { // a bright day: the painting's tones by how much sun reache
   return m;
 }
 
+/** 凝灰岩: Cappadocia's soft tuff (W5: its fairy chimneys, props.js fairyChimney / G.tuff: smooth lathes), as its concept painting
+ *  paints them, in the bark's way (barkMaterial):
+ *  - a soft ramp over N·L (the sun wraps round each cone: a broad lit flank, a soft terminator, a warm shade);
+ *  - under a clear sky the painting's own tones (U.uTf…, ungraded each frame in main.js, by the time of day), by how much sun
+ *    reaches a point (the ramp and the shadows): a mauve-brown shade, an ochre middle, a warm sandy light; towards the foot the
+ *    pale cream tuff of the ridges they rise from (vColor.b: how far up), the basalt cap dark (vColor.r);
+ *  - painted strokes, periodic round each lathe (uv.x: the angle, so its seam never shows; uv.y: metres up): soft runnels
+ *    wandering down it, a few strata across it, a soft mottling, fading out with distance; its lobes' hollows a little darker
+ *    (vColor.g).
+ *  Grey skies and rain: the same shapes in their own colours under the scene's light. */
+export function tuffMaterial(lite = false) {
+  const m = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: gradGhibli(-0.3, 0.45, 0.0) });
+  if (lite) m.defines = { TF_LITE: '' }; // (phones: no strata)
+  m.onBeforeCompile = sh => {
+    for (const k of ['uTfK', 'uTfS', 'uTfM', 'uTfL', 'uTfP', 'uTfC']) sh.uniforms[k] = U[k];
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vTf;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvTf = uv;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+uniform float uTfK; uniform vec3 uTfS, uTfM, uTfL, uTfP, uTfC; varying vec2 vTf;`)
+      .replace('#include <color_fragment>', /* glsl */`
+// runnels wandering down it (11 round any chimney), fading to their average once under a pixel or two; a soft mottling
+float tfW = vnoise(vec2(vTf.y * 0.22, 3.0 + 7.0 * vColor.r)), tfPh = vTf.x * 11.0 + tfW * 4.0;
+float tfRun = (0.5 + 0.5 * sin(tfPh)) * (1.0 - smoothstep(0.7, 1.8, fwidth(tfPh)));
+float tfMot = vnoise(vec2(cos(vTf.x), sin(vTf.x)) * 1.8 + vec2(vTf.y * 0.35, -vTf.y * 0.2));
+float tf = (0.9 + 0.2 * tfMot) * (1.0 - 0.15 * smoothstep(0.55, 0.95, tfRun));
+#ifndef TF_LITE
+{ float sy = vTf.y * 1.9 + tfW * 3.0; tf *= 1.0 - 0.08 * smoothstep(0.82, 0.97, sin(sy)) * (1.0 - smoothstep(0.4, 1.2, fwidth(sy))); } // (strata)
+#endif
+float tfFoot = 1.0 - smoothstep(0.03, 0.28, vColor.b);
+diffuseColor.rgb = mix(mix(${glslC('#c99b6e')}, ${glslC('#e9d6bd')}, tfFoot), ${glslC('#5e4c43')}, vColor.r) * vColor.g * tf;`)
+      .replace('#include <aomap_fragment>', /* glsl */`#include <aomap_fragment>
+#if NUM_DIR_LIGHTS > 0
+if (uTfK > 0.001) { // a clear sky: the painting's tones by how much sun reaches here (the soft ramp and the shadows)
+  vec3 tfW3 = vec3(0.2126, 0.7152, 0.0722);
+  float lf = clamp(dot(reflectedLight.directDiffuse, tfW3) / max(dot(directionalLights[0].color * BRDF_Lambert(diffuseColor.rgb), tfW3), 1e-6), 0.0, 1.0);
+  vec3 pc = mix(mix(uTfS, uTfM, smoothstep(0.0, 0.4, lf)), uTfL, smoothstep(0.5, 0.92, lf));
+  pc = mix(pc, uTfP * mix(0.6, 1.0, smoothstep(0.0, 0.85, lf)), tfFoot) * mix(vec3(1.0), uTfC, vColor.r);
+  reflectedLight.directDiffuse = mix(reflectedLight.directDiffuse, pc * tf * vColor.g, uTfK); reflectedLight.indirectDiffuse *= 1.0 - uTfK;
+}
+#endif`);
+    worldShade(sh); // (last: its declarations, vnoise among them, go first)
+  };
+  m.customProgramCacheKey = () => (lite ? 'tuff-v1-lite' : 'tuff-v1');
+  return m;
+}
+
 /** give any built-in material the drifting cloud shadows (car, train …) so everything darkens together */
 // (one cache key for all of them: the patch is identical, so materials with the same settings share a program)
 export function withCloudShadow(m) { m.onBeforeCompile = sh => worldShade(sh); m.customProgramCacheKey = () => 'cs'; return m; }
@@ -1291,6 +1386,20 @@ export function makeAtlasW(M, worldTex) {
       .replace('#include <project_vertex>', '#include <project_vertex>\nif (abs(aoD * 255.0 - 1.0) < 0.5) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);');
   };
   M.atlasWDepth.customProgramCacheKey = () => 'atlaswdepth-v2';
+}
+/** Cappadocia's atlas material (W5): its own cells (textures.js buildCapAtlas: the caves' doors and windows, the dry grass, the bare
+ *  crowns' twigs, its road sign) drawn as the atlas material draws its cells (cut out at alpha 0.5, contact shading, the cave
+ *  windows lit one by one at dusk, the cloud shadows), from a texture pair of their own; both faces of its cards (their normals
+ *  kept on the back: they shade as the ground or the crown they stand for), casting no shadow. One of Turkey's programs: made with
+ *  them (main.js). (A fourth read in the world variant's own program moved a few far pixels of the Turkish town's street) */
+export function makeCapAtlas(M, tex) {
+  const m = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: GRAD, map: tex.map, emissiveMap: tex.emissive, emissive: 0xffffff, emissiveIntensity: 0.1, alphaTest: 0.5, side: THREE.DoubleSide });
+  m.onBeforeCompile = sh => {
+    sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>', THREE.ShaderChunk.normal_fragment_begin.replace('gl_FrontFacing ? 1.0 : - 1.0', '1.0'));
+    contactAO(sh); windowLights(sh); worldShade(sh);
+  };
+  m.customProgramCacheKey = () => 'capatlas-v1';
+  M.capAtlas = m;
 }
 export function makeMaterials(atlasTex, folTex, paintTex) {
   const M = {};

@@ -577,21 +577,25 @@ export function treeGhibliSakura(G, M, r, s = 1, ave = false) {
 // avenue's cherry trees, built facing the road (chunks.js placeSakura)
 const TREE_BUILDERS = { broad: (G, M, r, s) => (GHIBLI.cells ? treeGhibli : treeBroad)(G, M, r, s), sakura: (G, M, r, s) => (GHIBLI.bcells ? treeGhibliSakura(G, M, r, s) : treeSakura(G, M, r, s)),
   sakuraAve: (G, M, r, s) => (GHIBLI.bcells ? treeGhibliSakura(G, M, r, s, true) : treeSakura(G, M, r, s)), pine: treePine, cedar: treeCedar, maple: treeMaple, ginkgo: treeGinkgo, birch: treeBirch, snowcedar: treeSnowCedar,
-  cypress: treeCypress, plane: (G, M, r, s) => (GHIBLI.cells ? treeGhibliPlane : treeBroad)(G, M, r, s) };
+  cypress: treeCypress, plane: (G, M, r, s) => (GHIBLI.cells ? treeGhibliPlane : treeBroad)(G, M, r, s), bare: (G, M, r, s) => treeBare(G, M, r, s) };
 const TCACHE = {};
 function treeTemplate(kind, v) {
   const key = kind + v;
   let t = TCACHE[key];
   if (!t) {
-    const g = { color: new GB(), foliage: new GB(), leaf: new GB({ uv: true }), gleaf: new GB({ uv: true, off: true }), gblossom: new GB({ uv: true, off: true }), bark: new GB({ uv: true, idx: true }) };
+    const g = { color: new GB(), foliage: new GB(), leaf: new GB({ uv: true }), gleaf: new GB({ uv: true, off: true }), gblossom: new GB({ uv: true, off: true }), bark: new GB({ uv: true, idx: true }),
+      twig: new GB({ uv: true }) }; // (Cappadocia's bare crowns, W5: its own atlas's cards)
     TREE_BUILDERS[kind](g, new THREE.Matrix4(), rng(1000 + v * 77 + kind.length * 13), 1);
-    t = TCACHE[key] = { c: g.color.toArrays(), f: g.foliage.toArrays(), l: g.leaf.toArrays(), g: g.gleaf.toArrays(), b: g.gblossom.toArrays(), k: g.bark.toArrays() };
+    t = TCACHE[key] = { c: g.color.toArrays(), f: g.foliage.toArrays(), l: g.leaf.toArrays(), g: g.gleaf.toArrays(), b: g.gblossom.toArrays(), k: g.bark.toArrays(), w: g.twig.toArrays() };
   }
   return t;
 }
 /** build every tree template up front (during loading, once the cluster atlas has loaded or failed), so no chunk build
  *  ever pays for one mid-drive */
-export function warmTrees() { for (const kind in TREE_BUILDERS) for (let v = 0; v < 4; v++) treeTemplate(kind, v); }
+export function warmTrees() { for (const kind in TREE_BUILDERS) if (kind !== 'bare' || A.has('uchTwig0')) for (let v = 0; v < 4; v++) treeTemplate(kind, v); }
+/** …and Cappadocia's bare trees (W5), whose crowns are its own atlas's cells: once it is built (a Japanese start: Turkey's lazy
+ *  load, main.js trLazy; else warmTrees) */
+export function warmBare() { for (let v = 0; v < 4; v++) treeTemplate('bare', v); }
 export function tree(G, M, kind, r, s = 1) {
   const t = treeTemplate(kind, Math.floor(r() * 4));
   const m = M.clone().scale(new THREE.Vector3(s, s, s)); m.groundY = M.groundY;
@@ -599,6 +603,7 @@ export function tree(G, M, kind, r, s = 1) {
   if (t.g.n) G.gleaf.stamp(t.g, m);
   if (t.b.n) G.gblossom.stamp(t.b, m);
   if (t.k.n) G.bark.stamp(t.k, m);
+  if (t.w.n && G.cap) G.cap.stamp(t.w, m); // (the bare crowns' twigs: Cappadocia's atlas's cells, W5)
 }
 
 // ------------------------------------------------------------------ buildings
@@ -1868,4 +1873,146 @@ export function townBack(G, M, r, s) {
   c.box(x0 - 0.04, H, -0.3, -x0 + 0.04, H + 0.4, 0.2, TW_CORN, null, { ny: mulC(tint, 0.85) });
   c.quad([-w / 2, H + 0.4, d], [w / 2, H + 0.4, d], [w / 2, H + 0.4, 0.2], [-w / 2, H + 0.4, 0.2], PAL.roof);
   if (r() < 0.45) { const xs = (r() - 0.5) * w * 0.5, zs = d * 0.4; c.box(xs - 1.0, H + 0.4, zs, xs + 1.0, H + 1.5, zs + 0.08, C('#2e3d5c')); c.box(xs - 1.0, H + 1.45, zs + 0.3, xs + 1.0, H + 1.85, zs + 0.7, C('#e6e6e2')); }
+}
+
+// ------------------------------------------------------------------ Cappadocia (W5)
+/** sides round a fairy chimney, near (lod 0) … far (2): more on desktops (a near one stands a fifth of the frame tall), fewer on
+ *  phones */
+const tuffSides = lod => (LEAF_D > 0.7 ? [18, 13, 9] : [12, 10, 8])[lod || 0];
+// fairy chimneys' profiles: [height / H, radius / R] from under the ground (its skirt sunk into it) up to the tip: a bell with
+// rounded shoulders and a pointed head (as the concept's near one), a straighter cone, and a squatter one with a rounder head
+const CONE_PROFS = [
+  [[-0.05, 1.16], [0, 1.12], [0.05, 1.07], [0.12, 1.02], [0.22, 0.95], [0.33, 0.85], [0.44, 0.73], [0.55, 0.6], [0.65, 0.48], [0.74, 0.37], [0.82, 0.27], [0.89, 0.18], [0.94, 0.11], [0.975, 0.06], [0.993, 0.03], [1, 0]],
+  [[-0.05, 1.2], [0, 1.15], [0.04, 1.04], [0.1, 0.94], [0.2, 0.84], [0.32, 0.72], [0.45, 0.6], [0.58, 0.48], [0.7, 0.37], [0.8, 0.27], [0.88, 0.19], [0.94, 0.12], [0.975, 0.065], [0.993, 0.03], [1, 0]],
+  [[-0.05, 1.18], [0, 1.14], [0.06, 1.08], [0.14, 1.0], [0.26, 0.9], [0.4, 0.78], [0.53, 0.66], [0.65, 0.54], [0.75, 0.43], [0.84, 0.32], [0.91, 0.22], [0.955, 0.14], [0.982, 0.07], [0.996, 0.03], [1, 0]],
+];
+// …and a pillar under a dark basalt cap (as Paşabağ's, W6; a few here): the body narrowing to a neck, the cap flaring out over it
+const CAP_PROF = [[-0.05, 1.3], [0, 1.24], [0.05, 1.05], [0.14, 0.88], [0.3, 0.74], [0.46, 0.66], [0.6, 0.6], [0.7, 0.56], [0.76, 0.55], [0.775, 0.62], [0.79, 0.9], [0.82, 0.94], [0.88, 0.8], [0.93, 0.56], [0.97, 0.3], [0.99, 0.12], [1, 0]];
+const CAP_T = 0.77; // (where the cap begins on CAP_PROF)
+/** the profile's radius (÷ R) at height t (÷ H) */
+const profAt = (pr, t) => { for (let i = 1; i < pr.length; i++) if (t <= pr[i][0]) { const [t0, r0] = pr[i - 1], [t1, r1] = pr[i]; return r0 + ((r1 - r0) * (t - t0)) / (t1 - t0); } return 0; };
+/** A fairy chimney (peri bacası) of soft tuff, as the concept paints them along its road (ref/world/cappadocia_uchisar.png): a lathe
+ *  of rings up a gently leaning axis, each ring's radius wobbling round it (lobes and runnels that drift a little as they rise),
+ *  from a flared skirt sunk into the ground up a cone to a rounded tip; or (sp.cap) a pillar under a dark basalt cap. Written into
+ *  G.tuff (an indexed GB drawn in materials.js tuffMaterial: uv x the angle round it, y metres up; its colour a key: r the stone
+ *  (0 tuff, 1 the cap), g the light (its lobes' hollows darker), b how far up it (0 at the foot … 1 at the tip)). Normals from
+ *  the grid's neighbours. Cave openings cut into the side that faces the road and the oncoming car (sp.caves: doors at the foot,
+ *  windows higher, some lit at dusk: the world atlas's cells, casting no shadow). sp: h, r, v (its profile), cap, side (u's sign),
+ *  caves. M: from matAt with faceRoad (−z towards the road) */
+export function fairyChimney(G, M, r, sp) {
+  const k = G.tuff; if (!k) return;
+  k.setM(M);
+  const H = sp.h, R = sp.r, pr = sp.cap ? CAP_PROF : CONE_PROFS[sp.v % CONE_PROFS.length], n = tuffSides(sp.lod), w = n + 1;
+  const lx = r.range(-0.05, 0.05) * H, lz = r.range(-0.05, 0.05) * H; // (the axis leans a little: x(t) = lx·t²)
+  const A2 = r.range(0.03, 0.08), A3 = r.range(0.02, 0.06), A5 = r.range(0.015, 0.035), P2 = r() * 6.28, P3 = r() * 6.28, P5 = r() * 6.28, TW = r.range(-0.8, 0.8);
+  const wob = (th, t) => 1 + A2 * Math.sin(2 * th + P2 + TW * t) + A3 * Math.sin(3 * th + P3 - TW * t) + A5 * Math.sin(5 * th + P5 + 2 * TW * t);
+  const K = pr.length, V = new Float32Array(K * w * 3), WB = new Float32Array(K * w);
+  for (let i = 0; i < K; i++) {
+    const t = pr[i][0], y = t * H, rr = pr[i][1] * R, ax = lx * t * Math.abs(t), az = lz * t * Math.abs(t);
+    for (let j = 0; j <= n; j++) {
+      const th = ((j % n) / n) * Math.PI * 2, wv = wob(th, t), o = (i * w + j) * 3;
+      V[o] = ax + Math.sin(th) * rr * wv; V[o + 1] = y; V[o + 2] = az + Math.cos(th) * rr * wv; WB[i * w + j] = wv;
+    }
+  }
+  const base = k.n, P = (i, j) => (Math.min(K - 1, Math.max(0, i)) * w + ((j + n) % n)) * 3;
+  for (let i = 0; i < K; i++) for (let j = 0; j <= n; j++) {
+    const o = (i * w + j) * 3, a = P(i, j - 1), b = P(i, j + 1), c = P(i - 1, j), d = P(i + 1, j);
+    const tx = V[b] - V[a], ty = V[b + 1] - V[a + 1], tz = V[b + 2] - V[a + 2], ux = V[d] - V[c], uy = V[d + 1] - V[c + 1], uz = V[d + 2] - V[c + 2];
+    let nx = ty * uz - tz * uy, ny = tz * ux - tx * uz, nz = tx * uy - ty * ux; const l = Math.hypot(nx, ny, nz);
+    if (l < 1e-6) { nx = 0; ny = 1; nz = 0; } // (the tip)
+    const t = pr[i][0], cap = sp.cap && t >= CAP_T ? 1 : 0, g = Math.min(1, Math.max(0.74, 0.86 + 1.8 * (WB[i * w + j] - 1)));
+    k.vtx(V[o], V[o + 1], V[o + 2], nx, ny, nz, ((j % n === 0 && j > 0) ? n : j % n) / n * Math.PI * 2, V[o + 1], [cap, g, Math.max(0, t)]);
+  }
+  const nt = (K - 1) * n * 6; if (k.ni + nt > k.icap) k.growI(k.ni + nt);
+  for (let i = 0; i < K - 1; i++) for (let j = 0; j < n; j++) { // (wound outward: tube()'s order, θ running from +z towards +x)
+    const a = base + i * w + j, b = a + 1, cc = a + w, dd = cc + 1, o = k.ni;
+    k.I[o] = a; k.I[o + 1] = b; k.I[o + 2] = dd; k.I[o + 3] = a; k.I[o + 4] = dd; k.I[o + 5] = cc; k.ni += 6;
+  }
+  // the cave openings: on the side towards the road (−z) and the oncoming car (−x on the right of the road, +x on the left: its
+  // frame turned round there), each a flat quad 6 cm out from the surface, along it and up its slope
+  if (!sp.caves) return;
+  const at = G.cap; at.setM(M);
+  const th0 = sp.side > 0 ? 1.25 * Math.PI : 0.75 * Math.PI;
+  for (let q = 0; q < sp.caves; q++) {
+    const door = q === 0 && r() < 0.7, t = door ? r.range(0.0, 0.03) : r.range(0.16, sp.cap ? 0.55 : 0.5), th = th0 + r.range(-0.55, 0.55);
+    const ww = door ? r.range(0.8, 1.05) : r.range(0.42, 0.6), hh = door ? ww * 1.75 : ww * 1.45, yc = t * H;
+    const rr = profAt(pr, t) * R * wob(th, t), rr2 = profAt(pr, Math.min(1, t + 0.05)) * R * wob(th, t + 0.05), slope = (rr - rr2) / (0.05 * H);
+    const ax = lx * t * t, az = lz * t * t, sx = Math.sin(th), cz = Math.cos(th);
+    let nx = sx, ny = slope, nz = cz; const l = Math.hypot(nx, ny, nz); nx /= l; ny /= l; nz /= l;
+    const Tx = cz, Tz = -sx, ux = ny * Tz, uy = nz * Tx - nx * Tz, uz = -ny * Tx; // (U = n × T: up its slope)
+    const cx = ax + sx * rr + nx * 0.06, cy = yc + ny * 0.06 + (door ? 0.05 : 0), czz = az + cz * rr + nz * 0.06, hw = ww / 2;
+    const p0 = [cx - Tx * hw, cy, czz - Tz * hw], p1 = [cx + Tx * hw, cy, czz + Tz * hw];
+    const p2 = [p1[0] + ux * hh, p1[1] + uy * hh, p1[2] + uz * hh], p3 = [p0[0] + ux * hh, p0[1] + uy * hh, p0[2] + uz * hh];
+    const lit = !door && r() < 0.45, cell = door ? 'uchDoor' + Math.floor(r() * 3) : 'uchWin' + Math.floor(r() * 3) + (lit ? 'L' : '');
+    at.litV = lit ? homeLit(at, th * 3.1 + q, t * 17 + H) : 0;
+    at.quad(p0, p1, p2, p3, W1, uv(cell)); at.litV = 0;
+  }
+}
+/** the bare trees of the steppe (W5), as the concept paints them along its road: a short dark trunk forking low into three or four
+ *  limbs that spread wide and up, their branches dividing into a broad dome of fine twigs (the foliage atlas's bare crown, in
+ *  clumps at the branches' ends and over the top), not a leaf on them. Smooth bark (G.bark: dark grey-brown, between the
+ *  cherries' and the broadleaf trees' tones) */
+const BARK_BARE = [0.6, 0.95, 1], BARK_BARE_IN = [0.6, 0.85, 1], TWIG_C = [1, 1, 1], TWIG_D = [0.74, 0.72, 0.76];
+/** n cards of the bare crown's twigs (Cappadocia's atlas's uchTwig cells: textures.js) round (cx, cy, cz), R across, their normals
+ *  out of the crown's centre `cen` (it shades as one soft dome), lighter towards its top (yr); into G.twig (the tree templates':
+ *  stamped into the chunk's Cappadocia atlas mesh, G.cap, casting no shadow) */
+function twigCards(G, cen, cx, cy, cz, R, n, r, yr) {
+  const g = G.twig; if (!g) return;
+  for (let i = 0; i < n; i++) {
+    const uvr = uv('uchTwig' + Math.floor(r() * 2)), a = r() * Math.PI, ca = Math.cos(a), sa = Math.sin(a), h = (R * (0.9 + r() * 0.35)) / 2;
+    const ox = cx + (r() - 0.5) * R * 0.5, oy = cy + (r() - 0.5) * R * 0.3, oz = cz + (r() - 0.5) * R * 0.5, tl = (r() - 0.5) * 0.5;
+    const P = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([u, v]) => [ox + ca * u * h + tl * v * h * sa, oy + v * h * 0.8, oz + sa * u * h - tl * v * h * ca]);
+    const N = P.map(p => { const x = p[0] - cen[0], y = p[1] - cen[1] + 0.4, z = p[2] - cen[2], l = Math.hypot(x, y, z) || 1; return [x / l, y / l, z / l]; });
+    const Cc = P.map(p => mixC(TWIG_D, TWIG_C, Math.max(0, Math.min(1, (p[1] - yr[0]) / (yr[1] - yr[0])))));
+    g.card(P, N, uvr, Cc);
+  }
+}
+export function treeBare(G, M, r, s = 1) {
+  const k = G.bark; k.setM(M); if (G.twig) G.twig.setM(M);
+  const bh = r.range(1.3, 2.1) * s, r0 = r.range(0.13, 0.19) * s, top = [r.range(-0.2, 0.2) * s, bh, r.range(-0.2, 0.2) * s];
+  const q = rng(Math.floor(bh * 7919 + r0 * 104729) + 53), [nT, nL, nB, , nS] = barkSides();
+  trunkTube(k, top, r0, r0 * 0.78, [q.range(-0.08, 0.08) * s, q.range(-0.08, 0.08) * s], nT, BARK_BARE);
+  const W = r.range(2.6, 3.5) * s, Hc = r.range(4.8, 6.4) * s, cen = [top[0], (bh + Hc) * 0.62, top[2]], yr = [bh, Hc];
+  const nl = 3 + (r() < 0.55 ? 1 : 0), a0 = r() * 6.283;
+  for (let i = 0; i < nl; i++) {
+    const a = a0 + (i / nl) * 6.283 + r.range(-0.4, 0.4), ca = Math.cos(a), sa = Math.sin(a), out = r.range(0.42, 0.62);
+    const tip = [top[0] + ca * W * out, bh + (Hc - bh) * r.range(0.42, 0.62), top[2] + sa * W * out];
+    const b0 = [top[0] + ca * r0 * 0.3, bh - r0 * 0.45, top[2] + sa * r0 * 0.3];
+    const mid = [top[0] + (tip[0] - top[0]) * 0.42, bh + (tip[1] - bh) * 0.55, top[2] + (tip[2] - top[2]) * 0.42];
+    const T = steps(nS), P = curve(b0, mid, tip, T);
+    k.tube(P, taper(T, r0 * 0.64, r0 * 0.26), nL, BARK_BARE, SEAM_UP);
+    for (let j = 0, nb = 2 + (r() < 0.45 ? 1 : 0); j < nb; j++) {
+      const p = P[Math.max(1, nS - 1 - j)], b = (j - (nb - 1) / 2) * r.range(0.55, 0.95), L = r.range(1.0, 1.7) * s;
+      const e = [p[0] + Math.cos(a + b) * L * 0.85, p[1] + L * r.range(0.4, 0.75), p[2] + Math.sin(a + b) * L * 0.85], T2 = steps(3);
+      k.tube(curve(p, [(p[0] + e[0]) / 2, (p[1] + e[1]) / 2 + 0.12 * L, (p[2] + e[2]) / 2], e, T2), taper(T2, r0 * 0.24, 0.02 * s), nB, BARK_BARE_IN, SEAM_UP);
+      if (j < 2) twigCards(G, cen, e[0], e[1] + 0.2 * s, e[2], r.range(1.5, 2.0) * s, 1, r, yr);
+    }
+  }
+  twigCards(G, cen, top[0], Hc * 0.84, top[2], W * 1.1, 1, r, yr);
+}
+/** a dry shrub of the steppe (W5): three crossed cards of the bare crowns' twigs (Cappadocia's atlas's uchTwig cells, G.cap), low
+ *  and wide, grey-mauve as the concept's, shaded like the ground, casting no shadow */
+export function dryBush(G, M, r, s = 1) {
+  const at = G.cap, uvr = uv('uchTwig' + Math.floor(r() * 2)), h = (0.8 + r() * 0.4) * s, w = h * 1.5, a0 = r() * Math.PI, UP = [0, 1, 0], N = [UP, UP, UP, UP], lo = [0.62, 0.6, 0.64], hi = [1, 1, 1];
+  at.setM(M);
+  for (let i = 0; i < 3; i++) {
+    const a = a0 + (i * Math.PI) / 3, cx = (Math.cos(a) * w) / 2, cz = (Math.sin(a) * w) / 2;
+    at.card([[-cx, -0.08, -cz], [cx, -0.08, cz], [cx, h, cz], [-cx, h, -cz]], N, uvr, [lo, lo, hi, hi]);
+  }
+}
+/** a road sign on a post whose panel is a cell of Cappadocia's atlas (W5: trSign's, G.cap), facing the drive (local −x) */
+export function capSign(G, M, cell, h = 2.4, w = 0.7, hgt = 0.7) {
+  G.color.setM(M); G.color.cyl(0, 0, 0, 0.04, 0.04, h + hgt / 2, 6, PAL.metal);
+  G.cap.setM(M); nxq(G.cap, -0.05, -w / 2, w / 2, h - hgt / 2, h + hgt / 2, cell);
+}
+/** a clump of the steppe's dry golden grass (W5): two crossed cards of a cell of Cappadocia's atlas (textures.js uchGrass, G.cap),
+ *  twice as wide as tall, shaded like the ground, casting no shadow (an alpha-tested caster in the shadow pass costs more than it
+ *  shows). Written straight into chunk space (x, y, z), turned by a */
+const DG_LO = [0.66, 0.62, 0.6], DG_HI = [1, 1, 1], DG_N = [[0, 1, 0], [0, 1, 0], [0, 1, 0], [0, 1, 0]];
+export function dryGrass(G, x, y, z, a, r, s = 1) {
+  const at = G.cap, c = uv('uchGrass' + Math.floor(r() * 3)), h = (0.4 + r() * 0.3) * s, w = h * 2.1;
+  for (const b of [a, a + Math.PI / 2]) {
+    const cx = (Math.cos(b) * w) / 2, cz = (Math.sin(b) * w) / 2;
+    at.card([[x - cx, y - 0.05, z - cz], [x + cx, y - 0.05, z + cz], [x + cx, y + h, z + cz], [x - cx, y + h, z - cz]], DG_N, c, [DG_LO, DG_LO, DG_HI, DG_HI]);
+  }
 }

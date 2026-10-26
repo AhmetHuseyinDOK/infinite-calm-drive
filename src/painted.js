@@ -635,6 +635,9 @@ export function makePaintedBand(atlas, post, fog, alias = null, haze0 = 0, winZo
     /** rows without the skirt under their foot (the far fields, hazed into the world's far edge) and without the haze over it:
      *  over open water the sea plane runs on up to them instead ({ zone: true }: the Golden Horn up to the old city's quays) */
     noSkirt: {},
+    /** rows with their own tones by the time of day ({ zone: todTones(…) with shade, mid, lit, ch }: Cappadocia's, W5, read from its
+     *  concept's repaints); the rest take BAND_TONES */
+    tones: {},
     turnTo(z, h) { if (AH[z] === undefined) return; const r = AH[z] + (h / (Math.PI * 2)) * per; this.rot[z] = r - Math.floor(r); },
     /** m: { a, b, t } from path.zoneMix; camH: the camera's height above the ground; fogD / fogFar: the scene fog's
      *  exp² density and draw distance */
@@ -665,7 +668,7 @@ export function makePaintedBand(atlas, post, fog, alias = null, haze0 = 0, winZo
       u.uLightC.value.setRGB(_bc.x / (NOON_SUN.r + NOON_SKY.r), _bc.y / (NOON_SUN.g + NOON_SKY.g), _bc.z / (NOON_SUN.b + NOON_SKY.b)); u.uPaint.value = paint;
       // the time of day's tones (all but a bright day's: the painting itself), under a clear sky; the far city's windows
       u.uTone.value = paintSky() * (1 - paint);
-      if (u.uTone.value > 0) { const P = BAND_TONES.at(TOD.t); u.uBS.value.fromArray(P.rgb('shade')).divideScalar(255); u.uBM.value.fromArray(P.rgb('mid')).divideScalar(255); u.uBH.value.fromArray(P.rgb('lit')).divideScalar(255); u.uBCh.value = P.rgb('ch')[0]; }
+      if (u.uTone.value > 0) { const P = (this.tones[(A && B ? (t < 0.5 ? za : zb) : za || zb)] || BAND_TONES).at(TOD.t); u.uBS.value.fromArray(P.rgb('shade')).divideScalar(255); u.uBM.value.fromArray(P.rgb('mid')).divideScalar(255); u.uBH.value.fromArray(P.rgb('lit')).divideScalar(255); u.uBCh.value = P.rgb('ch')[0]; }
       const nk = Math.min(Math.max((TOD.night - 0.15) / 0.65, 0), 1), wn = nk * nk * (3 - 2 * nk) * (1 - 0.6 * TOD.overcast);
       u.uWin.value.set(wins.has(m.a) ? wn * PAINT_TOD.on : 0, wins.has(m.b) ? wn * PAINT_TOD.on : 0); // (Turkey's: the Asian shore's houses, the old city's)
       // (alpha-tested, without MSAA: a passing haze while one zone's skyline gives way to the next, or to the rings)

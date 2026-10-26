@@ -78,6 +78,21 @@ const UCH_HERO_P = [[157.5, -13.8, 'chim', 5.4, 0, 4], [166, -9.8, 'chim', 4.2, 
   [150, -6.4, 'tree', 0.6, 0.92], [146.5, 9.4, 'tree', 1.2, 1.15], [196, -7.5, 'tree', 2.0, 0.8], [214, 8.6, 'tree', 4.1, 0.85], [240, 7.8, 'tree', 3.3, 0.8],
   [143, -5.6, 'bush', 0.3, 1.25], [147, -9.4, 'bush', 1.7, 1.1], [152, 6.2, 'bush', 0.9, 1.0], [158, 12.5, 'bush', 2.2, 1.3], [171, 7.4, 'bush', 2.8, 0.9],
   [158.5, -5.3, 'flag', 7.2, 0]];
+/** Paşabağ's fairy chimneys (W6), in bands along each side: [anchors every … m, their jitter, nearest u, how far further out, heights
+ *  (m), the most in a group, the share of anchors left empty, the chance of cave openings, of two or three heads on one mound] */
+const PAS_BANDS = [[52, 18, 13, 14, 12, 19, 2, 0.3, 0.7, 0.35], [48, 18, 32, 34, 11, 17, 2, 0.45, 0.4, 0.35], [44, 16, 75, 100, 9, 15, 3, 0.55, 0.1, 0.3]];
+/** its opening view (W6: 125–330 m into the zone, where ?env=pasabag starts: the car at 140), as the concept: [m into the zone, u,
+ *  kind, …]: a chimney: its height, its kind ('two': a mound with two heads), how many cave openings; a tree, a shrub: its turn and
+ *  scale; a boulder: its scale; the tourists: how many. Placed where the chase camera sees them where the concept paints them */
+const PAS_HERO = [125, 330];
+// (a chimney's last field: the seed of its random numbers, picked for the shape the concept paints)
+const PAS_HERO_P = [[172, 24.0, 'chim', 19.5, 'mush', 6, 9171], [178, -21, 'chim', 19.5, 'two', 3, 9231], [216, 28, 'chim', 15, 'hat', 3, 9611], [223, 37.5, 'chim', 19, 'hat', 2, 9681],
+  [262, -30, 'chim', 16, 'hat', 0, 10071], [290, 34, 'chim', 17, 'mush', 2, 10351], [305, -24, 'chim', 18, 'two', 1, 10501],
+  [147.2, -8.2, 'tree', 0.8, 0.9], [142.5, 7.9, 'tree', 3.6, 0.8], [154, 6.8, 'tree', 2.2, 0.75], [188, -11.6, 'tree', 1.4, 1.15], [196, 9.5, 'tree', 5.1, 0.8],
+  [214, 10.5, 'tree', 0.3, 0.75], [232, -10, 'tree', 2.8, 0.85], [246, 8.6, 'tree', 4.4, 0.7],
+  [170, -8.4, 'rock', 0.8], [183, -10.5, 'rock', 0.6], [190, -8.9, 'rock', 1.0], [176, -13.2, 'rock', 1.3],
+  [150, -6.4, 'bush', 1.2, 0.9], [165, 7.5, 'bush', 0.4, 0.8],
+  [199, 4.0, 'people', 9]];
 /** true within m metres of a river (keeps houses, poles and trees out of the channel) */
 const nearR = (s, m) => { const r = riverNear(s); return !!r && Math.abs(s - r.s) < m; };
 
@@ -193,7 +208,8 @@ export class World {
       tetra: new GB({ uv: true, ao: true, idx: true }), // (the coast's tetrapods, in their own soft concrete; indexed)
       bark: new GB({ uv: true, ao: true, idx: true }), // (the painted trees' trunks and limbs: smooth tubes in their own soft bark)
       tuff: new GB({ uv: true, idx: true }), // (Cappadocia's fairy chimneys, W5: smooth lathes in their own soft tuff)
-      cap: new GB({ uv: true, ao: true, lit: true }) }; // (…and its own atlas's cells: the caves, the dry grass, the bare crowns, its sign)
+      cap: new GB({ uv: true, ao: true, lit: true }), // (…and its own atlas's cells: the caves, the dry grass, the bare crowns, its sign)
+      pgrass: new GB({ uv: true, ao: true }) }; // (Paşabağ's tall grass, W6, in a texture and a material of its own)
     const ground = new GroundB(), shore = { rows: [], puffs: [] }, river = [];
     G.lamps = []; // lights that can light the car: chunk-local x, y, z, power … (props.js lampAt)
     const f = {}, f2 = {};
@@ -202,9 +218,10 @@ export class World {
     const H = (s, u) => { path.at(s, f2); const rw = zparam(s, 'rw'); return f2.y + groundOffsetMix(s, u, f2.y, rw); };
     // (the Galata Bridge in the avenue's channel: materials.js Z_GAL; the Turkish town in the country's, W4: Z_TOWN. Over the
     // bridge's hand-over to the town the ground changes over at the landing itself, not over the blend: path.js townLanding)
-    // (and Cappadocia, W5, in the avenue's: they never meet either)
+    // (and Cappadocia, W5, in the avenue's: they never meet either; Paşabağ, W6, there too, its own share in the snow's slot as well:
+    // the ground shader's Z_UCH tells its land from Uçhisar's by it)
     const zw4 = s => { const w = zoneW(s), tl = w.town > 0 && w.galata > 0 ? townLanding(s) : null; if (tl) { const g = s < tl.s ? 1 : 0; w.galata = g; w.town = 1 - g; }
-      return [w.city, w.sakura + w.galata + w.uchisar, wSea(w), w.country + w.town, w.snow]; };
+      return [w.city, w.sakura + w.galata + w.uchisar + w.pasabag, wSea(w), w.country + w.town, w.snow + w.pasabag]; };
     const world = (s, u, y) => { path.at(s, f); return [f.x + f.rx * u - ox, y, f.z + f.rz * u - oz]; };
     const matAt = (s, u, y, extraYaw = 0, faceRoad = true) => {
       path.at(s, f);
@@ -224,7 +241,7 @@ export class World {
       // (on the Galata Bridge, W3: a column at its deck's far edge, its face 0.4 m wide; a chunk all on the bridge, away from
       // the border tunnel's headland, has only its deck and its faces down to the water: the open sea draws the rest)
       const gal = Math.max(zoneW(s0).galata, zoneW(s1).galata) > 0, deck = gal && Math.min(zoneW(s0).galata, zoneW(s1).galata) > 0.999 && !nearB(s0 + CH / 2, 2 * T_RIDGE + CH);
-      const uch = Math.max(zoneW(s0).uchisar, zoneW(s1).uchisar) > 0 && !nearB(s0 + CH / 2, 2 * T_RIDGE + CH);
+      const uch = Math.max(zoneW(s0).uchisar + zoneW(s0).pasabag, zoneW(s1).uchisar + zoneW(s1).pasabag) > 0 && !nearB(s0 + CH / 2, 2 * T_RIDGE + CH); // (Cappadocia's, W5, W6)
       const far = gal ? [...FAR.filter(v => v <= GAL_R), GAL_R + 0.4, ...FAR.filter(v => v > GAL_R && !deck)] : uch ? UCH_FAR : FAR;
       const cols = (() => { const right = [0, ...NEAR]; const out = right.map(n => n); far.forEach(v => out.push(v - rwMid)); return out; })();
       // columns: −far … −rw | rw … far, expressed as offsets from the road edge (a deck: its left side to the walkway's face)
@@ -354,6 +371,7 @@ export class World {
     yield;
     yield* this.placeTown(G, c, s0, s1, matAt, road, rwAt);
     yield* this.placeUchisar(G, c, s0, s1, matAt, onGround, road, rwAt, H, ox, oz);
+    yield* this.placePasabag(G, c, s0, s1, matAt, onGround, road, rwAt, H, ox, oz);
     yield* this.placeCountry(G, r, s0, s1, matAt, onGround, road, rwAt, H);
     yield* this.placeMountain(G, r, s0, s1, matAt, onGround, road, rwAt, H);
     yield* this.placeSnow(G, r, s0, s1, matAt, onGround, road, rwAt, H);
@@ -373,6 +391,7 @@ export class World {
     add(G.bark.build(), this.M.bark, true, true, 0, 'leaf'); yield; // (the trees' bark: shown as far as their crowns; plain depth material too)
     if (this.M.tuff) add(G.tuff.build(), this.M.tuff, true, true); // (Cappadocia's fairy chimneys, W5: plain depth material)
     if (this.M.capAtlas) add(G.cap.build(), this.M.capAtlas, false, true); // (…and its atlas's cards: casting no shadow)
+    if (this.M.pasGrass) add(G.pgrass.build(), this.M.pasGrass, false, true); // (…and Paşabağ's tall grass, W6: casting no shadow)
     add(G.foliage.build(), this.M.foliage, true, true);
     add(G.leaf.build(), this.M.leaf, true, true, 0, 'leaf');
     if (this.M.gleaf) { const m = add(G.gleaf.build(), this.M.gleaf, true, true, 0, 'leaf'); if (m) m.customDepthMaterial = this.M.gleafDepth; } // (clusters face the sun in the shadow pass)
@@ -405,7 +424,7 @@ export class World {
   // poles + overhead wires (country / coast / city share the rule so wires connect across zones)
   poleSpec(k) {
     const s = k * POLE_SP + 6, z = zoneAt(s);
-    if (z === 'sakura' || z === 'galata' || z === 'town' || z === 'uchisar' || nearX(s, 6) || nearR(s, 34) || nearT(s, T_RIDGE + 12)) return null; // (the Galata Bridge: the tram line's portals carry its lamps; the Turkish town's wires are underground, as the concept's; Cappadocia's road has none, as its concept)
+    if (z === 'sakura' || z === 'galata' || z === 'town' || z === 'uchisar' || z === 'pasabag' || nearX(s, 6) || nearR(s, 34) || nearT(s, T_RIDGE + 12)) return null; // (the Galata Bridge: the tram line's portals carry its lamps; the Turkish town's wires are underground, as the concept's; Cappadocia's road has none, as its concept)
     const rw = zparam(s, 'rw');
     const u = z === 'city' ? rw + 0.45 : z === 'coast' ? rw + 1.35 : z === 'bosphorus' ? rw + 1.3 : z === 'mountain' ? -(rw + 1.45) : z === 'snow' ? rw + 2.9 : rw + 2.35;
     return { s, u, z };
@@ -652,7 +671,7 @@ export class World {
       const rows = Math.max(2, Math.ceil((xb - xa) / 3) + 1), cols = [-(rw + 1.5), -rw, -rw * 0.5, 0, rw * 0.5, rw, rw + 1.5];
       ground.gridN(rows, cols.length, (i, j) => {
         const ds = xa + ((xb - xa) * i) / (rows - 1), s = t.s + ds, u = cols[j], y = e + ridgeHr(ds, u);
-        if (t.border) { const wr = zoneW(s); return [f0.x + f0.fx * ds + f0.rx * u - ox, y, f0.z + f0.fz * ds + f0.rz * u - oz, 0, 1, 0, mod(s, S_WRAP), u, wr.city, wr.sakura + wr.galata + wr.uchisar, wSea(wr), wr.country + wr.town, rw, 0, -1, wr.snow]; }
+        if (t.border) { const wr = zoneW(s); return [f0.x + f0.fx * ds + f0.rx * u - ox, y, f0.z + f0.fz * ds + f0.rz * u - oz, 0, 1, 0, mod(s, S_WRAP), u, wr.city, wr.sakura + wr.galata + wr.uchisar + wr.pasabag, wSea(wr), wr.country + wr.town, rw, 0, -1, wr.snow + wr.pasabag]; }
         return [f0.x + f0.fx * ds + f0.rx * u - ox, y, f0.z + f0.fz * ds + f0.rz * u - oz, 0, 1, 0, mod(s, S_WRAP), u, w4[0], w4[1], w4[2], w4[3], rw, 0, -1];
       });
       // the tube, seen from inside (faces point inwards)
@@ -694,7 +713,7 @@ export class World {
     for (const sd of [-1, 1]) {
       const sp = t.s + sd * T_HALF, xp = sd * (T_HALF + 0.08);
       if (sp < s0 || sp >= s1) continue;
-      snowP = !!t.border && zoneW(sp).snow > 0.5; uchP = !!t.border && zoneW(sp).uchisar > 0.5;
+      snowP = !!t.border && zoneW(sp).snow > 0.5; uchP = !!t.border && zoneW(sp).uchisar + zoneW(sp).pasabag > 0.5;
       const zs = [];
       for (const o of NEAR) if (o >= 1.44) zs.push(rw + o, -(rw + o));
       for (const a of FAR) if (a > rw + 3.5 && a < rw + 21) zs.push(a, -a);
@@ -789,7 +808,7 @@ export class World {
         const kind = autumn ? (q < 0.5 ? 'maple' : q < 0.8 ? 'cedar' : 'ginkgo') : t.border && zoneW(s).snow > 0.5 ? (q < 0.65 ? 'snowcedar' : 'birch') : (q < 0.65 ? 'pine' : 'broad');
         // (on Cappadocia's side of its border, W5: its bare trees, sparse, over a ridge of its tuff (the ground shader); their own
         // random numbers, so every other ridge's trees stay as they were)
-        if (t.border && zoneW(s).uchisar > 0.5) { const ur = rng(Math.floor(hash2(Math.round(s * 10), side > 0 ? 7301 : 7303) * 4294967295)); if (ur() < 0.3) P.tree(G, onGround(s, u, -0.3, ur() * 6, false), 'bare', ur, ur.range(0.85, 1.2)); continue; }
+        if (t.border && zoneW(s).uchisar + zoneW(s).pasabag > 0.5) { const ur = rng(Math.floor(hash2(Math.round(s * 10), side > 0 ? 7301 : 7303) * 4294967295)); if (ur() < 0.3) P.tree(G, onGround(s, u, -0.3, ur() * 6, false), 'bare', ur, ur.range(0.85, 1.2)); continue; }
         P.tree(G, onGround(s, u, -0.3, r() * 6, false), kind, r, r.range(0.9, 1.3));
       }
     }
@@ -940,7 +959,7 @@ export class World {
         else if (z === 'sakura') { u = rw + 2.68 + r() * 1.3; dens = 0.55; fl = 0.3; }
         else if (z === 'coast') { if (side < 0) continue; u = rw + 0.95 + r() * 1.7; dens = 0.75; fl = 0.18; }
         else if (z === 'bosphorus') { if (side < 0) continue; u = rw + 4.25 + r() * 0.3; dens = 0.35; fl = 0.25; } // (at the foot of the gardens' railings)
-        else if (z === 'snow' || z === 'galata' || z === 'town' || z === 'uchisar') continue; // (Cappadocia's: placeUchisar)
+        else if (z === 'snow' || z === 'galata' || z === 'town' || z === 'uchisar' || z === 'pasabag') continue; // (Cappadocia's: placeUchisar, placePasabag)
         else if (z === 'mountain') { u = side < 0 ? rw + 1.0 + r() * 0.35 : rw + 0.25 + r() * 0.2; dens = side < 0 ? 0.55 : 0.18; fl = 0.12; sc = 0.85; }
         else { if (nearSide(s, 5)) continue; u = rw + 3.02 + r() * 0.1; dens = 0.1; fl = 0.08; sc = 0.65; }
         if (r() > dens) continue;
@@ -1667,6 +1686,127 @@ export class World {
     if (foot) foot.push([s, u, R * 1.25]);
     const cap = v < 0 && q() < 0.08, caves = nc || (q() < caveP ? 1 + Math.floor(q() * (h > 8 ? 4 : 3)) : 0);
     P.fairyChimney(G, matAt(s, u, y, q.range(-0.4, 0.4), true), q, { h, r: R, v: v < 0 ? Math.floor(q() * 3) : v, cap, side, caves, lod });
+  }
+  /** Paşabağ (W6): the road past its fairy chimneys, as its concept painting has it (ref/world/cappadocia_pasabag.png, after the real
+   *  road's Street View): tall dry golden grass thick on both verges past the gravel shoulders, bare trees near the road and further
+   *  out, pale tuff boulders, and the chimneys close along both sides, tall cream tuff under dark basalt caps, singly, in twos and
+   *  threes, now and then two or three heads on one mound (the Monks' Valley's), some with their cave doors and windows towards the
+   *  road; further out more of them, and far off; a little group of tourists at the roadside now and then. Its opening view (PAS_HERO,
+   *  where ?env=pasabag starts) laid out as the concept. On random numbers of its own (no other zone's chunks draw them); the chimneys'
+   *  groups on fixed anchors along the road, each built whole by the chunk its anchor falls in */
+  *placePasabag(G, c, s0, s1, matAt, onGround, road, rwAt, H, ox, oz) {
+    const pw = s => zoneW(s).pasabag;
+    if (pw(s0) < 0.25 && pw(s1) < 0.25) return;
+    const pr = rng(Math.floor(hash2(c, 7401) * 4294967295)), path = this.path, f = {};
+    // (where it is: from its weight's half in the hand-over from Uçhisar, growing in to its full scenery by 0.9; clear of the border
+    // tunnel's ridge at its far end)
+    const ok = (s, m = 6) => pw(s) > 0.5 && !nearB(s, T_RIDGE + m), dens = s => sstep(0.5, 0.9, pw(s));
+    const z0 = s0 - zoneL(s0), heroZ = zoneAt(z0 + 10) === 'pasabag', hero = s => { const l = zoneL(s); return heroZ && l > PAS_HERO[0] && l < PAS_HERO[1] && zoneAt(s) === 'pasabag'; };
+    const foot = [], clear = (s, u, m) => foot.every(([s2, u2, r2]) => Math.hypot(s - s2, u - u2) > r2 + m);
+    // (beyond the opening view, as far as it sees, the valley open but for its own chimneys, as the concept has it: no others in a
+    // wedge round the road ahead)
+    const view = (s, u0) => { const l = zoneL(s); return heroZ && zoneAt(s) === 'pasabag' && l >= PAS_HERO[1] && l < 900 && u0 < 0.16 * (l - 120); };
+    // the chimneys, in groups on fixed anchors along each side (each its own random numbers)
+    G.tuff.setM(IDENT);
+    for (const side of [-1, 1]) {
+      for (const [sp, j, u0, du, hLo, hHi, nMax, skip, caveP, multiP] of PAS_BANDS) {
+        for (let k = Math.ceil((s0 - sp) / sp); k * sp - sp < s1; k++) {
+          const q = rng(Math.floor(hash2(k * 4 + (side > 0 ? 1 : 0), 7411 + Math.round(u0)) * 4294967295));
+          const sa = k * sp + (q() - 0.5) * j; if (sa < s0 || sa >= s1) continue;
+          if (q() < skip || !ok(sa, 30) || hero(sa) || q() > dens(sa) || view(sa, u0)) continue;
+          const n = 1 + Math.floor(q() * nMax), ua = u0 + q() * du;
+          for (let i = 0; i < n; i++) {
+            const s = sa + (i ? q.range(-1, 1) * (8 + 3 * i) : 0), u = side * (ua + (i ? q.range(-0.5, 1) * (6 + 3 * i) : 0));
+            if (!ok(s, 30) || hero(s) || !clear(s, u, 2)) continue;
+            const h = q.range(hLo, hHi) * (i ? q.range(0.7, 0.95) : 1), x = q();
+            this.pasChim(G, s, u, h, q, side, q() < caveP ? 1 + Math.floor(q() * (h > 14 ? 5 : 3)) : 0, x < multiP ? 'multi' : x < multiP + 0.38 ? 'mush' : x < multiP + 0.58 ? 'hat' : x < 0.93 ? 'mush' : 'cone', matAt, H, u0 < 25 ? 0 : u0 < 60 ? 1 : 2, foot);
+          }
+        }
+        yield;
+      }
+    }
+    // the opening view, as the concept has it (at every pass: its layout there)
+    if (heroZ) for (const [l, u, kind, a, b, nc, sd] of PAS_HERO_P) {
+      const s = z0 + l; if (s < s0 || s >= s1) continue;
+      const hq = rng(sd || 7451 + Math.round(l * 10));
+      if (kind === 'chim') this.pasChim(G, s, u, a, hq, Math.sign(u), nc, b === 'two' ? 'two' : b, matAt, H, 0, foot);
+      else if (kind === 'tree') P.tree(G, onGround(s, u, -0.15, a, false), 'barePas', hq, b);
+      else if (kind === 'bush') P.dryBush(G, onGround(s, u, 0, a, false), hq, b, 0.55);
+      else if (kind === 'rock') { P.pasBoulder(G, onGround(s, u, 0, hq() * 6.28, false), hq, a); foot.push([s, u, 1.3 * a]); }
+      else if (kind === 'people') this.tourists(G, s, u, a, hq, matAt, H);
+    }
+    yield;
+    // the verges: tall dry grass thick from the gravel's edge, thinning out over the next few metres; a little further out more clumps,
+    // fewer (fewer on phones)
+    const gs = P.bankStep() > 1 ? 1.5 : 1;
+    for (const side of [-1, 1]) {
+      G.pgrass.setM(IDENT);
+      // (the verge's deep grass: thickest and darkest at the gravel's edge, as the concept's, lighter as it thins out)
+      for (let s = s0 + pr() * 0.2; s < s1; s += pr.range(0.16, 0.36) * gs) {
+        if (!ok(s) || pr() > 0.3 + 0.7 * dens(s)) continue;
+        path.at(s, f); const rw = rwAt(s), d = Math.pow(pr(), 1.9) * 8, u = side * (rw + 1.3 + d), y = f.y + groundOffsetMix(s, u, f.y, rw);
+        if (!clear(s, u, 0.3)) continue;
+        P.pasGrass(G, f.x + f.rx * u - ox, y, f.z + f.rz * u - oz, pr() * 3.14, pr, pr.range(1.0, 1.6), 0.72 + 0.28 * Math.min(1, d / 6));
+      }
+      for (let s = s0 + pr() * 1.2; s < s1; s += pr.range(1.0, 2.2) * gs) {
+        if (!ok(s) || pr() > dens(s)) continue;
+        path.at(s, f); const rw = rwAt(s), u = side * (rw + 8 + pr() * 24), y = f.y + groundOffsetMix(s, u, f.y, rw);
+        if (!clear(s, u, 0.4)) continue;
+        P.pasGrass(G, f.x + f.rx * u - ox, y, f.z + f.rz * u - oz, pr() * 3.14, pr, pr.range(1.0, 1.5));
+      }
+      yield;
+      // small dark dry shrubs dotted over the fields, as painted
+      G.cap.setM(IDENT);
+      for (let s = s0 + pr() * 6; s < s1; s += pr.range(5, 12)) {
+        if (!ok(s) || hero(s) || pr() > dens(s)) continue;
+        const u = side * (rwAt(s) + 4 + Math.pow(pr(), 1.2) * 36); if (!clear(s, u, 1)) continue;
+        P.dryBush(G, onGround(s, u, 0, pr() * 6.28, false), pr, pr.range(0.6, 1.1), 0.55);
+      }
+      // pale tuff boulders scattered over the valley floor (more on the left, at the hillside's foot)
+      for (let s = s0 + pr() * 10; s < s1; s += pr.range(8, 22) * (side < 0 ? 1 : 1.8)) {
+        if (!ok(s) || hero(s) || pr() > dens(s)) continue;
+        const u = side * (rwAt(s) + pr.range(4, 16)); if (!clear(s, u, 1.5)) continue;
+        const sc = pr.range(0.5, 1.4); P.pasBoulder(G, onGround(s, u, 0, pr() * 6.28, false), pr, sc); foot.push([s, u, 1.3 * sc]);
+      }
+      // bare trees: near the road (one every ~25–55 m a side), and a few further out
+      for (let s = s0 + pr() * 25; s < s1; s += pr.range(25, 55)) {
+        if (!ok(s, 10) || hero(s) || pr() > dens(s)) continue;
+        const u = side * (rwAt(s) + pr.range(3.5, 14)); if (!clear(s, u, 2.5)) continue;
+        P.tree(G, onGround(s, u, -0.15, pr() * 6.28, false), 'barePas', pr, pr.range(0.8, 1.2));
+      }
+      for (let s = s0 + pr() * 30; s < s1; s += pr.range(30, 70)) {
+        if (!ok(s, 10) || pr() > dens(s)) continue;
+        const u = side * pr.range(24, 100); if (!clear(s, u, 3)) continue;
+        P.tree(G, onGround(s, u, -0.2, pr() * 6.28, false), 'barePas', pr, pr.range(0.85, 1.25));
+      }
+      yield;
+    }
+    // a little group of tourists at the roadside now and then (beside the opening view's), on the right
+    { const sd = Math.floor((s0 + CH / 2) / 750) * 750 + 560; if (sd >= s0 && sd < s1 && ok(sd, 20) && !hero(sd)) this.tourists(G, sd, rwAt(sd) + 1.6, 4 + Math.floor(pr() * 5), pr, matAt, H); }
+  }
+  /** one of Paşabağ's fairy chimneys (props.js pasChimney) standing on the ground at (s, u): its foot at the lowest of the ground round
+   *  it (its skirt sunk into the rest), facing the road; h its height, caves that many openings, kind 'mush' | 'hat' | 'cone', or
+   *  'multi' (two or three heads of either cap on one mound) / 'two' (the opening view's: a tall mushroom and a smaller one beyond
+   *  it), lod 0 near … 2 far. Its footprint into `foot` */
+  pasChim(G, s, u, h, q, side, caves, kind, matAt, H, lod = 0, foot = null) {
+    const R = h * 0.3, y = Math.min(H(s, u), H(s - R, u), H(s + R, u), H(s, u - R), H(s, u + R)) - 0.15;
+    if (foot) foot.push([s, u, R * 1.15]);
+    let heads = null;
+    if (kind === 'two') heads = [{ x: 0.3, z: 0.2, h, kind: 'mush', k: 0.95 }, { x: -0.25 * h, z: 0.04 * h, h: h * 0.74, kind: 'mush', k: 0.8 }];
+    else if (kind === 'multi') {
+      const nh = q() < 0.6 ? 2 : 3, a0 = q() * 6.28; heads = [];
+      for (let i = 0; i < nh; i++) { const a = a0 + (i / nh) * 6.28 + q.range(-0.4, 0.4), d = h * q.range(0.11, 0.17); heads.push({ x: Math.sin(a) * d, z: Math.cos(a) * d, h: h * (i ? q.range(0.7, 0.92) : 1), kind: q() < 0.55 ? 'mush' : 'hat' }); }
+    }
+    P.pasChimney(G, matAt(s, u, y, q.range(-0.4, 0.4), true), q, { h, kind, heads, side, caves, lod });
+  }
+  /** a little group of n tourists at the roadside, standing about at (s, u) in a loose row out across the shoulder and the verge,
+   *  most of them turned back down the road (towards the car), as the concept's group (props.js tourist) */
+  tourists(G, s, u, n, q, matAt, H) {
+    const sd = Math.sign(u) || 1;
+    for (let i = 0; i < n; i++) {
+      const si = s + q.range(-0.6, 0.6) + (i % 2) * 0.5, ui = u + sd * (i * q.range(0.5, 0.65) + q.range(-0.1, 0.1));
+      P.tourist(G, matAt(si, ui, H(si, ui), (sd > 0 ? 1 : -1) * Math.PI / 2 + q.range(-0.6, 0.6), true), q);
+    }
   }
   *placeCountry(G, r, s0, s1, matAt, onGround, road, rwAt, H) {
     for (const side of [-1, 1]) {

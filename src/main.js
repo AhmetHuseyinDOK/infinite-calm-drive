@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { Path, zoneW, zoneWeight, zoneAt, zparam, ZINFO, setStartZone, startZone, zoneSets, trafficSide, seaWeight, regionWeight, viewMix, borderNear, nextBorderS, REGION, crossingS, crossingValid, XING, XOFF, riverNear, RIV, ROFF, groundOffsetMix, tunnelNear, T_HALF, T_RIDGE, ZONE_LEN } from './path.js';
 import { makeCrossingRig, makeTrain, xingPosts } from './crossing.js';
-import { buildAtlas, buildFoliage, buildPaintedAtlas, buildWorldAtlas, buildCapAtlas } from './textures.js';
-import { makeMaterials, makeAtlasW, makeCapAtlas, setWorldTex, U, groundMaterialFor, setGrazeFade, makeCloudMap, makeGhibliLeaf, FIELD, tetraMaterial, barkMaterial, tuffMaterial } from './materials.js';
+import { buildAtlas, buildFoliage, buildPaintedAtlas, buildWorldAtlas, buildCapAtlas, buildPasAtlas, albedoTexture } from './textures.js';
+import { makeMaterials, makeAtlasW, makeCapAtlas, makePasGrass, setWorldTex, U, groundMaterialFor, setGrazeFade, makeCloudMap, makeGhibliLeaf, FIELD, tetraMaterial, barkMaterial, tuffMaterial, PROP_DEPTH } from './materials.js';
 import { setAtlas, setFoliage, warmTrees, warmBare, warmTetrapods, setLeafDensity, GHIBLI, setHouses, setTrHouses } from './props.js';
 import { loadTreeAtlas } from './ghibli.js';
 import { World, CH } from './chunks.js';
@@ -84,7 +84,8 @@ async function main() {
   // …and Turkey's (the Bosphorus's far shore; the Galata Bridge's old city, W3; the Turkish town's mosque at the end of its street
   // and the distant town round it, W4; Cappadocia's castle rock of Uçhisar at the end of its road among the fairy chimneys' valleys,
   // W5: a row each, in files of their own), with Japan's when it is needed at the start
-  const loadTrBands = () => Promise.all([loadBandAtlas(TIER, 15000, 'bandtr1'), loadBandAtlas(TIER, 15000, 'bandtr2'), loadBandAtlas(TIER, 15000, 'bandtr3'), loadBandAtlas(TIER, 15000, 'bandtr4')]);
+  // (…and Paşabağ's rounded tuff hill at the end of its road among the valley's chimneys, W6)
+  const loadTrBands = () => Promise.all([loadBandAtlas(TIER, 15000, 'bandtr1'), loadBandAtlas(TIER, 15000, 'bandtr2'), loadBandAtlas(TIER, 15000, 'bandtr3'), loadBandAtlas(TIER, 15000, 'bandtr4'), loadBandAtlas(TIER, 15000, 'bandtr5')]);
   const bandTrLoad = TR_START ? firstLoads.then(loadTrBands) : null;
   // (and Cappadocia's hot-air balloons, W5: on the clouds' tiers)
   const balloonLoad = TR_START ? firstLoads.then(() => loadBalloonAtlas(TIER)) : null, BALLOONS_N = quality === 'high' ? 36 : 22;
@@ -168,9 +169,9 @@ async function main() {
   // textures and the atlas material's world variant are made once the rest of the scene is (makeAtlasW, below): made
   // earlier, their ids drew random numbers ahead of the particles', which moved every falling petal of a seeded capture)
   // (and Cappadocia's cells, W5, in an atlas of their own: textures.js buildCapAtlas)
-  let watlas = null, catlas = null;
+  let watlas = null, catlas = null, patlasP = null; // (…and Paşabağ's, W6: textures.js buildPasAtlas)
   if (TR_START) {
-    const th = await trHouseLoad, ta = await townLoad; watlas = buildWorldAtlas(atlas, HTIER, th, ta); catlas = buildCapAtlas(atlas, HTIER);
+    const th = await trHouseLoad, ta = await townLoad; watlas = buildWorldAtlas(atlas, HTIER, th, ta); catlas = buildCapAtlas(atlas, HTIER); patlasP = buildPasAtlas(atlas, HTIER); U.uPasSway.value.set(...patlasP.sway); // (Paşabağ's grass, W6)
     if (watlas.trHouses) setTrHouses(th.types, th.extras); // (else: the procedural houses)
     if (th) th.img.close(); if (ta) ta.img.close();
   }
@@ -288,10 +289,30 @@ async function main() {
   const TF_SUNSET = { s: [42, 29, 37], m: [80, 48, 52], l: [116, 66, 66], p: [130, 84, 96] };
   const TF_NIGHT = { s: [17, 23, 34], m: [38, 48, 66], l: [58, 75, 98], p: [88, 114, 146] };
   const TF_N = ['s', 'm', 'l', 'p'], TF_U = [U.uTfS.value, U.uTfM.value, U.uTfL.value, U.uTfP.value], TF_T = todKeys(TF_NIGHT, TF_SUNSET, TF_DAY, TF_GOLD);
+  // …and Paşabağ's (W6), as its concept paints them (ref/world/cappadocia_pasabag.png: the cream tuff's blue-grey shade, its warm
+  // middle and peach-cream light, its pale foot; their dark basalt caps' share of those: c, linear) and its repaints (ref/tod/pasabag_*)
+  const TFP_DAY = { s: [76, 78, 90], m: [186, 158, 124], l: [244, 220, 182], p: [240, 222, 190], c: [0.31, 0.31, 0.38] };
+  const TFP_GOLD = { s: [84, 66, 62], m: [172, 124, 82], l: [245, 196, 126], p: [240, 192, 132], c: [0.42, 0.36, 0.33] };
+  const TFP_SUNSET = { s: [96, 58, 70], m: [130, 78, 88], l: [188, 116, 122], p: [176, 108, 116], c: [0.45, 0.4, 0.45] };
+  const TFP_NIGHT = { s: [18, 28, 42], m: [34, 45, 63], l: [64, 78, 99], p: [72, 88, 110], c: [0.38, 0.42, 0.5] };
+  const TFP_U = [U.uTfS2.value, U.uTfM2.value, U.uTfL2.value, U.uTfP2.value], TFP_T = todKeys(TFP_NIGHT, TFP_SUNSET, TFP_DAY, TFP_GOLD);
   // …and its ground's albedo (materials.js uchGround, linear: the sandy shoulder and plain, the dry grass, the pale tuff), lit by
   // the scene, by the time of day under a clear sky (grey skies: the day's)
   const UG_DAY = { s: [0.52, 0.43, 0.38], g: [0.16, 0.115, 0.075], t: [0.95, 0.84, 0.74] };
   const UG_T = todKeys(UG_DAY, UG_DAY, UG_DAY, UG_DAY);
+  // …and Paşabağ's (W6: its grey gravel shoulder, its golden dry grass, its pale tuff; c: its tall grass cards' tint, materials.js
+  // makePasGrass), at golden hour, sunset and night as its concept repainted then has them (ref/tod/pasabag_*.png: the grass deep gold,
+  // then a dusky mauve-gold, then a moonlit blue-grey): over 1 where the scene's light at that hour is too dim or too red for it
+  const PG_DAY = { s: [0.4, 0.36, 0.33], g: [0.4, 0.3, 0.17], t: [0.92, 0.84, 0.72], c: [1, 1, 1] };
+  const PG_GOLD = { s: [0.42, 0.36, 0.32], g: [0.46, 0.34, 0.22], t: [0.92, 0.82, 0.7], c: [1, 1, 1.25] };
+  const PG_SUNSET = { s: [0.5, 0.45, 0.42], g: [0.42, 0.32, 0.26], t: [0.9, 0.8, 0.76], c: [0.9, 1.0, 1.25] };
+  const PG_NIGHT = { s: [0.4, 0.38, 0.33], g: [0.5, 0.46, 0.36], t: [0.6, 0.56, 0.52], c: [1.2, 1.3, 1.35] };
+  const PG_T = todKeys(PG_NIGHT, PG_SUNSET, PG_DAY, PG_GOLD);
+  // (…and its zenith under a clear sky, display sRGB: the concept's deep ultramarine by day, the repaints' at golden hour, sunset, night)
+  const PAS_Z = todKeys({ z: [44, 70, 96] }, { z: [48, 90, 140] }, { z: [51, 73, 122] }, { z: [32, 58, 116] }), pasZen = new THREE.Color();
+  // (…and its asphalt's tint near and far on top of the painted road's, by the hour: the concept's mid grey, the repaints' muted mauve
+  // grey at sunset and blue-grey at night)
+  const PAS_R = todKeys({ n: [1.6, 1.5, 1.05], f: [1.2, 1.4, 1.3] }, { n: [2.4, 2.4, 1.0], f: [1.0, 1.2, 1.1] }, { n: [0.96, 0.9, 0.74], f: [0.78, 0.72, 0.68] }, { n: [0.96, 0.9, 0.8], f: [0.85, 0.8, 0.75] });
   // the coast's and the country's asphalt (materials.js roadCol): its tint near the eye (n) and from ~22 m on (f), read
   // against coast.png and country.png (a cool blue-grey, darker than the old warm grey near the car: CIELAB L* 43–51 there,
   // paler and bluer with distance: 56–60 at 15–25 m, 64 beyond) and the paintings repainted at golden hour and sunset;
@@ -330,7 +351,16 @@ async function main() {
   // right through the day, swinging out to 55° at golden hour (lighting the chimneys' sides towards us, as the repaint) and back to
   // 25° as it sets; ~30° right in the morning, over the balloons)
   const uchAz = t => (t < 0.62 ? (t < 0.3 ? lerp(-30, -40, sstep(0.25, 0.3, t)) : -40) : t < 0.7 ? lerp(-40, -55, sstep(0.62, 0.7, t)) : lerp(-55, -25, sstep(0.7, 0.76, t))) * D2R_, D2R_ = Math.PI / 180;
-  const townTurn = s => { const sb = sunBearing(st.tod); return clamp((sb - AZ14) / (AZ70 - AZ14), 0, 1) * (TOWN_AZ - sb) * zoneWeight(s, 'town') + (uchAz(st.tod) - sb) * zoneWeight(s, 'uchisar'); };
+  // (and in Paşabağ, W6, whose concept paints its sun high on the LEFT and a little behind: the van's shadow falling to its right and a
+  // little forward, the chimneys' faces towards us lit, their right-hand sides in a blue-grey shade. 110° left of the road through the
+  // day; it turns there from Uçhisar's over the PAS_LEAD metres before the hand-over and on through it, at most PAS_AZR a second (150°:
+  // ~50 s), so the light is the concept's from the valley's first chimneys)
+  // (by the hour as its concept repainted then has it (ref/tod/pasabag_*.png): still on the left at golden hour, low ahead at the road's
+  // end at sunset; at night the moon ahead-right (MOON_AZ, 20° left of the sun's line: −32° puts it 20° right))
+  const pasAz = t => (t < 0.2 ? -32 : t < 0.27 ? lerp(-32, 100, sstep(0.2, 0.27, t)) : t < 0.62 ? lerp(100, 110, sstep(0.27, 0.33, t)) : t < 0.7 ? lerp(110, 100, sstep(0.62, 0.7, t))
+    : t < 0.76 ? lerp(100, 15, sstep(0.7, 0.76, t)) : lerp(15, -32, sstep(0.76, 0.8, t))) * D2R_, PAS_LEAD = 300, PAS_AZR = (3 * Math.PI) / 180;
+  const pasW = s => { const w0 = zoneWeight(s, 'pasabag'), wu = zoneWeight(s, 'uchisar'); return wu > 0 ? Math.max(w0, zoneWeight(s + PAS_LEAD, 'pasabag')) : w0; };
+  const townTurn = s => { const sb = sunBearing(st.tod), wp = pasW(s); return clamp((sb - AZ14) / (AZ70 - AZ14), 0, 1) * (TOWN_AZ - sb) * zoneWeight(s, 'town') + (uchAz(st.tod) - sb) * Math.min(zoneWeight(s, 'uchisar'), 1 - wp) + (pasAz(st.tod) - sb) * wp; };
   // the painted volumes' keys (materials.js VOL_KEY; see the frame loop): the tetrapods' 110° round from the view's direction,
   // the broadleaf crowns' 150° (against coast.png's crowns, ΔE 17.0 at 110°, 11.1 at 130°, 8.1 at 150°; its tetrapods 6.0
   // at 110°, 10.5 at 130°). (Tried on the props, the guardrail's material: the city's right-hand shops and the avenue's lawn
@@ -368,6 +398,7 @@ async function main() {
   // made earlier would move every falling leaf of a seeded capture)
   if (TR_START) M.tuff = tuffMaterial(quality !== 'high');
   if (catlas) makeCapAtlas(M, catlas.textures(renderer)); // (…and its atlas's material: textures.js buildCapAtlas)
+  if (patlasP) makePasGrass(M, { map: albedoTexture(patlasP, renderer) }); // (…and Paşabağ's tall grass, W6: textures.js buildPasAtlas)
   world.trReady = TR_START; // (no chunk of Turkey's, or of a border's, is built before its assets are in: chunks.js)
   status('building the road…');
   await new Promise(r => setTimeout(r, 10));
@@ -391,9 +422,11 @@ async function main() {
     // triangle without normals too, or the coast's water and surf and the rivers compiled when they first came into view)
     const tri0 = new THREE.BufferGeometry(); tri0.setAttribute('position', tri.attributes.position);
     const bare = new Set([M.shore, M.surf, riverMat]);
-    const mats = [M.color, M.atlas, M.atlasW, M.foliage, M.leaf, M.lamp, M.sig, M.sodium, M.decal, M.pool, M.shore, M.surf, riverMat, M.tetra, M.bark, ...(M.gleaf ? [M.gleaf] : []), ...(M.gblossom ? [M.gblossom] : []), ...(M.tuff ? [M.tuff, M.capAtlas] : [])];
+    const mats = [M.color, M.atlas, M.atlasW, M.foliage, M.leaf, M.lamp, M.sig, M.sodium, M.decal, M.pool, M.shore, M.surf, riverMat, M.tetra, M.bark, ...(M.gleaf ? [M.gleaf] : []), ...(M.gblossom ? [M.gblossom] : []), ...(M.tuff ? [M.tuff, M.capAtlas] : []), ...(M.pasGrass ? [M.pasGrass] : [])];
     for (const zs of zoneSets()) if (TR_START || !trSet(zs)) mats.push(groundMaterialFor(zs)); // (each zone, each pair of neighbours, each border's: Turkey's later if not needed now)
-    for (const m of mats) { const o = new THREE.Mesh(bare.has(m) ? tri0 : tri, m); o.castShadow = o.receiveShadow = !bare.has(m); o.frustumCulled = false; if (m === M.gleaf || m === M.gblossom) o.customDepthMaterial = M.gleafDepth; if (m === M.atlas) o.customDepthMaterial = M.atlasDepth; if (m === M.atlasW) o.customDepthMaterial = M.atlasWDepth; warm.add(o); }
+    for (const m of mats) { const o = new THREE.Mesh(bare.has(m) ? tri0 : tri, m); o.castShadow = o.receiveShadow = !bare.has(m); o.frustumCulled = false; if (m === M.gleaf || m === M.gblossom) o.customDepthMaterial = M.gleafDepth; if (m === M.atlas) o.customDepthMaterial = M.atlasDepth; if (m === M.atlasW) o.customDepthMaterial = M.atlasWDepth; if (m === M.color) o.customDepthMaterial = PROP_DEPTH; warm.add(o); }
+    // (the props' shadow-pass twin too, W6: it used to compile only when a real props' mesh stood in the shadow box during the load, and a
+    // start in Paşabağ's valley (no poles) met its first props in the city, 20 ms into the drive)
     warm.position.set(0, 0, 0); scene.add(warm);
     sun.target.position.set(0, 0, 0); sun.position.set(0, 150, 60); // so the warm-up meshes sit inside the shadow camera
     const hidden = [rain.mesh, snowfall.mesh, spray.mesh, mirage.mesh, train.group, rig.group, sea.mesh].filter(o => !o.visible);
@@ -435,16 +468,19 @@ async function main() {
   /** Turkey's zones without a row of their own (their file failed, or isn't in yet) borrow the coast's from Japan's band */
   // (the Turkish town's, W4, borrows Japan's far city in haze)
   // (…and Cappadocia's, W5, the country's far hills)
-  function trAlias(tra) { const has = z => !!tra && tra.some(a => a && a.zones[z]), al = {}; for (const z of ['bosphorus', 'galata']) if (!has(z)) al[z] = 'coast'; if (!has('town')) al.town = 'city'; if (!has('uchisar')) al.uchisar = 'country'; return Object.keys(al).length ? al : null; }
+  function trAlias(tra) { const has = z => !!tra && tra.some(a => a && a.zones[z]), al = {}; for (const z of ['bosphorus', 'galata']) if (!has(z)) al[z] = 'coast'; if (!has('town')) al.town = 'city'; if (!has('uchisar')) al.uchisar = 'country'; if (!has('pasabag')) al.pasabag = 'country'; return Object.keys(al).length ? al : null; }
   /** Turkey's band: the Bosphorus's Asian shore in a light haze, as painted (its houses' windows lit at night), the Galata
    *  Bridge's old city, crisper (its windows too), its row turned down the bridge (galTurn), and the Turkish town's mosque at
    *  the end of its street with the distant town round it (W4), turned down the street the same way; null if no row loaded */
   function makeTrBand(tra) {
     if (!tra || !tra.some(Boolean)) return null;
     // (the town's row takes no lit windows at night: they spangled its mosque's pale stone)
-    const b = makePaintedBand(tra, post, scene.fog.color, null, { bosphorus: 0.12, galata: 0.05, town: 0.06, uchisar: 0.03 }, ['bosphorus', 'galata']); scene.add(b.mesh);
+    const b = makePaintedBand(tra, post, scene.fog.color, null, { bosphorus: 0.12, galata: 0.05, town: 0.06, uchisar: 0.03, pasabag: 0.04 }, ['bosphorus', 'galata']); scene.add(b.mesh);
     b.hero = 0.208; // (the Bosphorus Bridge's middle 15° left of ahead, as in the concept painting, when its band first shows)
     b.noSkirt.galata = true; // (the old city's quays crisp at the water's edge, the Golden Horn up to them, as painted)
+    // (Paşabağ's tuff hill, W6, the same way: honey-gold at golden hour, rose-gold at sunset, moonlit blue at night: ref/tod/pasabag_*.png)
+    b.tones.pasabag = todKeys({ shade: [30, 42, 62], mid: [52, 68, 92], lit: [78, 98, 122], ch: [0.12, 0.12, 0.12] }, { shade: [120, 72, 72], mid: [190, 112, 100], lit: [240, 160, 110], ch: [0.25, 0.25, 0.25] },
+      { shade: [84, 112, 132], mid: [142, 170, 190], lit: [200, 220, 234], ch: [0.6, 0.6, 0.6] }, { shade: [150, 110, 80], mid: [214, 167, 111], lit: [236, 190, 134], ch: [0.3, 0.3, 0.3] });
     // (Cappadocia's castle rock and ridges at golden hour, sunset and night as its concept repainted then: ref/tod/uchisar_*.png)
     b.tones.uchisar = todKeys({ shade: [30, 42, 62], mid: [56, 74, 98], lit: [92, 112, 140], ch: [0.12, 0.12, 0.12] }, { shade: [64, 42, 52], mid: [106, 65, 70], lit: [168, 96, 98], ch: [0.25, 0.25, 0.25] },
       { shade: [84, 112, 132], mid: [142, 170, 190], lit: [200, 220, 234], ch: [0.6, 0.6, 0.6] }, { shade: [110, 66, 50], mid: [192, 115, 70], lit: [226, 154, 100], ch: [0.3, 0.3, 0.3] });
@@ -456,12 +492,15 @@ async function main() {
   const galK = { galata: NaN, town: NaN }, galF = {};
   // (Cappadocia's, W5: its castle rock at the end of its road, whose long bends turn it slowly: its row turned to where the road
   // heads over the next ~800 m, at most UCH_TR a second, so the rock stays at the road's end without ever being seen to slide)
-  const UCH_TR = (0.6 * Math.PI) / 180; let uchHead = NaN;
+  // (and Paşabağ's, W6: its rounded tuff hill at the end of its road, the same way)
+  const UCH_TR = (0.6 * Math.PI) / 180, capHead = { uchisar: NaN, pasabag: NaN };
   function uchTurn(s, dt) {
-    if (!bandTr || bandTr.ahead.uchisar === undefined || Math.max(zoneWeight(s, 'uchisar'), zoneWeight(s + 900, 'uchisar')) <= 0) { uchHead = NaN; return; }
-    const tgt = path.meanHeading(s + 450, 400);
-    uchHead = uchHead !== uchHead || !started ? tgt : uchHead + clamp(tgt - uchHead, -UCH_TR * dt, UCH_TR * dt);
-    bandTr.turnTo('uchisar', uchHead);
+    for (const zn in capHead) {
+      if (!bandTr || bandTr.ahead[zn] === undefined || Math.max(zoneWeight(s, zn), zoneWeight(s + 900, zn)) <= 0) { capHead[zn] = NaN; continue; }
+      const tgt = path.meanHeading(s + 450, 400), h = capHead[zn];
+      capHead[zn] = h !== h || !started ? tgt : h + clamp(tgt - h, -UCH_TR * dt, UCH_TR * dt);
+      bandTr.turnTo(zn, capHead[zn]);
+    }
   }
   function galTurn(s) {
     if (!bandTr) return;
@@ -488,6 +527,8 @@ async function main() {
     await nextFrame();
     const ct = buildCapAtlas(atlas, HTIER).textures(renderer); renderer.initTexture(ct.map); renderer.initTexture(ct.emissive); step('cappadocia'); // (Cappadocia's cells, W5)
     await nextFrame();
+    const pa = buildPasAtlas(atlas, HTIER), pt = { map: albedoTexture(pa, renderer) }; U.uPasSway.value.set(...pa.sway); renderer.initTexture(pt.map); step('pasabag'); // (…and Paşabağ's, W6)
+    await nextFrame();
     warmBare(); step('bare'); // (Cappadocia's bare trees, W5: their crowns are the world atlas's cells)
     await nextFrame();
     const wt = wa.textures(renderer); renderer.initTexture(wt.map); step('map');
@@ -508,15 +549,17 @@ async function main() {
     const warm = new THREE.Group(), tri = new THREE.BufferGeometry();
     tri.setAttribute('position', new THREE.Float32BufferAttribute([0, -50, 0, 0.01, -50, 0, 0, -49.99, 0], 3)); tri.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
     // (one ground variant a frame: Turkey's seven since W4, all set up in one frame, made a slow frame on a throttled phone)
+    const seen = new Set(); // (Paşabağ's zone sets are drawn by Uçhisar's variants, W6: each compiled once)
     for (const zs of zoneSets()) if (trSet(zs)) {
-      const o = new THREE.Mesh(tri, groundMaterialFor(zs)); o.receiveShadow = true; warm.clear(); warm.add(o);
+      const gm = groundMaterialFor(zs); if (seen.has(gm)) continue; seen.add(gm);
+      const o = new THREE.Mesh(tri, gm); o.receiveShadow = true; warm.clear(); warm.add(o);
       renderer.setRenderTarget(post.composer.readBuffer); const ready = renderer.compileAsync(warm, camera, scene); renderer.setRenderTarget(null);
       await ready; await nextFrame();
     }
     // (Cappadocia's fairy chimneys' tuff and its atlas's material, W5: on a triangle with the attributes their meshes have, as drawn)
-    M.tuff = tuffMaterial(quality !== 'high'); makeCapAtlas(M, ct);
+    M.tuff = tuffMaterial(quality !== 'high'); makeCapAtlas(M, ct); makePasGrass(M, pt);
     tri.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 0, 1], 2)); tri.setAttribute('color', new THREE.Float32BufferAttribute([1, 1, 1, 1, 1, 1, 1, 1, 1], 3));
-    for (const m of [M.tuff, M.capAtlas]) {
+    for (const m of [M.tuff, M.capAtlas, M.pasGrass]) {
       const o = new THREE.Mesh(tri, m); o.castShadow = m === M.tuff; o.receiveShadow = true; warm.clear(); warm.add(o);
       renderer.setRenderTarget(post.composer.readBuffer); const ready = renderer.compileAsync(warm, camera, scene); renderer.setRenderTarget(null);
       await ready; await nextFrame();
@@ -716,7 +759,7 @@ async function main() {
     // paintings), by its mean heading over ±SUN_W: on top of the hour's, the road's long bends turn the shadows at under
     // 0.3–1.8°/s at cruising speed (95% of the time; 2.3 on the mountain pass; the old sky swept 0.75°/s all day), and the
     // light keeps within 2–7° of its place against the car (95% of the time; 11° on the mountain pass)
-    { const tgt = townTurn(st.s); st.sunAdj = st.sunAdj === undefined || !started ? tgt : st.sunAdj + clamp(tgt - st.sunAdj, -TOWN_AZR * dt, TOWN_AZR * dt); } // (the town's sun, W4)
+    { const tgt = townTurn(st.s), ar = pasW(st.s) > 0 ? PAS_AZR : TOWN_AZR; st.sunAdj = st.sunAdj === undefined || !started ? tgt : st.sunAdj + clamp(tgt - st.sunAdj, -ar * dt, ar * dt); } // (the town's sun, W4; Paşabağ's, W6)
     updateTOD(st.tod, st.sunroad ? path.meanHeading(st.s, SUN_W) + st.sunAdj : null, REGION_KEYS.tr, REGION_KEYS.tr ? regionWeight(st.s, 'tr') : 0); // (a region's own palette: sky.js REGION_KEYS)
     // (over the Golden Horn on a bright day the zenith a deeper, greyer blue, as the Galata Bridge's concept paints its sky (its
     // other concepts' and Japan's paintings' are a brighter azure); by the bridge's weight 150 m on, so it turns as we drive on)
@@ -724,6 +767,7 @@ async function main() {
     // (…and over the Turkish town's street, W4, the concept's brighter azure: a little greener)
     { const tz = zoneWeight(st.s + 150, 'town') * TOD.bright; if (tz > 0) { TOD.zenith.g *= 1 + 0.16 * tz; TOD.zenith.b *= 1 - 0.03 * tz; } }
     { const uz = zoneWeight(st.s + 150, 'uchisar') * TOD.bright; if (uz > 0) TOD.zenith.lerp(UCH.zen, uz); } // (Cappadocia's, W5)
+    { const pz = zoneWeight(st.s + 150, 'pasabag') * paintSky(); if (pz > 0) { const z = PAS_Z.at(TOD.t).rgb('z'); TOD.zenith.lerp(pasZen.setRGB(z[0] / 255, z[1] / 255, z[2] / 255, THREE.SRGBColorSpace), pz); } } // (Paşabağ's, W6)
     weather.update(dt);
     const ov = weather.W.ov, rn = weather.W.rain;
     applyWeather(ov, rn);
@@ -731,7 +775,7 @@ async function main() {
 
     // stream the world
     if (!TRL.started && nextBorderS(st.s) - st.s < TR_NEAR) trLazy().catch(e => { // (should anything fail: its procedural look)
-      console.warn('Turkey:', e); try { setWorldTex(buildWorldAtlas(atlas, HTIER, null).textures(renderer)); if (!M.capAtlas) makeCapAtlas(M, buildCapAtlas(atlas, HTIER).textures(renderer)); } catch (e2) {} world.trReady = true; TRL.done = true; });
+      console.warn('Turkey:', e); try { setWorldTex(buildWorldAtlas(atlas, HTIER, null).textures(renderer)); if (!M.capAtlas) makeCapAtlas(M, buildCapAtlas(atlas, HTIER).textures(renderer)); } catch (e2) {} try { if (!M.pasGrass) { const pa = buildPasAtlas(atlas, HTIER); U.uPasSway.value.set(...pa.sway); makePasGrass(M, { map: albedoTexture(pa, renderer) }); } } catch (e2) {} world.trReady = true; TRL.done = true; });
     const tw0 = performance.now(); world.update(st.s, started ? 3.5 : 14); const tw1 = performance.now();
     path.at(st.s, f);
     if (Math.abs(f.x - world.origin.x) > 900 || Math.abs(f.z - world.origin.z) > 900) {
@@ -954,7 +998,7 @@ async function main() {
     // (the city on a bright day: a thinner haze, so its canyon of tall blocks reads to the street's far end, as painted)
     // (the Turkish town, W4: a light haze down its street on a bright day, as its concept has it, the mosque clear at its end)
     // (Cappadocia, W5: the steppe's clear dry air, its far chimneys and the castle rock crisp on a bright day, as painted)
-    const fogD = (w.city * (0.0022 - CITY_HAZE * TOD.bright) + w.sakura * 0.0019 + w.coast * 0.0011 + w.bosphorus * 0.0011 + w.galata * 0.0009 + w.town * (0.0018 - 0.0008 * TOD.bright) + w.uchisar * (0.0013 - 0.0006 * TOD.bright) + w.country * 0.0014 + w.mountain * 0.0017 + w.snow * 0.0021) * (1 + TOD.night * 0.25);
+    const fogD = (w.city * (0.0022 - CITY_HAZE * TOD.bright) + w.sakura * 0.0019 + w.coast * 0.0011 + w.bosphorus * 0.0011 + w.galata * 0.0009 + w.town * (0.0018 - 0.0008 * TOD.bright) + (w.uchisar + w.pasabag) * (0.0013 - 0.0006 * TOD.bright) + w.country * 0.0014 + w.mountain * 0.0017 + w.snow * 0.0021) * (1 + TOD.night * 0.25);
     scene.fog.near = fogD * (1 + 0.55 * ov + 0.45 * rn); scene.fog.far = world.ahead * 0.92;
     U.uSkyHor.value.copy(TOD.horizon); U.uSkyZen.value.copy(TOD.zenith); U.uTime.value = t;
     U.uWet.value = wet * (1 - w.snow);
@@ -1002,10 +1046,11 @@ async function main() {
     const bandW = Math.max(band && st.band !== 0 ? band.update(camera, vm, camH, scene.fog.near, scene.fog.far) : 0, bandTr && st.band !== 0 ? bandTr.update(camera, vm, camH, scene.fog.near, scene.fog.far) : 0);
     if (band && st.band === 0) band.mesh.visible = false; if (bandTr && st.band === 0) bandTr.mesh.visible = false;
     mountains.update(camera.position, Math.max(w.snow, zoneW(st.s + 600).snow * 0.7), 1 - bandW);
-    if (balloons) { // (over Cappadocia's zone, while it is here or ahead: W5)
-      const zi = Math.floor(st.s / ZONE_LEN); let bz = NaN;
-      for (let k = zi; k <= zi + 1; k++) if (zoneAt(k * ZONE_LEN + 10) === 'uchisar') { bz = k * ZONE_LEN; break; }
-      balloons.update(camera, path, bz, ZONE_LEN, Math.max(w.uchisar, zoneWeight(st.s + 600, 'uchisar') * (borderNear(st.s + 600) ? 0 : 1)), world.origin, dt);
+    if (balloons) { // (over Cappadocia's zone, while it is here or ahead: W5; over Paşabağ's once the drive is in it, W6: they come down one
+      // by one through the hand-over from Uçhisar and go up over Paşabağ's valley as it ends)
+      const zi = Math.floor(st.s / ZONE_LEN), pz = w.pasabag > w.uchisar ? 'pasabag' : 'uchisar'; let bz = NaN;
+      for (let k = zi; k <= zi + 1; k++) if (zoneAt(k * ZONE_LEN + 10) === pz) { bz = k * ZONE_LEN; break; }
+      balloons.update(camera, path, bz, ZONE_LEN, pz === 'pasabag' ? (w.pasabag - w.uchisar) * (1 - sstep(0.31, 0.38, TOD.t)) : w.pasabag > 0 ? w.uchisar - w.pasabag : Math.max(w.uchisar, zoneWeight(st.s + 600, 'uchisar') * (borderNear(st.s + 600) ? 0 : 1)), world.origin, dt);
     }
     // (not across a border the camera hasn't entered yet: from the snow country's side the strait beyond the tunnel showed
     // at the far horizon; inside the tube its exit shows it)
@@ -1041,11 +1086,15 @@ async function main() {
       // …and Cappadocia's fairy chimneys' (W5), once its scenery is anywhere near
       U.uTfK.value = M.tuff ? U.uTpK.value * st.tuff : 0;
       if (U.uTfK.value > 0 && Math.max(w.uchisar, zoneWeight(st.s + 760, 'uchisar')) > 0) { const P = TF_T.at(TOD.t); for (let i = 0; i < 4; i++) P.ug(g, TF_N[i], TF_U[i]); }
+      if (U.uTfK.value > 0 && Math.max(w.pasabag, zoneWeight(st.s + 760, 'pasabag')) > 0) { const P = TFP_T.at(TOD.t); for (let i = 0; i < 4; i++) P.ug(g, TF_N[i], TFP_U[i]); U.uTfC2.value.fromArray(P.rgb('c')); } // (Paşabağ's, W6)
     }
     if (M.tuff) { // (its ground's albedo by the time of day under a clear sky; grey skies: the day's)
       const P = UG_T.at(TOD.t), k = paintSky(), a = P.rgb('s'), b = P.rgb('g'), c = P.rgb('t'), d0 = UG_DAY.s, d1 = UG_DAY.g, d2 = UG_DAY.t;
       U.uUchS.value.set(lerp(d0[0], a[0], k), lerp(d0[1], a[1], k), lerp(d0[2], a[2], k)); U.uUchG.value.set(lerp(d1[0], b[0], k), lerp(d1[1], b[1], k), lerp(d1[2], b[2], k));
       U.uUchT.value.set(lerp(d2[0], c[0], k), lerp(d2[1], c[1], k), lerp(d2[2], c[2], k));
+      const Q = PG_T.at(TOD.t), qa = Q.rgb('s'), qb = Q.rgb('g'), qc = Q.rgb('t'), qd = Q.rgb('c'), e0 = PG_DAY.s, e1 = PG_DAY.g, e2 = PG_DAY.t; // (Paşabağ's, W6)
+      U.uPasS.value.set(lerp(e0[0], qa[0], k), lerp(e0[1], qa[1], k), lerp(e0[2], qa[2], k)); U.uPasG.value.set(lerp(e1[0], qb[0], k), lerp(e1[1], qb[1], k), lerp(e1[2], qb[2], k));
+      U.uPasT.value.set(lerp(e2[0], qc[0], k), lerp(e2[1], qc[1], k), lerp(e2[2], qc[2], k)); U.uPasGT.value.set(lerp(1, qd[0], k), lerp(1, qd[1], k), lerp(1, qd[2], k));
     }
     { // the coast's and the country's painted asphalt, under a clear sky (grey skies and rain keep the old one); on the Galata
       // Bridge on a bright day its far stretch paler, as its concept has it (the low sun ahead's sheen on it: GAL_RF)
@@ -1054,6 +1103,8 @@ async function main() {
       if (gk > 0) U.uRoadF.value.multiply(galRF.set(lerp(1, GAL_RF[0], gk), lerp(1, GAL_RF[1], gk), lerp(1, GAL_RF[2], gk)));
       const uk = w.uchisar * paintSky() * st.road; // (Cappadocia's asphalt, W5: its concept's darker grey, a little warmer far off)
       if (uk > 0) { U.uRoadN.value.multiply(uchRT.set(lerp(1, UCH.rn[0], uk), lerp(1, UCH.rn[1], uk), lerp(1, UCH.rn[2], uk))); U.uRoadF.value.multiply(uchRT.set(lerp(1, UCH.rf[0], uk), lerp(1, UCH.rf[1], uk), lerp(1, UCH.rf[2], uk))); }
+      const pk = w.pasabag * paintSky() * st.road; // (Paşabağ's, W6, by the hour)
+      if (pk > 0) { const Q = PAS_R.at(TOD.t), rn = Q.rgb('n'), rf = Q.rgb('f'); U.uRoadN.value.multiply(uchRT.set(lerp(1, rn[0], pk), lerp(1, rn[1], pk), lerp(1, rn[2], pk))); U.uRoadF.value.multiply(uchRT.set(lerp(1, rf[0], pk), lerp(1, rf[1], pk), lerp(1, rf[2], pk))); }
     }
     // the painted meadow's tint: the reference art's light lime on a bright day, the repainted hours' tints at golden hour,
     // sunset and night (FIELD_T); the paddies' old, deeper green under grey skies (the day's lime turned the fields ochre at
@@ -1133,7 +1184,7 @@ async function main() {
 
     rain.update(camera.position, t, rn * (1 - tunS) * (1 - w.snow), day());
     { // 逃げ水: the road mirage of a hot clear summer day, around midday (mirage.js); not near a tunnel
-      const tq = tunnelNear(st.s + 190), hot = (w.city + w.country + w.coast + w.bosphorus + w.galata + w.town + w.uchisar) * (1 - ov) * (1 - wet) * sstep(0.6, 0.9, TOD.sunEl) * (st.mirage ?? 1) * (tq && Math.abs(st.s + 190 - tq.s) < 330 ? 0 : 1);
+      const tq = tunnelNear(st.s + 190), hot = (w.city + w.country + w.coast + w.bosphorus + w.galata + w.town + w.uchisar + w.pasabag) * (1 - ov) * (1 - wet) * sstep(0.6, 0.9, TOD.sunEl) * (st.mirage ?? 1) * (tq && Math.abs(st.s + 190 - tq.s) < 330 ? 0 : 1);
       mirage.update(path, st.s, world.origin.x, world.origin.z, zparam(st.s + 150, 'rw'), hot, t, TOD.horizon);
     }
     { // spray off the tyres on a wet road, powder on a snowy one, exhaust vapour in the cold (spray.js)
@@ -1191,7 +1242,7 @@ async function main() {
     if (started && frames > 150 && dt > 0.03) slowT += dt; else slowT = Math.max(0, slowT - dt * 0.5);
     if (slowT > 3 && !QS.has('q')) { slowT = 0; stepDown(); }
   }
-  window.__dbg = { renderer, st, scene, camera, world, TOD, KEYS, X, train, weather, U, birds, cine, post, car, sun, M, clouds, pclouds, band, get bandTr() { return bandTr; }, sky, mountains, shadowDir, CM, spray, grass, sea, get ferry() { return ferry; }, get balloons() { return balloons; }, TRL, get audio() { return audio; }, uch: { TF_DAY, TF_GOLD, TF_SUNSET, TF_NIGHT, UG_DAY, UCH } };
+  window.__dbg = { renderer, st, scene, camera, world, TOD, KEYS, X, train, weather, U, birds, cine, post, car, sun, M, clouds, pclouds, band, get bandTr() { return bandTr; }, sky, mountains, shadowDir, CM, spray, grass, sea, get ferry() { return ferry; }, get balloons() { return balloons; }, TRL, get audio() { return audio; }, uch: { TF_DAY, TF_GOLD, TF_SUNSET, TF_NIGHT, UG_DAY, UCH }, pas: { TFP_DAY, TFP_GOLD, TFP_SUNSET, TFP_NIGHT, PG_DAY, PG_GOLD, PG_SUNSET, PG_NIGHT, PAS_Z, PAS_R, pasAz } };
   status('');
   $start.classList.add('ready');
   if (QS.has('auto')) begin();

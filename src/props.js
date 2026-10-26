@@ -577,7 +577,8 @@ export function treeGhibliSakura(G, M, r, s = 1, ave = false) {
 // avenue's cherry trees, built facing the road (chunks.js placeSakura)
 const TREE_BUILDERS = { broad: (G, M, r, s) => (GHIBLI.cells ? treeGhibli : treeBroad)(G, M, r, s), sakura: (G, M, r, s) => (GHIBLI.bcells ? treeGhibliSakura(G, M, r, s) : treeSakura(G, M, r, s)),
   sakuraAve: (G, M, r, s) => (GHIBLI.bcells ? treeGhibliSakura(G, M, r, s, true) : treeSakura(G, M, r, s)), pine: treePine, cedar: treeCedar, maple: treeMaple, ginkgo: treeGinkgo, birch: treeBirch, snowcedar: treeSnowCedar,
-  cypress: treeCypress, plane: (G, M, r, s) => (GHIBLI.cells ? treeGhibliPlane : treeBroad)(G, M, r, s), bare: (G, M, r, s) => treeBare(G, M, r, s) };
+  cypress: treeCypress, plane: (G, M, r, s) => (GHIBLI.cells ? treeGhibliPlane : treeBroad)(G, M, r, s), bare: (G, M, r, s) => treeBare(G, M, r, s),
+  barePas: (G, M, r, s) => treeBare(G, M, r, s, true) }; // (Paşabağ's, W6: darker, denser crowns)
 const TCACHE = {};
 function treeTemplate(kind, v) {
   const key = kind + v;
@@ -592,10 +593,10 @@ function treeTemplate(kind, v) {
 }
 /** build every tree template up front (during loading, once the cluster atlas has loaded or failed), so no chunk build
  *  ever pays for one mid-drive */
-export function warmTrees() { for (const kind in TREE_BUILDERS) if (kind !== 'bare' || A.has('uchTwig0')) for (let v = 0; v < 4; v++) treeTemplate(kind, v); }
-/** …and Cappadocia's bare trees (W5), whose crowns are its own atlas's cells: once it is built (a Japanese start: Turkey's lazy
- *  load, main.js trLazy; else warmTrees) */
-export function warmBare() { for (let v = 0; v < 4; v++) treeTemplate('bare', v); }
+export function warmTrees() { for (const kind in TREE_BUILDERS) if (!kind.startsWith('bare') || A.has('uchTwig0')) for (let v = 0; v < 4; v++) treeTemplate(kind, v); }
+/** …and Cappadocia's bare trees (W5; Paşabağ's, W6), whose crowns are its own atlas's cells: once it is built (a Japanese start:
+ *  Turkey's lazy load, main.js trLazy; else warmTrees) */
+export function warmBare() { for (const kind of ['bare', 'barePas']) for (let v = 0; v < 4; v++) treeTemplate(kind, v); }
 export function tree(G, M, kind, r, s = 1) {
   const t = treeTemplate(kind, Math.floor(r() * 4));
   const m = M.clone().scale(new THREE.Vector3(s, s, s)); m.groundY = M.groundY;
@@ -1953,25 +1954,29 @@ export function fairyChimney(G, M, r, sp) {
  *  clumps at the branches' ends and over the top), not a leaf on them. Smooth bark (G.bark: dark grey-brown, between the
  *  cherries' and the broadleaf trees' tones) */
 const BARK_BARE = [0.6, 0.95, 1], BARK_BARE_IN = [0.6, 0.85, 1], TWIG_C = [1, 1, 1], TWIG_D = [0.74, 0.72, 0.76];
+// (Paşabağ's, W6, as its concept paints its trees: near-black gnarled wood, a dense dark net of twigs)
+const BARK_PAS = [0.55, 0.5, 1], BARK_PAS_IN = [0.55, 0.45, 1], TWIG_PC = [0.5, 0.46, 0.46], TWIG_PD = [0.34, 0.31, 0.32];
 /** n cards of the bare crown's twigs (Cappadocia's atlas's uchTwig cells: textures.js) round (cx, cy, cz), R across, their normals
  *  out of the crown's centre `cen` (it shades as one soft dome), lighter towards its top (yr); into G.twig (the tree templates':
  *  stamped into the chunk's Cappadocia atlas mesh, G.cap, casting no shadow) */
-function twigCards(G, cen, cx, cy, cz, R, n, r, yr) {
+function twigCards(G, cen, cx, cy, cz, R, n, r, yr, dark = false) {
   const g = G.twig; if (!g) return;
+  const TC = dark ? TWIG_PC : TWIG_C, TD = dark ? TWIG_PD : TWIG_D;
   for (let i = 0; i < n; i++) {
     const uvr = uv('uchTwig' + Math.floor(r() * 2)), a = r() * Math.PI, ca = Math.cos(a), sa = Math.sin(a), h = (R * (0.9 + r() * 0.35)) / 2;
     const ox = cx + (r() - 0.5) * R * 0.5, oy = cy + (r() - 0.5) * R * 0.3, oz = cz + (r() - 0.5) * R * 0.5, tl = (r() - 0.5) * 0.5;
     const P = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([u, v]) => [ox + ca * u * h + tl * v * h * sa, oy + v * h * 0.8, oz + sa * u * h - tl * v * h * ca]);
     const N = P.map(p => { const x = p[0] - cen[0], y = p[1] - cen[1] + 0.4, z = p[2] - cen[2], l = Math.hypot(x, y, z) || 1; return [x / l, y / l, z / l]; });
-    const Cc = P.map(p => mixC(TWIG_D, TWIG_C, Math.max(0, Math.min(1, (p[1] - yr[0]) / (yr[1] - yr[0])))));
+    const Cc = P.map(p => mixC(TD, TC, Math.max(0, Math.min(1, (p[1] - yr[0]) / (yr[1] - yr[0])))));
     g.card(P, N, uvr, Cc);
   }
 }
-export function treeBare(G, M, r, s = 1) {
+export function treeBare(G, M, r, s = 1, dark = false) {
   const k = G.bark; k.setM(M); if (G.twig) G.twig.setM(M);
+  const BB = dark ? BARK_PAS : BARK_BARE, BI = dark ? BARK_PAS_IN : BARK_BARE_IN;
   const bh = r.range(1.3, 2.1) * s, r0 = r.range(0.13, 0.19) * s, top = [r.range(-0.2, 0.2) * s, bh, r.range(-0.2, 0.2) * s];
   const q = rng(Math.floor(bh * 7919 + r0 * 104729) + 53), [nT, nL, nB, , nS] = barkSides();
-  trunkTube(k, top, r0, r0 * 0.78, [q.range(-0.08, 0.08) * s, q.range(-0.08, 0.08) * s], nT, BARK_BARE);
+  trunkTube(k, top, r0, r0 * 0.78, [q.range(-0.08, 0.08) * s, q.range(-0.08, 0.08) * s], nT, BB);
   const W = r.range(2.6, 3.5) * s, Hc = r.range(4.8, 6.4) * s, cen = [top[0], (bh + Hc) * 0.62, top[2]], yr = [bh, Hc];
   const nl = 3 + (r() < 0.55 ? 1 : 0), a0 = r() * 6.283;
   for (let i = 0; i < nl; i++) {
@@ -1980,20 +1985,20 @@ export function treeBare(G, M, r, s = 1) {
     const b0 = [top[0] + ca * r0 * 0.3, bh - r0 * 0.45, top[2] + sa * r0 * 0.3];
     const mid = [top[0] + (tip[0] - top[0]) * 0.42, bh + (tip[1] - bh) * 0.55, top[2] + (tip[2] - top[2]) * 0.42];
     const T = steps(nS), P = curve(b0, mid, tip, T);
-    k.tube(P, taper(T, r0 * 0.64, r0 * 0.26), nL, BARK_BARE, SEAM_UP);
+    k.tube(P, taper(T, r0 * 0.64, r0 * 0.26), nL, BB, SEAM_UP);
     for (let j = 0, nb = 2 + (r() < 0.45 ? 1 : 0); j < nb; j++) {
       const p = P[Math.max(1, nS - 1 - j)], b = (j - (nb - 1) / 2) * r.range(0.55, 0.95), L = r.range(1.0, 1.7) * s;
       const e = [p[0] + Math.cos(a + b) * L * 0.85, p[1] + L * r.range(0.4, 0.75), p[2] + Math.sin(a + b) * L * 0.85], T2 = steps(3);
-      k.tube(curve(p, [(p[0] + e[0]) / 2, (p[1] + e[1]) / 2 + 0.12 * L, (p[2] + e[2]) / 2], e, T2), taper(T2, r0 * 0.24, 0.02 * s), nB, BARK_BARE_IN, SEAM_UP);
-      if (j < 2) twigCards(G, cen, e[0], e[1] + 0.2 * s, e[2], r.range(1.5, 2.0) * s, 1, r, yr);
+      k.tube(curve(p, [(p[0] + e[0]) / 2, (p[1] + e[1]) / 2 + 0.12 * L, (p[2] + e[2]) / 2], e, T2), taper(T2, r0 * 0.24, 0.02 * s), nB, BI, SEAM_UP);
+      if (j < 2) twigCards(G, cen, e[0], e[1] + 0.2 * s, e[2], r.range(1.5, 2.0) * s, dark ? 2 : 1, r, yr, dark);
     }
   }
-  twigCards(G, cen, top[0], Hc * 0.84, top[2], W * 1.1, 1, r, yr);
+  twigCards(G, cen, top[0], Hc * 0.84, top[2], W * 1.1, dark ? 2 : 1, r, yr, dark);
 }
 /** a dry shrub of the steppe (W5): three crossed cards of the bare crowns' twigs (Cappadocia's atlas's uchTwig cells, G.cap), low
  *  and wide, grey-mauve as the concept's, shaded like the ground, casting no shadow */
-export function dryBush(G, M, r, s = 1) {
-  const at = G.cap, uvr = uv('uchTwig' + Math.floor(r() * 2)), h = (0.8 + r() * 0.4) * s, w = h * 1.5, a0 = r() * Math.PI, UP = [0, 1, 0], N = [UP, UP, UP, UP], lo = [0.62, 0.6, 0.64], hi = [1, 1, 1];
+export function dryBush(G, M, r, s = 1, k = 1) { // (k: its colour's scale: Paşabağ's darker, W6)
+  const at = G.cap, uvr = uv('uchTwig' + Math.floor(r() * 2)), h = (0.8 + r() * 0.4) * s, w = h * 1.5, a0 = r() * Math.PI, UP = [0, 1, 0], N = [UP, UP, UP, UP], lo = [0.62 * k, 0.6 * k, 0.64 * k], hi = [k, k, k];
   at.setM(M);
   for (let i = 0; i < 3; i++) {
     const a = a0 + (i * Math.PI) / 3, cx = (Math.cos(a) * w) / 2, cz = (Math.sin(a) * w) / 2;
@@ -2015,4 +2020,171 @@ export function dryGrass(G, x, y, z, a, r, s = 1) {
     const cx = (Math.cos(b) * w) / 2, cz = (Math.sin(b) * w) / 2;
     at.card([[x - cx, y - 0.05, z - cz], [x + cx, y - 0.05, z + cz], [x + cx, y + h, z + cz], [x - cx, y + h, z - cz]], DG_N, c, [DG_LO, DG_LO, DG_HI, DG_HI]);
   }
+}
+
+// ------------------------------------------------------------------ Paşabağ (W6)
+/** Paşabağ's lathes' angle round them starts at 32π (16 whole turns): the tuff material tells their vertices by it and gives them
+ *  Paşabağ's tones (materials.js tuffMaterial); every pattern round a lathe is periodic in 2π, so nothing else changes */
+export const PAS_UV = 32 * Math.PI;
+// Paşabağ's fairy chimneys' profiles, as its concept paints them: [height ÷ H, radius ÷ H, the basalt cap's share, how eroded (its
+// facets, folds and swellings: 1 on the soft tuff of the body … 0 at the tip)], from under the ground (the skirt sunk into it) up
+// a tall pillar under a mushroom cap (the near one on the right): a broad bell of a body narrowing to a shoulder at ~57%, a smooth
+// neck, a thick slab of a cap overhanging it, its top a rough dome
+const PAS_MUSH = [[-0.14, 0.3, 0, 1], [-0.03, 0.3, 0, 1], [0.03, 0.28, 0, 1], [0.1, 0.256, 0, 1], [0.18, 0.232, 0, 1], [0.26, 0.208, 0, 1], [0.34, 0.184, 0, 1], [0.41, 0.164, 0, 0.9], [0.47, 0.147, 0, 0.8], [0.515, 0.132, 0, 0.6], [0.545, 0.114, 0, 0.35], [0.575, 0.102, 0, 0.15], [0.63, 0.098, 0, 0.1], [0.69, 0.097, 0, 0.1], [0.745, 0.096, 0, 0.12], [0.762, 0.094, 0, 0.15],
+  [0.768, 0.118, 1, 0.6], [0.774, 0.145, 1, 0.8], [0.784, 0.152, 1, 0.9], [0.805, 0.155, 1, 0.95], [0.83, 0.15, 1, 0.95], [0.852, 0.136, 1, 0.9], [0.874, 0.114, 1, 0.85], [0.896, 0.087, 1, 0.8], [0.917, 0.058, 1, 0.7], [0.935, 0.031, 1, 0.55], [0.948, 0.011, 1, 0.3], [0.952, 0, 1, 0]];
+// a slender pillar under a witch's hat (the pair further off on the right): a straighter body, a long neck, a cone of a cap
+const PAS_HAT = [[-0.14, 0.2, 0, 1], [-0.03, 0.2, 0, 1], [0.04, 0.183, 0, 1], [0.12, 0.166, 0, 1], [0.21, 0.149, 0, 1], [0.31, 0.132, 0, 0.95], [0.41, 0.116, 0, 0.85], [0.49, 0.101, 0, 0.6], [0.54, 0.089, 0, 0.35], [0.585, 0.082, 0, 0.15], [0.635, 0.08, 0, 0.1], [0.668, 0.078, 0, 0.15],
+  [0.674, 0.1, 1, 0.5], [0.68, 0.126, 1, 0.6], [0.692, 0.125, 1, 0.6], [0.73, 0.108, 1, 0.6], [0.78, 0.088, 1, 0.55], [0.83, 0.067, 1, 0.5], [0.88, 0.047, 1, 0.45], [0.93, 0.028, 1, 0.35], [0.97, 0.012, 1, 0.2], [1, 0, 1, 0]];
+// a plain cone with no cap left on it (a few, as Uçhisar's)
+const PAS_CONE = [[-0.14, 0.3, 0, 1], [-0.03, 0.3, 0, 1], [0.05, 0.275, 0, 1], [0.15, 0.245, 0, 1], [0.27, 0.21, 0, 1], [0.4, 0.17, 0, 1], [0.53, 0.128, 0, 0.9], [0.65, 0.09, 0, 0.8], [0.76, 0.058, 0, 0.6], [0.85, 0.033, 0, 0.4], [0.92, 0.016, 0, 0.25], [0.97, 0.006, 0, 0.1], [1, 0, 0, 0]];
+// the common foot of a chimney of two or three heads (the Monks' Valley's): a broad lumpy mound, the heads rising out of it
+const PAS_MOUND = [[-0.14, 0.37, 0, 1], [-0.03, 0.37, 0, 1], [0.05, 0.35, 0, 1], [0.13, 0.325, 0, 1], [0.21, 0.295, 0, 1], [0.29, 0.26, 0, 1], [0.37, 0.22, 0, 1], [0.44, 0.175, 0, 1], [0.5, 0.125, 0, 0.9], [0.54, 0.07, 0, 0.8], [0.56, 0, 0, 0]];
+export const PAS_PROF = { mush: PAS_MUSH, hat: PAS_HAT, cone: PAS_CONE, mound: PAS_MOUND };
+/** sides round one of Paşabağ's chimneys, near (lod 0) … far (2): its facets want a few vertices each */
+const pasSides = lod => (LEAF_D > 0.7 ? [20, 14, 9] : [16, 11, 8])[lod || 0];
+const wrapA = a => a - Math.round(a / (Math.PI * 2)) * Math.PI * 2;
+/** One lathe of Paşabağ's soft tuff into G.tuff (materials.js tuffMaterial: uv x the angle round it from PAS_UV, y metres up; colour
+ *  r the basalt cap's share, g the light (its creases' hollows darker), b how far up the whole chimney (its pale foot)): `pr` a
+ *  profile (PAS_PROF), H its height, kR its radius's scale, (ox, oz) its axis's foot in M's frame, y0 its foot's height there, hT the
+ *  whole chimney's height (for b). Eroded as the concept paints them, the soft tuff of its body in rounded swellings between deep
+ *  vertical creases (a few round it, wandering as they rise), broad lumps turning slowly up it, a few swellings bulging out of its
+ *  flanks, a hint of facets; its basalt cap lumpy and faceted, never fluted. Returns its radius at (y over its foot, th), for caves */
+function pasLathe(k, M, r, pr, H, kR, ox, oz, y0, hT, lod, eros = 1) {
+  const n = pasSides(lod), w = n + 1, K = pr.length, base = k.n;
+  const lx = r.range(-0.025, 0.025) * H, lz = r.range(-0.025, 0.025) * H; // (the axis leans a little: x(t) = lx·t²)
+  // broad lumps: sines of 1, 2, 3 and 5 round it, each turning its own way up it
+  const LU = [[1, r.range(0.02, 0.05)], [2, r.range(0.03, 0.065)], [3, r.range(0.02, 0.045)], [5, r.range(0.01, 0.025)]].map(([kk, a]) => [kk, a, r() * 6.28, r.range(-1.2, 1.2)]);
+  // creases: kc round it (|sin|: rounded swellings, sharp hollows), drifting and wandering up it
+  const kc = 4 + Math.floor(r() * 4), cph = r() * 6.28, ctw = r.range(-1.4, 1.4), cam = r.range(0.08, 0.14) * eros, cwv = r() * 6.28;
+  // (a hint of facets: a polygon of nf sides, pc its sides' distance from the middle, pm about its mean radius)
+  const nf = 4 + Math.floor(r() * 4), fph = r() * 6.28, ftw = r.range(-1.2, 1.2), pc = Math.cos(Math.PI / nf), pm = (pc + 1) / 2;
+  const G3 = [], B2 = [];
+  for (let i = 0, ng = 2 + Math.floor(r() * 3); i < ng; i++) G3.push([r() * 6.28, r.range(0.06, 0.13) * eros, r.range(0.14, 0.24), r.range(-0.6, 0.6)]);
+  for (let i = 0, nb = 2 + Math.floor(r() * 3); i < nb; i++) B2.push([r() * 6.28, r.range(0.04, 0.45), r.range(0.1, 0.24) * eros, r.range(0.4, 0.8), r.range(0.05, 0.11)]);
+  const far = lod >= 2;
+  // (and broken into blocks, as the concept paints its rock: every vertex pushed in or out on its own, the rings a little up or down,
+  // so its faces turn every way in broad planes; the cap most of all, a jagged lump of basalt)
+  const JR = new Float32Array(K * n), JY = new Float32Array(K);
+  for (let i = 0; i < K * n; i++) JR[i] = r() - 0.5;
+  for (let i = 0; i < K; i++) JY[i] = r() - 0.5;
+  const mod = (th, t, e, cap) => { // (its shape against the round profile; and the light: the creases' hollows)
+    let lu = 1; for (const [kk, a, ph, tw] of LU) lu += a * Math.sin(kk * th + ph + tw * t) * (cap ? 1.4 : 0.5 + 0.5 * e);
+    const per = (Math.PI * 2) / nf, d = ((((th - fph - ftw * t) % per) + per) % per) - per / 2, F = (cap ? 0.5 : 0.22) * e;
+    const facet = 1 - F + (F * pc) / Math.cos(d) / pm;
+    let cr = 1, gro = 1, bul = 1;
+    if (!cap) {
+      cr = 1 + cam * e * (Math.abs(Math.sin((kc / 2) * (th - cph - ctw * t - 0.18 * Math.sin(t * 9 + cwv)))) * 1.571 - 1);
+      if (!far) for (const [gt, gd, gw, gtw] of G3) { const x = wrapA(th - gt - gtw * t) / gw; gro -= gd * e * Math.exp(-x * x); }
+    }
+    for (const [bt, btt, ba, bw, bh] of B2) { const x = wrapA(th - bt) / bw, y = (t - btt) / bh; bul += ba * e * Math.exp(-x * x - y * y); }
+    return [lu * facet * cr * gro * bul, cr * gro];
+  };
+  const V = new Float32Array(K * w * 3), WB = new Float32Array(K * w);
+  for (let i = 0; i < K; i++) {
+    const [t, rr0, cap, e] = pr[i], dt = i > 0 && i < K - 1 ? Math.min(pr[i][0] - pr[i - 1][0], pr[i + 1][0] - pr[i][0]) : 0;
+    const y = (t + JY[i] * dt * 0.5 * Math.min(1, e * 1.5)) * H, rr = rr0 * H * kR, ax = ox + lx * t * Math.abs(t), az = oz + lz * t * Math.abs(t);
+    const jr = (cap > 0.5 ? 0.3 : 0.24) * e * eros * (i === K - 1 ? 0 : 1);
+    for (let j = 0; j <= n; j++) {
+      const th = ((j % n) / n) * Math.PI * 2, [m0, lg] = mod(th, t, e, cap > 0.5), m = m0 * (1 + jr * JR[i * n + (j % n)]), o = (i * w + j) * 3;
+      V[o] = ax + Math.sin(th) * rr * m; V[o + 1] = y0 + y; V[o + 2] = az + Math.cos(th) * rr * m; WB[i * w + j] = lg * (1 + 0.5 * jr * JR[i * n + (j % n)]);
+    }
+  }
+  k.setM(M);
+  const P = (i, j) => (Math.min(K - 1, Math.max(0, i)) * w + ((j + n) % n)) * 3;
+  for (let i = 0; i < K; i++) for (let j = 0; j <= n; j++) {
+    const o = (i * w + j) * 3, a = P(i, j - 1), b = P(i, j + 1), c = P(i - 1, j), d = P(i + 1, j);
+    const tx = V[b] - V[a], ty = V[b + 1] - V[a + 1], tz = V[b + 2] - V[a + 2], ux = V[d] - V[c], uy = V[d + 1] - V[c + 1], uz = V[d + 2] - V[c + 2];
+    let nx = ty * uz - tz * uy, ny = tz * ux - tx * uz, nz = tx * uy - ty * ux; const l = Math.hypot(nx, ny, nz);
+    if (l < 1e-6) { nx = 0; ny = 1; nz = 0; } // (the tip)
+    const [t, , cap] = pr[i], g = Math.min(1, Math.max(0.7, 0.9 + 1.7 * (WB[i * w + j] - 1)));
+    k.vtx(V[o], V[o + 1], V[o + 2], nx, ny, nz, PAS_UV + (((j % n === 0 && j > 0) ? n : j % n) / n) * Math.PI * 2, V[o + 1], [cap, g, Math.max(0, Math.min(1, (y0 + t * H) / hT))]);
+  }
+  const nt = (K - 1) * n * 6; if (k.ni + nt > k.icap) k.growI(k.ni + nt);
+  for (let i = 0; i < K - 1; i++) for (let j = 0; j < n; j++) { // (wound outward, as fairyChimney's)
+    const a = base + i * w + j, b = a + 1, cc = a + w, dd = cc + 1, o = k.ni;
+    k.I[o] = a; k.I[o + 1] = b; k.I[o + 2] = dd; k.I[o + 3] = a; k.I[o + 4] = dd; k.I[o + 5] = cc; k.ni += 6;
+  }
+  // its surface at (y over its foot, th) as built (the quads' corners interpolated): the point, the unit tangents round it (T) and up
+  // it (U), the outward normal (T × U)
+  return (y, th) => {
+    const yy = y0 + y; let i = 0; while (i < K - 2 && V[((i + 1) * w) * 3 + 1] < yy) i++;
+    const ya = V[i * w * 3 + 1], yb = V[(i + 1) * w * 3 + 1], q = Math.min(1, Math.max(0, (yy - ya) / (yb - ya || 1)));
+    const jf = ((((th / (Math.PI * 2)) % 1) + 1) % 1) * n, j0 = Math.min(n - 1, Math.floor(jf)), fj = jf - j0;
+    const C = (ii, jj, c) => V[(ii * w + jj) * 3 + c], out = { p: [0, 0, 0], T: [0, 0, 0], U: [0, 0, 0], N: [0, 0, 0] };
+    for (let c = 0; c < 3; c++) {
+      const a = C(i, j0, c), b = C(i, j0 + 1, c), d = C(i + 1, j0, c), e = C(i + 1, j0 + 1, c);
+      out.p[c] = (a + (b - a) * fj) * (1 - q) + (d + (e - d) * fj) * q; out.T[c] = (b - a) * (1 - q) + (e - d) * q; out.U[c] = (d - a) * (1 - fj) + (e - b) * fj;
+    }
+    const nr = v => { const l = Math.hypot(v[0], v[1], v[2]) || 1; v[0] /= l; v[1] /= l; v[2] /= l; return v; }, T = nr(out.T), U0 = out.U;
+    const N = nr([T[1] * U0[2] - T[2] * U0[1], T[2] * U0[0] - T[0] * U0[2], T[0] * U0[1] - T[1] * U0[0]]);
+    out.N = N; out.U = nr([N[1] * T[2] - N[2] * T[1], N[2] * T[0] - N[0] * T[2], N[0] * T[1] - N[1] * T[0]]); // (U = N × T: up its face)
+    return out;
+  };
+}
+/** A fairy chimney of Paşabağ (W6), as its concept paints them along its road (ref/world/cappadocia_pasabag.png) and the Monks'
+ *  Valley has them: tall cream tuff under a dark basalt cap, a mushroom's (sp.kind 'mush') or a witch's hat ('hat'), now and then a
+ *  plain cone ('cone'); or a broad mound with two or three such heads rising out of it (sp.heads: [{ x, z, h, kind }] round its
+ *  middle, in metres). Cave openings in the side towards the road and the oncoming car (sp.caves: doors at the foot, windows up
+ *  its body, some lit at dusk: Cappadocia's atlas's cells, casting no shadow). M: from matAt with faceRoad (−z towards the road);
+ *  sp: h, kind, heads, side (u's sign), caves, lod */
+export function pasChimney(G, M, r, sp) {
+  const k = G.tuff; if (!k) return;
+  const H = sp.h, lod = sp.lod || 0;
+  let rad, tHi = 0.48; // (the caves' surface: the body's, or the heads' common mound's, up to tHi of the height)
+  if (sp.heads && sp.heads.length) {
+    rad = pasLathe(k, M, r, PAS_MOUND, H, r.range(0.9, 1.1), 0, 0, 0, H, lod); tHi = 0.28;
+    for (const hd of sp.heads) pasLathe(k, M, r, PAS_PROF[hd.kind], hd.h, hd.k || r.range(0.78, 0.92), hd.x, hd.z, 0, H, lod);
+  } else rad = pasLathe(k, M, r, PAS_PROF[sp.kind] || PAS_MUSH, H, r.range(0.9, 1.1), 0, 0, 0, H, lod);
+  if (!sp.caves) return;
+  const at = G.cap; at.setM(M);
+  const th0 = sp.side > 0 ? 1.25 * Math.PI : 0.75 * Math.PI, Hh = H;
+  for (let q = 0; q < sp.caves; q++) {
+    const door = q === 0 && r() < 0.6;
+    const t = door ? r.range(0.005, 0.03) : r.range(0.1, tHi), th = th0 + r.range(-0.5, 0.5);
+    const ww = (door ? r.range(1.1, 1.4) : r.range(0.95, 1.35)) * (Hh > 12 ? 1.3 : 1), hh = door ? ww * 1.7 : ww * 1.2, yc = t * Hh;
+    // (its face there, as built; the quad upright on it (level across, up its slope), a little proud of it)
+    const S = rad(yc + hh / 2, th), hw = ww / 2, N = S.N, tl = Math.hypot(N[2], N[0]) || 1, T = [N[2] / tl, 0, -N[0] / tl];
+    const Uv = [N[1] * T[2] - N[2] * T[1], N[2] * T[0] - N[0] * T[2], N[0] * T[1] - N[1] * T[0]], out = 0.12 + 0.05 * Hh / 20;
+    if (T[0] * S.T[0] + T[2] * S.T[2] < 0) { T[0] = -T[0]; T[2] = -T[2]; Uv[0] = -Uv[0]; Uv[1] = -Uv[1]; Uv[2] = -Uv[2]; } // (wound as the face is)
+    if (Uv[1] < 0) { Uv[0] = -Uv[0]; Uv[1] = -Uv[1]; Uv[2] = -Uv[2]; }
+    const c0 = [S.p[0] + S.N[0] * out - Uv[0] * hh / 2, S.p[1] + S.N[1] * out - Uv[1] * hh / 2, S.p[2] + S.N[2] * out - Uv[2] * hh / 2];
+    const p0 = [c0[0] - T[0] * hw, c0[1] - T[1] * hw, c0[2] - T[2] * hw], p1 = [c0[0] + T[0] * hw, c0[1] + T[1] * hw, c0[2] + T[2] * hw];
+    const p2 = [p1[0] + Uv[0] * hh, p1[1] + Uv[1] * hh, p1[2] + Uv[2] * hh], p3 = [p0[0] + Uv[0] * hh, p0[1] + Uv[1] * hh, p0[2] + Uv[2] * hh];
+    const lit = !door && r() < 0.4, cell = door ? 'uchDoor' + Math.floor(r() * 3) : 'uchWin' + Math.floor(r() * 3) + (lit ? 'L' : '');
+    at.litV = lit ? homeLit(at, th * 3.1 + q, t * 17 + H) : 0;
+    at.quad(p0, p1, p2, p3, W1, uv(cell)); at.litV = 0;
+  }
+}
+/** a pale tuff boulder of the valley floor (W6): a squat lumpy lathe of Paşabağ's tuff, sunk a little into the ground */
+const PAS_BOULDER = [[-0.4, 0.9, 0, 1], [0, 1, 0, 1], [0.3, 0.97, 0, 1], [0.6, 0.8, 0, 1], [0.85, 0.5, 0, 0.8], [1, 0, 0, 0]];
+export function pasBoulder(G, M, r, s = 1) {
+  if (!G.tuff) return;
+  const h = r.range(0.45, 1.1) * s; pasLathe(G.tuff, M, r, PAS_BOULDER.map(([t, rr, c, e]) => [t, rr * r.range(1.1, 1.5), c, e]), h, 1, 0, 0, -0.1 * h, h * 8, 2, 1.2);
+}
+/** a clump of Paşabağ's tall dry grass (W6): two crossed cards of its cells (textures.js pasGrass: a texture of their own, G.pgrass,
+ *  drawn by materials.js makePasGrass), 4:3, shaded like the ground, casting no shadow, swayed by the breeze. Straight into chunk space */
+const PG_LO = [0.46, 0.41, 0.36], PG_HI = [0.9, 0.86, 0.8], PG_N = [[0, 1, 0], [0, 1, 0], [0, 1, 0], [0, 1, 0]];
+export function pasGrass(G, x, y, z, a, r, s = 1, k = 1) { // (k: its colour's scale: the verge's deep grass darker, as painted)
+  const at = G.pgrass; if (!at) return;
+  const c = uv('pasGrass' + Math.floor(r() * 4)), h = (0.55 + r() * 0.4) * s, w = h * 1.33;
+  const lo = k === 1 ? PG_LO : PG_LO.map(v => v * k), hi = k === 1 ? PG_HI : PG_HI.map(v => v * (0.5 + 0.5 * k));
+  for (let i = 0; i < 2; i++) { // (three a clump cost 11.8 ms on the Vega's desktop tier: the verge is many alpha-tested layers deep)
+    const b = a + (i * Math.PI) / 2, cx = (Math.cos(b) * w) / 2, cz = (Math.sin(b) * w) / 2;
+    at.card([[x - cx, y - 0.05, z - cz], [x + cx, y - 0.05, z + cz], [x + cx, y + h, z + cz], [x - cx, y + h, z - cz]], PG_N, c, [lo, lo, hi, hi]);
+  }
+}
+/** a tourist at Paşabağ's roadside (W6), as the concept's little group far ahead: light summer clothes, now and then a sun hat or a
+ *  backpack, facing the valley across the road (−z), in G.color */
+const T_TOPS = ['#f1efe8', '#9cc4e4', '#e8d2b0', '#7fb2d8', '#e9b7b0', '#cfe0d8', '#f4dc8c', '#5f86b8', '#ffffff'].map(C);
+const T_LEGS = ['#3e5f8a', '#2b3a55', '#c8b48e', '#e8e2d4', '#33363d', '#6a7f9e'].map(C), T_HATS = ['#efe6d0', '#d8c49a', '#f4f1ea', '#2f3d5a'].map(C), T_BAGS = ['#d8572f', '#2f3d5a', '#5b5f3d', '#c9402e'].map(C);
+export function tourist(G, M, r) {
+  const c = G.color; c.setM(M); c.noShadow = false;
+  const top = r.pick(T_TOPS), leg = r.pick(T_LEGS), sk = r.pick(SKIN), s = r.range(0.9, 1.06), hip = 0.86 * s, sh = hip + 0.56 * s, shorts = r() < 0.35;
+  c.cyl(-0.1, 0, 0, 0.065, 0.08, hip, 5, shorts ? sk : leg); c.cyl(0.1, 0, 0, 0.065, 0.08, hip, 5, shorts ? sk : leg);
+  if (shorts) { c.cyl(-0.1, hip * 0.55, 0, 0.085, 0.09, hip * 0.45, 5, leg); c.cyl(0.1, hip * 0.55, 0, 0.085, 0.09, hip * 0.45, 5, leg); }
+  c.cyl(0, hip - 0.04, 0, 0.19, 0.17, sh - hip + 0.06, 6, top);
+  c.cyl(-0.23, sh - 0.5, 0, 0.045, 0.05, 0.48, 4, sk); c.cyl(0.23, sh - 0.5, 0, 0.045, 0.05, 0.48, 4, sk); // (the arms, hanging)
+  c.cyl(0, sh + 0.02, 0, 0.08, 0.065, 0.04, 6, sk); c.cyl(0, sh + 0.06, 0, 0.095, 0.09, 0.19 * s, 7, r() < 0.5 ? C('#3a2a22') : sk); // (the head: dark hair from behind)
+  if (r() < 0.4) { const ht = r.pick(T_HATS); c.cyl(0, sh + 0.19 * s, 0, 0.19, 0.19, 0.02, 8, ht); c.cyl(0, sh + 0.2 * s, 0, 0.1, 0.09, 0.08, 7, ht); }
+  if (r() < 0.45) c.box(-0.15, sh - 0.42, 0.16, 0.15, sh - 0.04, 0.32, r.pick(T_BAGS)); // (a backpack)
 }

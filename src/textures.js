@@ -22,19 +22,19 @@ export class Atlas {
    *  (the painted atlas lists its cells in the procedural atlas's: one namespace, one uv() for both). cpu: canvases drawn on
    *  the CPU (willReadFrequently): Cappadocia's (W5), whose round-capped strokes on the grey ground lost the whole of a
    *  GPU-drawn canvas in Chrome (ANGLE on Vulkan, this box and the live build alike) */
-  constructor(h = SH, uOff = 0, cells = {}, cpu = false) {
-    const H = (this.H = h), o = cpu ? { willReadFrequently: true } : undefined;
-    this.cA = canvas(SW, H); this.cE = canvas(SW / 2, H / 2);
+  constructor(h = SH, uOff = 0, cells = {}, cpu = false, w = SW) {
+    const H = (this.H = h), W = (this.W = w), o = cpu ? { willReadFrequently: true } : undefined; // (w: its width, W6's small one's)
+    this.cA = canvas(W, H); this.cE = canvas(W / 2, H / 2);
     this.a = this.cA.getContext('2d', o); this.e = this.cE.getContext('2d', o);
-    this.e.fillStyle = '#000'; this.e.fillRect(0, 0, SW / 2, H / 2);
-    this.a.fillStyle = '#8a8a8a'; this.a.fillRect(0, 0, SW, H); // opaque padding so alpha-test only cuts the railing cell
+    this.e.fillStyle = '#000'; this.e.fillRect(0, 0, W / 2, H / 2);
+    this.a.fillStyle = '#8a8a8a'; this.a.fillRect(0, 0, W, H); // opaque padding so alpha-test only cuts the railing cell
     this.x = 0; this.y = 0; this.rowH = 0; this.cells = cells; this.uOff = uOff;
     this.grain = this.a.createPattern(grainC, 'repeat');
   }
   /** allocate a w×h cell and paint it; draw(a, e, w, h) is called with both contexts translated to the cell */
   add(name, w, h, draw) {
     const P = 4;
-    if (this.x + w + P > SW) { this.x = 0; this.y += this.rowH + P; this.rowH = 0; }
+    if (this.x + w + P > this.W) { this.x = 0; this.y += this.rowH + P; this.rowH = 0; }
     if (this.y + h > this.H) throw new Error('atlas full at ' + name);
     const r = { x: this.x, y: this.y, w, h };
     this.x += w + P; this.rowH = Math.max(this.rowH, h);
@@ -42,7 +42,7 @@ export class Atlas {
     draw(this.a, this.e, w, h);
     this.a.restore(); this.e.restore();
     const hp = 0.5, H = this.H, o = this.uOff;
-    this.cells[name] = { u0: o + (r.x + hp) / SW, u1: o + (r.x + w - hp) / SW, v0: 1 - (r.y + h - hp) / H, v1: 1 - (r.y + hp) / H, w, h, px: r.x, py: r.y };
+    this.cells[name] = { u0: o + (r.x + hp) / this.W, u1: o + (r.x + w - hp) / this.W, v0: 1 - (r.y + h - hp) / H, v1: 1 - (r.y + hp) / H, w, h, px: r.x, py: r.y };
     return this.cells[name];
   }
   /** repaint a cell from an image: the albedo from (sx, sy, sw, sh), the emissive from (sx, ey, sw, sh) of the same
@@ -1291,6 +1291,38 @@ function uchTwig(A, a, e, w, h, seed) {
   };
   for (let i = 0; i < 5; i++) br(w / 2 + (r() - 0.5) * w * 0.12, h * 0.98, -Math.PI / 2 + (i - 2) * 0.42 + (r() - 0.5) * 0.25, h * (0.22 + r() * 0.06), 2.6 * k, 5);
 }
+/** a clump of Paşabağ's tall dry grass (W6), as its concept paints its verges: long fine blades rising from a dark olive root and
+ *  arching out, golden straw in the light, pale cream at their tips, a few still greenish low down, oat-like seed heads nodding on
+ *  their stalks over them; on a transparent ground (4:3). Brighter, taller and denser than Uçhisar's (uchGrass). Its own random
+ *  numbers (seed) */
+function pasGrass(A, a, e, w, h, seed) {
+  const r = rng(seed), k = w / 256; a.clearRect(0, 0, w, h);
+  const pal = ['#4c3c28', '#6b5638', '#8a7048', '#a98a58', '#bf9e66', '#d0b278', '#ddc590', '#e8d8b0'];
+  const cx = w / 2;
+  for (let layer = 0; layer < 4; layer++) for (let i = 0; i < 70; i++) {
+    const bx = cx + (r() - 0.5) * w * 0.62 * Math.sqrt(r()), hh = h * (0.4 + r() * 0.58) * (1 - Math.abs(bx - cx) / (w * 0.48)) * (0.72 + layer * 0.1);
+    if (hh < h * 0.1) continue;
+    const lean = (bx - cx) * (0.6 + r() * 1.3) + (r() - 0.5) * w * 0.14, wB = (2.2 + r() * 2.4) * k, tx = bx + lean, ty = h - hh;
+    const green = layer < 2 && r() < 0.18, top = Math.min(7, Math.max(1, Math.floor(layer * 1.5 + r() * 2.5 + (hh / h) * 2.5)));
+    const gr = a.createLinearGradient(0, h, 0, ty);
+    gr.addColorStop(0, pal[Math.max(0, top - 5)]); gr.addColorStop(0.5, green ? '#7f8446' : pal[Math.max(0, top - 2)]); gr.addColorStop(1, green ? '#a9a660' : pal[top]);
+    a.fillStyle = gr; a.beginPath(); a.moveTo(bx - wB / 2, h);
+    a.quadraticCurveTo(bx - wB / 2 + lean * 0.3, h - hh * 0.62, tx, ty); a.quadraticCurveTo(bx + wB / 2 + lean * 0.3, h - hh * 0.56, bx + wB / 2, h); a.fill();
+  }
+  // seed heads on long stalks, nodding over the clump, pale in the light
+  for (let i = 0; i < 16; i++) {
+    const bx = cx + (r() - 0.5) * w * 0.45, tx = bx + (r() - 0.5) * w * 0.5, ty = h * (0.02 + r() * 0.3), sw = 1.3 * k;
+    a.strokeStyle = r() < 0.5 ? '#d6b469' : '#e4c97f'; a.lineWidth = sw; a.beginPath(); a.moveTo(bx, h); a.quadraticCurveTo((bx + tx) / 2, (h + ty) / 2 - h * 0.05, tx, ty); a.stroke();
+    for (let j = 0; j < 4; j++) { a.fillStyle = j % 2 ? '#f1dfa4' : '#e2c47c'; a.beginPath(); a.ellipse(tx + (r() - 0.5) * 6 * k, ty + j * 5 * k, 2.2 * k, 5.5 * k, (tx - bx) / w + (r() - 0.5) * 0.6, 0, 7); a.fill(); }
+  }
+}
+/** Paşabağ's cells (W6), as [name, [w, h], painter]: its tall grass, four clumps of one size (the atlas material sways them from the
+ *  root: materials.js makeCapAtlas, their rectangle in U.uCapSway) */
+function pasList(k) {
+  const L = [];
+  for (let i = 0; i < 4; i++) L.push(['pasGrass' + i, [Math.round(256 * k), Math.round(192 * k)], (A, a, e, w, h) => pasGrass(A, a, e, w, h, 7201 + i)]);
+  return L;
+}
 /** Cappadocia's rows of the world atlas (W5): their cells, as [name, [w, h], painter]; `k` the tier's scale */
 function uchList(k) {
   const L = [], C = [Math.round(64 * k), Math.round(96 * k)], D = [Math.round(80 * k), Math.round(144 * k)];
@@ -1309,6 +1341,23 @@ export function buildCapAtlas(main, tier) {
   const ul = uchList(tier === 'hi' ? 1 : 0.5), C = new Atlas(Math.ceil((flowEnd(ul.map(c => c[1])) + 8) / 4) * 4, 0, main.cells, true);
   for (const [n, [w, h], f] of ul) C.add(n, w, h, (a, e, cw, ch) => f(C, a, e, cw, ch));
   return C;
+}
+/** Builds Paşabağ's cells for a tier (W6: 'hi' or 'lo', half the px), in a small texture of their own, one row (its tall grass), drawn
+ *  by a material of their own (materials.js makePasGrass), so Uçhisar's atlas, its size, its mips and its program stay as they were
+ *  (its cells listed in the one namespace, as the others'). .sway: their row's v0 and v1 */
+export function buildPasAtlas(main, tier) {
+  const pl = pasList(tier === 'hi' ? 1 : 0.5), W = Math.ceil((pl.reduce((x, c) => x + c[1][0] + 4, 0) + 4) / 4) * 4, H = Math.ceil((Math.max(...pl.map(c => c[1][1])) + 8) / 4) * 4;
+  const C = new Atlas(H, 0, main.cells, true, W);
+  for (const [n, [w, h], f] of pl) C.add(n, w, h, (a, e, cw, ch) => f(C, a, e, cw, ch));
+  C.sway = [C.cells.pasGrass0.v0, C.cells.pasGrass0.v1];
+  return C;
+}
+/** an atlas's albedo alone, as a texture (Paşabağ's cells: nothing of theirs glows) */
+export function albedoTexture(C, renderer) {
+  const t = new THREE.CanvasTexture(C.cA);
+  t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true;
+  return t;
 }
 /** Builds the world atlas for a tier ('hi' or 'lo': half the px). `main`: the procedural atlas, whose cell list it shares;
  *  `th`: the Bosphorus's painted houses (painted.js loadTrHouseAtlas), in rows of their own (.trHouses: whether they are in);

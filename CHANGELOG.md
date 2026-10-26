@@ -2,6 +2,60 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-26 · 18:05 — World 6: Cappadocia's Paşabağ fairy chimneys, as its concept painting has it
+- **On from Uçhisar into the valley of the fairy chimneys.** Turkey's leg now runs Bosphorus → Galata → town → Uçhisar →
+  Paşabağ → border → Japan: over the Uçhisar road's last 260 m its sand, cones and castle give way to Paşabağ's golden grass,
+  hillside and capped chimneys, and the castle rock on the horizon to a rounded tuff hill at the road's end. `?env=pasabag`
+  starts there; its zone card reads Paşabağ / Cappadocia · Monks' Valley.
+- **The chimneys as painted** (ref/world/cappadocia_pasabag.png): tall cream tuff pillars, 9–20 m, close along both sides of
+  the road, each under a dark basalt cap — a mushroom's jagged slab over a smooth neck, a witch's hat, now and then none — and
+  every so often two or three heads on one mound, as in the Monks' Valley. Their soft rock is broken into blocks, rounded
+  swellings between deep creases, painted crevices running down them, big arched cave doors and windows towards the road that
+  light up one by one at dusk; the concept's tones by day, its repaints' honey, rose-mauve and moonlit tones at golden hour,
+  sunset and night (ref/tod/pasabag_*.png).
+- **The valley:** grey gravel shoulders; tall dry golden grass along both verges, swaying in the breeze and darkest at the
+  gravel's edge; golden fields dotted with dark shrubs; a grassy hillside rising on the left; pale tuff boulders; near-black
+  gnarled bare trees; a small group of tourists at the roadside now and then.
+- **A rounded tuff hill at the road's end:** a new painted horizon (Grok on the concept's far view, between four panoramas of
+  the valley), turned slowly with the road; honey at golden hour, rose at sunset, moonlit at night.
+- **The concept's light:** the sun high on the left and a little behind, so the van's shadow falls to its right and the
+  chimneys' faces towards us are lit; still on the left at golden hour, low ahead at sunset, the moon ahead-right at night. It
+  turns from Uçhisar's over the 300 m before the hand-over and through it, at most 3°/s. Paşabağ has its own zenith, asphalt
+  and ground tones by the hour; balloons over it in the morning only.
+- Against the concept (region medians, CIELAB ΔE, at its 1296 × 800; before = live's ?env=pasabag, its Bosphorus start): mean
+  33.3 → 10.4; far hill 1.2, left chimney's shade 1.3, hillside 4.3, sky 5.3. Against its repaints: golden hour 14.4, sunset
+  21.2, night 12.6.
+- Japan, the Bosphorus, Galata, the town and Uçhisar unchanged: all ten starts identical to live in seeded captures (to the few
+  pixels their own loads differ by; Uçhisar's dawn balloons over its far end float a little differently, as the road there runs
+  on into Paşabağ now). Uçhisar's ground and chimney programs take Paşabağ's look by vertex, exactly nothing for Uçhisar's;
+  Cappadocia's atlas program is untouched (any change to it moved a few of Uçhisar's far twigs' pixels on this GPU), so
+  Paşabağ's grass has a texture and a material of its own. The props' shadow program is now compiled at load (a start with no
+  poles near the car compiled it at the first props, mid-drive).
+- How: path.js (TURKEY, CAPPA, ZINFO.pasabag, pasLand), chunks.js (placePasabag, pasChim, tourists, PAS_BANDS, PAS_HERO_P),
+  props.js (pasChimney, pasLathe, PAS_UV, pasBoulder, pasGrass, tourist, barePas), textures.js (pasGrass, buildPasAtlas,
+  albedoTexture), materials.js (uchGround's and tuffMaterial's Paşabağ share, makePasGrass, ZALIAS), main.js, audio.js.
+- Assets: assets/band/bandtr5.json, bandtr5_hi.webp (76 KB), bandtr5_lo.webp (28 KB): WebP q50 from lossless masters
+  (~/cdtest/w6/band, bandtr5.py), loaded with Turkey's other bands. Without them: the country's far hills.
+- Programs: a Turkish start 76 desktop / 75 phone (75 / 74); a Japanese start 63 / 62, then 76 / 75 once Turkey is in.
+- Cost (the shared box's Vega; the desktop machine down): Paşabağ cheaper than the country on desktops and the same on phones —
+  over drives on staging, interleaved, 18.70 / 19.32 / 18.92 ms against the country's 21.41 / 20.92 / 21.48 (desktop), 9.78 /
+  9.16 / 9.82 against 9.87 / 9.69 / 10.42 (phone); its tall grass is its dearest draw (~5 ms desktop). Uçhisar's chimneys
+  +0.3 ms on desktops (per draw 1.53 / 1.57 → 1.92 / 1.82 ms: Paşabağ's crevices are worked out for every chimney and weighed
+  out for Uçhisar's), its draws all told the same (17.2 / 17.6 → 17.2 / 16.3 ms), its phone drives the same (9.20 / 9.51 / 9.11
+  → 9.08 / 9.47 / 9.25); Japan's city unchanged (per draw 20.2 / 19.9 → 18.9 / 20.4 ms desktop, 13.2 / 14.6 → 14.9 / 13.9
+  phone). World build: Japan's the same (the country's chunks, profiled, 1280 / 1264 / 1338 → 1274 / 1176 / 1148 ms);
+  Paşabağ's chunks in its range (on a 4×-throttled phone, the worst generator step 24.7 / 45.4 ms over two runs against the
+  country's 32.2 / 50.7 and Uçhisar's 17.6 / 117.8 on this busy box; the median chunk's worst 6.0 / 12.6 against 6.4 / 8.8). Start-up: a Japanese start the same (desktop medians 3.31 → 3.40 s over four loads each, a 3 Mbps phone 7.27 →
+  7.29 s over nine; +22 KB of code, 7.7 KB gzipped); a Turkish start's first visit +97 KB desktop / +50 KB phone. Turkey's lazy
+  load from a Japanese start: 63 → 76 / 62 → 75 ~1.3 km in, no program in a slow frame on either. 0 shader errors in all eleven
+  zones on desktops, on the phone tier at dawn, noon, sunset and night, and at q=low; no console errors at q=low, mid and high;
+  nothing compiled through sunset, night, rain, dawn, the hand-over or either border (the car keeps right, then left again in
+  Japan); embed starts on tap; with the band missing, no errors.
+- Left over: procedural crevices rather than painted rock; thinner verges than painted (the grass's cost); the right near
+  chimney's shade off-frame; the stretch 330–900 m into the zone kept open (the opening view's valley ahead), so it has few
+  chimneys near the road; sunset's shaded chimney faces painted rose; the sun's ~50 s turn into the valley; chimneys at the
+  edges in phone portrait; flat out on a throttled phone the world build spikes more than elsewhere.
+
 ## 2026-10-26 · 13:xx — World 5: Cappadocia's Göreme → Uçhisar road, as its concept painting has it
 - **Out of the town onto the open Anatolian road.** Turkey's leg now runs Bosphorus → Galata → town → Uçhisar → border →
   Japan: the town's blocks end half-way through a 260 m hand-over and the dry tuff land begins. `?env=uchisar` starts

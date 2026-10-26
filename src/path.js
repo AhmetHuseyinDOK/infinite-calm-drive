@@ -4,17 +4,21 @@ import { clamp, lerp, smooth, sstep, noise1, fbm1, hash2 } from './util.js';
 // ---- the world's route: regions of zones, ZONE_LEN each, driven in order and round again
 // Japan's six zones (as they always were), then through the border tunnel into Turkey, then back through another border
 // tunnel to Japan's first. Turkey so far: the Bosphorus shore road at Arnavutköy (W2), the Galata Bridge (W3), a typical
-// Turkish town's high street (W4) and Cappadocia's Göreme → Uçhisar road (W5). PLANNED lists the next regions' zones in
-// their order (W6: the Paşabağ fairy chimneys; then Tokyo, Osaka and a Japanese coastal city): each joins its region's list
-// once it is built (its ZINFO entry, its look in chunks.js / materials.js / painted.js), and the route grows with it. A start
-// in a planned zone (?env=pasabag …) begins at its region's first built zone.
+// Turkish town's high street (W4), Cappadocia's Göreme → Uçhisar road (W5) and the Paşabağ fairy chimneys (W6). PLANNED lists
+// the next regions' zones in their order (Tokyo, Osaka and a Japanese coastal city): each joins its region's list once it is
+// built (its ZINFO entry, its look in chunks.js / materials.js / painted.js), and the route grows with it. A start in a planned
+// zone (?env=tokyo …) begins at its region's first built zone.
 export const JAPAN = ['city', 'sakura', 'coast', 'country', 'mountain', 'snow'];
 // (W3: the shore road runs on into Karaköy and out over the Golden Horn on the Galata Bridge towards Eminönü; W4: off the
 // bridge into a Turkish town, its high street of apartment blocks over shops closed by a mosque; W5: out of the town onto the
-// open Anatolian road, through Cappadocia's tuff valleys towards the castle rock of Uçhisar, before the border)
-export const TURKEY = ['bosphorus', 'galata', 'town', 'uchisar'];
+// open Anatolian road, through Cappadocia's tuff valleys towards the castle rock of Uçhisar; W6: on through the valley of the
+// Paşabağ fairy chimneys, before the border)
+export const TURKEY = ['bosphorus', 'galata', 'town', 'uchisar', 'pasabag'];
 export const ZONES = [...JAPAN, ...TURKEY];
-export const PLANNED = { tr: ['pasabag'], jp2: ['tokyo', 'osaka', 'jpcoast'] };
+export const PLANNED = { tr: [], jp2: ['tokyo', 'osaka', 'jpcoast'] };
+/** Cappadocia's zones (W5, W6): one tuff land (path.js TUFF), drawn by one ground variant (materials.js Z_UCH: Paşabağ's own share
+ *  rides in the snow's slot, chunks.js), one fairy chimneys' material (tuffMaterial) and one atlas (textures.js buildCapAtlas) */
+export const CAPPA = ['uchisar', 'pasabag'];
 /** each zone's region: its traffic side, its border crossings, its zone card's language */
 export const REGION = {};
 for (const z of JAPAN) REGION[z] = 'jp';
@@ -49,8 +53,12 @@ export const ZINFO = {
   // grass, the castle rock of Uçhisar at the end of the road (the painted band, turned down the road: main.js). Nearly straight,
   // its gentle bends long and slow, rising and falling a little over the plateau (its base the town's: no slope at the hand-over)
   uchisar: { loc: 'Uçhisar Yolu', en: 'Cappadocia · Göreme → Uçhisar', curv: 1 / 1100, hill: 1.6, base: 6.2, rw: 3.3, speed: 12 },
-  // (planned, not on the route yet: names only)
-  pasabag: { loc: 'Paşabağ', en: 'Fairy Chimneys' },
+  // Cappadocia (W6): the road past the Paşabağ fairy chimneys (the Monks' Valley), as its concept painting has it
+  // (ref/world/cappadocia_pasabag.png, after the real road's Street View): two lanes between gravel shoulders through dry golden
+  // grass, tall cream tuff chimneys under dark basalt caps close along both sides, a grassy hillside rising on the left, a rounded
+  // tuff hill at the road's end (the painted band, turned down the road: main.js). Straight but for long gentle bends, on from
+  // Uçhisar's plateau at its height (no slope at the hand-over)
+  pasabag: { loc: 'Paşabağ', en: "Cappadocia · Monks' Valley", curv: 1 / 1500, hill: 1.1, base: 6.2, rw: 3.3, speed: 11.5 },
 };
 export const ZONE_LEN = 1500, TRANS = 260, SEA = 0;
 /** the coast: the sea wall's face stands WALL_U past the road's edge; its foot is SEA_FOOT under the water */
@@ -95,7 +103,7 @@ export function zoneMix(s) {
   return { a, b, t };
 }
 export function zoneW(s) {
-  const m = zoneMix(s), w = { city: 0, sakura: 0, coast: 0, country: 0, mountain: 0, snow: 0, bosphorus: 0, galata: 0, town: 0, uchisar: 0 };
+  const m = zoneMix(s), w = { city: 0, sakura: 0, coast: 0, country: 0, mountain: 0, snow: 0, bosphorus: 0, galata: 0, town: 0, uchisar: 0, pasabag: 0 };
   w[m.a] += 1 - m.t; w[m.b] += m.t;
   return w;
 }
@@ -321,6 +329,23 @@ export function uchTuff(s, u) {
 }
 /** the tuff's share of the last groundOffset('uchisar') call's height (0 … 1: its pale cream in the ground shader) */
 export let TUFF = 0;
+/** Paşabağ's land (W6), as its concept paints it: on the left, from ~20 m out (behind the near chimneys), a grassy hillside rising to
+ *  ~15 m at 50 m and rolling on higher beyond (its height swelling and sinking along the road, slow), a few patches of pale tuff on it;
+ *  on the right the valley floor, nearly flat, rising gently far out. Height over the plain at (s, a = |u|) by side; pasTuffK the
+ *  pale tuff's share of the last call (0 … 1, its colour only: the ground shader's) */
+let pasTuffK = 0;
+function pasLand(s, u) {
+  const a = Math.abs(u);
+  pasTuffK = 0;
+  if (u < 0) {
+    const k = 0.75 + 0.5 * noise1(s / 190 + 3.7, 111), q = noise1(s / 47 + a / 23, 113);
+    const h = KS(1, (a - 19) / 32) * 15 * k + KS(1, (a - 50) / 60) * 9 * (0.5 + noise1(s / 260 + 9.1, 115)) + KS(1, (a - 20) / 20) * 1.6 * (q - 0.5);
+    // (pale tuff showing through the grass on its steeper face, in a few patches)
+    pasTuffK = 0.7 * KS(1, (a - 24) / 10) * (1 - KS(1, (a - 70) / 30)) * Math.max(0, noise1(s / 21 + a / 17 + 5.5, 117) * 2.4 - 1.75);
+    return h;
+  }
+  return KS(1, (a - 70) / 90) * 7 * (0.4 + 0.6 * noise1(s / 230 + 1.3, 119)) + KS(1, (a - 10) / 30) * 0.5 * (noise1(s / 31 + a / 29, 121) - 0.5);
+}
 /** Height of the ground relative to the road surface at (s,u), per zone. u > 0 is the right-hand side. */
 export function groundOffset(zone, s, u, e, rw) {
   const a = Math.abs(u);
@@ -333,6 +358,15 @@ export function groundOffset(zone, s, u, e, rw) {
       if (a < rw + 1.7) return -0.08 - 0.06 * (a - rw - 0.3) / 1.4;
       const pl = -0.14 - 0.1 * sstep(rw + 1.7, rw + 4, a) + 0.45 * sstep(rw + 3, rw + 9, a) * (noise1(s / 23 + (u > 0 ? 17 : 0) + a / 31, 89) - 0.5);
       const h = uchTuff(s, u); TUFF = Math.min(1, h / 1.6);
+      return pl + h;
+    }
+    case 'pasabag': {
+      // Paşabağ (W6): the asphalt's edge, a strip of grey gravel shoulder at the road's level (as painted: ~1.1 m), the verge of tall
+      // dry grass dipping a little beyond it, then the valley's land (pasLand: the hillside on the left)
+      if (a < rw + 0.3) { TUFF = 0; return -0.06; }
+      if (a < rw + 1.4) { TUFF = 0; return -0.08 - 0.05 * (a - rw - 0.3) / 1.1; }
+      const pl = -0.13 - 0.12 * sstep(rw + 1.4, rw + 3, a) + 0.4 * sstep(rw + 3, rw + 10, a) * (noise1(s / 25 + (u > 0 ? 29 : 0) + a / 33, 109) - 0.5);
+      const h = pasLand(s, u); TUFF = pasTuffK;
       return pl + h;
     }
     case 'city':
@@ -416,9 +450,9 @@ export function groundOffsetMix(s, u, e, rw) {
   // (out of the Turkish town into Cappadocia, W5: the town's paving holds on to where its blocks end, half-way through the hand-over,
   // and the tuff rises out of the plain after them, not through them)
   if (m.a === 'town' && m.b === 'uchisar') tm = sstep(0.45, 0.95, tm);
-  const tuffA = m.a === 'uchisar' ? TUFF : 0;
+  const tuffA = CAPPA.includes(m.a) ? TUFF : 0; // (Cappadocia's, W5, W6)
   let base = m.t > 0 ? lerp(a, groundOffset(m.b, s, u, e, rw), tm) : a;
-  TUFF = m.t > 0 ? lerp(tuffA, m.b === 'uchisar' ? TUFF : 0, tm) : tuffA;
+  TUFF = m.t > 0 ? lerp(tuffA, CAPPA.includes(m.b) ? TUFF : 0, tm) : tuffA;
   // (the shore road onto the Galata Bridge, W3: at Karaköy the bridge leaves the land, so beyond its deck the hill on the right
   // turns away from the road, its foot (a quay) running off over the water at ~50° from the road, past the ground's far edge by
   // the bridge's first metre; it starts where the Bosphorus's houses and trees end (their weight 0.6, 112 m into the hand-over:
@@ -448,8 +482,8 @@ export function groundOffsetMix(s, u, e, rw) {
   // (a border tunnel's mouth into the shopping street: its cutting stands back behind the sidewalk and the shopfronts, so
   // the street runs up to the portal)
   // (and the Turkish town's high street, W4, up to its pavements' edge)
-  // (and Cappadocia's, W5, behind its sandy shoulder)
-  const zc = t.border && ad >= T_HALF ? zoneAt(s) : '', cut = zc === 'city' ? rw + 3.05 : zc === 'town' ? rw + TOWN_SW + 0.05 : zc === 'uchisar' ? rw + 1.7 : rw + 1.0;
+  // (and Cappadocia's, W5, behind its sandy shoulder; Paşabağ's, W6, behind its gravel)
+  const zc = t.border && ad >= T_HALF ? zoneAt(s) : '', cut = zc === 'city' ? rw + 3.05 : zc === 'town' ? rw + TOWN_SW + 0.05 : zc === 'uchisar' ? rw + 1.7 : zc === 'pasabag' ? rw + 1.4 : rw + 1.0;
   let y;
   if (ad < T_HALF) y = au <= rw + 1.46 ? -0.25 : Math.max(base, hr);  // over the tube (the strip under the walkways stays low; a cap covers it)
   else y = Math.max(base, Math.min(hr, au < cut ? -0.06 : au - cut)); // the approach cutting, 45° faces

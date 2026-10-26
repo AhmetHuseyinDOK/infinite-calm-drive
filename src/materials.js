@@ -145,6 +145,14 @@ export const U = {
   // ochre tuff's shade, middle and light, the pale tuff of their feet in the light, and the basalt cap's share of them
   uTfK: { value: 0 }, uTfS: { value: new THREE.Color() }, uTfM: { value: new THREE.Color() }, uTfL: { value: new THREE.Color() }, uTfP: { value: new THREE.Color() },
   uTfC: { value: new THREE.Vector3(0.42, 0.4, 0.42) },
+  // …and Paşabağ's (W6, by vertex: its lathes' angle runs from 32π, props.js PAS_UV): its cream tuff's blue-grey shade, middle and
+  // light, its pale foot, and its dark basalt caps' share of them
+  uTfS2: { value: new THREE.Color() }, uTfM2: { value: new THREE.Color() }, uTfL2: { value: new THREE.Color() }, uTfP2: { value: new THREE.Color() },
+  uTfC2: { value: new THREE.Vector3(0.42, 0.37, 0.37) },
+  // Paşabağ's ground (W6, uchGround by its share, vZS): its gravel shoulder's, its dry grass's and its pale tuff's albedo (linear)
+  uPasS: { value: new THREE.Vector3(0.3, 0.27, 0.24) }, uPasG: { value: new THREE.Vector3(0.24, 0.16, 0.07) }, uPasT: { value: new THREE.Vector3(0.9, 0.82, 0.7) },
+  // …and its tall grass's row in its own texture (textures.js buildPasAtlas: v0, v1), swayed from the root by the breeze (makePasGrass)
+  uPasSway: { value: new THREE.Vector2(0, 1) }, uPasGT: { value: new THREE.Vector3(1, 1, 1) }, // (…and their tint by the time of day: main.js)
   uTunA: { value: new THREE.Vector3(0, -1e4, 0) },  // the current tunnel's axis (portal to portal, at road level)
   uTunB: { value: new THREE.Vector3(0, -1e4, 0) },
   uTunR: { value: 4.6 },
@@ -664,28 +672,33 @@ vec3 galGround(float s, float u, float rw){
 // golden grass, thicker away from the road (the painted meadow's strokes in straw: their lightness kept, their green gone), and
 // the soft pale tuff rising out of it in rounded ridges, a peach-cream streaked a little down its slopes (vRV: path.js TUFF, its
 // share of the height). The tints by the time of day (uUchS, uUchG, uUchT: main.js)
-uniform vec3 uUchS, uUchG, uUchT;
+// (W6: and Paşabağ's, by its share in the snow's slot, vZS: the two never meet. Its gravel shoulder greyer than Uçhisar's sand, its
+// verge thick with tall dry grass right from the gravel's edge (the clumps: chunks.js placePasabag), its tuff a paler cream: uPas…)
+uniform vec3 uUchS, uUchG, uUchT, uPasS, uPasG, uPasT;
 vec3 uchTuffCol(vec2 p){
   float n = vnoise(p * vec2(0.07, 0.05) + 4.1);
   // runnels down the slopes: a stretched noise along the fall line, weighted in where it is steep enough to have one (read
   // unconditionally: the noise takes screen derivatives)
   vec2 fl = vWN.xz; float st = length(fl);
   float run = vnoise(vec2(dot(vWP.xz, vec2(-fl.y, fl.x)) / max(st, 0.05) * 0.9, vWY * 0.25));
-  return uUchT * (0.92 + 0.14 * n) * (1.0 - 0.22 * smoothstep(0.15, 0.55, st) * smoothstep(0.45, 0.8, run));
+  return mix(uUchT, uPasT, vZS) * (0.92 + 0.14 * n) * (1.0 - 0.22 * smoothstep(0.15, 0.55, st) * smoothstep(0.45, 0.8, run));
 }
 vec3 uchGround(float s, float u, float rw){
-  vec2 p = vec2(s, u); float a = abs(u);
-  vec3 sand = uUchS * (0.9 + 0.2 * vnoise(p * vec2(0.08, 0.12) + 3.3)) * (0.95 + 0.08 * vnoise(p * vec2(1.3, 2.1)));
+  vec2 p = vec2(s, u); float a = abs(u), pk = vZS;
+  vec3 sand = mix(uUchS, uPasS, pk) * (0.9 + 0.2 * vnoise(p * vec2(0.08, 0.12) + 3.3)) * (0.95 + 0.08 * vnoise(p * vec2(1.3, 2.1)));
   if (a < rw + 0.32) return sand * mix(0.62, 1.0, smoothstep(rw + 0.02, rw + 0.3, a)); // (the asphalt's crumbling edge)
 #ifdef F_PAINT
   vec3 f = fieldTex(2.5); float fl = dot(f, vec3(0.3, 0.59, 0.11)) * 4.2;
-  vec3 grass = uUchG * (0.4 + 0.75 * clamp(fl, 0.0, 1.3));
+  vec3 grass = mix(uUchG, uPasG, pk) * (0.4 + 0.75 * clamp(fl, 0.0, 1.3));
 #else
   float fl = 0.75 + 0.5 * vnoise(p * vec2(2.2, 6.5) + 5.9);
-  vec3 grass = uUchG * fl;
+  vec3 grass = mix(uUchG, uPasG, pk) * fl;
 #endif
-  // (the shoulder bare; the grass in patches from a metre past it, all but covering the plain further out)
+  // (the shoulder bare; the grass in patches from a metre past it, all but covering the plain further out; Paşabağ's from the gravel's
+  // edge on)
   float gm = smoothstep(0.25, 0.5, vnoise(p * 0.11 + 9.1) * 0.7 + fl * 0.22 + 0.15 * smoothstep(rw + 6.0, rw + 25.0, a)) * smoothstep(rw + 1.4, rw + 2.4, a);
+  gm = mix(gm, smoothstep(rw + 1.2, rw + 1.65, a), pk);
+  grass *= mix(1.0, 0.55 + 0.45 * smoothstep(rw + 2.5, rw + 10.0, a), pk); // (Paşabağ's verge: the deep grass's shade between its clumps)
   vec3 c = mix(sand, grass, gm);
   return mix(c, uchTuffCol(p), smoothstep(0.05, 0.55, vRV)); // (the tuff's share of the height: vRV, path.js TUFF)
 }
@@ -929,8 +942,10 @@ export function groundDefines(zones) {
   return d;
 }
 const GROUND_VARIANTS = new Map();
+/** zones drawn by another's variant: Paşabağ by Uçhisar's (W6: Cappadocia's one ground, its own share in the snow's slot) */
+const ZALIAS = { pasabag: 'uchisar' };
 export function groundMaterialFor(zones) {
-  const key = [...new Set(zones)].sort().join('+');
+  const key = [...new Set(zones.map(z => ZALIAS[z] || z))].sort().join('+');
   let m = GROUND_VARIANTS.get(key);
   if (!m) { m = groundMaterial(groundDefines(key.split('+')), key); GROUND_VARIANTS.set(key, m); }
   return m;
@@ -943,7 +958,7 @@ export function groundMaterial(defines = groundDefines(Object.keys(ZDEF)), key =
   m.onBeforeCompile = sh => {
     sh.uniforms.uSkyHor = U.uSkyHor; sh.uniforms.uSkyZen = U.uSkyZen; sh.uniforms.uWet = U.uWet; sh.uniforms.uSakWet = U.uSakWet; sh.uniforms.uNight = U.uNight; sh.uniforms.uSunDir = U.uSunDir; sh.uniforms.uSunCol = U.uSunCol;
     for (const k of ['uReflTex', 'uReflOn', 'uReflRes', 'uHorizon', 'uReflK', 'uRoadN', 'uRoadF']) sh.uniforms[k] = U[k];
-    if (defines.Z_UCH !== undefined) for (const k of ['uUchS', 'uUchG', 'uUchT']) sh.uniforms[k] = U[k];
+    if (defines.Z_UCH !== undefined) for (const k of ['uUchS', 'uUchG', 'uUchT', 'uPasS', 'uPasG', 'uPasT']) sh.uniforms[k] = U[k];
     if (paint) { sh.uniforms.uFieldTex = { value: FIELD.tex }; for (const k of ['uFieldK', 'uFieldC', 'uFieldCo', 'uFieldSa', 'uFieldM', 'uFieldBo']) sh.uniforms[k] = FIELD[k]; }
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
@@ -1165,14 +1180,20 @@ export function tuffMaterial(lite = false) {
   const m = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: gradGhibli(-0.3, 0.45, 0.0) });
   if (lite) m.defines = { TF_LITE: '' }; // (phones: no strata)
   m.onBeforeCompile = sh => {
-    for (const k of ['uTfK', 'uTfS', 'uTfM', 'uTfL', 'uTfP', 'uTfC']) sh.uniforms[k] = U[k];
+    for (const k of ['uTfK', 'uTfS', 'uTfM', 'uTfL', 'uTfP', 'uTfC', 'uTfS2', 'uTfM2', 'uTfL2', 'uTfP2', 'uTfC2']) sh.uniforms[k] = U[k];
+    // (Paşabağ's broken faces, W6: their shadow lookups three times as far out along the normal: its blocks' faces turn every way, and
+    // with the usual offset the ones the sun grazes shaded themselves in a dotted grid)
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec2 vTf;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvTf = uv;');
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvTf = uv;')
+      .replace('#include <shadowmap_vertex>', THREE.ShaderChunk.shadowmap_vertex.replace('vec4 shadowWorldPosition;', 'vec4 shadowWorldPosition; shadowWorldNormal *= 1.0 + 2.0 * step(64.0, uv.x);'));
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
-uniform float uTfK; uniform vec3 uTfS, uTfM, uTfL, uTfP, uTfC; varying vec2 vTf;`)
+uniform float uTfK; uniform vec3 uTfS, uTfM, uTfL, uTfP, uTfC, uTfS2, uTfM2, uTfL2, uTfP2, uTfC2; varying vec2 vTf;`)
       .replace('#include <color_fragment>', /* glsl */`
+// (Paşabağ's chimneys, W6: their angle round them runs from 32π (props.js PAS_UV), so every pattern below, periodic in 2π, is
+// the same; they take their own tones)
+float tfP = step(64.0, vTf.x);
 // runnels wandering down it (11 round any chimney), fading to their average once under a pixel or two; a soft mottling
 float tfW = vnoise(vec2(vTf.y * 0.22, 3.0 + 7.0 * vColor.r)), tfPh = vTf.x * 11.0 + tfW * 4.0;
 float tfRun = (0.5 + 0.5 * sin(tfPh)) * (1.0 - smoothstep(0.7, 1.8, fwidth(tfPh)));
@@ -1181,15 +1202,25 @@ float tf = (0.9 + 0.2 * tfMot) * (1.0 - 0.15 * smoothstep(0.55, 0.95, tfRun));
 #ifndef TF_LITE
 { float sy = vTf.y * 1.9 + tfW * 3.0; tf *= 1.0 - 0.08 * smoothstep(0.82, 0.97, sin(sy)) * (1.0 - smoothstep(0.4, 1.2, fwidth(sy))); } // (strata)
 #endif
+// (Paşabağ's, W6: its soft tuff cracked and weathered as its concept paints it: crevices wandering down its faces (the iso-line of a
+// value noise stretched up the lathe, round it seamlessly; faded to their average once under a pixel or two), paler and darker
+// patches; its basalt caps pitted. Weighed in by tfP: Uçhisar's chimneys keep exactly their tones)
+{ vec2 tc = vec2(cos(vTf.x), sin(vTf.x));
+  float cn = vnoise(tc * 3.2 + vec2(vTf.y * 0.11, vTf.y * 0.07) + 11.0), cf = fwidth(cn);
+  float crk = (1.0 - smoothstep(0.02, 0.045 + cf * 0.8, abs(cn - 0.5))) * (1.0 - smoothstep(0.06, 0.16, cf));
+  float pm = vnoise(tc * 1.4 + vec2(vTf.y * 0.09, -vTf.y * 0.05) + 23.0);
+  tf *= mix(1.0, (1.0 - mix(0.42, 0.25, vColor.r) * crk) * (0.86 + 0.26 * pm), tfP); }
 float tfFoot = 1.0 - smoothstep(0.03, 0.28, vColor.b);
-diffuseColor.rgb = mix(mix(${glslC('#c99b6e')}, ${glslC('#e9d6bd')}, tfFoot), ${glslC('#5e4c43')}, vColor.r) * vColor.g * tf;`)
+diffuseColor.rgb = mix(mix(mix(${glslC('#c99b6e')}, ${glslC('#e9d6bd')}, tfFoot), ${glslC('#5e4c43')}, vColor.r), mix(mix(${glslC('#d9c3a4')}, ${glslC('#e8dbc6')}, tfFoot), ${glslC('#5f544c')}, vColor.r), tfP) * vColor.g * tf;`)
       .replace('#include <aomap_fragment>', /* glsl */`#include <aomap_fragment>
 #if NUM_DIR_LIGHTS > 0
 if (uTfK > 0.001) { // a clear sky: the painting's tones by how much sun reaches here (the soft ramp and the shadows)
   vec3 tfW3 = vec3(0.2126, 0.7152, 0.0722);
   float lf = clamp(dot(reflectedLight.directDiffuse, tfW3) / max(dot(directionalLights[0].color * BRDF_Lambert(diffuseColor.rgb), tfW3), 1e-6), 0.0, 1.0);
-  vec3 pc = mix(mix(uTfS, uTfM, smoothstep(0.0, 0.4, lf)), uTfL, smoothstep(0.5, 0.92, lf));
-  pc = mix(pc, uTfP * mix(0.6, 1.0, smoothstep(0.0, 0.85, lf)), tfFoot) * mix(vec3(1.0), uTfC, vColor.r);
+  lf = mix(lf, smoothstep(0.2, 0.75, lf), tfP); // (Paşabağ's: its planes' light and shade sharply apart at the terminator, as painted)
+  vec3 tS = mix(uTfS, uTfS2, tfP), tM = mix(uTfM, uTfM2, tfP), tL = mix(uTfL, uTfL2, tfP);
+  vec3 pc = mix(mix(tS, tM, smoothstep(0.0, 0.4, lf)), tL, smoothstep(0.5, 0.92, lf));
+  pc = mix(pc, mix(uTfP, uTfP2, tfP) * mix(0.6, 1.0, smoothstep(0.0, 0.85, lf)), tfFoot) * mix(vec3(1.0), mix(uTfC, uTfC2, tfP), vColor.r);
   reflectedLight.directDiffuse = mix(reflectedLight.directDiffuse, pc * tf * vColor.g, uTfK); reflectedLight.indirectDiffuse *= 1.0 - uTfK;
 }
 #endif`);
@@ -1400,6 +1431,28 @@ export function makeCapAtlas(M, tex) {
   };
   m.customProgramCacheKey = () => 'capatlas-v1';
   M.capAtlas = m;
+}
+/** Paşabağ's tall dry grass (W6: textures.js buildPasAtlas, props.js pasGrass, G.pgrass): its clumps' cards drawn as Cappadocia's
+ *  atlas draws its cells (cut out at alpha 0.5, both faces shaded as the ground, contact shading, the cloud shadows), casting no
+ *  shadow, and bent from the root by the breeze as the foliage's tufts (U.uPasSway: its row's v0, v1). A program of its own, one of
+ *  Turkey's: any change to Cappadocia's atlas program (even a branch after its cut-out) moved a few of Uçhisar's far twigs' pixels */
+export function makePasGrass(M, tex) {
+  const m = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: GRAD, map: tex.map, alphaTest: 0.5, side: THREE.DoubleSide });
+  m.onBeforeCompile = sh => {
+    sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>', THREE.ShaderChunk.normal_fragment_begin.replace('gl_FrontFacing ? 1.0 : - 1.0', '1.0'));
+    sh.uniforms.uPasGT = U.uPasGT;
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform vec3 uPasGT;').replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= uPasGT;');
+    contactAO(sh); worldShade(sh);
+    sh.uniforms.uPasSway = U.uPasSway; sh.uniforms.uWind = U.uWind;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform vec2 uPasSway; uniform float uWind;') // (uTime comes with the vertex cloud shadows)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+{ vec4 wq = modelMatrix * vec4(transformed, 1.0); float k = clamp((uv.y - uPasSway.x) / (uPasSway.y - uPasSway.x), 0.0, 1.0);
+  float sw = sin(uTime * 1.3 + wq.x * 0.29 + wq.z * 0.21) * 0.65 + sin(uTime * 2.5 + wq.x * 0.77 - wq.z * 0.45) * 0.35;
+  k *= k * 0.16 * uWind; transformed.x += sw * k; transformed.z += sw * k * 0.7; }`);
+  };
+  m.customProgramCacheKey = () => 'pasgrass-v1';
+  M.pasGrass = m;
 }
 export function makeMaterials(atlasTex, folTex, paintTex) {
   const M = {};

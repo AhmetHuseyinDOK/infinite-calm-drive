@@ -1,0 +1,56 @@
+{
+ "period": 180.0,
+ "files": {
+  "hi": "bandtr5_hi.webp",
+  "lo": "bandtr5_lo.webp"
+ },
+ "bytes": {
+  "hi": 76384,
+  "lo": 27820
+ },
+ "size": {
+  "hi": [
+   5760,
+   300
+  ],
+  "lo": [
+   2880,
+   156
+  ]
+ },
+ "zones": {
+  "hi": {
+   "pasabag": {
+    "v0": 0.046666666666666634,
+    "v1": 0.96,
+    "e0": 0.0,
+    "e1": 8.5625,
+    "ahead": 0.51109,
+    "tiles": [
+     "ps4",
+     "ps1",
+     "ph1",
+     "ps2",
+     "ps3"
+    ]
+   }
+  },
+  "lo": {
+   "pasabag": {
+    "v0": 0.07051282051282048,
+    "v1": 0.9487179487179487,
+    "e0": 0.0,
+    "e1": 8.5625,
+    "ahead": 0.51109,
+    "tiles": [
+     "ps4",
+     "ps1",
+     "ph1",
+     "ps2",
+     "ps3"
+    ]
+   }
+  }
+ },
+ "encode": "WebP q50, alpha_quality 90 method 6 from the lossless master (~/cdtest/w6/band/masters, bandtr5.py)"
+}

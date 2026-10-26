@@ -143,7 +143,7 @@ export function makeAudio() {
       stream.g.gain.setTargetAtTime(wv * 0.035 * gurgle, t, 0.25); stream.f.frequency.setTargetAtTime(600 + 400 * gurgle, t, 0.25);
       const gust = 0.35 + 0.65 * Math.pow(0.5 + 0.5 * Math.sin(t * 0.23) * Math.sin(t * 0.071 + 2), 2);
       const rush = x.rush || 0; // driving very fast: a steady rush of wind
-      wind.g.gain.setTargetAtTime(((w.mountain || 0) + (w.snow || 0) * 0.7 + (w.uchisar || 0) * 0.55) * 0.06 * gust + rush * 0.055, t, 0.8); wind.f.frequency.setTargetAtTime(260 + 420 * gust + rush * 500, t, 0.8); // (and Cappadocia's steppe breeze, W5)
+      wind.g.gain.setTargetAtTime(((w.mountain || 0) + (w.snow || 0) * 0.7 + ((w.uchisar || 0) + (w.pasabag || 0)) * 0.55) * 0.06 * gust + rush * 0.055, t, 0.8); wind.f.frequency.setTargetAtTime(260 + 420 * gust + rush * 500, t, 0.8); // (and Cappadocia's steppe breeze, W5)
       const tv = x.train || 0;
       rumble.g.gain.setTargetAtTime(tv * 0.16, t, 0.2);
       if (tv > 0.04) { if (nextClick < t) nextClick = t + 0.02; while (nextClick < t + 0.12) { thump(nextClick, tv); thump(nextClick + 0.15, tv * 0.8); nextClick += 1.2; } }
@@ -165,7 +165,7 @@ export function makeAudio() {
       // creatures — how often each calls depends on zone, time of day and rain
       const dry = 1 - Math.min(1, rv * 1.4), night = 1 - day, dusk = x.dusk || 0, snow = w.snow || 0, warm = 1 - snow;
       const tw = w.town || 0; // (the Turkish town, W4: a town's sparrows, crows and the odd gull, its crickets hushed as the city's)
-      const uc = w.uchisar || 0; // (Cappadocia, W5: the steppe's sparrows and crows by day, cicadas in the dry grass, crickets at night)
+      const uc = (w.uchisar || 0) + (w.pasabag || 0); // (Cappadocia, W5, W6: the steppe's sparrows and crows by day, cicadas in the dry grass, crickets at night)
       const rates = {
         sparrow: day * dry * 0.22 * (0.3 + (w.city + tw) * 0.5 + w.sakura + w.country * 0.8 + w.coast * 0.2 + (w.mountain || 0) * 0.5 + uc * 0.3) * (1 - snow * 0.8),
         uguisu: day * dry * w.sakura * 0.06,

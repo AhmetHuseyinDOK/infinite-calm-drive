@@ -85,15 +85,16 @@ export function clusterMips(w, h, data, cols, rows, T = 0.5) {
   return levels;
 }
 
-/** Loads the cluster atlas: 'hi' (256² cells) or 'lo' (128² cells: phones, the embed). Resolves to null (never rejects)
- *  when the index or the image is missing, broken, truncated or too slow, or the browser has no DecompressionStream:
- *  the trees then keep their card crowns. */
-export async function loadTreeAtlas(tier, timeoutMs = 15000) {
+/** Loads a cluster atlas: 'hi' (256² cells) or 'lo' (128² cells: phones, the embed). `name`: crowns3 (the broadleaf
+ *  crowns' leaf clusters) or blossom3 (step 26: the cherry canopy); `kind`: the cells it must list. Resolves to null (never
+ *  rejects) when the index or the image is missing, broken, truncated or too slow, or the browser has no
+ *  DecompressionStream: those trees then keep their card crowns. */
+export async function loadTreeAtlas(tier, timeoutMs = 15000, name = 'crowns3', kind = 'leaf') {
   const base = ASSETS + 'trees/';
   return orNull((async () => {
     if (typeof DecompressionStream === 'undefined') throw new Error('no DecompressionStream');
-    const r = await fetch(base + 'crowns.json'); // (leaf clusters in its first row, cherry blossom in its second)
-    if (!r.ok) throw new Error('crowns.json ' + r.status);
+    const r = await fetch(base + name + '.json');
+    if (!r.ok) throw new Error(name + '.json ' + r.status);
     const J = await r.json(), file = J.files[tier] ? tier : 'hi';
     const ri = await fetch(base + J.files[file]);
     if (!ri.ok) throw new Error(J.files[file] + ' ' + ri.status);
@@ -105,12 +106,12 @@ export async function loadTreeAtlas(tier, timeoutMs = 15000) {
       const e = 0.5 / img.w, f = 0.5 / img.h; // (half a texel in: neighbours never bleed in at the top level)
       return { kind: c.kind, u0: c.col / cols + e, u1: (c.col + 1) / cols - e, v0: 1 - (c.row + 1) / rows + f, v1: 1 - c.row / rows - f };
     });
-    if (!cells.some(c => c.kind === 'leaf')) throw new Error('no leaf clusters listed');
+    if (!cells.some(c => c.kind === kind)) throw new Error('no ' + kind + ' clusters listed');
     const mips = clusterMips(img.w, img.h, img.data, cols, rows, 0.5);
     const tex = new THREE.DataTexture(img.data, img.w, img.h, THREE.RGBAFormat);
     tex.mipmaps = mips; tex.generateMipmaps = false;
     tex.minFilter = THREE.LinearMipmapLinearFilter; tex.magFilter = THREE.LinearFilter;
     tex.colorSpace = THREE.NoColorSpace; tex.needsUpdate = true;
     return { tex, cells, tier: file };
-  })(), timeoutMs, 'painted tree crowns unavailable, keeping the card crowns:');
+  })(), timeoutMs, 'painted tree crowns (' + name + ') unavailable, keeping the old crowns:');
 }

@@ -2,6 +2,48 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-26 · 23:53 — Gaps 3 and 6: the cherry canopy and the avenue's road as painted
+- **The avenue's cherry trees are the painting's broad umbrellas of blossom.** Each crown is wider than tall, a domed top over a
+  rim hanging down round it; along the row they meet in one canopy and from both sides they close in over the road, leaving the
+  painting's V of sky over its middle. They were round "cotton-ball" billows with sky between them. Pink fills 78% of the crown
+  areas (painting 76%, was 60%); sky inside the canopy 8% (10%, was 15%).
+- **Distinct small five-petal flowers, lit as one surface:** a new painted canopy of notched flowers at about the painting's
+  scale, each petal its own pink, deeper flowers between them, now and then a petal in full sun, single flowers at its ragged
+  edge; a lit upper tier over a deeper lower one. Seen from the road it is lit by a painter's key, so its undersides are pink,
+  not a dark magenta ceiling; the day's rose a little less saturated.
+- **Trunks and limbs as painted, no sticks over the pink:** a slimmer trunk forking into four or five limbs that fan out in a wide
+  V and curve up into the canopy, where they disappear into the flowers. The old twig stubs (twigs painted into the old clusters,
+  thin branches and open limb ends crossing the crowns) are gone: each limb ends inside a cluster, whose card is depth-tested as
+  the front of its dome of flowers.
+- **The avenue's road as painted:** in the sun its wet road is the painting's violet-grey near the car, deeper and bluer ahead,
+  under its wet sheen and reflections; each cluster casts a smaller shadow, so the road is mostly in the sun with a sparse
+  dapple, as painted, not under big blotches.
+- Against the painting (region medians, CIELAB ΔE, at its 1792 × 1104, s = 300): the whole frame (share-weighted) 11.3 → 6.4;
+  canopy 5.6 → 3.9 (lit quarter 5.0 → 6.8, shade 12.8 → 12.5; detail 4.15 → 4.41, painting 4.83); road near the car 16.4 →
+  2.4, ahead 8.3 → 7.7; left pavement 41.6 → 11.1; lawn in the sun 6.0 → 3.0; near trunks 3.1 → 2.5. Worse: the houses' box
+  18.6 → 26.0 (the canopy's lower rim now hangs in front of them).
+- Golden hour, sunset, night, grey skies and rain keep their tones. Every other zone's start is identical to live in seeded
+  captures but for a few far crowns' pixels at the vanishing point (the city 26 px, the country 56: the leaves' atlas now without
+  the old blossom row, its mips a little different) and the mountain's falling leaves (two more objects at load).
+- How: props.js (treeGhibliSakura), materials.js (the canopy's key uBlKey, BL_TEXN, its own shadow twin BL_SHADOW, its cards'
+  depth BL_PULL; the ground's road tint now also in the avenue's variants, uSakRT), main.js (SAK_R by the hour, the day's rose
+  and shade tint), ghibli.js (loadTreeAtlas by name), chunks.js. Assets: assets/trees/blossom3.json, blossom3_hi.png (259 KB),
+  blossom3_lo.png (78 KB); assets/trees/crowns3.* (263 / 79 KB: crowns.*'s leaf row byte for byte, without its unused blossom
+  row); crowns.* retired. A first visit the same size (desktop +11 KB, phone −2 KB). Programs 64 desktop / 63 phone (+1, the
+  canopy's own shadow twin, compiled at load). Without blossom3 the cherries take the card crowns; without both atlases every
+  tree does; no errors.
+- Cost: no measurable change, the cherries' own draws lighter. Per draw on the shared box's Vega over avenue drives (L S S L L
+  S): desktop all draws 20.8 / 22.0 / 20.6 → 20.0 / 19.2 / 19.6 ms (the bark −0.4, the blossom's shadow −0.5, the ground the
+  same), phone 14.9 / 14.6 / 14.1 → 14.3 / 13.2 / 14.0 (the cherries −1.0, the avenue's ground +0.3 for its road tint). The M1's
+  whole frame over drives desktop 5.31 → 5.58 ms mean over seven interleaved drives each (medians 5.07 → 5.63, each set spread
+  over ±1 ms), phone 3.52 → 3.74 over three (11 runs each earlier: 5.04 → 4.96 and 3.25 → 3.11). World build the same (M1: genbench 32.5 / 30.8 → 30.0 / 30.5 ms per 20 chunks; no spikes
+  flat out on a 4×-throttled phone). Start-up the same (M1: desktop medians 0.91 → 0.91 s, a 3 Mbps phone 6.21 → 6.06 s).
+  0 shader errors in all eleven zones, on the phone tier at dawn, noon, sunset and night, and at q=low; no console errors at
+  q=low, mid and high; nothing compiled through sunset, night, rain or a drive; embed starts on tap.
+- Left over: limb ends cut by the cards' hard edge where they enter the canopy (most visible at golden hour); the canopy's lit
+  tones (lit quarter ΔE 6.8, chroma 46 against 40); the far road is mostly the wet mirror; the evening and night road barely
+  improved (the near road lies in long shadows; the night road too dark); the houses' box behind the lower rim.
+
 ## 2026-10-26 · 18:05 — World 6: Cappadocia's Paşabağ fairy chimneys, as its concept painting has it
 - **On from Uçhisar into the valley of the fairy chimneys.** Turkey's leg now runs Bosphorus → Galata → town → Uçhisar →
   Paşabağ → border → Japan: over the Uçhisar road's last 260 m its sand, cones and castle give way to Paşabağ's golden grass,

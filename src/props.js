@@ -510,66 +510,84 @@ export function treeGhibliPlane(G, M, r, s = 1) {
 
 // ---- cherry trees (桜) from painted blossom clusters, as the sakura painting draws them (GHIBLI.bcells: the atlas's
 // blossom cells; without them the cherry trees keep their card crowns, treeSakura) ----
-/** A big old cherry tree: a thick dark trunk forking at 2.2–2.7 m into three or four limbs that rise in a wide V, and a
- *  broad crown of blossom clusters high on them, 8–9 m across (at s = 1). `ave`: an avenue tree, built facing the road
- *  (−z): its trunk leans a little away from the road and its crown reaches a little out over it, so the crowns of the two
- *  rows close into a tunnel down the road, as in the painting, leaving a slot of sky over the middle near the car. The
- *  crown's core (two big clusters in its shade) is drawn first and hides the clusters behind it. 23–26 hexagonal cards
- *  in all (the old card crown had ~46 square ones, at random angles) */
+/** A big old cherry tree, as the sakura painting draws them (step 26): a dark trunk forking at 2.3–2.8 m (at s = 1) into
+ *  four or five limbs that fan out in a wide V, under a broad umbrella of blossom, wider than tall: a domed top, a rim that
+ *  hangs down round it, and a hollow underside where the limbs and branches show dark against the deeper rose. `ave`: an
+ *  avenue tree, built facing the road (−z): its lower rim reaches out over the road, so the two rows' crowns close in over
+ *  it from both sides and along the row they meet in one canopy (the other cherries' crowns are a little smaller). The
+ *  clusters are spread evenly over the umbrella, not pulled into lobes (the painting's crowns are one surface; the old
+ *  billows left sky between them): a deep core drawn first (it hides what is behind it), the underside, two tiers round
+ *  the rim (the painting's layers: a lit upper tier over a deeper lower one, now and then a bough hanging lower) and the
+ *  top. 29 hexagonal cards a tree (the old crowns had 23–26). Every limb ends hidden inside the flowers. */
 export function treeGhibliSakura(G, M, r, s = 1, ave = false) {
   const k = G.bark; k.setM(M);
-  const lean = ave ? 1 : 0, h0 = r.range(2.2, 2.7) * s, r0 = r.range(0.3, 0.35) * s;
-  const top = [r.range(-0.15, 0.15) * s, h0, lean * 0.3 * s];
-  // (the smooth bark's own random numbers: the layout and the crown keep theirs)
-  const q = rng(Math.floor(h0 * 7919 + r0 * 104729) + (ave ? 17 : 0)), [nT, nLs, nB, nW, nS] = barkSides();
-  trunkTube(k, top, r0, r0 * 0.8, [q.range(-0.07, 0.07) * s, q.range(-0.07, 0.07) * s], nT, BARK_SAK);
-  // the crown: a broad dome high over the fork, pushed out over the road on an avenue
-  const cy = r.range(6.3, 6.9) * s, cz = -lean * 0.5 * s, Rx = r.range(4.0, 4.5) * s, Rz = r.range(3.6, 4.0) * s, Ry = r.range(1.7, 2.0) * s;
-  // the limbs: three or four rising steeply in a wide V from the fork (one of them toward the road on an avenue), each
-  // bending once on its way up, then forking into branches that reach into the crown's underside
-  const nL = r() < 0.35 ? 4 : 3, a0 = ave ? -Math.PI / 2 + r.range(-0.35, 0.35) : r() * 6.283;
-  for (let i = 0; i < nL; i++) {
-    const a = a0 + (i / nL) * 6.283 + r.range(-0.3, 0.3), ca = Math.cos(a), sa = Math.sin(a), out = r.range(0.32, 0.46);
-    const tip = [top[0] + ca * Rx * out, cy - Ry * r.range(0.35, 0.55), top[2] * 0.5 + cz * 0.4 + sa * Rz * out];
-    const mid = [top[0] + (tip[0] - top[0]) * 0.45 + ca * 0.25 * s, h0 + (tip[1] - h0) * 0.55, top[2] + (tip[2] - top[2]) * 0.45 + sa * 0.25 * s];
-    // one smooth limb out of the trunk's crotch (it starts inside it), curving out through mid to tip as it thins
-    const b0 = [top[0] + ca * r0 * 0.3, h0 - r0 * 0.45, top[2] + sa * r0 * 0.3], T = steps(nS), P = curve(b0, mid, tip, T);
-    k.tube(P, taper(T, r0 * 0.64, r0 * 0.3), nLs, BARK_SAK, SEAM_UP);
-    const tb = P[nS - 1], nb = i % 2 ? 1 : 2; // (branches up into the crown: two on every other limb)
-    for (let j = 0; j < nb; j++) {
-      const b = (j ? 1 : -1) * r.range(0.3, 0.9), L = r.range(1.2, 1.9) * s;
-      const e = [tip[0] + Math.cos(a + b) * L, tip[1] + r.range(0.7, 1.2) * s, tip[2] + Math.sin(a + b) * L];
-      // bowing up a little on its way out, and a thinner twig off it on towards the crown's underside
-      const T2 = steps(3), P2 = curve(tb, [(tb[0] + e[0]) / 2, (tb[1] + e[1]) / 2 + L * 0.1, (tb[2] + e[2]) / 2], e, T2);
-      k.tube(P2, taper(T2, r0 * 0.27, 0.035 * s), nB, BARK_SAK_IN, SEAM_UP);
-      const p = P2[1], a2 = a + b + (q() < 0.5 ? -1 : 1) * q.range(0.5, 1.0), L2 = q.range(0.8, 1.3) * s;
-      const e2 = [p[0] + Math.cos(a2) * L2, p[1] + L2 * q.range(0.15, 0.45), p[2] + Math.sin(a2) * L2];
-      k.tube([p, [(p[0] + e2[0]) / 2, (p[1] + e2[1]) / 2 + 0.06 * L2, (p[2] + e2[2]) / 2], e2], [0.05 * s, 0.032 * s, 0.014 * s], nW, BARK_SAK_IN);
-    }
+  const lean = ave ? 1 : 0, h0 = r.range(2.3, 2.8) * s, r0 = r.range(0.23, 0.27) * s;
+  const top = [r.range(-0.12, 0.12) * s, h0, lean * 0.15 * s];
+  // (the smooth bark's own random numbers)
+  const q = rng(Math.floor(h0 * 7919 + r0 * 104729) + (ave ? 17 : 0)), [nT, nLs, , , nS] = barkSides();
+  trunkTube(k, top, r0, r0 * 0.82, [q.range(-0.06, 0.06) * s, q.range(-0.06, 0.06) * s], nT, BARK_SAK);
+  // the umbrella: its long axis along the row; heights over the fraction p of its radius: the top's (from yT at the
+  // middle to yR at the rim) and the underside's (from yU at the middle to yB, the rim's foot)
+  const cw = ave ? 1 : 0.82, Rx = r.range(4.3, 4.8) * s * cw, Rz = r.range(2.9, 3.3) * s * cw, ccz = -lean * 0.2 * s;
+  const yT = r.range(8.0, 8.6) * s, yU = r.range(5.0, 5.3) * s, yB = r.range(4.5, 4.8) * s, yR = yB + r.range(1.1, 1.4) * s;
+  const topY = p => yR + (yT - yR) * (1 - p * p), undY = p => yU - (yU - yB) * p * p;
+  // the clusters first: [x, y, z, radius, normal x, y, z, shade, core, layer (0 core, 1 underside, 2 the rim's lower tier,
+  // 3 its upper one, 4 the top)], spread evenly (golden-angle spirals, a little jitter); the wood is then routed to them.
+  // Each layer has its own middle across the road on an avenue (the lower rim out over the road, the top back over the
+  // trunk) and its own normal: the underside's and the rim's turned only partly down, so that seen from the road (always
+  // from below) the canopy is lit as painted, not a dark ceiling; the layers' shade (vertex colour) deepens downwards
+  const all = [], GA = 2.39996, rot = r() * 6.283, jit = () => r.range(-0.5, 0.5);
+  const zc = v => lean * v * s, cU = zc(-0.2), c1 = zc(-0.35), c2 = zc(-0.05), cT = zc(0.3);
+  const rimN = (a, up) => { const c = Math.cos(a), si = Math.sin(a); return [c * Rz, up * Math.min(Rx, Rz), si * Rx]; }; // (outward on an ellipse: its normal)
+  for (let i = 0; i < 3; i++) { // the core: a row of three big deep clusters along the crown's long axis, inside it
+    const f = i / 2 - 0.5, p = Math.abs(f) * 0.84;
+    all.push([f * Rx * 0.84 + jit() * 0.3 * s, (undY(p) + topY(p)) * 0.5 - 0.25 * s, ccz + jit() * 0.4 * s, 1.75 * s, 0, -1, 0, 0.66, 1, 0]);
   }
-  // 6–7 lobe directions, as on the broadleaf crowns: the clusters gather toward them, so the crown reads as a few big
-  // billows of blossom with gaps between them
-  const lobes = [], nl = 6 + Math.floor(r() * 2);
-  for (let i = 0; i < nl; i++) { const a = (i / nl) * 6.283 + r() * 0.5, el = r.range(-0.2, 0.6), ce = Math.sqrt(1 - el * el); lobes.push([Math.cos(a) * ce, el, Math.sin(a) * ce]); }
-  lobes.push([0, 1, 0]);
-  const all = [[-Rx * 0.3, cy, cz, 1.75 * s, 1], [Rx * 0.3, cy, cz, 1.75 * s, 1]]; // the core
-  const nc = 21 + Math.floor(r() * 4);
-  for (let i = 0; i < nc; i++) {
-    let dx = r() * 2 - 1, dy = r.range(-0.3, 1), dz = r() * 2 - 1, l = Math.hypot(dx, dy, dz) || 1; dx /= l; dy /= l; dz /= l;
-    let best = lobes[0], bd = -2; for (const L of lobes) { const d = L[0] * dx + L[1] * dy + L[2] * dz; if (d > bd) { bd = d; best = L; } }
-    dx = dx * 0.5 + best[0] * 0.5; dy = dy * 0.5 + best[1] * 0.5; dz = dz * 0.5 + best[2] * 0.5; l = Math.hypot(dx, dy, dz) || 1; dx /= l; dy /= l; dz /= l;
-    const rr = r.range(0.8, 0.95);
-    all.push([dx * Rx * rr, cy + dy * Ry * rr, cz + dz * Rz * rr, r.range(1.0, 1.3) * s, 0]);
+  const rr = () => r.range(0.95, 1.2) * s;
+  for (let i = 0; i < 3; i++) { // the underside
+    const a = rot + i * GA, p = 0.35 + 0.37 * Math.sqrt((i + 0.5) / 3), c = Math.cos(a), si = Math.sin(a);
+    all.push([c * Rx * p, undY(p) + 0.35 * s, cU + si * Rz * p, rr(), c * p, -0.55, si * p, 0.73, 0, 1]);
+  }
+  for (let i = 0; i < 8; i++) { // the rim's lower tier
+    const a = rot + ((i + 0.5 + jit() * 0.4) / 8) * 6.283, p = r.range(0.9, 1.0), n = rimN(a, -0.18);
+    const hang = r() < 0.3 ? -0.45 * s : 0; // (now and then a bough hanging lower)
+    all.push([Math.cos(a) * Rx * p, yB + 0.45 * s + jit() * 0.6 * s + hang, c1 + Math.sin(a) * Rz * p, rr(), n[0], n[1], n[2], 0.79, 0, 2]);
+  }
+  for (let i = 0; i < 8; i++) { // …and its upper tier, between the lower one's clusters
+    const a = rot + ((i + jit() * 0.4) / 8) * 6.283, p = r.range(0.78, 0.9), n = rimN(a, 0.4);
+    all.push([Math.cos(a) * Rx * p, yR + 0.3 * s + jit() * 0.3 * s, c2 + Math.sin(a) * Rz * p, rr(), n[0], n[1], n[2], 0.845, 0, 3]);
+  }
+  for (let i = 0; i < 7; i++) { // the top
+    const a = rot + 1.3 + i * GA, p = 0.12 + 0.58 * Math.sqrt((i + 0.5) / 7), c = Math.cos(a), si = Math.sin(a);
+    all.push([c * Rx * p, topY(p) - 0.5 * s, cT + si * Rz * p, rr(), c * p * 0.8, 1, si * p * 0.8, 0.88, 0, 4]);
+  }
+  // the limbs: four or five out of the fork, fanning out sideways (on an avenue two towards the road and two away from it,
+  // so that seen down the road they spread in a wide V, as painted; a fifth along the road now and then), each one smooth
+  // curve out and up through the umbrella's foot to the rim's lower tier in its own direction, ending inside that cluster,
+  // so from the road a limb only ever disappears into the flowers (the cards are depth-tested nearer the eye: materials.js
+  // BL_PULL). (No thinner branches: from the road the near crowns are seen from below, against their own pink, and every thin
+  // branch, and every limb that hooked back to a cluster, read as a stick over the flowers)
+  const rim = all.filter(c => c[9] === 2), toward = a => { let best = rim[0], bd = 9; for (const c of rim) { let d = Math.abs(Math.atan2(c[2] - top[2], c[0] - top[0]) - a) % 6.283; d = Math.min(d, 6.283 - d); if (d < bd) { bd = d; best = c; } } return best; };
+  const nL = r() < 0.35 ? 5 : 4, sp = 0.55, a0 = r() * 6.283;
+  const AZ = ave ? [-Math.PI / 2 - sp, -Math.PI / 2 + sp, Math.PI / 2 - sp, Math.PI / 2 + sp, r() < 0.5 ? 0 : Math.PI] : [0, 1, 2, 3, 4].map(i => a0 + (i / nL) * 6.283);
+  for (let i = 0; i < nL; i++) {
+    const c = toward(AZ[i] + r.range(-0.25, 0.25)), a = Math.atan2(c[2] - top[2], c[0] - top[0]), ca = Math.cos(a), sa = Math.sin(a);
+    // (its tip just inside the cluster's lower part, where the limb enters the flowers: that card, depth-pulled towards the eye,
+    // hides it (materials.js BL_PULL), and no stretch of it runs on behind other clusters, to be glimpsed through their gaps)
+    const E = [c[0], c[1] - 0.3 * c[3], c[2]], dE = Math.hypot(E[0] - top[0], E[2] - top[2]), pl = r.range(0.55, 0.7);
+    const F = [top[0] + ca * dE * pl, Math.min(E[1] - 0.3 * s, yB + r.range(-0.2, 0.2) * s), top[2] + sa * dE * pl];
+    const b0 = [top[0] + ca * r0 * 0.3, h0 - r0 * 0.45, top[2] + sa * r0 * 0.3], T = steps(nS + 2), P = curve(b0, F, E, T), R = taper(T, r0 * 0.52, r0 * 0.15);
+    R[R.length - 1] = r0 * 0.04; // (closing to a point at its hidden tip)
+    k.tube(P, R, nLs, BARK_SAK, SEAM_UP);
   }
   const tint = [1, r.range(0.96, 1.03), r.range(0.97, 1.02)]; // (a little variety: some trees rosier, some paler)
   const g = G.gblossom; g.setM(M);
-  for (const [x, y, z, rad, core] of all) {
-    let nx = x / Rx, ny = (y - cy) / Ry + 0.12, nz = (z - cz) / Rz; const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
-    if (core) { nx = nz = 0; ny = -1; } // (a straight-down normal marks the core for the shader: it casts no shadow, and takes the crown's)
-    // (hexagons round each cluster's paint, mapped with a 0.86 inset: the same painted size as the broadleaf crowns'
-    // octagons at 0.88, with a third fewer vertices to stamp into every chunk)
-    const ht = Math.min(1, Math.max(0, (y - (cy - Ry)) / (2 * Ry))), k = core ? 0.62 : 0.8 + 0.2 * ht, hh = (rad / 0.8) * 0.86;
-    g.bill(x, y, z, nx, ny, nz, hh, hh, GHIBLI.bcells[Math.floor(r() * GHIBLI.bcells.length)], [tint[0] * k, tint[1] * k, tint[2] * k], BILL_HEX, 0.86);
+  for (const [x, y, z, rad, nx0, ny0, nz0, kk, core] of all) {
+    let nx = nx0, ny = ny0 + 0.2, nz = nz0; const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
+    if (core) { nx = nz = 0; ny = -1; } // (a straight-down normal marks the core for the shader: it casts no shadow)
+    // (hexagons round each cluster's paint, mapped with a 0.86 inset)
+    const hh = (rad / 0.8) * 0.86;
+    g.bill(x, y, z, nx, ny, nz, hh, hh, GHIBLI.bcells[Math.floor(r() * GHIBLI.bcells.length)], [tint[0] * kk, tint[1] * kk, tint[2] * kk], BILL_HEX, 0.86);
   }
 }
 

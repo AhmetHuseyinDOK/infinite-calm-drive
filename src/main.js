@@ -56,7 +56,9 @@ async function main() {
   const CLOUDS = QS.get('clouds') || 'painted', TIER = quality === 'high' && innerHeight * DPR >= 900 ? 'hi' : 'lo';
   // the painted crowns' clusters (ghibli.js): 256² clusters on desktops (a near crown fills a third of the frame, and its
   // flowers are a few texels wide), else 128² (phones, the embed)
-  const treeLoad = loadTreeAtlas(quality === 'high' && innerHeight * DPR >= 560 ? 'hi' : 'lo');
+  // (the leaves' atlas, crowns3, and the cherry canopy's own, blossom3: step 26. crowns3 is crowns' leaf row alone, byte for byte)
+  const treeTier = quality === 'high' && innerHeight * DPR >= 560 ? 'hi' : 'lo', treeLoad = loadTreeAtlas(treeTier, 15000, 'crowns3');
+  const blossomLoad = loadTreeAtlas(treeTier, 15000, 'blossom3', 'blossom');
   // the painted meadow of the countryside's fields (painted.js), on the clouds' tiers
   const fieldLoad = loadFieldTexture(TIER);
   // the shopping street's painted shopfronts and upper floors (painted.js), on the crowns' tiers (a near shopfront fills
@@ -78,7 +80,7 @@ async function main() {
   // start once the four above are in (or after 4 s, so a stalled one never holds them up for its whole 15 s timeout): on
   // a slow line those then have all of it, instead of a share. On a fast line this costs nothing (all six are in long
   // before the band and the clouds are awaited)
-  const firstLoads = Promise.race([Promise.all([treeLoad, fieldLoad, frontLoad, houseLoad]), new Promise(r => setTimeout(r, 4000))]);
+  const firstLoads = Promise.race([Promise.all([treeLoad, blossomLoad, fieldLoad, frontLoad, houseLoad]), new Promise(r => setTimeout(r, 4000))]);
   const pcLoad = CLOUDS === 'old' ? Promise.resolve(null) : firstLoads.then(() => loadCloudAtlas(TIER));
   const bandLoad = firstLoads.then(() => loadBandAtlas(TIER));
   // …and Turkey's (the Bosphorus's far shore; the Galata Bridge's old city, W3; the Turkish town's mosque at the end of its street
@@ -182,15 +184,14 @@ async function main() {
   await new Promise(r => setTimeout(r, 10));
   setLeafDensity(QS.has('leafd') ? parseFloat(QS.get('leafd')) : quality === 'high' ? 0.72 : 0.62); // fewer, larger foliage cards
   { // the broadleaf trees' crowns: painted leaf clusters once their atlas is in, else (if it failed) the old card crowns
-    const ta = await treeLoad;
+    const ta = await treeLoad, ba = await blossomLoad, an = Math.min(4, renderer.capabilities.getMaxAnisotropy());
     if (ta) {
-      GHIBLI.cells = ta.cells.filter(c => c.kind === 'leaf'); ta.tex.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+      GHIBLI.cells = ta.cells.filter(c => c.kind === 'leaf'); ta.tex.anisotropy = an;
       const g = makeGhibliLeaf(ta.tex); M.gleaf = g.mat; M.gleafDepth = g.depth;
-      // …and the cherry trees' blossom clusters (the atlas's second row), lit by the same code with the painting's pinks;
-      // their shadow-pass twin is the leaves' (the same billboards)
-      const bc = ta.cells.filter(c => c.kind === 'blossom');
-      if (bc.length) { GHIBLI.bcells = bc; M.gblossom = makeGhibliLeaf(ta.tex, { blossom: true }).mat; }
     }
+    // …and the cherry trees' canopy clusters (their own atlas, step 26; without it the card crowns), lit by the same code with
+    // the painting's pinks; their shadow-pass twin casts each cluster's shadow smaller (a sparser dapple: materials.js BL_SHADOW)
+    if (ba) { ba.tex.anisotropy = an; GHIBLI.bcells = ba.cells; const b = makeGhibliLeaf(ba.tex, { blossom: true }); M.gblossom = b.mat; M.gblossomDepth = b.depth; }
   }
   warmTrees(); warmTetrapods();
   // the painted meadow's tint (materials.js FIELD), from its painted colours to the albedo that shows as the reference
@@ -248,7 +249,7 @@ async function main() {
   const BACKLIT_K = QS.has('backlit') ? parseFloat(QS.get('backlit')) : 1; // (test hook)
   // the cherry blossom's shade tint (materials.js makeGhibliLeaf): a bright rose-magenta on a bright day (the shaded
   // undersides of the crowns stay a glowing pink, as in the painting), and a little pink otherwise; the avenue's wet road
-  const BL_SHADE_DAY = [7.5, 3, 2.3], BL_SHADE_DIM = [1.7, 1.15, 1.0], SAK_WET = 0.7;
+  const BL_SHADE_DAY = [7.25, 3.3, 2.45], /* (step 26: a little less red for the new canopy, was 7.5, 3, 2.3) */ BL_SHADE_DIM = [1.7, 1.15, 1.0], SAK_WET = 0.7;
   // …and under a clear sky at golden hour, sunset and night, as the avenue painted at those hours (ref/tod/sakura_*.png):
   // the shaded blossom a warm pink at golden hour, a rosy mauve at sunset, and at night pale lavender in the moonlight (it
   // went a near-black purple)
@@ -320,6 +321,13 @@ async function main() {
   const R_DAY = { n: [0.46, 0.53, 0.68], f: [0.95, 1.05, 1.3] }, R_GOLD = { n: [0.55, 0.55, 0.7], f: [0.85, 0.62, 0.75] };
   const R_SUNSET = { n: [0.4, 0.8, 1.2], f: [1.1, 1.5, 1.4] }, R_NIGHT = { n: [1, 1, 1], f: [1, 1, 1] };
   const ROAD_T = todKeys(R_NIGHT, R_SUNSET, R_DAY, R_GOLD), GAL_RF = [1.4, 1.35, 1.25], galRF = new THREE.Vector3(); // (the Galata Bridge's far road: below)
+  // (…and the cherry avenue's, step 26, on top of those, read against sakura.png and its repaints: by day its wet road's
+  // violet-grey near the car (the sunlit road ΔE ~3 there, was 19–23 under the paler canopy's sparser shadow), deeper and
+  // bluer ahead; at golden hour and sunset a little warmer and greener than the coast's (most of the near road lies in long
+  // shadows then, and the far road is the wet mirror's: the tint, on the sunlight only, can do little there); the night as
+  // the coast's, the old road)
+  const SR_DAY = { n: [1, 0.75, 0.92], f: [0.4, 0.53, 0.88] }, SR_GOLD = { n: [0.88, 1, 1.05], f: [0.88, 1, 1.05] };
+  const SR_SUNSET = { n: [0.85, 1.4, 1.25], f: [1, 1, 1] }, SR_NIGHT = { n: [1, 1, 1], f: [1, 1, 1] }, SAK_R = todKeys(SR_NIGHT, SR_SUNSET, SR_DAY, SR_GOLD);
   const GAL_ZEN = new THREE.Color('#385a92'); // (the Galata Bridge's zenith on a bright day: below)
   // (Cappadocia's, W5: its concept's deep, slightly greyed azure over the steppe, and its asphalt's tint on top of the painted
   // road's, near and far: below)
@@ -332,7 +340,7 @@ async function main() {
   // higher, more of each flower keeps the rose): on a bright day the painting's (its crowns' pink pixels: CIELAB L*
   // median 57, three quarters under 69; with the old ramp ours were 64–68 and 77–78), the old ramp at golden hour,
   // sunset and night (their tones were read against ref/tod/ with it)
-  const BLM_OLD = { m: [205, 105, 150], w: [0.3, 0, 0] }, BLM_DAY = { m: [188, 88, 132], w: [0.47, 0, 0] }, BLM_T = todKeys(BLM_OLD, BLM_OLD, BLM_DAY, BLM_OLD), blMid = new THREE.Color();
+  const BLM_OLD = { m: [205, 105, 150], w: [0.3, 0, 0] }, BLM_DAY = { m: [186, 91, 135], w: [0.47, 0, 0] }, /* (step 26: a little less saturated for the new canopy, was 188, 88, 132) */ BLM_T = todKeys(BLM_OLD, BLM_OLD, BLM_DAY, BLM_OLD), blMid = new THREE.Color();
   const BL_TIP = new THREE.Color().setRGB(1, 232 / 255, 242 / 255, THREE.SRGBColorSpace); // (the petal tips' pale pink, (255, 232, 242) as before)
   const LIGHTS_ON = QS.has('lightson') ? parseFloat(QS.get('lightson')) : -1; // (test hook)
   // the car's painter's sun (CAR_KEY): the real sun pulled round to within KEY_A of the car's heading (see the frame loop)
@@ -364,8 +372,10 @@ async function main() {
   // the painted volumes' keys (materials.js VOL_KEY; see the frame loop): the tetrapods' 110° round from the view's direction,
   // the broadleaf crowns' 150° (against coast.png's crowns, ΔE 17.0 at 110°, 11.1 at 130°, 8.1 at 150°; its tetrapods 6.0
   // at 110°, 10.5 at 130°). (Tried on the props, the guardrail's material: the city's right-hand shops and the avenue's lawn
-  // got worse)
-  const volF = new THREE.Vector3(), VOL_B = (110 * Math.PI) / 180, LEAF_B = (150 * Math.PI) / 180;
+  // got worse). The cherry canopy's (step 26) 110°: its umbrella crowns are always seen from below, and without a key their
+  // undersides were a dark magenta where the painting's are lit pink (the canopy's median ΔE 5.4 → 4.4 against sakura.png;
+  // at 150° a hot pink, 13.8; the key failed on the old round crowns)
+  const volF = new THREE.Vector3(), VOL_B = (110 * Math.PI) / 180, LEAF_B = (150 * Math.PI) / 180, BL_B = (110 * Math.PI) / 180;
   /** a painter's key: the light L's height, on its side of the view (horizontal forward f), b round from the view's direction */
   const keyAt = (L, f, b, out) => { const hm = Math.hypot(L.x, L.z), sd = L.x * f.z - L.z * f.x < 0 ? -1 : 1, cb = Math.cos(b) * hm, sb = Math.sin(b) * hm * sd;
     return out.set(f.x * cb + f.z * sb, L.y, f.z * cb - f.x * sb).transformDirection(camera.matrixWorldInverse); };
@@ -384,7 +394,7 @@ async function main() {
   // towards the kerb of the side the traffic keeps to (path.js trafficSide: left in Japan, right in Turkey), so through a
   // border tunnel the car moves over to the other side of the road with the traffic
   const MULT_MIN = 0.4, MULT_MAX = 5.5, SIDE0 = trafficSide(S0) < 0 ? -1 : 1;
-  const st = { s: S0, u: 1.65 * SIDE0, uHome: 1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, spray: QS.has('nospray') ? 0 : 1 /* test switch */, grass: 1 /* test switch: the meadow's blades */, pclouds: 1 /* test switch: painted clouds (0: the procedural ones, with ?clouds=both) */, band: 1 /* test switch: the painted horizon (0: the mountain rings) */, waves: 1 /* test switch: the painted sea's waves (0: its flat tones) */, shore: 1 /* test switch: the waves and foam along the sea wall (0: the open sea's colour there) */, surf: 1 /* test switch: the spray over the tetrapods */, tetra: 1 /* test switch: the tetrapods */, bark: 1 /* test switch: the bark's painted tones (0: the old colours, lit) */, trunks: 1 /* test switch: the painted trees' bark (0: hidden) */, todpaint: 1 /* test switch: the painted look at golden hour, sunset and night (0: only on a bright day, as before) */, road: 1 /* test switch: the coast's and the country's painted asphalt (0: the old warm grey) */, carkey: 1 /* test switch: the car lit by the painter's sun (0: by the real sun) */, sunroad: 1 /* test switch: the sun and the moon stand by the road's heading, as in the paintings (0: fixed in the world, as before) */, volkey: 1 /* test switch: the crowns and the tetrapods lit by the painted volumes' key (0: by the real sun) */, shsoft: 1 /* test switch: soft shadow edges near the camera (0: one tap everywhere, as before) */, shfit: 1 /* test switch: the sun's shadow box fitted to what can be seen at a low sun (0: the old square box) */, tuff: 1 /* test switch: Cappadocia's fairy chimneys in their painted tones (0: their own colours, lit) */, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
+  const st = { s: S0, u: 1.65 * SIDE0, uHome: 1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, spray: QS.has('nospray') ? 0 : 1 /* test switch */, grass: 1 /* test switch: the meadow's blades */, pclouds: 1 /* test switch: painted clouds (0: the procedural ones, with ?clouds=both) */, band: 1 /* test switch: the painted horizon (0: the mountain rings) */, waves: 1 /* test switch: the painted sea's waves (0: its flat tones) */, shore: 1 /* test switch: the waves and foam along the sea wall (0: the open sea's colour there) */, surf: 1 /* test switch: the spray over the tetrapods */, tetra: 1 /* test switch: the tetrapods */, bark: 1 /* test switch: the bark's painted tones (0: the old colours, lit) */, trunks: 1 /* test switch: the painted trees' bark (0: hidden) */, todpaint: 1 /* test switch: the painted look at golden hour, sunset and night (0: only on a bright day, as before) */, road: 1 /* test switch: the coast's, the country's and the cherry avenue's painted asphalt (0: the old road; in the avenue's ground it also skips the tint's work) */, carkey: 1 /* test switch: the car lit by the painter's sun (0: by the real sun) */, sunroad: 1 /* test switch: the sun and the moon stand by the road's heading, as in the paintings (0: fixed in the world, as before) */, volkey: 1 /* test switch: the crowns and the tetrapods lit by the painted volumes' key (0: by the real sun) */, shsoft: 1 /* test switch: soft shadow edges near the camera (0: one tap everywhere, as before) */, shfit: 1 /* test switch: the sun's shadow box fitted to what can be seen at a low sun (0: the old square box) */, tuff: 1 /* test switch: Cappadocia's fairy chimneys in their painted tones (0: their own colours, lit) */, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
   let started = false;
   // (the atlas's world variant and its shadow twin are made, and their programs compiled, at every start: without Turkey's
   // atlas yet, on a stand-in, its textures swapped in when they load (materials.js setWorldTex))
@@ -424,7 +434,7 @@ async function main() {
     const bare = new Set([M.shore, M.surf, riverMat]);
     const mats = [M.color, M.atlas, M.atlasW, M.foliage, M.leaf, M.lamp, M.sig, M.sodium, M.decal, M.pool, M.shore, M.surf, riverMat, M.tetra, M.bark, ...(M.gleaf ? [M.gleaf] : []), ...(M.gblossom ? [M.gblossom] : []), ...(M.tuff ? [M.tuff, M.capAtlas] : []), ...(M.pasGrass ? [M.pasGrass] : [])];
     for (const zs of zoneSets()) if (TR_START || !trSet(zs)) mats.push(groundMaterialFor(zs)); // (each zone, each pair of neighbours, each border's: Turkey's later if not needed now)
-    for (const m of mats) { const o = new THREE.Mesh(bare.has(m) ? tri0 : tri, m); o.castShadow = o.receiveShadow = !bare.has(m); o.frustumCulled = false; if (m === M.gleaf || m === M.gblossom) o.customDepthMaterial = M.gleafDepth; if (m === M.atlas) o.customDepthMaterial = M.atlasDepth; if (m === M.atlasW) o.customDepthMaterial = M.atlasWDepth; if (m === M.color) o.customDepthMaterial = PROP_DEPTH; warm.add(o); }
+    for (const m of mats) { const o = new THREE.Mesh(bare.has(m) ? tri0 : tri, m); o.castShadow = o.receiveShadow = !bare.has(m); o.frustumCulled = false; if (m === M.gleaf) o.customDepthMaterial = M.gleafDepth; if (m === M.gblossom) o.customDepthMaterial = M.gblossomDepth; if (m === M.atlas) o.customDepthMaterial = M.atlasDepth; if (m === M.atlasW) o.customDepthMaterial = M.atlasWDepth; if (m === M.color) o.customDepthMaterial = PROP_DEPTH; warm.add(o); }
     // (the props' shadow-pass twin too, W6: it used to compile only when a real props' mesh stood in the shadow box during the load, and a
     // start in Paşabağ's valley (no poles) met its first props in the city, 20 ms into the drive)
     warm.position.set(0, 0, 0); scene.add(warm);
@@ -973,8 +983,8 @@ async function main() {
       // light them from the upper left of the frame, the camera's side, while their shadows fall towards us. The real light's
       // height, on its side of the view, VOL_B / LEAF_B round from the view's direction (their shadows stay the real sun's)
       camera.getWorldDirection(volF); volF.y = 0; volF.normalize();
-      if (st.volkey) { keyAt(L, volF, VOL_B, U.uVolKey.value); keyAt(L, volF, LEAF_B, U.uLeafKey.value); }
-      else { U.uVolKey.value.copy(L).transformDirection(camera.matrixWorldInverse); U.uLeafKey.value.copy(U.uVolKey.value); }
+      if (st.volkey) { keyAt(L, volF, VOL_B, U.uVolKey.value); keyAt(L, volF, LEAF_B, U.uLeafKey.value); keyAt(L, volF, BL_B, U.uBlKey.value); }
+      else { U.uVolKey.value.copy(L).transformDirection(camera.matrixWorldInverse); U.uLeafKey.value.copy(U.uVolKey.value); U.uBlKey.value.copy(U.uVolKey.value); }
     }
     { // …and the painter's fill in the car's shade (car.js CAR_FILL), by the time of day under a clear sky (grey skies: none)
       const c = CF_T.at(TOD.t).rgb('f'), k = paintSky() * st.carkey; U.uCarFill.value.set(c[0] * k, c[1] * k, c[2] * k);
@@ -1105,6 +1115,8 @@ async function main() {
       if (uk > 0) { U.uRoadN.value.multiply(uchRT.set(lerp(1, UCH.rn[0], uk), lerp(1, UCH.rn[1], uk), lerp(1, UCH.rn[2], uk))); U.uRoadF.value.multiply(uchRT.set(lerp(1, UCH.rf[0], uk), lerp(1, UCH.rf[1], uk), lerp(1, UCH.rf[2], uk))); }
       const pk = w.pasabag * paintSky() * st.road; // (Paşabağ's, W6, by the hour)
       if (pk > 0) { const Q = PAS_R.at(TOD.t), rn = Q.rgb('n'), rf = Q.rgb('f'); U.uRoadN.value.multiply(uchRT.set(lerp(1, rn[0], pk), lerp(1, rn[1], pk), lerp(1, rn[2], pk))); U.uRoadF.value.multiply(uchRT.set(lerp(1, rf[0], pk), lerp(1, rf[1], pk), lerp(1, rf[2], pk))); }
+      const sk = w.sakura * paintSky() * st.road; U.uSakRT.value = st.road; // (the cherry avenue's, step 26, by the hour; st.road 0 skips the work in its ground)
+      if (sk > 0) { const Q = SAK_R.at(TOD.t), rn = Q.rgb('n'), rf = Q.rgb('f'); U.uRoadN.value.multiply(uchRT.set(lerp(1, rn[0], sk), lerp(1, rn[1], sk), lerp(1, rn[2], sk))); U.uRoadF.value.multiply(uchRT.set(lerp(1, rf[0], sk), lerp(1, rf[1], sk), lerp(1, rf[2], sk))); }
     }
     // the painted meadow's tint: the reference art's light lime on a bright day, the repainted hours' tints at golden hour,
     // sunset and night (FIELD_T); the paddies' old, deeper green under grey skies (the day's lime turned the fields ochre at

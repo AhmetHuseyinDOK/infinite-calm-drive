@@ -1,0 +1,72 @@
+{
+ "about": "the cherry canopy (step 26) for the Ghibli-style crowns (src/ghibli.js loadTreeAtlas): an even mosaic of five-petal flowers over deeper rose, petal outlines and bright petals, no twigs (~/cdtest/s26/bake/canopy.mjs); texel = (normal.x, normal.y, blossom ramp key, coverage); baked by ~/cdtest/s26/bake/bake26b.mjs",
+ "cols": 4,
+ "rows": 1,
+ "cell": 256,
+ "files": {
+  "hi": "blossom3_hi.png",
+  "lo": "blossom3_lo.png"
+ },
+ "bytes": {
+  "hi": 265252,
+  "lo": 80116
+ },
+ "size": {
+  "hi": [
+   1024,
+   256
+  ],
+  "lo": [
+   512,
+   128
+  ]
+ },
+ "opt": {
+  "rf": 0.034,
+  "rfr": 0.008,
+  "numb": 130,
+  "ndeep": 340,
+  "nrim": 80,
+  "npetal": 48,
+  "rmain": 0.27,
+  "deep0": 0.46,
+  "deep1": 0.56,
+  "top0": 0.62,
+  "top1": 0.76,
+  "tpow": 1,
+  "hi": 0,
+  "hip": 0.3,
+  "hik": 0.78,
+  "hiup": 0.5,
+  "oe": 0.72,
+  "ok": 0.6,
+  "od": 0,
+  "deepdn": 0.15
+ },
+ "cells": [
+  {
+   "kind": "blossom",
+   "col": 0,
+   "row": 0,
+   "seed": 7001
+  },
+  {
+   "kind": "blossom",
+   "col": 1,
+   "row": 0,
+   "seed": 7102
+  },
+  {
+   "kind": "blossom",
+   "col": 2,
+   "row": 0,
+   "seed": 7203
+  },
+  {
+   "kind": "blossom",
+   "col": 3,
+   "row": 0,
+   "seed": 7304
+  }
+ ]
+}

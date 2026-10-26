@@ -138,6 +138,7 @@ export const U = {
   // the coast's and the country's asphalt as painted (roadCol; main.js, by the time of day under a clear sky, 1 under grey
   // skies): its tint near the eye and from ~22 m on
   uRoadN: { value: new THREE.Vector3(1, 1, 1) }, uRoadF: { value: new THREE.Vector3(1, 1, 1) },
+  uSakRT: { value: 1 }, // the cherry avenue's share of that tint (step 26; main.js st.road: 0 skips its work in the avenue's variants)
   // Cappadocia's ground (W5, the ground shader's uchGround; main.js, by the time of day): the albedo of its sandy shoulder and plain,
   // of its dry grass, and of its pale tuff (linear)
   uUchS: { value: new THREE.Vector3(0.52, 0.43, 0.38) }, uUchG: { value: new THREE.Vector3(0.16, 0.115, 0.075) }, uUchT: { value: new THREE.Vector3(0.95, 0.84, 0.74) },
@@ -160,6 +161,7 @@ export const U = {
   uCarKey: { value: new THREE.Vector3(0, 1, 0) }, // the car's painter's sun, in view space (main.js; CAR_KEY above)
   uVolKey: { value: new THREE.Vector3(0, 1, 0) }, // the painted volumes' key (the tetrapods), in view space (main.js; VOL_KEY above)
   uLeafKey: { value: new THREE.Vector3(0, 1, 0) }, // …and the broadleaf crowns' (further round towards the camera)
+  uBlKey: { value: new THREE.Vector3(0, 1, 0) }, // …and the cherry canopy's (step 26: seen from below, it is lit as painted, not a dark ceiling)
   uCarFill: { value: new THREE.Vector3() },       // …and the painter's fill in its shade (car.js CAR_FILL; main.js, by the time of day)
   uWind: { value: 1 },
   uNoiseTex: { value: makeNoiseTex() },
@@ -350,15 +352,17 @@ vec3 roadCol(float s, float u, float rw){
 #ifdef Z_CITY
   c *= mix(vec3(1.0), vec3(0.70, 0.68, 0.80), city); // the shopping street's asphalt: darker, a violet grey, as in the city painting
 #endif
-#if defined(Z_COAST) || defined(Z_COUNTRY) || defined(Z_GAL) || defined(Z_TOWN) || defined(Z_UCH)
+#if defined(Z_COAST) || defined(Z_COUNTRY) || defined(Z_GAL) || defined(Z_TOWN) || defined(Z_UCH) || defined(Z_SAKURA)
   // the coast's and the country's asphalt as painted: in the sun a cool blue-grey, darkest near the eye and paler and
   // bluer with distance (uRoadN → uRoadF over 3–22 m; by the time of day under a clear sky, 1 under grey skies). It tints
   // the sunlight on it only (gRoadT, after the lights): its shade keeps the painted navy it had. (The Galata Bridge's too:
   // the concept's road is the same blue-grey; and the Turkish town's, W4, in the country's channel; and Cappadocia's, W5, in
-  // the avenue's, as the bridge's)
+  // the avenue's, as the bridge's; and the cherry avenue's own, step 26, under its wet sheen)
   float wR = vZW.z + vZW.w;
 #if defined(Z_GAL) || defined(Z_UCH)
   wR += vZW.y;
+#elif defined(Z_SAKURA)
+  wR += vZW.y * uSakRT;
 #endif
   if (wR > 0.004) gRoadT = mix(vec3(1.0), mix(uRoadN, uRoadF, smoothstep(3.0, 22.0, distance(vWP, cameraPosition))), wR);
 #endif
@@ -959,6 +963,7 @@ export function groundMaterial(defines = groundDefines(Object.keys(ZDEF)), key =
     sh.uniforms.uSkyHor = U.uSkyHor; sh.uniforms.uSkyZen = U.uSkyZen; sh.uniforms.uWet = U.uWet; sh.uniforms.uSakWet = U.uSakWet; sh.uniforms.uNight = U.uNight; sh.uniforms.uSunDir = U.uSunDir; sh.uniforms.uSunCol = U.uSunCol;
     for (const k of ['uReflTex', 'uReflOn', 'uReflRes', 'uHorizon', 'uReflK', 'uRoadN', 'uRoadF']) sh.uniforms[k] = U[k];
     if (defines.Z_UCH !== undefined) for (const k of ['uUchS', 'uUchG', 'uUchT', 'uPasS', 'uPasG', 'uPasT']) sh.uniforms[k] = U[k];
+    if (defines.Z_SAKURA !== undefined) sh.uniforms.uSakRT = U.uSakRT;
     if (paint) { sh.uniforms.uFieldTex = { value: FIELD.tex }; for (const k of ['uFieldK', 'uFieldC', 'uFieldCo', 'uFieldSa', 'uFieldM', 'uFieldBo']) sh.uniforms[k] = FIELD[k]; }
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
@@ -969,12 +974,15 @@ vSU = su; vZW = zw; vRK = rk; vRV = rv; vZS = zs; vWY = (modelMatrix * vec4(posi
     worldShade(sh, `
 uniform vec3 uSkyHor, uSkyZen, uSunDir, uSunCol, uRoadN, uRoadF; uniform float uWet, uSakWet, uNight;
 uniform sampler2D uReflTex; uniform vec2 uReflRes; uniform float uReflOn, uHorizon, uReflK;
+#ifdef Z_SAKURA
+uniform float uSakRT;
+#endif
 varying vec2 vSU; varying vec4 vZW; varying vec2 vRK; varying float vWY; varying float vRV; varying vec3 vWN; varying float vZS;
 float gWater = 0.0; vec3 gRoadT = vec3(1.0);
 ${GROUND}`, WET + MIRROR, false);
     sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
 diffuseColor.rgb *= groundAlbedo();`).replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
-#if defined(Z_COAST) || defined(Z_COUNTRY) || defined(Z_GAL) || defined(Z_TOWN) || defined(Z_UCH)
+#if defined(Z_COAST) || defined(Z_COUNTRY) || defined(Z_GAL) || defined(Z_TOWN) || defined(Z_UCH) || defined(Z_SAKURA)
 reflectedLight.directDiffuse *= gRoadT;
 #endif`);
   };
@@ -1527,7 +1535,7 @@ const GRAD_BLOSSOM = gradGhibli(-0.5, 0.45, 0.12);
 // The clusters face the camera: each corner is spread along the view's right / up vectors (chunk meshes only translate, so
 // object space is world space up to an offset), with a slow sideways sway of the whole cluster. The shadow pass runs the
 // same code with the sun's view, so the clusters face the sun and the crown casts a lobed shadow.
-function billboard(sh, depth) {
+function billboard(sh, depth, shrink = 0, pull = 0) { // (shrink: the cherry blossom's shadow pass, its cards that much smaller; pull: its depth, below)
   sh.uniforms.uTime = U.uTime; sh.uniforms.uWind = U.uWind;
   sh.vertexShader = sh.vertexShader
     .replace('#include <common>', '#include <common>\nattribute vec2 aOff; uniform float uWind;' + (depth ? ' uniform float uTime;' : ''))
@@ -1535,14 +1543,33 @@ function billboard(sh, depth) {
 { vec3 bbR = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]), bbU = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
   vec4 wq = modelMatrix * vec4(transformed, 1.0);
   float sw = (sin(uTime * 1.1 + wq.x * 0.31 + wq.z * 0.23) * 0.65 + sin(uTime * 2.1 + wq.x * 0.83 - wq.z * 0.47) * 0.35) * 0.04 * uWind;
-  transformed += bbR * (aOff.x + sw) + bbU * aOff.y; }`);
+  transformed += ${shrink ? '(bbR * (aOff.x + sw) + bbU * aOff.y) * ' + shrink.toFixed(3) : 'bbR * (aOff.x + sw) + bbU * aOff.y'}; }`);
   // the crown's core (marked by a straight-down normal) casts no shadow: its sun-facing twin would cut it in two
   if (depth) sh.vertexShader = sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\nif (normal.y < -0.97) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);');
+  // (pull: the card's depth as if it stood that much nearer the eye, where a cluster's dome of flowers faces it, while it keeps
+  // its place and size on screen; the crown's core keeps its own; never nearer than 0.6 of its own depth, clear of the near plane)
+  else if (pull) sh.vertexShader = sh.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
+{ vec4 bp = projectionMatrix * vec4(mvPosition.xy, min(mvPosition.z + ${pull.toFixed(3)} * length(aOff) * step(-0.97, normal.y), mvPosition.z * 0.6), 1.0); gl_Position.z = bp.z / bp.w * gl_Position.w; }`);
 }
-// Cherry blossom (the atlas's second row): B is a key into the sakura painting's colours, not a brightness. Twigs (~0.06)
-// are a dark bark brown, the gaps between flowers (~0.3) a deep rose, and the flowers run from a rose pink to the pale,
-// nearly white pink of the petals in full sun (1). Shade and light then come from each flower's own normal
+// Cherry blossom (its own atlas, step 26: ghibli.js, blossom3): B is a key into the sakura painting's colours, not a brightness. Under ~0.1 a
+// dark bark brown, the deeper flowers and the petals' outlines (~0.3–0.5) a deep rose, and the petals run from a rose pink
+// (~0.6, the painting's commonest) to the pale, nearly white pink of the petals in full sun (1). Shade and light then come
+// from each flower's own normal and the crown's
 const bl = (r, g, b) => { const c = new THREE.Color().setRGB(r / 255, g / 255, b / 255, THREE.SRGBColorSpace); return `vec3(${c.r.toFixed(4)}, ${c.g.toFixed(4)}, ${c.b.toFixed(4)})`; };
+// The cherry canopy (step 26) is lit as one surface: its cells' own normals are nearly flat, and the crown's (per cluster)
+// weighs more than on the leaves (the cluster's own takes 0.45 of the normal, the leaves' 0.72), so a crown's light and
+// shade belong to the crown, not a lit cap on every cluster (the old cotton balls)
+const BL_TEXN = 0.45;
+// …and its shadow: each cluster casts a shadow card this much smaller round its middle, so the crowns' shadows on the road
+// and the pavements are a sparse dapple, as painted (the painting's road is mostly in the sun), not one blotch: the left
+// pavement's dapple ΔE 16 at 0.6, 21 at 0.5, 25 at 0.42 (the painting's dapple there is denser than the road's)
+const BL_SHADOW = 0.6;
+// …and its depth: each card stands for a dome of flowers whose front is nearer the eye than its middle by about its
+// half-width, so the cards are depth-tested as if that much nearer (BL_PULL × the card's corner radius; their place and size
+// on screen unchanged). A limb that ends inside a cluster then passes behind its flowers' painted outline from any side; a
+// flat card through the cluster's middle let the limb's tip show over the flowers in front of it, and a shallower pull cut
+// limbs heading away from the eye with a straight edge in the middle of the pink, as a sawn-off stump
+const BL_PULL = 0.75;
 const BLOSSOM_RAMP = `float blT = clamp(gTx.b * uBlMid.w + uBlTip.w, 0.0, 1.0); // (smoothstep(edge, 1, b): the edge's maths done on the CPU)
 diffuseColor.rgb *= mix(${bl(62, 38, 34)}, uBlMid.rgb + uBlTip.rgb * (blT * blT * (3.0 - 2.0 * blT)), smoothstep(0.1, 0.26, gTx.b));`;
 /** The crowns' material (`tex`: the cluster atlas, ghibli.js). Every cluster lights its own painted leaves: its normal is
@@ -1554,12 +1581,12 @@ export function makeGhibliLeaf(tex, { blossom = false } = {}) {
   // Blossom: the atlas's B is a key into the sakura painting's own colours (BLOSSOM_RAMP), so the material is white
   const m = new THREE.MeshToonMaterial({ map: tex, vertexColors: true, color: blossom ? 0xffffff : new THREE.Color().setRGB(0.68, 0.85, 0.46, THREE.SRGBColorSpace), gradientMap: blossom ? GRAD_BLOSSOM : GRAD_GHIBLI, alphaTest: 0.5, side: THREE.FrontSide });
   m.shadowSide = THREE.DoubleSide; // (three flips FrontSide to BackSide for shadows; the depth twins face the sun)
-  if (!blossom) m.defines = { VOL_KEY: 'uLeafKey' }; // (the leaves lit by the crowns' painter's key, as the paintings light them)
+  m.defines = { VOL_KEY: blossom ? 'uBlKey' : 'uLeafKey' }; // (lit by the crowns' painter's key, as the paintings light them)
   m.onBeforeCompile = sh => {
     worldShade(sh); backlit(sh);
-    billboard(sh, false); // (uTime comes with the vertex cloud shadows)
+    billboard(sh, false, 0, blossom ? BL_PULL : 0); // (uTime comes with the vertex cloud shadows)
     sh.uniforms.uGhShade = blossom ? U.uBlShade : U.uGhShade; // (blossom: its own shade, a bright rose-magenta)
-    if (!blossom) { sh.uniforms.uGhTint = U.uGhTint; volKey(sh, 'uLeafKey'); } else { sh.uniforms.uBlMid = U.uBlMid; sh.uniforms.uBlTip = U.uBlTip; }
+    if (!blossom) { sh.uniforms.uGhTint = U.uGhTint; volKey(sh, 'uLeafKey'); } else { sh.uniforms.uBlMid = U.uBlMid; sh.uniforms.uBlTip = U.uBlTip; volKey(sh, 'uBlKey'); }
     // the sun's shadow is looked up from the cluster's sunward surface (~1.1 × its half-width out), so a cluster never
     // shadows itself (its sun-facing depth twin cuts through its middle) while the lobes above and toward the sun still
     // shade the ones below. The crown's core (marked by a straight-down normal) looks it up 2.5 m deeper into the crown:
@@ -1578,7 +1605,7 @@ ${blossom ? BLOSSOM_RAMP : 'diffuseColor.rgb *= gTx.b * uGhTint;'}
 diffuseColor.a *= gTx.a;`)
       // the cluster's own normal (in card = view space) mixed with the crown's
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
-normal = normalize(mix(normal, gTexN, 0.72));`)
+normal = normalize(mix(normal, gTexN, ${blossom ? BL_TEXN.toFixed(3) : '0.72'}));`)
       // the crown's shade is lit by the sky alone, through a shade tint (a deep teal on a clear day), not by the warm ground
       // bounce the open surfaces get from the hemisphere light: it turned shaded leaves olive
       .replace('#include <aomap_fragment>', `#if NUM_HEMI_LIGHTS > 0
@@ -1586,9 +1613,9 @@ reflectedLight.indirectDiffuse = hemisphereLights[0].skyColor * BRDF_Lambert(dif
 #endif
 #include <aomap_fragment>`);
   };
-  m.customProgramCacheKey = () => (blossom ? 'gblossom-v2' : 'gleaf-v2');
+  m.customProgramCacheKey = () => (blossom ? 'gblossom-v3' : 'gleaf-v2');
   const d = new THREE.MeshDepthMaterial();
-  d.onBeforeCompile = sh => billboard(sh, true);
-  d.customProgramCacheKey = () => 'gleaf-depth-v1';
+  d.onBeforeCompile = sh => billboard(sh, true, blossom ? BL_SHADOW : 0);
+  d.customProgramCacheKey = () => (blossom ? 'gblossom-depth-v1' : 'gleaf-depth-v1');
   return { mat: m, depth: d };
 }

@@ -397,7 +397,7 @@ export class World {
     if (this.M.gleaf) { const m = add(G.gleaf.build(), this.M.gleaf, true, true, 0, 'leaf'); if (m) m.customDepthMaterial = this.M.gleafDepth; } // (clusters face the sun in the shadow pass)
     // (blossom casts shadows but doesn't receive them: its shaded undersides already face away from the sun, and the
     // received shadows changed its colours by under 1% for ~0.4 ms on desktop)
-    if (this.M.gblossom) { const m = add(G.gblossom.build(), this.M.gblossom, true, false, 0, 'leaf'); if (m) m.customDepthMaterial = this.M.gleafDepth; }
+    if (this.M.gblossom) { const m = add(G.gblossom.build(), this.M.gblossom, true, false, 0, 'leaf'); if (m) m.customDepthMaterial = this.M.gblossomDepth; } // (its own shadow twin: a sparser dapple)
     yield;
     add(G.lamp.build(), this.M.lamp, false, false, 0, 'light');
     add(G.sig.build(), this.M.sig, false, false, 0, 'small');

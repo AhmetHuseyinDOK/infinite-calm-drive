@@ -1,0 +1,50 @@
+{
+ "about": "painted leaf clusters for the Ghibli-style broadleaf crowns (src/ghibli.js loadTreeAtlas): one row of four rosettes of small leaf clumps (R1 painter), byte for byte the leaf row of crowns.* (Restyle 9), without its cherry-blossom row (step 26: the cherries have their own atlas, blossom2.*); texel = (normal.x, normal.y, albedo, coverage); baked by ~/cdtest/gt/bake/bake.mjs (NAME=crowns3 KINDS=leaf,leaf,leaf,leaf)",
+ "cols": 4,
+ "rows": 1,
+ "cell": 256,
+ "files": {
+  "hi": "crowns3_hi.png",
+  "lo": "crowns3_lo.png"
+ },
+ "bytes": {
+  "hi": 268994,
+  "lo": 80343
+ },
+ "size": {
+  "hi": [
+   1024,
+   256
+  ],
+  "lo": [
+   512,
+   128
+  ]
+ },
+ "cells": [
+  {
+   "kind": "leaf",
+   "col": 0,
+   "row": 0,
+   "seed": 4100
+  },
+  {
+   "kind": "leaf",
+   "col": 1,
+   "row": 0,
+   "seed": 4231
+  },
+  {
+   "kind": "leaf",
+   "col": 2,
+   "row": 0,
+   "seed": 4362
+  },
+  {
+   "kind": "leaf",
+   "col": 3,
+   "row": 0,
+   "seed": 4493
+  }
+ ]
+}

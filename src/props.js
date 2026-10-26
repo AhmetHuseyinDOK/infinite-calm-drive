@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { C, mulC, mixC, rng } from './util.js';
 import { GB, BILL_OCT, BILL_HEX } from './geom.js';
+import { TS_CAP, TS_PAD, TOWN_SHOPS, TOWN_AWNINGS } from './textures.js';
 
 const W1 = [1, 1, 1];
 export const PAL = {
@@ -466,6 +467,47 @@ export function treeGhibli(G, M, r, s = 1) {
   }
 }
 
+/** a plane tree (çınar) of a Turkish town's pavements (W4), as the concept paints them: treeGhibli's painted crown and smooth
+ *  bark, but a tall bole forking at ~4.5 m and the crown high over the pavement (its underside ~4.5 m up, clear of the shops'
+ *  signs and awnings), narrower, and reaching a little out over the road (−z: built facing it) */
+export function treeGhibliPlane(G, M, r, s = 1) {
+  const h = r.range(9.6, 11.2) * s, k = G.bark; k.setM(M);
+  const bh = h * r.range(0.4, 0.45), cz = -0.65 * s;
+  const q = rng(Math.floor(h * 7919 + bh * 104729) + 31), [nT, nL, nB, , nS] = barkSides();
+  trunkTube(k, [0, bh, cz * 0.35], 0.25 * s, 0.18 * s, [q.range(-0.05, 0.05) * s, q.range(-0.05, 0.05) * s], nT, BARK_BROAD);
+  const cy = h * 0.7, Rx = r.range(2.9, 3.4) * s, Ry = r.range(2.4, 2.8) * s;
+  const lobeDirs = [], nl = 5 + Math.floor(r() * 3);
+  for (let i = 0; i < nl; i++) { const a = (i / nl) * 6.283 + r() * 0.6, el = r.range(-0.1, 0.75), ce = Math.sqrt(1 - el * el); lobeDirs.push([Math.cos(a) * ce, el, Math.sin(a) * ce]); }
+  lobeDirs.push([0, 1, 0]);
+  const all = [[0, cy + 0.15 * Ry, cz, 1.8 * s, 1]];
+  const nc = 28 + Math.floor(r() * 7);
+  for (let i = 0; i < nc; i++) {
+    let dx = r() * 2 - 1, dy = r.range(-0.5, 1), dz = r() * 2 - 1, l = Math.hypot(dx, dy, dz) || 1; dx /= l; dy /= l; dz /= l;
+    let best = lobeDirs[0], bd = -2; for (const L of lobeDirs) { const d = L[0] * dx + L[1] * dy + L[2] * dz; if (d > bd) { bd = d; best = L; } }
+    dx = dx * 0.45 + best[0] * 0.55; dy = dy * 0.45 + best[1] * 0.55; dz = dz * 0.45 + best[2] * 0.55; l = Math.hypot(dx, dy, dz) || 1; dx /= l; dy /= l; dz /= l;
+    const rr = r.range(0.78, 0.95);
+    all.push([dx * Rx * rr, cy + dy * Ry * rr, cz + dz * Rx * rr, r.range(0.8, 1.05) * s, 0]);
+  }
+  for (let i = 0; i < 4; i++) { // the limbs out of the fork, up into the crown
+    const d = lobeDirs[i % nl], dh = Math.hypot(d[0], d[2]) || 1, ox = d[0] / dh, oz = d[2] / dh;
+    const b0 = [ox * 0.05 * s, bh * 0.9, cz * 0.35 + oz * 0.05 * s], e = [d[0] * Rx * 0.55, cy + Math.min(0, d[1]) * Ry * 0.4 - 0.3 * s, cz + d[2] * Rx * 0.55];
+    const m = [(b0[0] + e[0]) * 0.5 - ox * 0.1 * s, (b0[1] + e[1]) * 0.5 + 0.2 * s, (b0[2] + e[2]) * 0.5 - oz * 0.1 * s];
+    const T = steps(nS), P = curve(b0, m, e, T);
+    k.tube(P, taper(T, 0.14 * s, 0.05 * s), nL, BARK_BROAD, SEAM_UP);
+    const p = P[nS - 1], a = Math.atan2(oz, ox) + q.range(-0.6, 0.6), L = q.range(0.9, 1.3) * s;
+    const e2 = [p[0] + Math.cos(a) * L * 0.7, p[1] + L * q.range(0.6, 0.9), p[2] + Math.sin(a) * L * 0.7], T2 = steps(3);
+    k.tube(curve(p, [(p[0] + e2[0]) / 2, (p[1] + e2[1]) / 2 + 0.1 * L, (p[2] + e2[2]) / 2], e2, T2), taper(T2, 0.06 * s, 0.022 * s), nB, BARK_BROAD_IN, SEAM_UP);
+  }
+  const hue = r(), tint = [0.64 - hue * 0.04, 0.63, 0.56 + hue * 0.06]; // (the concept's: a deeper olive green than the coast's crowns)
+  const g = G.gleaf; g.setM(M);
+  for (const [x, y, z, rad, core] of all) {
+    let nx = x, ny = (y - cy) * (Rx / Ry) + 0.1 * Rx, nz = z - cz; const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
+    if (core) { nx = nz = 0; ny = -1; }
+    const ht = Math.min(1, Math.max(0, (y - (cy - Ry)) / (2 * Ry))), kk = core ? 0.55 : 0.72 + 0.28 * ht, hh = (rad / 0.8) * 0.88;
+    g.bill(x, y, z, nx, ny, nz, hh, hh, GHIBLI.cells[Math.floor(r() * GHIBLI.cells.length)], [tint[0] * kk, tint[1] * kk, tint[2] * kk], BILL_OCT, 0.88);
+  }
+}
+
 // ---- cherry trees (桜) from painted blossom clusters, as the sakura painting draws them (GHIBLI.bcells: the atlas's
 // blossom cells; without them the cherry trees keep their card crowns, treeSakura) ----
 /** A big old cherry tree: a thick dark trunk forking at 2.2–2.7 m into three or four limbs that rise in a wide V, and a
@@ -535,7 +577,7 @@ export function treeGhibliSakura(G, M, r, s = 1, ave = false) {
 // avenue's cherry trees, built facing the road (chunks.js placeSakura)
 const TREE_BUILDERS = { broad: (G, M, r, s) => (GHIBLI.cells ? treeGhibli : treeBroad)(G, M, r, s), sakura: (G, M, r, s) => (GHIBLI.bcells ? treeGhibliSakura(G, M, r, s) : treeSakura(G, M, r, s)),
   sakuraAve: (G, M, r, s) => (GHIBLI.bcells ? treeGhibliSakura(G, M, r, s, true) : treeSakura(G, M, r, s)), pine: treePine, cedar: treeCedar, maple: treeMaple, ginkgo: treeGinkgo, birch: treeBirch, snowcedar: treeSnowCedar,
-  cypress: treeCypress };
+  cypress: treeCypress, plane: (G, M, r, s) => (GHIBLI.cells ? treeGhibliPlane : treeBroad)(G, M, r, s) };
 const TCACHE = {};
 function treeTemplate(kind, v) {
   const key = kind + v;
@@ -611,6 +653,8 @@ export function building(G, M, r, spec) {
     case 'konbini': return konbini(G, M, r, spec);
     case 'house': return spec.ptype ? paintedHouse(G, M, r, spec) : woodHouse(G, M, r, spec);
     case 'block': return block(G, M, r, spec);
+    case 'townApt': return townApt(G, M, r, spec);
+    case 'townBack': return townBack(G, M, r, spec);
   }
 }
 
@@ -1525,4 +1569,303 @@ export function galBarrier(G, M) {
   for (const x of [-L, 0, L]) c.box(x - 0.07, 0, -0.07, x + 0.07, 1.35, 0.07, OR);
   c.box(-L, 1.2, -0.06, L, 1.36, 0.06, OR); c.box(-L, 0.18, -0.05, L, 0.3, 0.05, OR);
   for (const x0 of [-L, 0]) { c.rod([x0 + 0.1, 0.3, 0], [x0 + L - 0.1, 1.2, 0], 0.04, 0.04, 4, WH); c.rod([x0 + 0.1, 1.2, 0], [x0 + L - 0.1, 0.3, 0], 0.04, 0.04, 4, WH); }
+}
+
+// ------------------------------------------------------------------ the Turkish town (W4)
+// As its concept painting has it (ref/world/turkish_town.png, after a real street, Eskişehir's İnönü Caddesi): five- to
+// seven-storey blocks of flats in pastel plaster over a row of shops, their balconies' iron railings hung with laundry, pots of
+// plants, satellite dishes and air conditioners, a flag hung from a balcony now and then; the shops' painted bays (the world
+// atlas's twBay…: painted.js loadTownAtlas), their signboards (twSg…) and striped awnings (twAwn…, twVal…); plane trees in
+// square planters, tea tables with tulip glasses, a simit cart, a parked dolmuş, a cat on the pavement
+/** the blocks' plaster, as the concept paints them: peach, salmon, a pale yellow, cream, white, a pale grey, a dusty pink, a
+ *  light ochre, a pale apricot */
+// (lighter and calmer than their painted colours: the sun and the grade's saturation turn them into the concept's lit pastels)
+export const TOWN_TINTS = ['#f2c8b4', '#f4d2bd', '#f1e2b6', '#f4ead2', '#f5f3ee', '#e3e2de', '#efcfcf', '#efd8ad', '#f3dcc8'].map(C);
+// (the shops' painted bays a little calmer than painted: lit by the scene and graded, the bakery's bread went a burning orange)
+const TW_SHOP = [0.9, 0.88, 0.9];
+const TW_STONE = C('#a9a59d'), TW_CORN = C('#efebe2'), TW_DARK = C('#3a3a3e'), TW_SOIL = C('#5a4433'), TW_KERB = C('#b7b4ad');
+const TCLOTH = ['#d23c3c', '#2e5fa8', '#f4f4ef', '#3aa6a0', '#e98fb0', '#f0c84a', '#7a4ca0', '#f4f4ef', '#f2f2ee'].map(C);
+/** a quad facing −z (towards the road) with an atlas cell and an explicit light code (the world atlas's cells aren't named as
+ *  the procedural atlas's lit cells are: litOf can't tell) */
+function wq(a, x0, x1, y0, y1, z, cell, col = W1, lit = 0) { a.litV = lit; a.quad([x1, y0, z], [x0, y0, z], [x0, y1, z], [x1, y1, z], col, uv(cell)); a.litV = 0; }
+/** a plain quad on a +x / −x face (the colour material: x at x, z0…z1, y0…y1) */
+const pxc = (c, x, z0, z1, y0, y1, col) => c.quad([x, y0, z1], [x, y0, z0], [x, y1, z0], [x, y1, z1], col);
+const nxc = (c, x, z0, z1, y0, y1, col) => c.quad([x, y0, z0], [x, y0, z1], [x, y1, z1], [x, y1, z0], col);
+/** a uv rect: the cell's columns px0…px1 (of its w px), whole height (mirrored when px0 > px1) */
+const cols = (cl, px0, px1) => ({ u0: cl.u0 + ((cl.u1 - cl.u0) * px0) / cl.w, u1: cl.u0 + ((cl.u1 - cl.u0) * px1) / cl.w, v0: cl.v0, v1: cl.v1 });
+/** a shop's signboard (x0…x1, y0…y1, its face at z, facing −z): its painted cell (textures.js townSign) in five strips, its two
+ *  caps (the rule at its ends) and the word at their own shape, the plain margins between stretched to the board's length; the
+ *  board's top, underside and ends in its own colour. Lit at dusk (the lettering glows: lit) */
+function townSignboard(G, x0, x1, y0, y1, z, cell, board, lit) {
+  const a = G.atlas, c = G.color, cl = uv(cell), h = y1 - y0, pc = TS_CAP * cl.h, pp = TS_PAD * cl.h;
+  const cap = TS_CAP * h, wn = ((cl.w - 2 * (pc + pp)) / cl.h) * h, room = x1 - x0 - 2 * cap - 0.6 * TS_PAD * h, ww = Math.min(wn, room), xm = (x0 + x1) / 2;
+  // (from the viewer's left, +x: the cap, the margin, the word, the margin, the cap)
+  const X = [x1, x1 - cap, xm + ww / 2, xm - ww / 2, x0 + cap, x0], U = [[0, pc], [pc + 2, pc + pp - 2], [pc + pp, cl.w - pc - pp], [cl.w - pc - pp + 2, cl.w - pc - 2], [cl.w - pc, cl.w]];
+  a.litV = lit; a.noShadow = true; // (in front of the fascia: it casts the board's shadow)
+  for (let i = 0; i < 5; i++) { const q = cols(cl, U[i][0], U[i][1]); a.quad([X[i], y0, z], [X[i + 1], y0, z], [X[i + 1], y1, z], [X[i], y1, z], W1, q); }
+  a.litV = 0; a.noShadow = false;
+  const d = 0.14; // (its depth: the board stands off the fascia)
+  c.quad([x0, y1, z], [x1, y1, z], [x1, y1, z + d], [x0, y1, z + d], mulC(board, 0.95)); // its top
+  c.quad([x1, y0, z], [x0, y0, z], [x0, y0, z + d], [x1, y0, z + d], mulC(board, 0.8)); // its underside
+  c.quad([x0, y0, z + d], [x0, y0, z], [x0, y1, z], [x0, y1, z + d], mulC(board, 0.88)); c.quad([x1, y0, z], [x1, y0, z + d], [x1, y1, z + d], [x1, y1, z], mulC(board, 0.88)); // its ends
+}
+/** a shop's awning over x0…x1: its canvas (twAwn k, 1 m a cell) sloping out and down from the fascia at y over the pavement,
+ *  its scalloped valance (twVal k) along the front, its underside (the canvas seen through), its two end pieces */
+function townAwning(G, x0, x1, y, k) {
+  // (they cast their shade over the shop windows, whose interiors glow warm by day too (light code 6), as the concept's)
+  townAwning0(G, x0, x1, y, k);
+}
+function townAwning0(G, x0, x1, y, k) {
+  const a = G.atlas, c = G.color, D = 1.35, drop = 0.55, yl = y - drop, zf = -D, n = Math.max(1, Math.round(x1 - x0)), cw = (x1 - x0) / n, ca = uv('twAwn' + k), cv = uv('twVal' + k);
+  const col = C(TOWN_AWNINGS[k][0]);
+  for (let i = 0; i < n; i++) {
+    const xa = x0 + i * cw, xb = xa + cw;
+    a.quad([xb, yl, zf], [xa, yl, zf], [xa, y, -0.02], [xb, y, -0.02], W1, ca); // (its top, sloping to the front)
+    a.quad([xa, yl, zf], [xb, yl, zf], [xb, y, -0.02], [xa, y, -0.02], [0.72, 0.72, 0.72], ca); // (its underside, seen from the road)
+    a.noShadow = true; // (the valance's scalloped alpha: no shadow)
+    a.quad([xb, yl - 0.3, zf - 0.005], [xa, yl - 0.3, zf - 0.005], [xa, yl, zf - 0.005], [xb, yl, zf - 0.005], W1, cv); // (the valance)
+    a.quad([xa, yl - 0.3, zf], [xb, yl - 0.3, zf], [xb, yl, zf], [xa, yl, zf], [0.75, 0.75, 0.75], cv);
+    a.noShadow = false;
+  }
+  for (const x of [x0, x1]) { // the end pieces (both faces)
+    c.quad([x, yl, zf], [x, y, -0.02], [x, y, -0.02], [x, yl - 0.3, zf], mulC(col, 0.85));
+    c.quad([x, yl - 0.3, zf], [x, y, -0.02], [x, y, -0.02], [x, yl, zf], mulC(col, 0.7));
+  }
+}
+/** a balcony's iron railing panel from (xa, za) to (xb, zb) at height y (twRail k, alpha-tested; both faces: seen from the road
+ *  and through the balcony) */
+function townRailing(G, xa, za, xb, zb, y, k) {
+  const a = G.atlas, cl = uv('twRail' + k), L = Math.hypot(xb - xa, zb - za), n = Math.max(1, Math.round(L / 2));
+  for (let i = 0; i < n; i++) {
+    const t0 = i / n, t1 = (i + 1) / n, p0 = [xa + (xb - xa) * t0, y, za + (zb - za) * t0], p1 = [xa + (xb - xa) * t1, y, za + (zb - za) * t1];
+    const q0 = [p0[0], y + 1.05, p0[2]], q1 = [p1[0], y + 1.05, p1[2]];
+    a.quad(p0, p1, q1, q0, W1, cl); a.quad(p1, p0, q0, q1, W1, { u0: cl.u1, u1: cl.u0, v0: cl.v0, v1: cl.v1 });
+  }
+}
+/** a line of brightly coloured washing on a balcony (as the concept's): between xa and xb, the line at y, at z */
+function townLaundry(c, xa, xb, y, z, r) {
+  c.rod([xa, y, z], [xb, y, z], 0.012, 0.012, 3, PAL.metal);
+  for (let x = xa + 0.1 + r() * 0.2; x < xb - 0.3;) {
+    const w = 0.25 + r() * 0.35, h = 0.35 + r() * 0.45, col = r.pick(TCLOTH), zz = z + (r() - 0.5) * 0.05;
+    c.quad([x + w, y - h, zz], [x, y - h, zz], [x, y - 0.02, zz], [x + w, y - 0.02, zz], col);
+    c.quad([x, y - h, zz + 0.01], [x + w, y - h, zz + 0.01], [x + w, y - 0.02, zz + 0.01], [x, y - 0.02, zz + 0.01], mulC(col, 0.8));
+    x += w + 0.05 + r() * 0.2;
+  }
+}
+/** a satellite dish on a short arm, looking up and out (its back to the wall at z0): a shallow grey dish in eight facets */
+function satDish(c, x, y, z0, R = 0.33) {
+  const D = C('#dcdcd8'), Dd = C('#b9b9b4'), cx = x, cy = y + 0.1, cz = z0 - 0.22, ux = 0, uy = 0.5, uz = -0.87; // (its axis)
+  // the dish's rim in its plane (axis u): two vectors across it
+  const ax = [1, 0, 0], ay = [0, 0.87, 0.5];
+  const P = k => { const t = (k / 8) * Math.PI * 2, ct = Math.cos(t) * R, st = Math.sin(t) * R; return [cx + ax[0] * ct + ay[0] * st, cy + ax[1] * ct + ay[1] * st, cz + ax[2] * ct + ay[2] * st]; };
+  const back = [cx - ux * 0.08, cy - uy * 0.08, cz - uz * 0.08];
+  for (let k = 0; k < 8; k++) { const p = P(k), q = P(k + 1); c.quad(back, q, p, p, D); c.quad(back, p, q, q, Dd); }
+  c.rod([cx, cy, cz + 0.05], [x, y - 0.1, z0], 0.02, 0.02, 3, Dd);
+  c.rod([cx, cy, cz], [cx + ux * 0.45, cy + uy * 0.45, cz + uz * 0.45], 0.012, 0.012, 3, Dd); // (the feed arm)
+}
+/** a block of flats over a row of shops (props.js building type 'townApt'), as the concept's. s: w, d, floors (in all, the
+ *  shops' floor too: 5–7), tint (its plaster), shops ([{ k: its kind (textures.js TOWN_SHOPS), j: its sign, aw: its awning
+ *  (−1 none), n: its bays }] from the −x end), door (the entrance's bay), bal ('full': a balcony across the front on every upper
+ *  floor; 'alt': on every other bay; 'mid': the middle bays; 'none'), rail (0 dark iron, 1 white), flag (a flag hung from a
+ *  balcony), near (which end looks back down the road: its end wall a shade lighter), painted (the town's paintings are in) */
+function townApt(G, M, r, s) {
+  const { w, d, floors, tint } = s, a = G.atlas, c = G.color; a.setM(M); c.setM(M); a.world = true;
+  const G0 = 4.55, FH = 3.0, H = G0 + (floors - 1) * FH, x0 = -w / 2, nb = Math.max(2, Math.round(w / 3.3)), bw = w / nb, SB = 3.35; // (SB: the shop bays' top)
+  const wall = mulC(tint, 1), dark = mulC(tint, 0.9);
+  // ---- the ground floor: the shops' painted bays (warm-lit by day too: light code 6) and the entrance, the fascia over them,
+  // the shops' signboards and awnings
+  let bay = 0;
+  const bayX = i => x0 + i * bw;
+  for (const sh of s.shops) {
+    if (bay === s.door) { wq(a, bayX(bay) + bw, bayX(bay), 0, SB, 0, 'twBay7', W1, 24 + Math.floor(r() * 120)); lampAt(G, M, bayX(bay) + bw / 2, 3.0, -0.6, 0.35); bay++; }
+    const xa = bayX(bay), xb = bayX(bay + sh.n);
+    // (their interiors warm by day too: light code 6, as the shopping street's)
+    for (let i = 0; i < sh.n; i++) { wq(a, bayX(bay + i), bayX(bay + i + 1), 0, SB, 0, 'twBay' + sh.k, TW_SHOP, 6); lampAt(G, M, bayX(bay + i) + bw / 2, 1.9, -0.8, 0.7); }
+    const S = TOWN_SHOPS[sh.k][sh.j];
+    // (its signboard as large as the concept's: the fascia's height, ~1 m, along the shop's whole front)
+    townSignboard(G, xa + 0.1, xb - 0.1, SB + 0.1, G0 - 0.12, -0.15, 'twSg' + sh.k + '_' + sh.j, C(S[1]), 24 + Math.floor(r() * 60));
+    if (sh.aw >= 0) townAwning(G, xa + 0.08, xb - 0.08, SB + 0.02, sh.aw);
+    if (sh.k === 5) { // the pharmacy's green cross, standing out from the wall at the board's end
+      const xc = xb - 0.35, yc = SB + 0.5; c.box(xc - 0.03, yc + 0.3, -0.62, xc + 0.03, yc + 0.38, 0, PAL.metal);
+      a.litV = 12; const q = uv('twCross'); a.quad([xc, yc, -0.95], [xc, yc, -0.35], [xc, yc + 0.6, -0.35], [xc, yc + 0.6, -0.95], W1, q); a.quad([xc + 0.01, yc, -0.35], [xc + 0.01, yc, -0.95], [xc + 0.01, yc + 0.6, -0.95], [xc + 0.01, yc + 0.6, -0.35], W1, q); a.litV = 0;
+    }
+    bay += sh.n;
+  }
+  for (; bay < nb; bay++) { if (bay === s.door) { wq(a, bayX(bay) + bw, bayX(bay), 0, SB, 0, 'twBay7', W1, 24 + Math.floor(r() * 120)); continue; } wq(a, bayX(bay + 1), bayX(bay), 0, SB, 0, 'twBay' + Math.floor(r() * 7), TW_SHOP, 6); }
+  fz(c, x0, -x0, SB, G0, 0, dark); // the fascia (the walls in plain plaster: the colour material, its painterly grain, no texture: in
+  // the shadow pass the props' plain depth, where the textured atlas's alpha test made the town's walls cost 9 ms a frame)
+  c.box(x0, SB - 0.02, -0.06, -x0, SB + 0.04, 0.0, TW_STONE); // (a stone string course over the shops)
+  // ---- the upper floors: plaster, a window in each bay (a balcony door where it has a balcony), the balconies' slabs, railings,
+  // washing, pots, dishes, air conditioners
+  const winCells = ['twWinA', 'twWinB', 'twWinC'], wk = winCells[Math.floor(r() * 3)], slab = mulC(tint, 1.02), under = mulC(tint, 0.78);
+  const hasBal = (f, i) => s.bal === 'full' || (s.bal === 'alt' && (i + f) % 2 === 0) || (s.bal === 'mid' && i > 0 && i < nb - 1);
+  let flags = s.flag ? (w > 11 ? 2 : 1) : 0; // (as many flags as the concept's: hung from the balconies, one or two a block)
+  fz(c, x0, -x0, G0, H, 0, wall); // the upper floors' plaster, one quad (the windows over it; neither casts a shadow: the wall does)
+  for (let f = 1; f < floors; f++) {
+    const y0 = G0 + (f - 1) * FH;
+    for (let i = 0; i < nb; i++) {
+      const xa = bayX(i), xb = bayX(i + 1), xm = (xa + xb) / 2, bal = hasBal(f, i);
+      // the window (or the balcony's door and window), at its own size (its cell's metres: textures.js / pack4.py); in front of the
+      // wall, casting no shadow (the wall behind it does)
+      a.noShadow = true;
+      if (bal) { const dw = Math.min(2.2, bw - 0.3), dh = dw * 1.3; wq(a, xm - dw / 2, xm + dw / 2, y0 + 0.02, y0 + 0.02 + dh, -0.02, 'twWinD', W1, homeLit(a, xm + y0, f)); }
+      else { const cell = r() < 0.75 ? wk : winCells[Math.floor(r() * 3)], ww = cell === 'twWinB' ? 1.6 : cell === 'twWinC' ? 1.25 : 1.45, wh = ww * (cell === 'twWinB' ? 1.1 : cell === 'twWinC' ? 1.24 : 1.18);
+        wq(a, xm - ww / 2, xm + ww / 2, y0 + 0.75, y0 + 0.75 + wh, -0.02, cell, W1, homeLit(a, xm + y0, f)); }
+      a.noShadow = false;
+      if (!bal && r() < 0.12) acUnit(G, M, xm + (r() < 0.5 ? -1 : 1) * (bw / 2 - 0.55), y0 + 0.4, -0.3);
+      a.setM(M); c.setM(M);
+    }
+    // the balconies: runs of neighbouring balcony bays share one slab and railing
+    for (let i = 0; i < nb;) {
+      if (!hasBal(f, i)) { i++; continue; }
+      let j = i; while (j + 1 < nb && hasBal(f, j + 1)) j++;
+      const xa = bayX(i) + 0.08, xb = bayX(j + 1) - 0.08, D = 1.5; // (deep, with a thick slab, as the concept's)
+      // (casting no shadow: the high sun put every storey's wall under the slab above it in shade, where the concept's walls stand
+      // in the sun with a narrow shade under each balcony (their undersides face down, in shade anyway))
+      c.noShadow = true; c.box(xa, y0 - 0.34, -D, xb, y0 + 0.02, 0, slab, null, { ny: under }); c.noShadow = false;
+      a.noShadow = true; // (the railings' alpha-tested bars cast no shadow either: a third of the shadow pass's cost)
+      townRailing(G, xb, -D + 0.04, xa, -D + 0.04, y0 + 0.02, s.rail);
+      townRailing(G, xa + 0.04, -D + 0.04, xa + 0.04, -0.02, y0 + 0.02, s.rail); townRailing(G, xb - 0.04, -0.02, xb - 0.04, -D + 0.04, y0 + 0.02, s.rail);
+      a.noShadow = false;
+      const q = r();
+      if (q < 0.4) townLaundry(c, xa + 0.15, xb - 0.15, y0 + 2.05, -D * 0.55, r);
+      if (r() < 0.55) for (let x = xa + 0.35 + r() * 0.4; x < xb - 0.3; x += 0.9 + r() * 1.6) if (r() < 0.6) pottedPlant(G, sub(M, 0, y0 + 0.02, 0), r, x, -D + 0.35);
+      a.setM(M); c.setM(M);
+      if (r() < 0.22) satDish(c, xb - 0.35, y0 + 1.2, -D + 0.06);
+      if (flags > 0 && f >= 2 && r() < 0.55) { // the flag hung over the railing, as the concept's
+        flags--; const xf = (xa + xb) / 2 + (r() - 0.5) * (xb - xa - 1.2), fw = 0.95, fh = 1.42, zf = -D - 0.03, cl = uv('twFlag');
+        a.quad([xf + fw / 2, y0 + 1.07 - fh, zf], [xf - fw / 2, y0 + 1.07 - fh, zf], [xf - fw / 2, y0 + 1.07, zf], [xf + fw / 2, y0 + 1.07, zf], W1, cl);
+        a.quad([xf - fw / 2, y0 + 1.07 - fh, zf + 0.01], [xf + fw / 2, y0 + 1.07 - fh, zf + 0.01], [xf + fw / 2, y0 + 1.07, zf + 0.01], [xf - fw / 2, y0 + 1.07, zf + 0.01], W1, { u0: cl.u1, u1: cl.u0, v0: cl.v0, v1: cl.v1 });
+      }
+      i = j + 1;
+    }
+  }
+  // ---- the cornice, the roof, the ends and the back
+  c.box(x0 - 0.04, H, -0.32, -x0 + 0.04, H + 0.42, 0.2, TW_CORN, null, { ny: mulC(tint, 0.85) });
+  c.quad([-w / 2, H + 0.42, d], [w / 2, H + 0.42, d], [w / 2, H + 0.42, 0.2], [-w / 2, H + 0.42, 0.2], PAL.roof);
+  if (r() < 0.5) { // a solar water heater on the roof (its panel and its tank), as on Turkish roofs
+    const xs = (r() - 0.5) * w * 0.5, zs = d * 0.4; c.box(xs - 1.0, H + 0.42, zs, xs + 1.0, H + 1.5, zs + 0.08, C('#2e3d5c'));
+    c.cyl(xs, H + 1.55, zs + 0.5, 0.28, 0.28, 0.2, 8, C('#e8e8e4')); c.box(xs - 1.0, H + 1.45, zs + 0.3, xs + 1.0, H + 1.85, zs + 0.7, C('#e6e6e2'));
+  }
+  // the ends: the one that looks back down the road (s.near: seen over a lower neighbour, and from the bridge's landing and down
+  // the side streets) with a window in every ~3.3 m of every upper floor, the other plain
+  const endC = mulC(tint, 0.9), ns = Math.max(2, Math.round((d - 0.5) / 3.3)), sd = (d - 0.5) / ns, ek = winCells[Math.floor(r() * 3)];
+  for (const sx of [-1, 1]) {
+    const xe = (sx * w) / 2, q = sx > 0 ? pxq : nxq, qc = sx > 0 ? pxc : nxc;
+    if (sx !== s.near) { qc(c, xe, 0, d, 0, H, endC); continue; }
+    const xo = xe + sx * 0.02;
+    qc(c, xe, 0, d, 0, G0, mulC(tint, 0.86)); qc(c, xe, 0, d, G0, H, mulC(tint, 0.96));
+    a.noShadow = true;
+    for (let f = 1; f < floors; f++) {
+      const y0 = G0 + (f - 1) * FH;
+      for (let j = 0; j < ns; j++) {
+        const zm = 0.25 + j * sd + sd / 2, ww = 1.25, wh = ww * 1.18;
+        a.litV = homeLit(a, zm + y0 * sx, f + 7); q(a, xo, zm - ww / 2, zm + ww / 2, y0 + 0.8, y0 + 0.8 + wh, ek); a.litV = 0;
+      }
+    }
+    a.noShadow = false;
+  }
+  c.quad([-w / 2, 0, d], [w / 2, 0, d], [w / 2, H, d], [-w / 2, H, d], mulC(tint, 0.8));
+}
+/** a plane tree in its square planter on the pavement (its kerb, its soil and grass), the tree facing the road (−z) */
+export function townTree(G, M, r, s = 1) {
+  const c = G.color; c.setM(M);
+  c.box(-0.75, 0, -0.75, 0.75, 0.13, -0.6, TW_KERB); c.box(-0.75, 0, 0.6, 0.75, 0.13, 0.75, TW_KERB);
+  c.box(-0.75, 0, -0.6, -0.6, 0.13, 0.6, TW_KERB); c.box(0.6, 0, -0.6, 0.75, 0.13, 0.6, TW_KERB);
+  c.quad([-0.6, 0.08, 0.6], [0.6, 0.08, 0.6], [0.6, 0.08, -0.6], [-0.6, 0.08, -0.6], TW_SOIL);
+  G.leaf.setM(M); for (let k = 0; k < 3; k++) cards(G, [(r() - 0.5) * 0.8, 0.1, (r() - 0.5) * 0.8], (r() - 0.5) * 0.8, 0.22, (r() - 0.5) * 0.8, 0.28, 'leafB', 3, r, [1, 1, 1], [0.6, 0.66, 0.7], [0.08, 0.4]);
+  tree(G, M, 'plane', r, s);
+}
+const TEA = C('#8a2a12'), GLASS = C('#e8e4dc'), WOOD_T = C('#b98a5c'), WOOD_TD = C('#8f6440');
+/** a tea table on the pavement (çay masası): a small square wooden table, two to four wooden chairs round it, tulip glasses of
+ *  tea on their saucers, now and then a sugar bowl */
+export function teaTable(G, M, r) {
+  const c = G.color; c.setM(M);
+  c.box(-0.33, 0.66, -0.33, 0.33, 0.7, 0.33, WOOD_T);
+  for (const [x, z] of [[-0.29, -0.29], [0.29, -0.29], [-0.29, 0.29], [0.29, 0.29]]) c.box(x - 0.025, 0, z - 0.025, x + 0.025, 0.66, z + 0.025, WOOD_TD);
+  const n = 2 + Math.floor(r() * 3), a0 = r() * 1.6;
+  for (let i = 0; i < n; i++) { // the chairs: a seat, four legs, a back
+    const t = a0 + (i / n) * Math.PI * 2, cx = Math.cos(t) * 0.62, cz = Math.sin(t) * 0.62, m = sub(M, cx, 0, cz, -t + Math.PI / 2);
+    c.setM(m); c.box(-0.21, 0.43, -0.21, 0.21, 0.47, 0.21, WOOD_T);
+    for (const [x, z] of [[-0.18, -0.18], [0.18, -0.18], [-0.18, 0.18], [0.18, 0.18]]) c.box(x - 0.02, 0, z - 0.02, x + 0.02, 0.43, z + 0.02, WOOD_TD);
+    c.box(-0.21, 0.47, 0.17, 0.21, 0.9, 0.21, WOOD_TD); c.box(-0.19, 0.72, 0.16, 0.19, 0.84, 0.17, WOOD_T);
+  }
+  c.setM(M);
+  for (let i = 0, ng = 1 + Math.floor(r() * 3); i < ng; i++) { // tulip glasses of tea on red-rimmed saucers
+    const x = (r() - 0.5) * 0.4, z = (r() - 0.5) * 0.4;
+    c.cyl(x, 0.7, z, 0.055, 0.055, 0.008, 8, PAL.red, true); c.cyl(x, 0.708, z, 0.022, 0.016, 0.05, 6, TEA, false); c.cyl(x, 0.758, z, 0.016, 0.025, 0.045, 6, TEA, true);
+  }
+  if (r() < 0.4) c.cyl(0.12, 0.7, -0.1, 0.05, 0.045, 0.07, 8, GLASS);
+}
+/** a simit cart (simitçi): a red barrow on two wheels, its glass case stacked with simit (twSimit), a red canopy on four posts,
+ *  its handles towards the road. Local x along the road */
+export function simitCart(G, M, r) {
+  const c = G.color, a = G.atlas, RED = C('#cf3328'), REDD = C('#a82820'); c.setM(M); a.setM(M); a.world = true;
+  c.box(-0.65, 0.42, -0.32, 0.65, 0.92, 0.32, RED, null, { py: C('#e8e2d6') });
+  c.box(-0.6, 0.3, -0.28, 0.6, 0.42, 0.28, REDD);
+  for (const z of [-0.36, 0.36]) { c.rod([0.25, 0.3, z], [0.25, 0.3, z + (z > 0 ? 0.06 : -0.06)], 0.3, 0.3, 12, C('#2b2b30')); c.rod([0.25, 0.3, z - 0.002], [0.25, 0.3, z + (z > 0 ? 0.062 : -0.062)], 0.12, 0.12, 8, C('#c9c9c4')); }
+  c.box(-0.62, 0, -0.04, -0.56, 0.42, 0.04, C('#2b2b30')); // (its stand)
+  const cl = uv('twSimit'), ct = { u0: cl.u0, u1: cl.u1, v0: cl.v0, v1: cl.v1 }, y0 = 0.92, y1 = 1.38;
+  a.litV = 6;
+  a.quad([0.55, y0, -0.27], [-0.55, y0, -0.27], [-0.55, y1, -0.27], [0.55, y1, -0.27], W1, ct); a.quad([-0.55, y0, 0.27], [0.55, y0, 0.27], [0.55, y1, 0.27], [-0.55, y1, 0.27], W1, ct);
+  a.quad([-0.55, y0, -0.27], [-0.55, y0, 0.27], [-0.55, y1, 0.27], [-0.55, y1, -0.27], W1, ct); a.quad([0.55, y0, 0.27], [0.55, y0, -0.27], [0.55, y1, -0.27], [0.55, y1, 0.27], W1, ct);
+  a.litV = 0;
+  c.box(-0.58, y1, -0.3, 0.58, y1 + 0.05, 0.3, C('#f0ece4'));
+  for (const [x, z] of [[-0.6, -0.3], [0.6, -0.3], [-0.6, 0.3], [0.6, 0.3]]) c.box(x - 0.015, 0.92, z - 0.015, x + 0.015, 2.0, z + 0.015, C('#d8d8d2'));
+  c.box(-0.78, 2.0, -0.45, 0.78, 2.07, 0.45, RED, null, { ny: REDD }); c.box(-0.78, 1.9, -0.46, 0.78, 2.0, -0.44, RED); c.box(-0.78, 1.9, 0.44, 0.78, 2.0, 0.46, RED);
+  for (const z of [-0.22, 0.22]) c.rod([0.65, 0.85, z], [1.15, 0.9, z], 0.02, 0.02, 4, C('#2b2b30'));
+}
+/** a ginger cat sitting on the pavement (the world atlas's painted card, twCat), its back to the drive: its card faces −x (a
+ *  frame along the road: back towards the camera); mirror: it looks the other way (towards the road from either pavement) */
+export function townCat(G, M, mirror = false) {
+  if (!A.has('twCat')) return; // (its painting failed: no cat)
+  const a = G.atlas; a.setM(M); a.world = true;
+  const cl = uv('twCat'), h = 0.46, w = (h * cl.w) / cl.h, q = mirror ? { u0: cl.u1, u1: cl.u0, v0: cl.v0, v1: cl.v1 } : cl;
+  a.quad([-0.02, 0, -w / 2], [-0.02, 0, w / 2], [-0.02, h, w / 2], [-0.02, h, -w / 2], W1, q);
+}
+/** a yellow dolmuş (a shared minibus, Ford Transit-like), parked: local x its length (its nose at +x), the road side −z */
+export function dolmus(G, M) {
+  const c = G.color, Y = C('#f0c419'), Yd = C('#d8a812'), GL = C('#2a3036'), BL = C('#1d1f22');
+  c.setM(M);
+  c.box(-2.6, 0.38, -0.98, 2.15, 1.2, 0.98, Y, null, { ny: BL }); // the body
+  c.box(-2.6, 1.2, -0.96, 1.6, 1.95, 0.96, GL); // the windows' band
+  for (const x of [-2.6, -1.55, -0.45, 0.6, 1.55]) c.box(x - 0.04, 1.2, -0.97, x + 0.04, 1.95, 0.97, Y); // (its pillars)
+  c.box(-2.6, 1.95, -0.98, 1.65, 2.32, 0.98, Y); // the roof
+  c.quad([2.15, 1.2, 0.9], [2.15, 1.2, -0.9], [1.65, 1.95, -0.9], [1.65, 1.95, 0.9], GL); // the windscreen, sloping back to the roof
+  c.box(2.15, 0.38, -0.98, 2.62, 1.0, 0.98, Y); c.box(2.62, 0.45, -0.85, 2.66, 0.9, 0.85, BL); // the bonnet, the grille
+  c.box(-2.64, 0.4, -0.98, -2.6, 0.62, 0.98, BL); // (the rear bumper)
+  for (const z of [-0.8, 0.8]) c.box(-2.63, 0.75, z - 0.14, -2.6, 1.05, z + 0.14, C('#d0282a')); // the tail lamps
+  c.box(-2.63, 0.62, -0.26, -2.61, 0.74, 0.26, C('#f4f4ef')); // the plate
+  for (const [x, z] of [[-1.7, -0.92], [-1.7, 0.92], [1.6, -0.92], [1.6, 0.92]]) c.rod([x, 0.36, z], [x, 0.36, z + (z > 0 ? 0.1 : -0.1)], 0.36, 0.36, 10, BL);
+  c.box(-0.5, 2.32, -0.25, 0.5, 2.55, 0.25, Yd); // (its roof sign)
+}
+/** a dolmuş stop's sign: a blue plate on a post (DOLMUŞ DURAĞI) */
+export function durakSign(G, M) {
+  G.color.setM(M); G.color.cyl(0, 0, 0, 0.04, 0.04, 2.5, 6, PAL.metal);
+  G.atlas.setM(M); G.atlas.world = true; nxq(G.atlas, -0.05, -0.32, 0.32, 1.95, 2.55, 'twDurak');
+}
+/** a block of flats in the town's second row (W4), behind the street's front row: a plain box of 6–8 storeys, its face to the
+ *  road and the end that looks back down the road in plaster with a window in every ~3.3 m of every floor (lit one by one at
+ *  dusk), the far end and the back plain, a cornice and a flat roof. Seen over the front row's lower blocks, down the gaps and
+ *  from the Galata Bridge's landing (~40 quads a floor: no balconies, no shops). s: w, d, floors, tint, near */
+export function townBack(G, M, r, s) {
+  const { w, d, floors, tint } = s, a = G.atlas, c = G.color; a.setM(M); c.setM(M); a.world = true;
+  const FH = 3.0, H = floors * FH, nb = Math.max(2, Math.round(w / 3.3)), bw = w / nb, x0 = -w / 2, cell = ['twWinA', 'twWinB', 'twWinC'][Math.floor(r() * 3)];
+  fz(c, x0, -x0, 0, H, 0, tint); // (its plaster: the colour material, as the front row's)
+  a.noShadow = true;
+  for (let f = 1; f < floors; f++) for (let i = 0; i < nb; i++) { const xm = x0 + i * bw + bw / 2, y0 = f * FH; wq(a, xm - 0.68, xm + 0.68, y0 + 0.8, y0 + 0.8 + 1.6, -0.02, cell, W1, homeLit(a, xm + y0, f + 3)); }
+  const ns = Math.max(2, Math.round(d / 3.3)), sd = d / ns, endC = mulC(tint, 0.9);
+  for (const sx of [-1, 1]) {
+    const xe = (sx * w) / 2, q = sx > 0 ? pxq : nxq, qc = sx > 0 ? pxc : nxc;
+    if (sx !== s.near) { qc(c, xe, 0, d, 0, H, endC); continue; }
+    qc(c, xe, 0, d, 0, H, mulC(tint, 0.96));
+    for (let f = 1; f < floors; f++) for (let j = 0; j < ns; j++) {
+      const zm = j * sd + sd / 2, y0 = f * FH; a.litV = homeLit(a, zm + y0 * sx, f + 11); q(a, xe + sx * 0.02, zm - 0.62, zm + 0.62, y0 + 0.8, y0 + 0.8 + 1.46, cell); a.litV = 0;
+    }
+  }
+  a.noShadow = false;
+  c.quad([-w / 2, 0, d], [w / 2, 0, d], [w / 2, H, d], [-w / 2, H, d], mulC(tint, 0.8));
+  c.box(x0 - 0.04, H, -0.3, -x0 + 0.04, H + 0.4, 0.2, TW_CORN, null, { ny: mulC(tint, 0.85) });
+  c.quad([-w / 2, H + 0.4, d], [w / 2, H + 0.4, d], [w / 2, H + 0.4, 0.2], [-w / 2, H + 0.4, 0.2], PAL.roof);
+  if (r() < 0.45) { const xs = (r() - 0.5) * w * 0.5, zs = d * 0.4; c.box(xs - 1.0, H + 0.4, zs, xs + 1.0, H + 1.5, zs + 0.08, C('#2e3d5c')); c.box(xs - 1.0, H + 1.45, zs + 0.3, xs + 1.0, H + 1.85, zs + 0.7, C('#e6e6e2')); }
 }

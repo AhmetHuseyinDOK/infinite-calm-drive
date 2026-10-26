@@ -1,0 +1,56 @@
+{
+ "period": 180.0,
+ "files": {
+  "hi": "bandtr3_hi.webp",
+  "lo": "bandtr3_lo.webp"
+ },
+ "bytes": {
+  "hi": 141118,
+  "lo": 49316
+ },
+ "size": {
+  "hi": [
+   5760,
+   768
+  ],
+  "lo": [
+   2880,
+   388
+  ]
+ },
+ "zones": {
+  "hi": {
+   "town": {
+    "v0": 0.01953125,
+    "v1": 0.984375,
+    "e0": 0.0,
+    "e1": 23.15625,
+    "ahead": 0.51444,
+    "tiles": [
+     "ts5_a",
+     "ts3_a",
+     "th2_a",
+     "ts4_a",
+     "ts6_a"
+    ]
+   }
+  },
+  "lo": {
+   "town": {
+    "v0": 0.02577319587628868,
+    "v1": 0.979381443298969,
+    "e0": 0.0,
+    "e1": 23.125,
+    "ahead": 0.51444,
+    "tiles": [
+     "ts5_a",
+     "ts3_a",
+     "th2_a",
+     "ts4_a",
+     "ts6_a"
+    ]
+   }
+  }
+ },
+ "encode": "WebP q50, alpha_quality 90 method 6 from the lossless master (~/cdtest/w4/band/masters, bandtown.py)"
+}

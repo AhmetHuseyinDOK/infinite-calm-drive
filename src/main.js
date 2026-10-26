@@ -6,7 +6,7 @@ import { makeMaterials, makeAtlasW, setWorldTex, U, groundMaterialFor, setGrazeF
 import { setAtlas, setFoliage, warmTrees, warmTetrapods, setLeafDensity, GHIBLI, setHouses, setTrHouses } from './props.js';
 import { loadTreeAtlas } from './ghibli.js';
 import { World, CH } from './chunks.js';
-import { makeSky, paintClouds, makeClouds, makeMountains, updateTOD, applyWeather, TOD, lightDirAt, KEYS, REGION_KEYS } from './sky.js';
+import { makeSky, paintClouds, makeClouds, makeMountains, updateTOD, applyWeather, TOD, lightDirAt, KEYS, REGION_KEYS, sunBearing } from './sky.js';
 import { makeWeather, makeRain, makeSnow, PLIGHT } from './weather.js';
 import { makeSpray } from './spray.js';
 import { makeMirage } from './mirage.js';
@@ -20,7 +20,7 @@ import { makePost } from './post.js';
 import { makeAudio } from './audio.js';
 import { makeParticles } from './particles.js';
 import { clamp, lerp, sstep, setSeed, hash2 } from './util.js';
-import { loadCloudAtlas, makePaintedClouds, loadBandAtlas, makePaintedBand, updatePainted, loadFieldTexture, loadFrontAtlas, loadHouseAtlas, loadTrHouseAtlas, todTones, mixTones, paintSky, PAINT_TOD } from './painted.js';
+import { loadCloudAtlas, makePaintedClouds, loadBandAtlas, makePaintedBand, updatePainted, loadFieldTexture, loadFrontAtlas, loadHouseAtlas, loadTrHouseAtlas, loadTownAtlas, todTones, mixTones, paintSky, PAINT_TOD } from './painted.js';
 
 const QS = new URLSearchParams(location.search);
 // inside an X player card (or any iframe): lighter quality, compact UI, tap-only start
@@ -70,6 +70,8 @@ async function main() {
   // border is then ~4–5 minutes away at a cruising speed, ~1 at full speed)
   const TR_NEAR = 3200, S0 = Math.max(100, parseFloat(QS.get('s')) || 140), TR_START = REGION[startZone()] === 'tr' || nextBorderS(S0) - S0 < TR_NEAR;
   const trHouseLoad = TR_START ? loadTrHouseAtlas(HTIER) : null;
+  // (…and the Turkish town's painted shops, windows and cat, W4: painted.js loadTownAtlas, on the same tiers, 100 px/m on desktops)
+  const townLoad = TR_START ? loadTownAtlas(HTIER) : null;
   // the painted cumulus and the horizon band (painted.js; 32 px/° where the frame is tall enough, else 16 px/°): the
   // largest downloads, and needed last (they are awaited once the road is built and the light prepared, below), so they
   // start once the four above are in (or after 4 s, so a stalled one never holds them up for its whole 15 s timeout): on
@@ -78,9 +80,9 @@ async function main() {
   const firstLoads = Promise.race([Promise.all([treeLoad, fieldLoad, frontLoad, houseLoad]), new Promise(r => setTimeout(r, 4000))]);
   const pcLoad = CLOUDS === 'old' ? Promise.resolve(null) : firstLoads.then(() => loadCloudAtlas(TIER));
   const bandLoad = firstLoads.then(() => loadBandAtlas(TIER));
-  // …and Turkey's (the Bosphorus's far shore; the Galata Bridge's old city, W3: a row each, in files of their own), with Japan's
-  // when it is needed at the start
-  const loadTrBands = () => Promise.all([loadBandAtlas(TIER, 15000, 'bandtr1'), loadBandAtlas(TIER, 15000, 'bandtr2')]);
+  // …and Turkey's (the Bosphorus's far shore; the Galata Bridge's old city, W3; the Turkish town's mosque at the end of its street
+  // and the distant town round it, W4: a row each, in files of their own), with Japan's when it is needed at the start
+  const loadTrBands = () => Promise.all([loadBandAtlas(TIER, 15000, 'bandtr1'), loadBandAtlas(TIER, 15000, 'bandtr2'), loadBandAtlas(TIER, 15000, 'bandtr3')]);
   const bandTrLoad = TR_START ? firstLoads.then(loadTrBands) : null;
 
   const scene = new THREE.Scene();
@@ -163,9 +165,9 @@ async function main() {
   // earlier, their ids drew random numbers ahead of the particles', which moved every falling petal of a seeded capture)
   let watlas = null;
   if (TR_START) {
-    const th = await trHouseLoad; watlas = buildWorldAtlas(atlas, HTIER, th);
+    const th = await trHouseLoad, ta = await townLoad; watlas = buildWorldAtlas(atlas, HTIER, th, ta);
     if (watlas.trHouses) setTrHouses(th.types, th.extras); // (else: the procedural houses)
-    if (th) th.img.close();
+    if (th) th.img.close(); if (ta) ta.img.close();
   }
   const fol = buildFoliage(renderer); setFoliage(fol.cells); U.uTuftV.value.set(...fol.tuftV);
   const M = makeMaterials(atlas.textures(renderer), fol.tex, patlas.textures(renderer));
@@ -296,6 +298,13 @@ async function main() {
   const KEY_A = 1.4, carKey = new THREE.Vector3();
   // the sun stands by the road's mean heading over ±SUN_W metres (see the frame loop)
   const SUN_W = 200;
+  // (in the Turkish town, W4, its concept painting's sun stands high and ahead to the RIGHT of its street: the left-hand blocks'
+  // fronts, their shops and their pavement in the sun, the right-hand ones and their pavement in the right-hand row's shadow,
+  // where the paintings' 70° left at noon put the left-hand row's shadow over the left pavement and half the road. Through the
+  // middle of the day (the evening keeps the paintings' sun ahead, a little left), by the town's weight, turned at most TOWN_AZR
+  // a second, so the shadows never sweep: sunAdj, the turn now)
+  const TOWN_AZ = (-35 * Math.PI) / 180, TOWN_AZR = (1.5 * Math.PI) / 180, AZ14 = (14 * Math.PI) / 180, AZ70 = (70 * Math.PI) / 180;
+  const townTurn = s => { const sb = sunBearing(st.tod); return clamp((sb - AZ14) / (AZ70 - AZ14), 0, 1) * (TOWN_AZ - sb) * zoneWeight(s, 'town'); };
   // the painted volumes' keys (materials.js VOL_KEY; see the frame loop): the tetrapods' 110° round from the view's direction,
   // the broadleaf crowns' 150° (against coast.png's crowns, ΔE 17.0 at 110°, 11.1 at 130°, 8.1 at 150°; its tetrapods 6.0
   // at 110°, 10.5 at 130°). (Tried on the props, the guardrail's material: the city's right-hand shops and the avenue's lawn
@@ -391,25 +400,31 @@ async function main() {
     if (pcAtlas) renderer.initTexture(pcAtlas.tex); if (bandAtlas) renderer.initTexture(bandAtlas.tex); if (trAtlases) for (const a of trAtlases) if (a) renderer.initTexture(a.tex);
   }
   /** Turkey's zones without a row of their own (their file failed, or isn't in yet) borrow the coast's from Japan's band */
-  function trAlias(tra) { const has = z => !!tra && tra.some(a => a && a.zones[z]), al = {}; for (const z of ['bosphorus', 'galata']) if (!has(z)) al[z] = 'coast'; return Object.keys(al).length ? al : null; }
-  /** Turkey's band: the Bosphorus's Asian shore in a light haze, as painted (its houses' windows lit at night), and the Galata
-   *  Bridge's old city, crisper (its windows too), its row turned down the bridge (galTurn); null if neither row loaded */
+  // (the Turkish town's, W4, borrows Japan's far city in haze)
+  function trAlias(tra) { const has = z => !!tra && tra.some(a => a && a.zones[z]), al = {}; for (const z of ['bosphorus', 'galata']) if (!has(z)) al[z] = 'coast'; if (!has('town')) al.town = 'city'; return Object.keys(al).length ? al : null; }
+  /** Turkey's band: the Bosphorus's Asian shore in a light haze, as painted (its houses' windows lit at night), the Galata
+   *  Bridge's old city, crisper (its windows too), its row turned down the bridge (galTurn), and the Turkish town's mosque at
+   *  the end of its street with the distant town round it (W4), turned down the street the same way; null if no row loaded */
   function makeTrBand(tra) {
     if (!tra || !tra.some(Boolean)) return null;
-    const b = makePaintedBand(tra, post, scene.fog.color, null, { bosphorus: 0.12, galata: 0.05 }, ['bosphorus', 'galata']); scene.add(b.mesh);
+    // (the town's row takes no lit windows at night: they spangled its mosque's pale stone)
+    const b = makePaintedBand(tra, post, scene.fog.color, null, { bosphorus: 0.12, galata: 0.05, town: 0.06 }, ['bosphorus', 'galata']); scene.add(b.mesh);
     b.hero = 0.208; // (the Bosphorus Bridge's middle 15° left of ahead, as in the concept painting, when its band first shows)
     b.noSkirt.galata = true; // (the old city's quays crisp at the water's edge, the Golden Horn up to them, as painted)
     return b;
   }
   // the Galata Bridge's skyline (W3) faces down the bridge, as the concept has it (the great mosque ahead-left, the Galata Tower
   // ahead-right): Turkey's band turns its row to the heading of the bridge in view (straight from its first metre: path.js), once
-  // per bridge
-  let galK = NaN; const galF = {};
+  // per bridge; and the Turkish town's (W4) down its straight street, the mosque at its end
+  const galK = { galata: NaN, town: NaN }, galF = {};
   function galTurn(s) {
-    if (!bandTr || bandTr.ahead.galata === undefined) return;
-    for (let z = Math.max(0, Math.floor((s - 200) / ZONE_LEN)); z <= Math.floor((s + 700) / ZONE_LEN); z++) {
-      if (z === galK || zoneAt(z * ZONE_LEN + 10) !== 'galata') continue;
-      galK = z; bandTr.turnTo('galata', path.at(z * ZONE_LEN, galF).h); return;
+    if (!bandTr) return;
+    for (const zn of ['galata', 'town']) {
+      if (bandTr.ahead[zn] === undefined) continue;
+      for (let z = Math.max(0, Math.floor((s - 200) / ZONE_LEN)); z <= Math.floor((s + 700) / ZONE_LEN); z++) {
+        if (z === galK[zn] || zoneAt(z * ZONE_LEN + 10) !== zn) continue;
+        galK[zn] = z; bandTr.turnTo(zn, path.at(z * ZONE_LEN + 10, galF).h); break;
+      }
     }
   }
   // ---- Turkey, loaded in the background (a Japanese start, once the drive comes within TR_NEAR of the border): the downloads,
@@ -421,9 +436,9 @@ async function main() {
   async function trLazy() {
     TRL.started = true; TRL.t0 = performance.now();
     const step = n => TRL.steps.push([n, Math.round(performance.now() - TRL.t0)]);
-    const [trAtlases, th] = await Promise.all([loadTrBands(), loadTrHouseAtlas(HTIER)]); step('loaded');
+    const [trAtlases, th, ta] = await Promise.all([loadTrBands(), loadTrHouseAtlas(HTIER), loadTownAtlas(HTIER)]); step('loaded');
     await nextFrame();
-    const wa = buildWorldAtlas(atlas, HTIER, th); if (wa.trHouses) setTrHouses(th.types, th.extras); if (th) th.img.close(); step('atlas');
+    const wa = buildWorldAtlas(atlas, HTIER, th, ta); if (wa.trHouses) setTrHouses(th.types, th.extras); if (th) th.img.close(); if (ta) ta.img.close(); step('atlas');
     await nextFrame();
     const wt = wa.textures(renderer); renderer.initTexture(wt.map); step('map');
     await nextFrame();
@@ -436,9 +451,13 @@ async function main() {
     ferry = makeFerry(M, sea); scene.add(ferry.group, ferry.group2); step('ferry');
     const warm = new THREE.Group(), tri = new THREE.BufferGeometry();
     tri.setAttribute('position', new THREE.Float32BufferAttribute([0, -50, 0, 0.01, -50, 0, 0, -49.99, 0], 3)); tri.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
-    for (const zs of zoneSets()) if (trSet(zs)) { const o = new THREE.Mesh(tri, groundMaterialFor(zs)); o.receiveShadow = true; warm.add(o); }
-    renderer.setRenderTarget(post.composer.readBuffer); const ready = renderer.compileAsync(warm, camera, scene); renderer.setRenderTarget(null);
-    await ready; tri.dispose(); step('programs');
+    // (one ground variant a frame: Turkey's seven since W4, all set up in one frame, made a slow frame on a throttled phone)
+    for (const zs of zoneSets()) if (trSet(zs)) {
+      const o = new THREE.Mesh(tri, groundMaterialFor(zs)); o.receiveShadow = true; warm.clear(); warm.add(o);
+      renderer.setRenderTarget(post.composer.readBuffer); const ready = renderer.compileAsync(warm, camera, scene); renderer.setRenderTarget(null);
+      await ready; await nextFrame();
+    }
+    tri.dispose(); step('programs');
     world.trReady = true; TRL.done = true;
   }
   // level crossing state
@@ -580,7 +599,7 @@ async function main() {
   const CM = { lat: 0, lon: 0, road: 0, jolt: 0, kick: 0, u: st.u, vu: 0, v: 0, s: st.s, yaw: 0, brake: 0, rk: NaN, rb: null };
   const LAMP_NIGHT = new THREE.Color(3.6, 2.8, 1.8); // (the street lamps' night colour: one object, not one per frame)
   /** the light j steps of 0.001 of the day ahead (the hour moving on if `run`, the car `ds` metres further on per step) */
-  const lightAhead = (j, run, ds, out) => lightDirAt(st.tod + (run ? j * 0.001 : 0), out, TOD.head === null ? null : path.meanHeading(st.s + j * ds, SUN_W));
+  const lightAhead = (j, run, ds, out) => lightDirAt(st.tod + (run ? j * 0.001 : 0), out, TOD.head === null ? null : path.meanHeading(st.s + j * ds, SUN_W) + st.sunAdj);
   const RAILS = [-2.5335, -1.4665, 1.4665, 2.5335], AXLES = [1.12, -1.12]; // rails of a crossing's two tracks (from sx); axles (from the car's centre)
   const JOINTS = [-24.5, 24.5]; // a river bridge's expansion joints (from its centre, chunks.js placeRiver)
   function frame(now) {
@@ -633,10 +652,13 @@ async function main() {
     // paintings), by its mean heading over ±SUN_W: on top of the hour's, the road's long bends turn the shadows at under
     // 0.3–1.8°/s at cruising speed (95% of the time; 2.3 on the mountain pass; the old sky swept 0.75°/s all day), and the
     // light keeps within 2–7° of its place against the car (95% of the time; 11° on the mountain pass)
-    updateTOD(st.tod, st.sunroad ? path.meanHeading(st.s, SUN_W) : null, REGION_KEYS.tr, REGION_KEYS.tr ? regionWeight(st.s, 'tr') : 0); // (a region's own palette: sky.js REGION_KEYS)
+    { const tgt = townTurn(st.s); st.sunAdj = st.sunAdj === undefined || !started ? tgt : st.sunAdj + clamp(tgt - st.sunAdj, -TOWN_AZR * dt, TOWN_AZR * dt); } // (the town's sun, W4)
+    updateTOD(st.tod, st.sunroad ? path.meanHeading(st.s, SUN_W) + st.sunAdj : null, REGION_KEYS.tr, REGION_KEYS.tr ? regionWeight(st.s, 'tr') : 0); // (a region's own palette: sky.js REGION_KEYS)
     // (over the Golden Horn on a bright day the zenith a deeper, greyer blue, as the Galata Bridge's concept paints its sky (its
     // other concepts' and Japan's paintings' are a brighter azure); by the bridge's weight 150 m on, so it turns as we drive on)
     { const gz = zoneWeight(st.s + 150, 'galata') * TOD.bright; if (gz > 0) TOD.zenith.lerp(GAL_ZEN, gz); }
+    // (…and over the Turkish town's street, W4, the concept's brighter azure: a little greener)
+    { const tz = zoneWeight(st.s + 150, 'town') * TOD.bright; if (tz > 0) { TOD.zenith.g *= 1 + 0.16 * tz; TOD.zenith.b *= 1 - 0.03 * tz; } }
     weather.update(dt);
     const ov = weather.W.ov, rn = weather.W.rain;
     applyWeather(ov, rn);
@@ -720,7 +742,7 @@ async function main() {
         lt.set(fl.x + fl.rx * st.u * R.lu - ox, fl.y + R.lookY, fl.z + fl.rz * st.u * R.lu - oz);
       } else if (ty === 'side') { // tracking alongside, from a sidewalk / the verge
         path.at(st.s + 1.5, fc);
-        const wz = zoneW(st.s), walk = wz.city + wz.sakura > 0.5; // track from the sidewalk where there is one (never through the sakura trunks)
+        const wz = zoneW(st.s), walk = wz.city + wz.sakura + wz.town > 0.5; // track from the sidewalk where there is one (never through the sakura trunks)
         const rwC = zparam(st.s, 'rw'), uC = cine.sideSign > 0 ? rwC + (walk ? 1.45 : 3.4) : -(rwC + 1.5);
         const gy = fc.y + groundOffsetMix(st.s + 1.5, uC, fc.y, rwC);
         tmp.set(fc.x + fc.rx * uC - ox, Math.max(gy + 1.55, fc.y + 1.25), fc.z + fc.rz * uC - oz);
@@ -795,7 +817,7 @@ async function main() {
       // sz along the light); the casters HC taller than them (the city's towers 80 m, the mountains' slopes 40 m)
       { const se = shadowDir.y, ce = Math.hypot(shadowDir.x, shadowDir.z), half = sun.shadow.mapSize.y / 2;
         const zm = Math.max(zoneWeight(st.s + 26, 'mountain') + zoneWeight(st.s + 26, 'snow'), zoneWeight(st.s + 110, 'mountain') + zoneWeight(st.s + 110, 'snow'));
-        const zc = Math.max(zoneWeight(st.s + 26, 'city'), zoneWeight(st.s + 110, 'city'));
+        const zc = Math.max(zoneWeight(st.s + 26, 'city'), zoneWeight(st.s + 110, 'city'), 0.45 * Math.max(zoneWeight(st.s + 26, 'town'), zoneWeight(st.s + 110, 'town'))); // (the Turkish town's blocks, W4: ~23 m)
         const hh = SH_FIT.HH + 15 * zm + 3, hl = SH_FIT.HL + 20 * zm + 3, hc = SH_FIT.HC + 28 * zc + 25 * zm; // (+3: the pivot's 3 m steps)
         const sy = vx * shY.x + vz * shY.z, sz = vx * shadowDir.x + vz * shadowDir.z, ky = Math.max(0.05, ce + sy);
         let kHi = half, kLo = half, near = 1;
@@ -821,6 +843,9 @@ async function main() {
     carSun.target.position.set(car.group.position.x, car.group.position.y + 0.9, car.group.position.z);
     carSun.position.copy(carSun.target.position).addScaledVector(TOD.lightDir, 12);
     hemi.color.copy(TOD.hemiSky); hemi.groundColor.copy(TOD.hemiGround); hemi.intensity = TOD.hemiI / dayExp;
+    // (the Turkish town's shade on a bright day, W4: its concept paints the right-hand pavement and fronts in a near-neutral grey
+    // shade, lighter than the paintings' blue one: its sky light warmer and stronger there, by the town's weight)
+    { const k = w.town * TOD.bright; if (k > 0) { hemi.color.r *= 1 + 0.32 * k; hemi.color.g *= 1 + 0.16 * k; hemi.color.b *= 1 - 0.1 * k; } }
     { // the painter's sun for the car (materials.js CAR_KEY): in all four paintings, and in their repaints at golden hour,
       // sunset and night, the light comes from ahead of the car (at noon 60–80° to its left, by its shadow), so its back is
       // in the shade, its lamps glowing out of it. The car takes the real sun's light and height, swung round towards its
@@ -862,7 +887,8 @@ async function main() {
     }
     scene.fog.color.copy(TOD.fog);
     // (the city on a bright day: a thinner haze, so its canyon of tall blocks reads to the street's far end, as painted)
-    const fogD = (w.city * (0.0022 - CITY_HAZE * TOD.bright) + w.sakura * 0.0019 + w.coast * 0.0011 + w.bosphorus * 0.0011 + w.galata * 0.0009 + w.country * 0.0014 + w.mountain * 0.0017 + w.snow * 0.0021) * (1 + TOD.night * 0.25);
+    // (the Turkish town, W4: a light haze down its street on a bright day, as its concept has it, the mosque clear at its end)
+    const fogD = (w.city * (0.0022 - CITY_HAZE * TOD.bright) + w.sakura * 0.0019 + w.coast * 0.0011 + w.bosphorus * 0.0011 + w.galata * 0.0009 + w.town * (0.0018 - 0.0008 * TOD.bright) + w.country * 0.0014 + w.mountain * 0.0017 + w.snow * 0.0021) * (1 + TOD.night * 0.25);
     scene.fog.near = fogD * (1 + 0.55 * ov + 0.45 * rn); scene.fog.far = world.ahead * 0.92;
     U.uSkyHor.value.copy(TOD.horizon); U.uSkyZen.value.copy(TOD.zenith); U.uTime.value = t;
     U.uWet.value = wet * (1 - w.snow);
@@ -1025,7 +1051,7 @@ async function main() {
 
     rain.update(camera.position, t, rn * (1 - tunS) * (1 - w.snow), day());
     { // 逃げ水: the road mirage of a hot clear summer day, around midday (mirage.js); not near a tunnel
-      const tq = tunnelNear(st.s + 190), hot = (w.city + w.country + w.coast + w.bosphorus + w.galata) * (1 - ov) * (1 - wet) * sstep(0.6, 0.9, TOD.sunEl) * (st.mirage ?? 1) * (tq && Math.abs(st.s + 190 - tq.s) < 330 ? 0 : 1);
+      const tq = tunnelNear(st.s + 190), hot = (w.city + w.country + w.coast + w.bosphorus + w.galata + w.town) * (1 - ov) * (1 - wet) * sstep(0.6, 0.9, TOD.sunEl) * (st.mirage ?? 1) * (tq && Math.abs(st.s + 190 - tq.s) < 330 ? 0 : 1);
       mirage.update(path, st.s, world.origin.x, world.origin.z, zparam(st.s + 150, 'rw'), hot, t, TOD.horizon);
     }
     { // spray off the tyres on a wet road, powder on a snowy one, exhaust vapour in the cold (spray.js)

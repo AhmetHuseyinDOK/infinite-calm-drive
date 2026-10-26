@@ -164,13 +164,14 @@ export function makeAudio() {
       waves.g.gain.setTargetAtTime(sea * (0.012 + swell * 0.05), t, 0.3); waves.f.frequency.setTargetAtTime(400 + swell * 900, t, 0.3);
       // creatures — how often each calls depends on zone, time of day and rain
       const dry = 1 - Math.min(1, rv * 1.4), night = 1 - day, dusk = x.dusk || 0, snow = w.snow || 0, warm = 1 - snow;
+      const tw = w.town || 0; // (the Turkish town, W4: a town's sparrows, crows and the odd gull, its crickets hushed as the city's)
       const rates = {
-        sparrow: day * dry * 0.22 * (0.3 + w.city * 0.5 + w.sakura + w.country * 0.8 + w.coast * 0.2 + (w.mountain || 0) * 0.5) * (1 - snow * 0.8),
+        sparrow: day * dry * 0.22 * (0.3 + (w.city + tw) * 0.5 + w.sakura + w.country * 0.8 + w.coast * 0.2 + (w.mountain || 0) * 0.5) * (1 - snow * 0.8),
         uguisu: day * dry * w.sakura * 0.06,
-        crow: dry * (dusk * 0.14 + day * (w.city + w.country + (w.mountain || 0) * 1.5 + snow * 2.5) * 0.012),
-        gull: day * sea * dry * 0.16,
+        crow: dry * (dusk * 0.14 + day * (w.city + tw + w.country + (w.mountain || 0) * 1.5 + snow * 2.5) * 0.012),
+        gull: day * (sea + 0.25 * tw) * dry * 0.16,
         frog: night * (w.country * 5 + w.sakura * 0.6 + w.coast * 0.3) * (1 + rv * 0.6) * warm,
-        cricket: night * dry * (1.6 - w.city * 1.1 + (w.mountain || 0) * 0.8) * warm,
+        cricket: night * dry * (1.6 - (w.city + tw) * 1.1 + (w.mountain || 0) * 0.8) * warm,
         bike: day * dry * w.city * 0.014,
         bell: snow * 0.022 + (w.mountain || 0) * 0.006,
       };

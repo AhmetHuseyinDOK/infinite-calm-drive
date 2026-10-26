@@ -214,6 +214,31 @@ export async function loadHouseAtlas(tier, timeoutMs = 15000, dir = 'houses/', n
  *  procedural houses (props.js ottomanHouse) */
 export const loadTrHouseAtlas = (tier, timeoutMs = 15000) => loadHouseAtlas(tier, timeoutMs, 'trhouses/', 'trhouses1', "the Bosphorus's painted houses unavailable, keeping the procedural ones:");
 
+/** Loads the Turkish town's painted pieces (W4: assets/town/, made by ~/cdtest/w4/scripts/pack4.py from Grok Imagine edits
+ *  anchored on its concept painting, ref/world/turkish_town.png): its shops' bays (a bakery, a grocer, a mini market, a tea
+ *  house, a barber, a pharmacy, a greengrocer; an apartment's entrance), its windows (cut out on their alpha) and a cat, with
+ *  what glows in each under it. Drawn into rows of their own in the world atlas (textures.js buildWorldAtlas). 'hi' (100 px/m)
+ *  or 'lo' (50: phones, the embed). Null when missing, broken or truncated: the town then keeps procedural shopfronts and
+ *  windows (textures.js townBayP, townWinP) and no cat */
+export async function loadTownAtlas(tier, timeoutMs = 15000) {
+  const base = ASSETS + 'town/';
+  return orNull((async () => {
+    const r = await fetch(base + 'town1.json');
+    if (!r.ok) throw new Error('town1.json ' + r.status);
+    const J = await r.json();
+    const file = J.files && J.files[tier] ? tier : 'hi', tiles = (J.tiles && J.tiles[file]) || [];
+    if (!tiles.length || !(J.rows && J.rows[file] > 0)) throw new Error('no tiles listed');
+    const ri = await fetch(base + J.files[file]);
+    if (!ri.ok) throw new Error(J.files[file] + ' ' + ri.status);
+    const blob = await ri.blob(); // (checked whole: a truncated image decodes without complaint)
+    if (J.bytes && J.bytes[file] && blob.size !== J.bytes[file]) throw new Error(J.files[file] + ' is ' + blob.size + ' bytes, not ' + J.bytes[file]);
+    const img = await createImageBitmap(blob, { premultiplyAlpha: 'none' });
+    if (J.size && J.size[file] && (img.width !== J.size[file][0] || img.height !== J.size[file][1])) throw new Error(J.files[file] + ' has the wrong size');
+    if (tiles.some(t => !(t.w > 0 && t.h > 0 && t.x >= 0 && t.x + t.w <= img.width && t.ey + t.h <= img.height))) throw new Error('a tile lies outside the sheet');
+    return { img, tiles, rows: J.rows[file], tier: file, m: J.m || {} };
+  })(), timeoutMs, "the town's painted shops and windows unavailable, keeping procedural ones:");
+}
+
 /** Loads the painted meadow (assets/fields/, made by ~/cdtest/ft/scripts/field.py): a tileable top-down painting of the
  *  country paintings' grass, 'hi' or 'lo' (phones, the embed). Resolves to null (never rejects) when the index or the
  *  image is missing, broken, truncated or too slow: the countryside then keeps its procedural paddies. */

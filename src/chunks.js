@@ -1,6 +1,7 @@
 // The world is built in 60 m chunks along the infinite road; each chunk merges its contents into a handful of meshes.
 import * as THREE from 'three';
-import { zoneMix, zoneW, zoneAt, zparam, groundOffsetMix, regionWeight, SEA, WALL_U, crossingS, crossingValid, crossingNear, XING, XOFF, riverS, riverValid, riverNear, riverBank, RIV, ROFF, RIVER_DROP, tunnelNear, borderNear, REGION, T_HALF, T_RIDGE, RAISE, ridgeHr, tubeHalf, GAL_R, GAL_WALK, GAL_KERB, ZONE_LEN } from './path.js';
+import { zoneMix, zoneW, zoneAt, zparam, groundOffsetMix, regionWeight, SEA, WALL_U, crossingS, crossingValid, crossingNear, XING, XOFF, riverS, riverValid, riverNear, riverBank, RIV, ROFF, RIVER_DROP, tunnelNear, borderNear, REGION, T_HALF, T_RIDGE, RAISE, ridgeHr, tubeHalf, GAL_R, GAL_WALK, GAL_KERB, ZONE_LEN, TOWN_SW, townLanding } from './path.js';
+import { TOWN_SHOPS } from './textures.js';
 import { xingPosts } from './crossing.js';
 import { GB } from './geom.js';
 import * as P from './props.js';
@@ -44,6 +45,22 @@ const BOS_VERGE = [1.0, 0.8, 0.86];
  *  o4, o6 (cream boards, cream plaster, ochre plaster), as the concept's (props.js TR_HOUSES: in packtr.py's order) */
 const TR_W = [2, 2, 1, 1, 2, 1], TR_WS = TR_W.reduce((a, b) => a + b, 0);
 const trPick = x => { let k = x * TR_WS; for (let i = 0; i < TR_W.length; i++) { k -= TR_W[i]; if (k < 0) return i; } return TR_W.length - 1; };
+/** the Turkish town's shops by a random number (W4: textures.js TOWN_SHOPS' kinds: a bakery, a grocer, a market, a tea house, a
+ *  barber, a pharmacy, a greengrocer), and the awning each kind mostly has (its other: textures.js TOWN_AWNINGS, −1 none), as
+ *  the concept's: the bakery's red and white stripes, the market's blue and white, the tea house's red, the grocer's and the
+ *  barber's blue */
+const TW_KIND = [0.15, 0.18, 0.14, 0.15, 0.12, 0.08, 0.12], TW_KS = TW_KIND.reduce((a, b) => a + b, 0);
+const twKind = x => { let k = x * TW_KS; for (let i = 0; i < TW_KIND.length; i++) { k -= TW_KIND[i]; if (k < 0) return i; } return TW_KIND.length - 1; };
+const TW_AWN = [[0, 2], [3, 4], [1, 2], [2, 0], [3, -1], [-1, 5], [4, 6]];
+/** the town's lay-bys (a dolmuş stop, its pavement stepping back): every TW_BAY m along the right-hand pavement, TW_BAY_L long
+ *  and TW_BAY_D deep with 3 m tapers */
+const TW_BAY = 420, TW_BAY0 = 150, TW_BAY_L = 18, TW_BAY_D = 2.4;
+/** the town's opening view (W4): 125–190 m into the town zone (where ?env=town starts: s = 140, the camera 133 m in), its
+ *  concept painting's composition: on the left a peach block over a bakery (its red and white awning) and a pharmacy, tea
+ *  tables, a simit cart and a cat on the pavement; on the right a pale block over a market (blue and white) and a tea house
+ *  (red), a big plane tree by the kerb, a dolmuş at its stop ahead. (At every pass through the town: its layout there) */
+const TW_HERO = [125, 190], TW_HERO_B = { '-1': 143.5, '1': 138 }; // (where its two blocks start, by side: in the chase view's edges)
+const zoneL = s => s - Math.floor(s / ZONE_LEN) * ZONE_LEN;
 /** true within m metres of a river (keeps houses, poles and trees out of the channel) */
 const nearR = (s, m) => { const r = riverNear(s); return !!r && Math.abs(s - r.s) < m; };
 
@@ -164,7 +181,10 @@ export class World {
 
     // ---------- helpers ----------
     const H = (s, u) => { path.at(s, f2); const rw = zparam(s, 'rw'); return f2.y + groundOffsetMix(s, u, f2.y, rw); };
-    const zw4 = s => { const w = zoneW(s); return [w.city, w.sakura + w.galata, wSea(w), w.country, w.snow]; }; // (the Galata Bridge in the avenue's channel: materials.js Z_GAL)
+    // (the Galata Bridge in the avenue's channel: materials.js Z_GAL; the Turkish town in the country's, W4: Z_TOWN. Over the
+    // bridge's hand-over to the town the ground changes over at the landing itself, not over the blend: path.js townLanding)
+    const zw4 = s => { const w = zoneW(s), tl = w.town > 0 && w.galata > 0 ? townLanding(s) : null; if (tl) { const g = s < tl.s ? 1 : 0; w.galata = g; w.town = 1 - g; }
+      return [w.city, w.sakura + w.galata, wSea(w), w.country + w.town, w.snow]; };
     const world = (s, u, y) => { path.at(s, f); return [f.x + f.rx * u - ox, y, f.z + f.rz * u - oz]; };
     const matAt = (s, u, y, extraYaw = 0, faceRoad = true) => {
       path.at(s, f);
@@ -175,7 +195,7 @@ export class World {
     const onGround = (s, u, dy = 0, extraYaw = 0, faceRoad = true) => { const h = H(s, u), m = matAt(s, u, h + dy, extraYaw, faceRoad); m.groundY = h; return m; };
     const road = s => path.at(s, f2).y;
     const rwAt = s => zparam(s, 'rw');
-    const walkW = s => { const w = zoneW(s); return w.city + w.sakura > 0.5 && !nearB(s, T_HALF + 2) ? (w.city >= w.sakura ? 3.0 : 2.6) : 0; };
+    const walkW = s => { const w = zoneW(s); return w.town >= 0.5 && !nearB(s, T_HALF + 2) ? TOWN_SW : w.city + w.sakura > 0.5 && !nearB(s, T_HALF + 2) ? (w.city >= w.sakura ? 3.0 : 2.6) : 0; };
 
     // ---------- terrain ----------
     {
@@ -193,6 +213,8 @@ export class World {
       // rows: uniform, plus a pair right at each tunnel portal so the ground steps up exactly behind the portal face
       const sl = Array.from({ length: rows }, (_, i) => s0 + (i / (rows - 1)) * CH);
       { const tq = tunnelNear(s0 + CH / 2); if (tq) for (const sp of [tq.s - T_HALF, tq.s + T_HALF]) if (sp > s0 + 0.1 && sp < s1 - 0.1) sl.push(sp - 0.03, sp + 0.03); }
+      // (and either side of the Galata Bridge's landing in the town, W4: the quay walls' faces stand there)
+      { const tl = townLanding(s0 + CH / 2); if (tl && tl.s > s0 + 0.1 && tl.s < s1 - 0.1) sl.push(tl.s - 0.03, tl.s + 0.03); }
       sl.sort((p, q) => p - q);
       const half = deck ? nc - cols.length : nc / 2, rowS = sl.map(s => { path.at(s, f); return { s, f: { ...f }, rw: rwAt(s), w: zw4(s), rb: fine ? riverBank(s) : 0 }; });
       const qtr = Math.round(half / 2), qtrR = Math.round((nc - half) / 2); // (half: the left side's columns)
@@ -226,23 +248,35 @@ export class World {
       });
     }
     // ---------- sidewalks + curbs (only where the zone has them) ----------
+    // (rows every 2 m; and at the Galata Bridge's landing, where the town's pavements begin, W4, and at the corners of the town's
+    // lay-bys, where the right-hand pavement steps back: its kerb at rw + bay(s), the asphalt carried on out to it)
     {
-      const rows = [];
-      for (let i = 0; i <= 30; i++) { const s = s0 + (i / 30) * CH; rows.push({ s, sw: walkW(s) }); }
+      const rows = [], ss = [];
+      for (let i = 0; i <= 30; i++) ss.push(s0 + (i / 30) * CH);
+      { const tl = townLanding(s0 + CH / 2); if (tl && tl.s > s0 + 0.05 && tl.s < s1 - 0.05) ss.push(tl.s); }
+      for (const q of this.townBayAt(s0, s1)) for (const sq of [q - 3, q, q + TW_BAY_L, q + TW_BAY_L + 3]) if (sq > s0 + 0.05 && sq < s1 - 0.05) ss.push(sq);
+      ss.sort((p, q) => p - q);
+      for (const s of ss) rows.push({ s, sw: walkW(s), bay: this.townBay(s) });
       const runs = []; let cur = null;
       for (const rw of rows) { if (rw.sw > 0) { if (!cur) { cur = []; runs.push(cur); } cur.push(rw); } else cur = null; }
       for (const run of runs) {
         if (run.length < 2) continue;
         for (const side of [-1, 1]) {
+          const ib = i => (side > 0 ? run[i].bay : 0);
           ground.grid(run.length, 2, (i, j) => {
-            const { s, sw } = run[i], rw = rwAt(s), u = side * (j === (side > 0 ? 0 : 1) ? rw : rw + sw);
+            const { s, sw } = run[i], rw = rwAt(s), u = side * (j === (side > 0 ? 0 : 1) ? rw + ib(i) : rw + sw);
             path.at(s, f); const w = zw4(s);
             return [f.x + f.rx * u - ox, f.y + 0.15, f.z + f.rz * u - oz, 0, 1, 0, mod(s, S_WRAP), u, w[0], w[1], w[2], w[3], rw, 2, 0, w[4]];
           });
           ground.grid(run.length, 2, (i, j) => {
-            const { s } = run[i], rw = rwAt(s), u = side * rw, top = side > 0 ? j : 1 - j;
+            const { s } = run[i], rw = rwAt(s), u = side * (rw + ib(i)), top = side > 0 ? j : 1 - j;
             path.at(s, f); const w = zw4(s);
             return [f.x + f.rx * u - ox, f.y + (top ? 0.15 : 0), f.z + f.rz * u - oz, -side * f.rx, 0, -side * f.rz, mod(s, S_WRAP), u, w[0], w[1], w[2], w[3], rw, 3, 0, w[4]];
+          });
+          if (side > 0 && run.some(q => q.bay > 0)) ground.grid(run.length, 2, (i, j) => { // (the lay-by's asphalt, out to its kerb)
+            const { s } = run[i], rw = rwAt(s), u = j ? rw + ib(i) : rw - 0.02;
+            path.at(s, f); const w = zw4(s);
+            return [f.x + f.rx * u - ox, f.y + 0.002, f.z + f.rz * u - oz, 0, 1, 0, mod(s, S_WRAP), u, w[0], w[1], w[2], w[3], rw, 1, 0, w[4]];
           });
         }
       }
@@ -253,8 +287,10 @@ export class World {
     // the right a narrow strip of the same slabs out to the tram line's railing (GAL_KERB): their tops, their kerbs and their
     // outer edges' faces down to the deck. Where the bridge is (galOn)
     {
-      const runs = []; let cur = null;
-      for (let i = 0; i <= 30; i++) { const s = s0 + (i / 30) * CH; if (this.galOn(s)) { if (!cur) { cur = []; runs.push(cur); } cur.push(s); } else cur = null; }
+      const runs = []; let cur = null, ss = [];
+      for (let i = 0; i <= 30; i++) ss.push(s0 + (i / 30) * CH);
+      { const tl = townLanding(s0 + CH / 2); if (tl && tl.s > s0 + 0.05 && tl.s < s1 - 0.05) { ss.push(tl.s); ss.sort((p, q) => p - q); } } // (the walkway runs to the landing, W4)
+      for (const s of ss) { if (this.galOn(s)) { if (!cur) { cur = []; runs.push(cur); } cur.push(s); } else cur = null; }
       const KH = 0.18, v = (s, u, y, nx, nz, kind) => { path.at(s, f); const w = zw4(s), rw = rwAt(s); return [f.x + f.rx * u - ox, f.y + y, f.z + f.rz * u - oz, nx, nx === 0 && nz === 0 ? 1 : 0, nz, mod(s, S_WRAP), u, w[0], w[1], w[2], w[3], rw, kind, 0, w[4]]; };
       for (const run of runs) {
         if (run.length < 2) continue;
@@ -294,6 +330,7 @@ export class World {
     yield* this.placeBosphorus(G, c, s0, s1, matAt, onGround, road, rwAt, world, ox, oz);
     yield* this.placeGalata(G, c, s0, s1, matAt, road, rwAt, world);
     yield;
+    yield* this.placeTown(G, c, s0, s1, matAt, road, rwAt);
     yield* this.placeCountry(G, r, s0, s1, matAt, onGround, road, rwAt, H);
     yield* this.placeMountain(G, r, s0, s1, matAt, onGround, road, rwAt, H);
     yield* this.placeSnow(G, r, s0, s1, matAt, onGround, road, rwAt, H);
@@ -343,7 +380,7 @@ export class World {
   // poles + overhead wires (country / coast / city share the rule so wires connect across zones)
   poleSpec(k) {
     const s = k * POLE_SP + 6, z = zoneAt(s);
-    if (z === 'sakura' || z === 'galata' || nearX(s, 6) || nearR(s, 34) || nearT(s, T_RIDGE + 12)) return null; // (the Galata Bridge: the tram line's portals carry its lamps)
+    if (z === 'sakura' || z === 'galata' || z === 'town' || nearX(s, 6) || nearR(s, 34) || nearT(s, T_RIDGE + 12)) return null; // (the Galata Bridge: the tram line's portals carry its lamps; the Turkish town's wires are underground, as the concept's)
     const rw = zparam(s, 'rw');
     const u = z === 'city' ? rw + 0.45 : z === 'coast' ? rw + 1.35 : z === 'bosphorus' ? rw + 1.3 : z === 'mountain' ? -(rw + 1.45) : z === 'snow' ? rw + 2.9 : rw + 2.35;
     return { s, u, z };
@@ -875,7 +912,7 @@ export class World {
         else if (z === 'sakura') { u = rw + 2.68 + r() * 1.3; dens = 0.55; fl = 0.3; }
         else if (z === 'coast') { if (side < 0) continue; u = rw + 0.95 + r() * 1.7; dens = 0.75; fl = 0.18; }
         else if (z === 'bosphorus') { if (side < 0) continue; u = rw + 4.25 + r() * 0.3; dens = 0.35; fl = 0.25; } // (at the foot of the gardens' railings)
-        else if (z === 'snow' || z === 'galata') continue;
+        else if (z === 'snow' || z === 'galata' || z === 'town') continue;
         else if (z === 'mountain') { u = side < 0 ? rw + 1.0 + r() * 0.35 : rw + 0.25 + r() * 0.2; dens = side < 0 ? 0.55 : 0.18; fl = 0.12; sc = 0.85; }
         else { if (nearSide(s, 5)) continue; u = rw + 3.02 + r() * 0.1; dens = 0.1; fl = 0.08; sc = 0.65; }
         if (r() > dens) continue;
@@ -1394,6 +1431,117 @@ export class World {
       const u0 = uv.u0; uv.u0 = uv.u1; uv.u1 = u0;
       a.quad(world(t, ub, yb + 0.06), world(s, ua, ya + 0.06), world(s, ua, ya + HT - 0.03), world(t, ub, yb + HT - 0.03), W1G, uv);
     }
+  }
+  /** the Turkish town where it is (W4): its weight a half or more (from the Galata Bridge's landing on), clear of the border
+   *  tunnel's mouth at its far end */
+  townOn(s) { return zoneW(s).town >= 0.5 && !nearB(s, T_HALF + 6); }
+  /** …and where its blocks stand: from 24 m past the landing (the quay's square at the bridge's end) */
+  townBlocks(s) { if (!this.townOn(s)) return false; const tl = townLanding(s); return !tl || s > tl.s + 24; }
+  /** the starts of the town's lay-bys (W4: a dolmuş stop) whose bays reach into [s0, s1): every TW_BAY m on the right-hand
+   *  pavement where the town runs the whole length of it */
+  townBayAt(s0, s1) {
+    const out = [];
+    for (let z = Math.floor((s0 - TW_BAY_L - 3) / ZONE_LEN); z * ZONE_LEN < s1; z++) // (counted from each zone's start)
+      for (let q = z * ZONE_LEN + TW_BAY0; q - 3 < s1 && q < (z + 1) * ZONE_LEN; q += TW_BAY)
+        if (q + TW_BAY_L + 3 > s0 && this.townBlocks(q - 6) && this.townBlocks(q + TW_BAY_L + 6)) out.push(q);
+    return out;
+  }
+  /** the depth of the town's lay-by at s (0 outside one; 3 m tapers at its ends) */
+  townBay(s) {
+    const z0 = Math.floor((s + 3) / ZONE_LEN) * ZONE_LEN, q = z0 + Math.floor((s - z0 - TW_BAY0 + 3) / TW_BAY) * TW_BAY + TW_BAY0, d = s - q;
+    if (d < -3 || d > TW_BAY_L + 3 || !this.townBlocks(q - 6) || !this.townBlocks(q + TW_BAY_L + 6)) return 0;
+    return TW_BAY_D * Math.min(1, (d + 3) / 3, (TW_BAY_L + 3 - d) / 3);
+  }
+  /** Mahalle çarşısı (W4): a Turkish town's high street, as its concept painting has it (ref/world/turkish_town.png): an almost
+   *  unbroken row of five- to seven-storey blocks of flats on either side behind wide pavements, a shop or two in each one's
+   *  ground floor under its signboard and awning (props.js townApt); plane trees in their planters along the kerbs, street
+   *  lamps, tea tables out in front of the tea houses and now and then a bakery, a simit cart, a cat; a dolmuş waiting at its
+   *  stop in a lay-by; at the bridge's end the quay's square with its two flags. On random numbers of its own (Japan's chunks
+   *  never draw them) */
+  *placeTown(G, c, s0, s1, matAt, road, rwAt) {
+    if (zoneW(s0).town < 0.25 && zoneW(s1).town < 0.25) return;
+    const tr = rng(Math.floor(hash2(c, 6501) * 4294967295)), front = s => rwAt(s) + TOWN_SW + 0.15, ok = s => this.townBlocks(s);
+    const items = []; // (what stands on the pavements: [s, u (signed), radius], so nothing stands in anything else)
+    const free = (s, u, rad) => items.every(([s2, u2, r2]) => Math.hypot(s - s2, u - u2) > rad + r2);
+    // the lay-bys' dolmuş and their stop signs
+    for (const q of this.townBayAt(s0, s1)) {
+      const sm = q + TW_BAY_L / 2; if (sm < s0 || sm >= s1) continue;
+      const rw = rwAt(sm); P.dolmus(G, matAt(sm + 1, rw + 1.25, road(sm), 0, false));
+      P.durakSign(G, matAt(q + 2, rw + TW_BAY_D + 0.35, road(q + 2) + 0.15)); items.push([q + 2, rwAt(q + 2) + TW_BAY_D + 0.35, 0.4]);
+    }
+    // (the opening view's blocks start TW_HERO_B into the zone: the town's, if that is in this chunk)
+    const z0 = s0 - zoneL(s0), hbOf = side => z0 + TW_HERO_B[side], heroOf = side => { const hb = hbOf(side); return zoneAt(hb + 5) === 'town' && hb >= s0 && hb < s1 - 14 && ok(hb) && ok(hb + 14); };
+    const heroIn = heroOf(-1) && heroOf(1);
+    const hl = s => { const l = zoneL(s); return l >= TW_HERO[0] && l < TW_HERO[1] && zoneAt(s) === 'town'; };
+    for (const side of [-1, 1]) {
+      const hb = hbOf(side);
+      // the blocks: one after another along the pavement, each inside its chunk (the chunk's last one reaches its end)
+      for (let s = s0 + 0.12; s < s1 - 3;) {
+        if (!ok(s)) { s += 1; continue; }
+        let w = tr.range(9, 15), next = NaN, hero = false; if (s1 - 0.12 - (s + w) < 6) w = s1 - 0.12 - s;
+        if (heroIn) { if (Math.abs(s - hb) < 0.01) { hero = true; w = 14; } else if (s < hb && s + w > hb - 4.5) { w = hb - 0.15 - s; next = hb; if (w < 4.5) { s = hb; continue; } } }
+        let e1 = s + w; while (e1 > s + 4 && !ok(e1)) e1 -= 1; // (not into the border's mouth)
+        if (e1 - s < 4.5) { s = e1 + 1; continue; } w = e1 - s;
+        const sm = s + w / 2, nb = Math.max(2, Math.round(w / 3.3));
+        let door = tr() < 0.18 ? -1 : Math.floor(tr() * nb), shops = [];
+        for (let n = nb - (door >= 0 ? 1 : 0); n > 0;) { const k = twKind(tr()), m = Math.min(n, tr() < 0.4 ? 2 : 1), aw = TW_AWN[k][tr() < 0.75 ? 0 : 1]; shops.push({ k, j: Math.floor(tr() * TOWN_SHOPS[k].length), aw, n: m }); n -= m; }
+        const t = tr(), spec = { type: 'townApt', w, d: tr.range(11, 15), floors: 5 + Math.floor(tr() * 3), tint: tr.pick(P.TOWN_TINTS), shops, door, bal: t < 0.4 ? 'full' : t < 0.65 ? 'alt' : t < 0.85 ? 'mid' : 'none', rail: tr() < 0.6 ? 0 : 1, flag: tr() < 0.75, near: -side };
+        // (the opening view's: on the left, from ahead (its −x end), the entrance, a pharmacy and a bakery under its red and white
+        // awning; on the right, from behind, a market under its blue and white one and a tea house under a red one, the entrance)
+        if (hero) Object.assign(spec, side < 0 ? { tint: P.TOWN_TINTS[0], floors: 6, bal: 'full', rail: 1, flag: true, door: 0, shops: [{ k: 5, j: 0, aw: -1, n: 1 }, { k: 0, j: 0, aw: 0, n: 2 }] }
+          : { tint: P.TOWN_TINTS[5], floors: 6, bal: 'mid', rail: 1, flag: true, door: 3, shops: [{ k: 2, j: 0, aw: 1, n: 2 }, { k: 3, j: 0, aw: 2, n: 1 }] });
+        P.building(G, matAt(sm, side * front(sm), road(sm) + 0.15), tr, spec);
+        door = spec.door; shops = spec.shops;
+        // tea tables out on the pavement in front of a tea house (and now and then a bakery's)
+        const bwid = w / nb, dIdx = door;
+        for (let i = 0, bi = 0; i < shops.length; i++) {
+          if (bi === dIdx) bi++;
+          const sh = shops[i], sa = s + bi * bwid, sb = sa + sh.n * bwid; bi += sh.n;
+          if (sh.k === 3 || (sh.k === 0 && (tr() < 0.35 || hero))) for (let q = sa + 0.9; q < sb - 0.6; q += tr.range(1.6, 2.4)) {
+            const u = side * (front(q) - tr.range(1.3, 2.1)); if (!free(q, u, 0.9)) continue;
+            P.teaTable(G, matAt(q, u, road(q) + 0.15, tr() * 6.28, false), tr); items.push([q, u, 0.9]);
+          }
+        }
+        s = next === next ? next : s + w + tr.range(0.05, 0.3);
+        yield;
+      }
+      // the second row: plain blocks of flats behind the street's (6–8 storeys, a little taller), close behind them, almost unbroken,
+      // so the town reads as a town over the street's lower blocks, down its gaps and from the bridge's landing (own random numbers)
+      { const bk = rng(Math.floor(hash2(Math.round(s0 / CH), side > 0 ? 6511 : 6513) * 4294967295));
+        for (let s2 = s0 + 0.2; s2 < s1 - 5;) {
+          let w2 = bk.range(12, 20); if (s1 - 0.2 - (s2 + w2) < 7) w2 = s1 - 0.2 - s2;
+          const sm2 = s2 + w2 / 2; if (!ok(s2 - 4) || !ok(s2 + w2)) { s2 += 3; continue; }
+          const u2 = front(sm2) + 16.5 + bk() * 2;
+          P.building(G, matAt(sm2, side * u2, road(sm2) + 0.14), bk, { type: 'townBack', w: w2, d: bk.range(10, 14), floors: 6 + Math.floor(bk() * 3), tint: bk.pick(P.TOWN_TINTS), near: -side });
+          s2 += w2 + bk.range(0.3, 3);
+        }
+        yield; }
+      // plane trees in their planters along the kerb (not in a lay-by), street lamps between them; in the opening view the
+      // concept's (a big one by the kerb on the right beside the car, one further on on the left)
+      if (heroIn) { const sh = z0 + (side > 0 ? 137.5 : 168), u = side * (rwAt(sh) + 1.05); P.townTree(G, matAt(sh, u, road(sh) + 0.15), tr, side > 0 ? 1.12 : 1.0); items.push([sh, u, 1.6]); }
+      // (as the concept's: one every ~25 m a side; on phones, P.bankStep() > 1, two in five of them left out: their painted crowns and
+      // bark were most of the town's cost over the shopping street's there)
+      const lite = P.bankStep() > 1;
+      for (let s = s0 + tr() * 10; s < s1; s += tr.range(21, 30)) {
+        const u = side * (rwAt(s) + 1.05); if (!this.townOn(s) || hl(s) || (side > 0 && this.townBay(s) > 0) || !free(s, u, 1.6) || (tr() < 0.4 && lite)) continue;
+        P.townTree(G, matAt(s, u, road(s) + 0.15), tr, tr.range(0.92, 1.08)); items.push([s, u, 1.6]);
+      }
+      yield;
+      for (let s = Math.ceil((s0 - (side > 0 ? 0 : 18)) / 36) * 36 + (side > 0 ? 0 : 18); s < s1; s += 36) {
+        const u = side * (rwAt(s) + 0.45); if (s < s0 || !this.townOn(s) || (side > 0 && this.townBay(s) > 0) || !free(s, u, 0.6)) continue;
+        P.streetLamp(G, matAt(s, u, road(s) + 0.15), tr); items.push([s, u, 0.4]);
+      }
+    }
+    // a simit cart by the kerb now and then, a cat on the pavement (in the opening view the concept's, on the left)
+    if (heroIn) { const sc = z0 + 154, sk = z0 + 146.5; P.simitCart(G, matAt(sc, -(rwAt(sc) + 1.3), road(sc) + 0.15, 0, false), tr); items.push([sc, -(rwAt(sc) + 1.3), 1.1]); P.townCat(G, matAt(sk, -(rwAt(sk) + 0.95), road(sk) + 0.15, 0, false), false); }
+    else if (tr() < 0.35) { const s = s0 + tr() * CH, side = tr() < 0.6 ? -1 : 1, u = side * (rwAt(s) + 1.3); if (this.townBlocks(s) && !(side > 0 && this.townBay(s) > 0) && free(s, u, 1.1)) { P.simitCart(G, matAt(s, u, road(s) + 0.15, 0, false), tr); items.push([s, u, 1.1]); } }
+    if (!heroIn && tr() < 0.3) { const s = s0 + tr() * CH, side = tr() < 0.6 ? -1 : 1, u = side * (rwAt(s) + tr.range(0.7, 3.4)); if (this.townBlocks(s) && !(side > 0 && this.townBay(s) > 0) && free(s, u, 0.4)) P.townCat(G, matAt(s, u, road(s) + 0.15, 0, false), side > 0); }
+    // the quay's square at the bridge's end: a flag on a tall pole either side of the street, round trees along the waterfront
+    { const tl = townLanding(s0 + CH / 2), sf = tl ? tl.s + 12 : NaN;
+      if (sf >= s0 && sf < s1) for (const side of [-1, 1]) {
+        P.flagPole(G, matAt(sf, side * (rwAt(sf) + 3.2), road(sf) + 0.15), 10);
+        for (let u = rwAt(sf) + TOWN_SW + 4 + tr() * 3; u < 75; u += tr.range(7, 11)) P.tree(G, matAt(tl.s + 5 + tr() * 3, side * u, road(sf) + 0.14, tr() * 6, false), 'broad', tr, tr.range(0.95, 1.2));
+      } }
   }
   *placeCountry(G, r, s0, s1, matAt, onGround, road, rwAt, H) {
     for (const side of [-1, 1]) {

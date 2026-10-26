@@ -1057,10 +1057,169 @@ function galRail(A, a, w, h, kind) {
   a.restore();
   for (const [y, t] of [[0, 6 * k], [h - 7 * k, 7 * k]]) { rect(a, 0, y, w, t, col); rect(a, 0, y, w, t * 0.3, hi); }
 }
+// ------------------------------------------------------------------ the Turkish town (W4)
+// Its shops' signboards (Turkish words, as the concept painting's: bold red lettering on a white board inside a red rule,
+// white on red for a market, a pharmacy's red on white inside its green), its awnings' striped and plain canvas, its
+// balconies' railings, a hanging flag, a pharmacy's green cross, the simit cart's glass case, a dolmuş stop's plate; and the
+// painted pieces (painted.js loadTownAtlas: the shops' bays, the windows, the cat) in rows of their own, under everything the
+// world atlas had: its other cells keep their places. (Its walls are plain plaster in the colour material: props.js townApt)
+/** the town's shops (props.js townBlock): by kind, the painted bay it takes (twBay0…6; the apartments' entrance is twBay7)
+ *  and its signboards: [word, board, ink, rule] */
+export const TOWN_SHOPS = [
+  [['Fırın', '#f7f1e8', '#c8241c', '#c8241c'], ['Ekmek Fırını', '#f7f1e8', '#c8241c', '#c8241c'], ['Simit Fırını', '#f6ead2', '#a8261b', '#a8261b']],
+  [['Bakkal', '#fbf8f1', '#c8241c', '#c8241c'], ['Şarküteri', '#fbf8f1', '#1f3f8c', '#1f3f8c']],
+  [['Market', '#c62a20', '#ffffff', '#ffffff'], ['Gıda Market', '#c62a20', '#ffffff', '#ffffff']],
+  [['Çay Ocağı', '#fbf8f1', '#c8241c', '#c8241c'], ['Kıraathane', '#2f5a3c', '#f6ead2', '#f6ead2']],
+  [['Kuaför', '#fbf8f1', '#c8241c', '#c8241c'], ['Berber', '#fbf8f1', '#1f3f8c', '#c8241c']],
+  [['Eczane', '#fbf8f1', '#c8241c', '#2e9a4c']],
+  [['Manav', '#fbf8f1', '#2a7d3a', '#2a7d3a'], ['Meyve Sebze', '#2f7d45', '#ffffff', '#ffffff']],
+];
+/** the awnings' canvas, 1 m square a cell: [the stripes' two colours] (one: plain) */
+export const TOWN_AWNINGS = [['#d1302a', '#f7f3ea'], ['#2557a8', '#f7f3ea'], ['#c8352b'], ['#2f62b0'], ['#2f8a4a', '#f7f3ea'], ['#2f7d4a'], ['#e07a2c', '#f7f3ea']];
+/** a signboard's cell (props.js townSign maps it in five strips: its caps and plain margins stretch to the board's width, its
+ *  lettering keeps its shape): a cap (the rule at its outer edge) TS_CAP px, a plain margin TS_PAD px, the word, the same on
+ *  the right; the board's colour, the rule round it, the word in bold capitals-and-lower-case as the concept's */
+export const TS_CAP = 0.1, TS_PAD = 0.22; // (of the cell's height)
+const TS_FONT = 0.66; // (the lettering's size, of the board's height: as large as the concept's)
+function townSignW(word, h) { const c = document.createElement('canvas').getContext('2d'); c.font = `700 ${Math.round(h * TS_FONT)}px ${TR_FONT}`; return Math.ceil(c.measureText(word).width + 2 * h * (TS_CAP + TS_PAD)); }
+function townSign(A, a, e, w, h, [word, board, ink, rule]) {
+  rect(a, 0, 0, w, h, board); vgrad(a, 0, 0, w, h, [[0, 'rgba(255,255,255,0.06)'], [1, 'rgba(0,0,0,0.10)']]);
+  const t = Math.max(2, h * 0.05), o = h * 0.07;
+  a.strokeStyle = rule; a.lineWidth = t; a.strokeRect(o, o, w - 2 * o, h - 2 * o);
+  a.fillStyle = ink; a.font = `700 ${Math.round(h * TS_FONT)}px ${TR_FONT}`; a.textAlign = 'center'; a.textBaseline = 'middle';
+  a.fillText(word, w / 2, h * 0.54);
+  grain(a, A, w, h, 0.06);
+  // (a lit sign at night: its board glows a little, its lettering more)
+  rect(e, 0, 0, w, h, 'rgba(70,64,56,1)'); e.fillStyle = '#ffffff'; e.font = a.font; e.textAlign = 'center'; e.textBaseline = 'middle'; e.fillText(word, w / 2, h * 0.53);
+}
+/** an awning's canvas: stripes running down its slope (or plain), soft folds, a little weathered */
+function townAwning(A, a, e, w, h, cols) {
+  const n = cols.length > 1 ? 4 : 1, sw = w / n;
+  for (let i = 0; i < n; i++) rect(a, i * sw, 0, sw, h, cols[i % cols.length]);
+  const g = a.createLinearGradient(0, 0, w, 0); for (let i = 0; i <= 8; i++) g.addColorStop(i / 8, i % 2 ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.05)');
+  a.fillStyle = g; a.fillRect(0, 0, w, h);
+  vgrad(a, 0, 0, w, h, [[0, 'rgba(0,0,0,0.12)'], [0.3, 'rgba(0,0,0,0)'], [1, 'rgba(255,255,255,0.06)']]);
+  grain(a, A, w, h, 0.1);
+}
+/** …and its valance: the same canvas, a hem along its top, its lower edge cut in scallops (alpha) */
+function townValance(A, a, e, w, h, cols) {
+  a.clearRect(0, 0, w, h);
+  const n = cols.length > 1 ? 4 : 1, sw = w / n, r = sw / 2, yb = h - r * 0.9;
+  a.save(); a.beginPath(); a.moveTo(0, 0); a.lineTo(w, 0); a.lineTo(w, yb);
+  for (let i = n - 1; i >= 0; i--) a.arc(i * sw + r, yb, r * 0.98, 0, Math.PI, false);
+  a.closePath(); a.clip();
+  for (let i = 0; i < n; i++) rect(a, i * sw, 0, sw, h, cols[i % cols.length]);
+  vgrad(a, 0, 0, w, h, [[0, 'rgba(0,0,0,0.05)'], [1, 'rgba(0,0,0,0.16)']]);
+  rect(a, 0, h * 0.08, w, Math.max(1.5, h * 0.06), 'rgba(255,255,255,0.35)');
+  a.restore();
+}
+/** a balcony's railing panel, 2 m by 1 m (alpha-tested, see-through): a top rail, a foot rail, upright bars ~11 cm apart;
+ *  dark iron (kind 0) or white-painted (1), lit from above */
+function townRail(A, a, w, h, kind) {
+  a.clearRect(0, 0, w, h);
+  const k = h / 128, col = kind ? '#eeeeea' : '#2a2b30', hi = kind ? 'rgba(255,255,255,0.6)' : 'rgba(150,160,175,0.45)';
+  for (let x = 7 * k; x < w; x += 14 * k) { rect(a, x, 0, 2.6 * k, h, col); rect(a, x, 0, 0.9 * k, h, hi); }
+  for (const [y, t] of [[0, 9 * k], [h - 9 * k, 9 * k], [h * 0.12, 3 * k]]) { rect(a, 0, y, w, t, col); rect(a, 0, y, w, t * 0.35, hi); }
+}
+/** the Turkish flag hanging from a balcony, as the concept paints it: taller than wide, the crescent and star upright */
+function townFlag(a, e, w, h) {
+  const RED = '#e30a17', G = w * 1.0, cy = h * 0.5, cx = w * 0.42;
+  rect(a, 0, 0, w, h, RED);
+  a.fillStyle = '#fff'; a.beginPath(); a.arc(cx, cy, 0.25 * G, 0, 7); a.fill();
+  a.fillStyle = RED; a.beginPath(); a.arc(cx + 0.0625 * G, cy, 0.2 * G, 0, 7); a.fill();
+  const sx = cx + 0.2292 * G, R = 0.125 * G, ri = R * 0.382;
+  a.fillStyle = '#fff'; a.beginPath();
+  for (let i = 0; i < 10; i++) { const t = Math.PI + (i * Math.PI) / 5, q = i % 2 ? ri : R; a.lineTo(sx + Math.cos(t) * q, cy + Math.sin(t) * q); }
+  a.closePath(); a.fill();
+  const g = a.createLinearGradient(0, 0, 0, h); for (let i = 0; i <= 6; i++) g.addColorStop(i / 6, i % 2 ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.06)');
+  a.fillStyle = g; a.fillRect(0, 0, w, h);
+}
+/** a small blue plate with two lines of white lettering (a dolmuş stop's) */
+function trDirSignPlain(a, w, h, lines) {
+  const m = h / 16;
+  rect(a, 0, 0, w, h, '#f2f2ee'); rect(a, m * 0.6, m * 0.6, w - m * 1.2, h - m * 1.2, '#1d4f9a');
+  a.fillStyle = '#fff'; a.textAlign = 'center'; a.textBaseline = 'middle';
+  for (let i = 0; i < lines.length; i++) { let fs = Math.round(m * 4.2); a.font = `700 ${fs}px ${TR_FONT}`; while (a.measureText(lines[i]).width > w * 0.84 && fs > 6) { fs--; a.font = `700 ${fs}px ${TR_FONT}`; } a.fillText(lines[i], w / 2, h * (0.36 + 0.3 * i)); }
+}
+/** a pharmacy's green cross light box (alpha round it) */
+function townCross(A, a, e, w, h) {
+  a.clearRect(0, 0, w, h);
+  const t = w * 0.3, cross = (c, col) => { c.fillStyle = col; c.fillRect((w - t) / 2, w * 0.06, t, h - w * 0.12); c.fillRect(w * 0.06, (h - t) / 2, w - w * 0.12, t); };
+  cross(a, '#f4f6f2'); a.save(); a.translate(w * 0.5, h * 0.5); a.scale(0.86, 0.86); a.translate(-w * 0.5, -h * 0.5); cross(a, '#1fbf4f'); a.restore();
+  e.save(); e.translate(w * 0.5, h * 0.5); e.scale(0.86, 0.86); e.translate(-w * 0.5, -h * 0.5); cross(e, '#4dff7a'); e.restore();
+}
+/** the simit cart's glass case: rows of sesame simit rings stacked on its shelves, in its warm light */
+function townSimit(A, a, e, w, h) {
+  const r = rng(6623);
+  rect(a, 0, 0, w, h, '#e9d6b2'); vgrad(a, 0, 0, w, h, [[0, 'rgba(255,255,255,0.25)'], [1, 'rgba(120,80,40,0.25)']]);
+  const R = h * 0.15;
+  for (let row = 0; row < 3; row++) for (let x = R * 0.8 + (row % 2) * R * 0.9; x < w - R * 0.5; x += R * 1.8) {
+    const y = h - R * 1.0 - row * R * 1.55;
+    a.lineWidth = R * 0.62; a.strokeStyle = `rgb(${170 + r() * 30},${100 + r() * 20},${40 + r() * 15})`; a.beginPath(); a.ellipse(x, y, R * 0.82, R * 0.62, 0, 0, 7); a.stroke();
+    a.lineWidth = R * 0.18; a.strokeStyle = 'rgba(255,225,170,0.55)'; a.beginPath(); a.ellipse(x - R * 0.06, y - R * 0.08, R * 0.8, R * 0.58, 0, 3.4, 5.6); a.stroke();
+    a.fillStyle = 'rgba(250,236,200,0.9)'; for (let k = 0; k < 14; k++) { const t = r() * 6.28, q = R * (0.6 + r() * 0.35); a.fillRect(x + Math.cos(t) * q * 0.95, y + Math.sin(t) * q * 0.72, 1.4, 1); }
+  }
+  rect(a, 0, 0, w, h * 0.06, 'rgba(255,255,255,0.4)'); // (the case's glass catching the light)
+}
+/** the town's shops' bays, windows and entrance when their paintings failed (painted.js loadTownAtlas): warm-lit procedural
+ *  shopfronts in a grey frame over a stone plinth, white-framed windows (cut out on their alpha) */
+function townBayP(A, a, e, w, h, seed, door) {
+  const r = rng(seed), m = w / 3.3;
+  rect(a, 0, 0, w, h, '#9a9894'); rect(a, 0, h - m * 0.45, w, m * 0.45, '#8f8b84');
+  const x0 = m * 0.18, y0 = m * 0.32, ww = w - 2 * x0, wh = h - y0 - m * 0.5;
+  if (door) { rect(a, w * 0.3, y0, w * 0.4, h - y0 - m * 0.1, '#3a3d42'); rect(a, w * 0.33, y0 + m * 0.06, w * 0.34, h - y0 - m * 0.25, '#d9c9a6'); litInterior(a, e, w * 0.33, y0 + m * 0.06, w * 0.34, h - y0 - m * 0.25, '#ffd28a'); return; }
+  rect(a, x0, y0, ww, wh, '#e6cf9f');
+  for (let j = 1; j < 4; j++) { rect(a, x0, y0 + (wh * j) / 4, ww, m * 0.05, '#8a6a46'); for (let x = x0 + 4; x < x0 + ww - 8; x += m * (0.12 + r() * 0.1)) rect(a, x, y0 + (wh * j) / 4 - m * (0.1 + r() * 0.12), m * 0.08, m * (0.1 + r() * 0.12), ['#c84a3a', '#e0b040', '#4a8a4a', '#d07a30', '#5a7ab0'][Math.floor(r() * 5)]); }
+  litInterior(a, e, x0, y0, ww, wh, '#ffd28a');
+  frame(a, x0, y0, ww, wh, m * 0.05, '#b8bcc0');
+}
+function townWinP(A, a, e, w, h, door) {
+  a.clearRect(0, 0, w, h);
+  const m = w / 1.5, f = m * 0.07;
+  rect(a, 0, 0, w, h * 0.1, '#f2f2ee');
+  const y0 = h * 0.12, y1 = h - (door ? 0 : m * 0.08);
+  rect(a, 0, y0, w, y1 - y0, '#f4f4f0');
+  const r = rng(6641);
+  glass(a, f, y0 + f, w / 2 - 1.5 * f, (door ? h * 0.5 : y1 - y0) - 2 * f, r, 1); glass(a, w / 2 + f / 2, y0 + f, w / 2 - 1.5 * f, (door ? h * 0.5 : y1 - y0) - 2 * f, r, 1);
+  if (!door) rect(a, -2, y1 - m * 0.02, w + 4, m * 0.08, '#e4e1da');
+  rect(e, f, y0 + f, w - 2 * f, (door ? h * 0.5 : y1 - y0) - 2 * f, '#ffc77e');
+}
+/** the town's rows of the world atlas (W4): their cells, as [name, [w, h], painter]; `k` the tier's scale. (The painted bays,
+ *  windows and cat come after these, in rows of their own: paintTown) */
+function townList(k, ta) {
+  const L = [], SH = Math.round(104 * k);
+  TOWN_SHOPS.forEach((signs, i) => signs.forEach((sg, j) => L.push(['twSg' + i + '_' + j, [Math.min(Math.round(760 * k), townSignW(sg[0], SH)), SH], (A, a, e, w, h) => townSign(A, a, e, w, h, sg)])));
+  TOWN_AWNINGS.forEach((c, i) => { L.push(['twAwn' + i, [Math.round(128 * k), Math.round(128 * k)], (A, a, e, w, h) => townAwning(A, a, e, w, h, c)], ['twVal' + i, [Math.round(128 * k), Math.round(40 * k)], (A, a, e, w, h) => townValance(A, a, e, w, h, c)]); });
+  for (const kind of [0, 1]) L.push(['twRail' + kind, [Math.round(256 * k), Math.round(128 * k)], (A, a, e, w, h) => townRail(A, a, w, h, kind)]);
+  L.push(['twFlag', [Math.round(96 * k), Math.round(144 * k)], (A, a, e, w, h) => townFlag(a, e, w, h)],
+    ['twCross', [Math.round(96 * k), Math.round(96 * k)], townCross], ['twSimit', [Math.round(192 * k), Math.round(128 * k)], townSimit],
+    ['twDurak', [Math.round(128 * k), Math.round(128 * k)], (A, a, e, w, h) => trDirSignPlain(a, w, h, ['DOLMUŞ', 'DURAĞI'])]);
+  if (!ta) { // (their paintings failed: procedural stand-ins)
+    for (let i = 0; i < 8; i++) L.push(['twBay' + i, [Math.round(330 * k), Math.round(330 * k)], (A, a, e, w, h) => townBayP(A, a, e, w, h, 6650 + i, i === 7)]);
+    for (const [n, wm, hm] of [['twWinA', 1.45, 1.71], ['twWinB', 1.7, 1.87], ['twWinC', 1.3, 1.61], ['twWinD', 2.2, 2.86]]) L.push([n, [Math.round(100 * wm * k), Math.round(100 * hm * k)], (A, a, e, w, h) => townWinP(A, a, e, w, h, n === 'twWinD')]);
+  }
+  return L;
+}
+/** the town's painted pieces (painted.js loadTownAtlas): each tile of its sheet a cell of its own, in rows of their own (cleared
+ *  to transparent first: the windows' and the cat's outlines are their alpha). False (the procedural stand-ins: none) if they
+ *  don't fit */
+function paintTown(A, ta) {
+  const P = 4, y0 = A.y + A.rowH + P + 12;
+  if (y0 + ta.rows > A.H) return false;
+  A.x = 0; A.y = y0; A.rowH = 0;
+  A.a.clearRect(0, y0 - 8, SW, Math.min(A.H, y0 + ta.rows + 8) - (y0 - 8));
+  try {
+    for (const t of ta.tiles) A.add(t.name, t.w, t.h, (a, e, w, h) => {
+      a.clearRect(0, 0, w, h); a.drawImage(ta.img, t.x, t.y, t.w, t.h, 0, 0, w, h);
+      e.drawImage(ta.img, t.x, t.ey, t.w, t.h, 0, 0, w, h);
+    });
+  } catch (err) { console.warn('the town\'s paintings:', err.message); return false; }
+  return true;
+}
 /** Builds the world atlas for a tier ('hi' or 'lo': half the px). `main`: the procedural atlas, whose cell list it shares;
  *  `th`: the Bosphorus's painted houses (painted.js loadTrHouseAtlas), in rows of their own (.trHouses: whether they are in);
  *  with them the procedural houses' bays and tiles aren't painted (only their fallback, props.js ottomanHouse, uses them) */
-export function buildWorldAtlas(main, tier, th = null) {
+export function buildWorldAtlas(main, tier, th = null, ta = null) {
   const k = tier === 'hi' ? 1 : 0.5, B = [Math.round(208 * k), Math.round(240 * k)], list = [];
   if (!th) TR_WOOD.forEach((col, i) => { for (const lit of [false, true]) list.push(['trW' + i + (lit ? 'L' : ''), B, (A, a, e, w, h) => trBay(A, a, e, w, h, col, lit, 900 + i, true, true, i === 3 ? '#f4f1ea' : '#5a3f2c')]); }); // (stained wood: dark frames)
   if (!th) {
@@ -1075,16 +1234,26 @@ export function buildWorldAtlas(main, tier, th = null) {
     // the border tunnels' Turkish mouths: their name plates (a Turkish highway's blue, white lettering), through the cape at
     // Arnavutköy (Akıntıburnu) and (since W3: it was the headland towards Kuruçeşme) the headland at Eminönü at the Galata
     // Bridge's end
-    ...['AKINTIBURNU TÜNELİ', 'EMİNÖNÜ TÜNELİ'].map((name, i) => ['trTunnel' + i, [Math.round(360 * k), Math.round(80 * k)], (A, a, e, w, h) => trTunnelPlate(A, a, w, h, name)]),
+    // (since W4 the second one is the Turkish town's, at its far end: it was Eminönü's, at the Galata Bridge's)
+    ...['AKINTIBURNU TÜNELİ', 'KARAKAYA TÜNELİ'].map((name, i) => ['trTunnel' + i, [Math.round(360 * k), Math.round(80 * k)], (A, a, e, w, h) => trTunnelPlate(A, a, w, h, name)]),
     // the Galata Bridge (W3): its railings' panels, and the blue sign for the old city's places ahead. (In the first row's free
     // width, no taller than its cells: the painted houses' rows below keep their places)
     ['galRailL', [Math.round(224 * k), Math.round(100 * k)], (A, a, e, w, h) => galRail(A, a, w, h, 0)],
     ['galRailR', [Math.round(224 * k), Math.round(100 * k)], (A, a, e, w, h) => galRail(A, a, w, h, 1)],
     ['trSignGal', [Math.round(200 * k), Math.round(100 * k)], (A, a, e, w, h) => trDirSign(A, a, e, w, h, ['Eminönü', 'Sirkeci'])]);
-  const H = Math.ceil((flowEnd(list.map(c => c[1])) + (th ? 16 + th.rows : 0) + 8) / 4) * 4, W = new Atlas(H, 4, main.cells);
+  // (the Turkish town's rows, W4, under all the rest, so every cell above keeps its place: as many rows more as a whole number
+  // of 128, so the texture's rows above keep their mip levels' 2×2 groupings as well (its rows count from the bottom))
+  const tl = townList(k, ta), H0 = Math.ceil((flowEnd(list.map(c => c[1])) + (th ? 16 + th.rows : 0) + 8) / 4) * 4;
+  const H = H0 + Math.ceil((flowEnd(tl.map(c => c[1])) + 4 + 12 + (ta ? 16 + ta.rows : 0) + 8) / 128) * 128, W = new Atlas(H, 4, main.cells);
   for (const [n, [w, h], f] of list) W.add(n, w, h, (a, e, cw, ch) => f(W, a, e, cw, ch));
   W.trHouses = !!th && paintHouses(W, th);
-  return th && !W.trHouses ? buildWorldAtlas(main, tier, null) : W; // (if they didn't fit: the procedural houses' cells)
+  if (th && !W.trHouses) return buildWorldAtlas(main, tier, null, ta); // (if they didn't fit: the procedural houses' cells)
+  // (the town's rows start under the old atlas's end, on the atlas's opaque grey again: the houses' rows clear everything under
+  // them to transparent for their outlines; the town's painted rows clear their own: paintTown)
+  W.x = 0; W.y = H0 + 4 + 12; W.rowH = 0; W.a.fillStyle = '#8a8a8a'; W.a.fillRect(0, H0, SW, H - H0);
+  for (const [n, [w, h], f] of tl) W.add(n, w, h, (a, e, cw, ch) => f(W, a, e, cw, ch));
+  W.town = !!ta && paintTown(W, ta);
+  return ta && !W.town ? buildWorldAtlas(main, tier, th, null) : W; // (…and the town's: its procedural stand-ins)
 }
 /** the atlas rows the painted houses take (assets/houses/houses2.json lists its own: pack.py), per tier: a cell's px are its
  *  tile's (48 px/m on desktops, 32 on phones and in the X card) */

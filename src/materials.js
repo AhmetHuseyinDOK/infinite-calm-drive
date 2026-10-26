@@ -335,11 +335,11 @@ vec3 roadCol(float s, float u, float rw){
 #ifdef Z_CITY
   c *= mix(vec3(1.0), vec3(0.70, 0.68, 0.80), city); // the shopping street's asphalt: darker, a violet grey, as in the city painting
 #endif
-#if defined(Z_COAST) || defined(Z_COUNTRY) || defined(Z_GAL)
+#if defined(Z_COAST) || defined(Z_COUNTRY) || defined(Z_GAL) || defined(Z_TOWN)
   // the coast's and the country's asphalt as painted: in the sun a cool blue-grey, darkest near the eye and paler and
   // bluer with distance (uRoadN → uRoadF over 3–22 m; by the time of day under a clear sky, 1 under grey skies). It tints
   // the sunlight on it only (gRoadT, after the lights): its shade keeps the painted navy it had. (The Galata Bridge's too:
-  // the concept's road is the same blue-grey)
+  // the concept's road is the same blue-grey; and the Turkish town's, W4, in the country's channel)
   float wR = vZW.z + vZW.w;
 #ifdef Z_GAL
   wR += vZW.y;
@@ -458,9 +458,32 @@ vec3 galWalk(float s, float u, float rw){
   return c * (0.92 + 0.12 * fbm2(vec2(s, u) * 0.8));
 }
 #endif
+#ifdef Z_TOWN
+// the Turkish town's pavements (W4), as its concept paints them: pale grey square slabs, 40 cm, each its own grey, a course of
+// kerb stones along the road and a yellow tactile strip half a metre in from it
+vec3 townWalk(float s, float u, float rw){
+  float d = abs(u) - rw;
+  vec2 t = vec2(s, d) / 0.4, f = fract(t), id = floor(t);
+  vec3 c = mix(L(vec3(0.80, 0.78, 0.75)), L(vec3(0.72, 0.70, 0.68)), hash12(id + 3.0));
+  c *= 1.0 - 0.14 * clamp(step(f.x, 0.04) + step(f.y, 0.04), 0.0, 1.0);
+  if (d < 0.22) c = L(vec3(0.75, 0.74, 0.72)) * (1.0 - 0.15 * step(fract(s / 0.8), 0.04));
+  else if (d > 0.5 && d < 0.8) { c = L(vec3(0.93, 0.76, 0.18)); vec2 q = fract(vec2(s, d) / 0.075) - 0.5; c *= 1.0 - 0.18 * (1.0 - smoothstep(0.18, 0.24, length(q))); }
+  return c * (0.93 + 0.1 * fbm2(vec2(s, u) * 0.7));
+}
+// …and its ground beyond them (the blocks' plots, the quay's square at the bridge's end: paving), and the quay walls' faces where
+// the Galata Bridge lands (path.js townLanding): dressed stone in courses, dark and wet down by the water
+vec3 townGround(float s, float u, float rw){
+  vec2 p = vec2(s, u);
+  if (vWN.y < 0.6) return L(vec3(0.66, 0.63, 0.58)) * (0.62 + 0.38 * smoothstep(0.0, 2.0, vWY)) * (0.88 + 0.12 * vnoise(p * vec2(0.6, 2.5))) * (1.0 - 0.12 * step(fract(vWY / 0.6), 0.06));
+  return mix(L(vec3(0.70, 0.69, 0.66)), L(vec3(0.62, 0.61, 0.58)), fbm2(p * 0.3)) * (0.9 + 0.12 * vnoise(p * 4.0));
+}
+#endif
 vec3 sidewalkCol(float s, float u, float rw){
 #ifdef Z_GAL
   if (vZW.y > 0.5) return galWalk(s, u, rw);
+#endif
+#ifdef Z_TOWN
+  if (vZW.w > 0.5) return townWalk(s, u, rw);
 #endif
   float d = abs(u) - rw;
   vec2 t = vec2(s, d) / 0.3, f = fract(t), id = floor(t);
@@ -747,6 +770,9 @@ vec3 groundAlbedo(){
 #ifdef Z_COUNTRY
   if (vZW.w > 0.004) c += vZW.w * countryGround(s, u, rw);
 #endif
+#ifdef Z_TOWN
+  if (vZW.w > 0.004) c += vZW.w * townGround(s, u, rw); // (the Turkish town, W4, in the country's channel: they never meet)
+#endif
   float wMtn = clamp(1.0 - dot(vZW, vec4(1.0)) - vZS, 0.0, 1.0);
 #ifdef Z_MTN
   if (wMtn > 0.004) c += wMtn * mountainGround(s, u, rw);
@@ -829,7 +855,7 @@ if (uWet > 0.01 || wetS > 0.01) {
 
 // zones → shader defines. Each chunk's ground uses a variant compiled with only the zones (and features) it contains:
 // one uber-shader with every zone's code ran ~4× slower even when the branches were skipped.
-const ZDEF = { city: 'Z_CITY', sakura: 'Z_SAKURA', coast: 'Z_COAST', country: 'Z_COUNTRY', mountain: 'Z_MTN', snow: 'Z_SNOW', bosphorus: 'Z_BOS', galata: 'Z_GAL' };
+const ZDEF = { city: 'Z_CITY', sakura: 'Z_SAKURA', coast: 'Z_COAST', country: 'Z_COUNTRY', mountain: 'Z_MTN', snow: 'Z_SNOW', bosphorus: 'Z_BOS', galata: 'Z_GAL', town: 'Z_TOWN' };
 /** The painted meadow's texture (painted.js loadFieldTexture), once it has loaded: set it before the world is built, and
  *  the ground variants with the country, the coast or the cherry avenue take it (F_PAINT); without it the country keeps
  *  its procedural paddies, and the coast's slope and the avenue's lawns their procedural grass. */
@@ -886,7 +912,7 @@ float gWater = 0.0; vec3 gRoadT = vec3(1.0);
 ${GROUND}`, WET + MIRROR, false);
     sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
 diffuseColor.rgb *= groundAlbedo();`).replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
-#if defined(Z_COAST) || defined(Z_COUNTRY) || defined(Z_GAL)
+#if defined(Z_COAST) || defined(Z_COUNTRY) || defined(Z_GAL) || defined(Z_TOWN)
 reflectedLight.directDiffuse *= gRoadT;
 #endif`);
   };
@@ -1257,8 +1283,14 @@ export function makeAtlasW(M, worldTex) {
   M.atlasW.onBeforeCompile = sh => { contactAO(sh); windowLights(sh); worldShade(sh); paintedAtlas(sh, P, false, worldTex); };
   M.atlasW.customProgramCacheKey = () => 'atlasw-v1';
   M.atlasWDepth = new THREE.MeshDepthMaterial();
-  M.atlasWDepth.onBeforeCompile = sh => paintedAtlas(sh, P, true, worldTex);
-  M.atlasWDepth.customProgramCacheKey = () => 'atlaswdepth-v1';
+  // (and, as the props' (PROP_DEPTH), it leaves out what is flagged to cast no shadow (aoD 1/255: GB.noShadow): the Turkish town's
+  // awnings, W4. Nothing else in the world atlas is flagged so)
+  M.atlasWDepth.onBeforeCompile = sh => {
+    paintedAtlas(sh, P, true, worldTex);
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aoD;')
+      .replace('#include <project_vertex>', '#include <project_vertex>\nif (abs(aoD * 255.0 - 1.0) < 0.5) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);');
+  };
+  M.atlasWDepth.customProgramCacheKey = () => 'atlaswdepth-v2';
 }
 export function makeMaterials(atlasTex, folTex, paintTex) {
   const M = {};

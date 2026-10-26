@@ -2,6 +2,56 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-26 · 10:xx — World 4: a Turkish town's high street, as its concept painting has it
+- **Off the Galata Bridge into a Turkish town.** The bridge now lands on a stone quay at Eminönü's end (a square with two
+  flags, round trees along the waterfront) and the drive runs on down a typical Turkish town's high street, 1.3 km of it,
+  before the border tunnel back to Japan (… Bosphorus → Galata → town → border → city). `?env=town` starts there; its zone
+  card reads Mahalle Çarşısı / A Turkish Town · Its High Street; the tunnel's Turkish plate now reads KARAKAYA TÜNELİ.
+- **The street as painted** (ref/world/turkish_town.png, after Eskişehir's İnönü Caddesi): five- to seven-storey blocks in
+  peach, cream, pale yellow, white and dusty pink, deep balconies on thick slabs with iron or white railings, bright washing,
+  pots of plants, satellite dishes, air conditioners and Turkish flags hung over them; a row of shops under every block —
+  Grok-painted bakeries, grocers, markets, tea houses, barbers, pharmacies and greengrocers under real Turkish signboards
+  (Fırın, Eczane, Bakkal, Market, Çay Ocağı, Kuaför, Manav, Kıraathane…) and striped awnings, a pharmacy's green cross; pale
+  slab pavements with their yellow tactile strip, plane trees in planters, street lamps, tea tables with tulip glasses, a
+  simit cart, a cat; a yellow dolmuş waiting at its stop in a lay-by. A second row of blocks stands behind. The opening view
+  of `?env=town` is laid out as the concept is.
+- **A mosque closes the street**: a new painted horizon (the concept's far end repainted without the street, its mosque
+  magnified half as large again) turned down the street, so its dome and minaret stand at the street's end.
+- **The concept's light**: in the town the sun stands high, ahead and to the right (the left-hand blocks, shops and pavement
+  in the sun, the right-hand ones in shade), turning there at 1.5°/s; a warmer, lighter shade, a brighter zenith, a light
+  haze.
+- Against the concept (region medians, CIELAB ΔE; before = live's ?env=town, its Bosphorus start): mean 38.3 → 14.1; sky
+  2.6, pavement in the sun 5.4, awning 7.6, mosque dome 10.1. Worst: the dolmuş 34 (in the sun where the concept's is in
+  shade), the left upper floors 25, the crowns 22.
+- Japan, the Bosphorus and the bridge are unchanged: the eight other starts identical to live in seeded captures (the
+  Bosphorus's and the bridge's within 1–2 levels: Turkey's texture grew taller).
+- How: path.js (TURKEY, ZINFO.town, TOWN_SW, townLanding, the town's ground, the landing's quay), chunks.js (placeTown, the
+  lay-bys, the pavements to the landing, the opening view), props.js (townApt, townBack, treeGhibliPlane, teaTable,
+  simitCart, dolmus, townCat, durakSign), textures.js (the town's signboards, awnings, railings, flag, cross, simit, stop
+  plate and its painted rows in the world atlas), materials.js (Z_TOWN in the country's channel; the world atlas's shadow
+  twin skips flagged quads), painted.js (loadTownAtlas), main.js (the town's assets and band, the sun, shade, zenith and
+  haze; Turkey's ground programs compiled one a frame), audio.js.
+- Assets: assets/town/town1.json, town1_hi.webp (120 KB), town1_lo.webp (43 KB); assets/band/bandtr3.json, bandtr3_hi.webp
+  (141 KB), bandtr3_lo.webp (49 KB): WebP q50 from lossless masters (~/cdtest/w4/masters, ~/cdtest/w4/band/masters;
+  pack4.py, bandtown.py), loaded with Turkey's other assets. Without them: procedural shopfronts and windows, Japan's far
+  city.
+- Programs: a Turkish start 70 desktop / 69 phone (68 / 67); a Japanese start 63 / 62, 70 / 69 once Turkey is in.
+- Cost (the shared box's Vega; the desktop machine down): in the city's range. Over drives on staging, interleaved, the
+  town 19.59 / 20.32 / 19.92 ms against the city's 19.75 / 20.00 / 18.88 on desktops and 11.20 / 10.82 / 10.70 against
+  12.19 / 12.13 / 11.99 on phones; timed per draw cheaper than the city (the subagent: 19.4 vs 21.3 desktop, 14.0 vs 14.7
+  phone): the town's walls are plain plaster in the colour material and its windows, signs and railings cast no shadow (its
+  first build's shadow pass cost 9.2 ms); phones get two in five fewer street trees. World build as the city's (a
+  4×-throttled phone flat out: two of five runs had one 49–56 ms step against the city's worst 28–31). Turkey's lazy load
+  from a Japanese start, alone on the box: 63 → 70 (62 → 69) ~3.1 km before the border, no program joining a frame over
+  12 ms on desktops, one in a 12.9 ms frame on phones. Start-up: a Japanese start about the same (+28 KB of code; desktop
+  medians 3.35 / 3.55 s over three and four loads, a 3 Mbps phone 6.92 → 7.05 s); a Turkish start's first visit +287 KB
+  desktop / +122 KB phone, ~0.3 s on a 3 Mbps phone. 0 shader errors in all nine zones on the desktop and phone tiers and
+  q=low; no console errors at q=low, mid and high; none compiled through sunset, night, rain, either border, or the
+  hand-over (the car keeps right in the town, left again in Japan); embed starts on tap; with the town's sheet and band
+  missing, procedural shopfronts and no errors.
+- Left over: the mosque never comes nearer (a painted band), the balconies cast no shadows, no side streets, the far blocks
+  plain boxes, the sun's turn into the town (~70 s), the mosque unlit at night.
+
 ## 2026-10-26 · 05:xx — World 3: Istanbul's Galata Bridge as its concept painting has it
 - **The shore road runs on onto the Galata Bridge.** After the Bosphorus the drive goes on through Karaköy and out over the
   Golden Horn on the Galata Bridge towards Eminönü, a zone of its own before the border tunnel back into Japan's shopping street

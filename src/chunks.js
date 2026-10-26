@@ -1,6 +1,6 @@
 // The world is built in 60 m chunks along the infinite road; each chunk merges its contents into a handful of meshes.
 import * as THREE from 'three';
-import { zoneMix, zoneW, zoneAt, zparam, groundOffsetMix, regionWeight, SEA, WALL_U, crossingS, crossingValid, crossingNear, XING, XOFF, riverS, riverValid, riverNear, riverBank, RIV, ROFF, RIVER_DROP, tunnelNear, borderNear, REGION, T_HALF, T_RIDGE, RAISE, TUFF, ridgeHr, tubeHalf, GAL_R, GAL_WALK, GAL_KERB, ZONE_LEN, TOWN_SW, townLanding } from './path.js';
+import { zoneMix, zoneW, zoneAt, zparam, groundOffsetMix, regionWeight, SEA, WALL_U, crossingS, crossingValid, crossingNear, XING, XOFF, riverS, riverValid, riverNear, riverBank, RIV, ROFF, RIVER_DROP, tunnelNear, borderNear, REGION, T_HALF, T_RIDGE, RAISE, TUFF, ridgeHr, tubeHalf, GAL_R, GAL_WALK, GAL_KERB, ZONE_LEN, TOWN_SW, townLanding, bayQ, HL } from './path.js';
 import { TOWN_SHOPS } from './textures.js';
 import { xingPosts } from './crossing.js';
 import { GB } from './geom.js';
@@ -17,6 +17,13 @@ const FAR = [7, 9, 11.5, 14.5, 18, 23, 29, 36, 45, 56, 70, 86, 104, 124, 140, 16
  *  Only in chunks clear of a border tunnel's ridge: where a chunk with these meets one with FAR's, the ground there is flat */
 const UCH_FAR = [7, 8, 9, 10.2, 11.5, 13, 14.5, 16.2, 18, 20.5, 23, 26, 29, 32.5, 36, 40.5, 45, 50.5, 56, 63, 70, 78, 86, 95, 104, 114, 124, 140, 160, 185, 215];
 const POLE_SP = 32;
+/** the coast painting's house: m into the coast zone (the audit view looks at it from 1100 m: ref/GAPS.md) */
+const COAST_HOUSE = 1136;
+const HEADW = [0, 0, 1, 0, 0]; // (the bay's end's headland: all coast, chunks' ground)
+/** …and its two boats: [bearing from the audit camera (°, − left), distance (m), scale] */
+const BOATS = [[-24.6, 118, 0.85], [-21.4, 205, 0.8]];
+/** …and its big round tree on the slope right of the house: [bearing (°), distance (m), scale] */
+const TREE_R = [37, 56, 1.6];
 // the coast's water along its sea wall (placeCoast): how far out from the wall each column of the strip lies (m)
 const SHORE_D = [-0.2, 2.2, 5.5, 10, 17, 27, 38];
 const WIRE = [0.025, 0.026, 0.032], BIRD = [0.05, 0.05, 0.065];
@@ -254,7 +261,9 @@ export class World {
       // (and either side of the Galata Bridge's landing in the town, W4: the quay walls' faces stand there)
       { const tl = townLanding(s0 + CH / 2); if (tl && tl.s > s0 + 0.1 && tl.s < s1 - 0.1) sl.push(tl.s - 0.03, tl.s + 0.03); }
       sl.sort((p, q) => p - q);
-      const half = deck ? nc - cols.length : nc / 2, rowS = sl.map(s => { path.at(s, f); return { s, f: { ...f }, rw: rwAt(s), w: zw4(s), rb: fine ? riverBank(s) : 0 }; });
+      // (the bay's end, step 27: its headland's land in the coast's own ground, its land on the sea side (materials.js coastGround),
+      // not the blend's sand under the water and the next zone's fields: wn, HEADW)
+      const half = deck ? nc - cols.length : nc / 2, rowS = sl.map(s => { path.at(s, f); return { s, f: { ...f }, rw: rwAt(s), w: zw4(s), rb: fine ? riverBank(s) : 0, wn: bayQ(s) < 0 ? zw4(Math.floor(s / ZONE_LEN) * ZONE_LEN + ZONE_LEN + 1) : null }; });
       const qtr = Math.round(half / 2), qtrR = Math.round((nc - half) / 2); // (half: the left side's columns)
       // quarters, so no single build step is long; they share a column and use ghost columns for seamless normals
       for (const [j0, j1, gl, gr] of [[0, qtr, 0, 1], [qtr - 1, half, 1, 0], [half, half + qtrR + 1, 0, 1], [half + qtrR, nc, 1, 0]]) {
@@ -269,7 +278,8 @@ export class World {
           // took a third of the grid colour)
           // (rv: the river bank's weight, or the ridge's as a negative; else Cappadocia's tuff, W5: path.js TUFF, 0 everywhere else)
           const y = F.y + groundOffsetMix(R.s, u, F.y, R.rw), rg = Math.abs(u) > R.rw + 0.98 ? Math.min(1, RAISE / 0.5) : 0;
-          return [F.x + F.rx * u - ox, y, F.z + F.rz * u - oz, 0, 1, 0, mod(R.s, S_WRAP), u, R.w[0], R.w[1], R.w[2], R.w[3], R.rw, 0, R.rb > 0 ? R.rb : rg > 0 ? -rg : TUFF, R.w[4]];
+          const w = R.wn && u < -(R.rw + 2.0) && y > 0.35 ? HEADW : R.w;
+          return [F.x + F.rx * u - ox, y, F.z + F.rz * u - oz, 0, 1, 0, mod(R.s, S_WRAP), u, w[0], w[1], w[2], w[3], R.rw, 0, R.rb > 0 ? R.rb : rg > 0 ? -rg : TUFF, w[4]];
         }, gl, gr);
         yield;
       }
@@ -361,7 +371,9 @@ export class World {
     yield;
     for (let s = s0; s < s1; s += 4) {
       const z = zoneAt(s);
-      if (((z === 'coast' && zoneW(s).coast > 0.45) || (z === 'mountain' && zoneW(s).mountain > 0.45)) && !nearT(s + 2, T_RIDGE + 4)) this.guardrail(G, s, Math.min(s + 4, s1), world, road, rwAt);
+      // (and at the bay's end until its headland stands by the road, step 27: the sea runs on beside the road there)
+      const bq = bayQ(s + 2);
+      if (((z === 'coast' && zoneW(s).coast > 0.45) || bq < HL.q0 + 22 || (z === 'mountain' && zoneW(s).mountain > 0.45)) && !nearT(s + 2, T_RIDGE + 4)) this.guardrail(G, s, Math.min(s + 4, s1), world, road, rwAt);
     }
     yield* this.placeCity(G, r, s0, s1, matAt, onGround, road, rwAt, walkW, H, ground, ox, oz);
     yield* this.placeSakura(G, r, s0, s1, matAt, onGround, road, rwAt, H);
@@ -964,6 +976,7 @@ export class World {
         else { if (nearSide(s, 5)) continue; u = rw + 3.02 + r() * 0.1; dens = 0.1; fl = 0.08; sc = 0.65; }
         if (r() > dens) continue;
         const uu = side * u;
+        if (side < 0 && bayQ(s) === bayQ(s) && H(s, uu) < 0.6) continue; // (the bay's end: its water, step 27)
         P.tuft(G, matAt(s, uu, H(s, uu), r() * 6.28, false), r, r() < fl ? 'flowers' : 'grass', sc * r.range(0.8, 1.2));
       }
       yield;
@@ -1204,13 +1217,21 @@ export class World {
     if (zoneAt(s0 + 30) === 'coast' && hq() < 0.5) {
       const s = s0 + hq() * CH, rw = rwAt(s);
       if (!nearT(s, T_RIDGE + 25)) house = { s, rw, T: P.houseType('coast', hq), u: rw + hq.range(11, 17) };
+      if (house && Math.abs(zoneL(s) - COAST_HOUSE) < 34) house = null; // (the painting's house is there: below)
     }
+    // (the coast painting's view, step 27: its two-storey house close above the road, ~45 m ahead of the audit place, its gable end
+    // to the camera, its door and porch to the road, the slope's trees round it; in every coast pass)
+    { const hs = Math.floor(s0 / ZONE_LEN) * ZONE_LEN + COAST_HOUSE;
+      if (hs >= s0 && hs < s1 && zoneAt(hs) === 'coast' && !nearT(hs, T_RIDGE + 25)) { const rw = rwAt(hs); house = { s: hs, rw, T: P.paintingHouse(), u: rw + 10, paint: true }; } }
     for (let s = s0 + r() * 6; s < s1; s += r.range(5, 9)) {
       if (zoneAt(s) !== 'coast' || nearT(s, T_RIDGE + 6)) continue;
       const rw = rwAt(s), k = r();
       if (k >= 0.58) continue;
       const u = rw + r.range(4.5, 30);
       if (house && house.T && Math.abs(s - house.s) < house.T.ww / 2 + 2.5 && u > house.u - 3.5 && u < house.u + house.T.wd + 2.5) continue;
+      // (the painting's house, step 27, wherever its chunk: its gable end clear against the slope, as painted: no slope tree in front of
+      // it, off its side or just behind it; its own stand round it)
+      { const dh = zoneL(s) - COAST_HOUSE; if (dh > -48 && dh < 30 && u < rw + 46) continue; }
       P.tree(G, onGround(s, u, 0, r() * 6, false), k < 0.48 ? 'broad' : 'pine', r, r.range(1.0, 1.4));
     }
     for (let s = s0 + 4; s < s1; ) s += r.range(18, 30); // (the old beach tetrapods' walk: its draws, as above)
@@ -1233,11 +1254,30 @@ export class World {
     }
     if (house) { // the coast painting's house up the green slope, among round trees, with flowering bushes in front
       const { s, rw, T, u } = house;
-      if (T) { P.building(G, onGround(s, u), hq, { type: 'house', w: T.ww, d: T.wd, ptype: T }); this.houseGarden(G, hq, s, u, 1, T, onGround, 2, 1, 1); }
+      // (the painting's: no tree off its near end, in front of its gable as seen from the road; its trees behind it and off its far end)
+      if (T && house.paint) { // (its trees well behind it, so the gable end stands clear against them, as painted)
+        P.building(G, onGround(s, u), hq, { type: 'house', w: T.ww, d: T.wd, ptype: T }); this.houseGarden(G, hq, s, u, 1, T, onGround, 2, 0, 0);
+        for (const [ds, du, k] of [[T.ww / 2 + 4, -T.wd - 1, 1.3], [T.ww / 2 + 16, 2, 1.3], [-8, 30, 1.35]]) P.tree(G, onGround(s + ds + hq.range(-1, 1), u + T.wd + du + hq.range(-1, 1), 0, hq() * 6), 'broad', hq, k * hq.range(0.95, 1.08));
+      } else if (T) { P.building(G, onGround(s, u), hq, { type: 'house', w: T.ww, d: T.wd, ptype: T }); this.houseGarden(G, hq, s, u, 1, T, onGround, 2, 1, 1); }
       else P.building(G, onGround(s, rw + hq.range(9, 16)), hq, { type: 'house', w: hq.range(7, 10), d: 8, floors: hq() < 0.5 ? 2 : 1, tint: hq.pick(P.TINTS), litP: 0.5, fence: 0 });
     }
     if (zoneAt(s0 + 30) === 'coast' && r() < 0.55) {
-      const s = s0 + r() * CH; P.boat(G, matAt(s, -(rwAt(s) + r.range(45, 220)), SEA - 0.25, r() * 6, false), r);
+      const s = s0 + r() * CH; P.fishingBoat(G, matAt(s, -(rwAt(s) + r.range(45, 220)), SEA - 0.25, r() * 6, false), r); // (the painting's: step 27)
+    }
+    // (the coast painting's view, step 27: two small fishing boats out on the bay where it has them, seen from the audit place: at
+    // their bearings and distances from its chase camera, whatever the road's bends)
+    if (zoneL(s0) <= 1100 && zoneL(s0) + CH > 1100 && zoneAt(s0 + 30) === 'coast') {
+      const zs = Math.floor(s0 / ZONE_LEN) * ZONE_LEN, a = world(zs + 1100 - 6.8, -1.4, 0), b = world(zs + 1100 + 22, -0.85, 0); // (chunk space)
+      const fx = b[0] - a[0], fz = b[2] - a[2], fl = Math.hypot(fx, fz), Fx = fx / fl, Fz = fz / fl, Rx = -Fz, Rz = Fx;
+      { const t = (TREE_R[0] * Math.PI) / 180, d = TREE_R[1], px = a[0] + d * (Math.cos(t) * Fx + Math.sin(t) * Rx), pz = a[2] + d * (Math.cos(t) * Fz + Math.sin(t) * Rz);
+        // (the painting's big round tree on the slope right of its house; on the ground there: its s and u from the chunk's frame)
+        const sl = zs + 1100 - 6.8 + d * Math.cos(t), ul = -1.4 + d * Math.sin(t), m = onGround(sl, ul, 0, 2.1, false);
+        P.tree(G, m, 'broad', rng(4711), TREE_R[2]); }
+      for (const [az, d, k] of BOATS) {
+        const t = (az * Math.PI) / 180, px = a[0] + d * (Math.cos(t) * Fx + Math.sin(t) * Rx), pz = a[2] + d * (Math.cos(t) * Fz + Math.sin(t) * Rz);
+        const m = new THREE.Matrix4().makeRotationY(Math.atan2(-Rz, Rx) + (az < -23 ? 0.15 : -0.2)); m.setPosition(px, SEA - 0.25, pz); m.groundY = SEA - 0.25;
+        P.fishingBoat(G, m, rng(Math.floor(az * 100)), k);
+      }
     }
     const lh = Math.floor((s0 + CH / 2) / 1500) * 1500 + 700;
     if (lh >= s0 && lh < s1 && zoneAt(lh) === 'coast' && !nearT(lh, T_RIDGE * 1.6)) P.lighthouse(G, matAt(lh, -(rwAt(lh) + 75), SEA - 1, 0, false));
@@ -1809,11 +1849,13 @@ export class World {
     }
   }
   *placeCountry(G, r, s0, s1, matAt, onGround, road, rwAt, H) {
+    const wet = (s, u) => u < 0 && bayQ(s) === bayQ(s) && (H(s, u) < 0.8 || H(s, u - 12) < 0.8); // (the bay's end: its water, or its shore within a house's depth, step 27)
     for (const side of [-1, 1]) {
       yield;
       for (let s = s0 + r() * 20; s < s1; s += r.range(20, 40)) {
         if (zoneAt(s) !== 'country' || r() < 0.55 || nearX(s, 16) || nearR(s, 48)) continue;
         const u = side * r.range(16, 95), M = onGround(s, u), T = P.houseType('country', r);
+        if (side < 0 && (bayQ(s) < HL.b1 || wet(s, u))) continue; // (the bay's end: its water and its headland, step 27)
         if (T) { // the country painting's houses: white plaster and cobalt tiles, round trees beside and behind, low hedges
           P.building(G, M, r, { type: 'house', w: T.ww, d: T.wd, ptype: T });
           this.houseGarden(G, r, s, u, side, T, onGround, 1, 2, 2);
@@ -1825,8 +1867,9 @@ export class World {
       for (let s = s0 + r() * 8; s < s1; s += r.range(5, 9)) {
         if (zoneAt(s) !== 'country' || nearX(s, 7) || nearR(s, 36)) continue;
         const u = side * r.range(140, 210);
-        P.tree(G, onGround(s, u, -0.3, r() * 6, false), 'cedar', r, r.range(0.9, 1.4));
-        if (r() < 0.12 && !nearX(s + 2, 8) && !nearR(s + 2, 34)) P.tree(G, onGround(s + 2, side * r.range(10, 130), 0, r() * 6), 'broad', r, r.range(0.8, 1.2));
+        // (the bay's end: none in its water, step 27)
+        if (!wet(s, u)) P.tree(G, onGround(s, u, -0.3, r() * 6, false), 'cedar', r, r.range(0.9, 1.4));
+        if (r() < 0.12 && !nearX(s + 2, 8) && !nearR(s + 2, 34)) { const ub = side * r.range(10, 130); if (!wet(s + 2, ub)) P.tree(G, onGround(s + 2, ub, 0, r() * 6), 'broad', r, r.range(0.8, 1.2)); }
       }
     }
     const sb = Math.floor((s0 + CH / 2) / 600) * 600 + 300;

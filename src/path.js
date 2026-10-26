@@ -130,6 +130,15 @@ export function viewMix(s, ahead) {
   const b = borderNear(s);
   return b && Math.abs(s - b.s) < B_TRANS / 2 + ahead ? zoneMix(s) : zoneMix(s + ahead);
 }
+/** the zones the painted horizon shows from s (viewMix), but at the coast's bay's end (step 27) the coast's far shore holds while
+ *  the open water still shows on the left (the next zone's hills used to come up over its mountains 200 m before the blend), and
+ *  gives way to the next zone's once the camera is beside the headland (60 m before the coast's end … 100 m after it) */
+export function bandMix(s, ahead) {
+  const q = bayQ(s), za = Math.floor(s / ZONE_LEN);
+  if (q === q) { const z = q < 0 ? za : za - 1; return { a: zkey(z), b: zkey(z + 1), t: smooth(clamp((q + 60) / 160, 0, 1)) }; }
+  if (bayQ(s + ahead) < 0) { const z = Math.floor((s + ahead) / ZONE_LEN); return { a: zkey(z), b: zkey(z + 1), t: 0 }; }
+  return viewMix(s, ahead);
+}
 /** the zone sets a chunk's ground can hold (materials.js groundMaterialFor; warmed up at load): each zone, each pair of
  *  neighbours on the route, and at a border both sides with 'border' (the tunnel's ridge over the tube: chunks.js) */
 export function zoneSets() {
@@ -165,7 +174,7 @@ export function nextBorderS(s) {
 export const XING = 650, XOFF = 375;
 export const crossingS = k => k * XING + XOFF;
 export function crossingValid(sx) {
-  if (sx < 300) return false;
+  if (sx < 300 || bayQ(sx - 70) === bayQ(sx - 70) || bayQ(sx + 70) === bayQ(sx + 70)) return false; // (nor across the bay's end's water, step 27)
   for (const d of [-70, 0, 70]) { const w = zoneW(sx + d); if (Math.max(w.city, w.country) < 0.9) return false; }
   const b = borderNear(sx); // (not at a border tunnel's mouth)
   return !(b && Math.abs(sx - b.s) < 2 * T_RIDGE + 80);
@@ -182,7 +191,7 @@ export function crossingW(s) { const c = crossingNear(s); return c ? 1 - sstep(8
 export const RIV = 1150, ROFF = 820, RIVER_DROP = 4.6; // water surface sits RIVER_DROP below the road
 export const riverS = k => k * RIV + ROFF;
 export function riverValid(sr) {
-  if (sr < 400) return false;
+  if (sr < 400 || bayQ(sr - 90) === bayQ(sr - 90) || bayQ(sr + 90) === bayQ(sr + 90)) return false; // (nor into the bay's end, step 27)
   for (const d of [-90, 0, 90]) { const w = zoneW(sr + d); if (w.country + w.sakura < 0.9) return false; }
   const c = crossingNear(sr), b = borderNear(sr);
   return !(c && Math.abs(c.s - sr) < 170) && !(b && Math.abs(sr - b.s) < 2 * T_RIDGE + 100);
@@ -439,8 +448,44 @@ export function groundOffset(zone, s, u, e, rw) {
       return -0.45 + sstep(140, 215, a) * 7 * (0.4 + 0.6 * noise1(s / 210 + (u > 0 ? 9 : 0), 7));
   }
 }
+// ---- the bay's end (step 27): where the coast hands over to a land zone its sea side used to fill with the next zone's flat fields
+// from a tenth of the way into the blend, right across to the ground's far edge; seen across the water from the coast they were a
+// long strip of fields, cedars and houses in front of the far shore's painted mountains, where the coast painting has the open sea
+// up to them. Now the bay runs on: its shore leaves the road at HL.q0 m before the zone's end and curves away from it, out to the
+// ground's far edge HL.n m into the next zone (but for the drive's first zone, whose opening view stays its own); and by the road a
+// green headland rises out of it, as the painting has one at the road's far end, right of the far shore's mountains. From the
+// coast the land is only that headland and, behind it in the haze, the next zone's first fields near the road
+/** the bay's end: where its shore leaves the road (m from the zone's end, < 0: in the blend), how far out it is at the zone's end
+ *  and where it reaches the ground's far edge (m into the next zone); the headland's height (m over the fields) and its back */
+export const HL = { q0: -128, u0: 50, n: 400, h: 12, b0: 30, b1: 90 };
+/** the bay's end at s: m from the coast's end into the next zone (−TRANS … HL.n; the coast's hand-over to a land zone and that
+ *  zone's first HL.n m but at the start of the drive), else NaN */
+export function bayQ(s) {
+  const z = Math.floor(s / ZONE_LEN), l = s - z * ZONE_LEN;
+  if (l >= ZONE_LEN - TRANS && zkey(z) === 'coast' && !SEA_ZONES.includes(zkey(z + 1))) return l - ZONE_LEN;
+  if (z > 0 && l < HL.n && zkey(z - 1) === 'coast' && !SEA_ZONES.includes(zkey(z))) return l;
+  return NaN;
+}
+/** its shore's distance from the road at q (land nearer the road, the sea beyond; 0 before it leaves the road) */
+export const bayShore = q => (q < HL.q0 ? 0 : q < 0 ? 6 + (HL.u0 - 6) * sstep(HL.q0, HL.q0 * 0.15, q) : HL.u0 + (240 - HL.u0) * sstep(0, HL.n, q));
+/** the headland's height over the land at q, a m from the road: rising out of the water at its front, its crest 22–30 m from the
+ *  road, falling to the shore, its back sinking to the fields */
+export function bayHill(q, a, ush, s) {
+  const ac = Math.max(22, 0.62 * ush);
+  return HL.h * sstep(HL.q0 + 4, HL.q0 + 74, q) * (1 - sstep(HL.b0, HL.b1, q)) * sstep(7, ac, a) * (1 - sstep(ac, Math.max(ac + 6, ush - 1), a)) * (0.8 + 0.4 * noise1(s / 60 + a / 45, 131));
+}
 export function groundOffsetMix(s, u, e, rw) {
   const m = zoneMix(s);
+  // (the bay's end: beyond the shoulder the sea, and the land out to its shore with the headland on it; ground of the zone the
+  // land belongs to: the next one's in the blend)
+  if (u < -(rw + 2.0)) {
+    const q = bayQ(s);
+    if (q === q) {
+      const a = -u, sh = bayShore(q), k = 1 - sstep(sh - 8, sh + 8, a), sea = groundOffset('coast', s, u, e, rw);
+      RAISE = 0; TUFF = 0;
+      return k > 0 ? lerp(sea, groundOffset(q < 0 ? m.b : m.a, s, u, e, rw) + bayHill(q, a, sh, s), k) : sea;
+    }
+  }
   const a = groundOffset(m.a, s, u, e, rw);
   // (the coast's sea side lies deep under the water right from its wall: blended in linearly it drowned the neighbouring
   // zone's land half-way through the transition, its trees and houses standing in the sea. There the land holds on, and

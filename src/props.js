@@ -981,6 +981,8 @@ export function setHouses(types) {
 }
 /** a painted house type for the zone (one random number), or null (then the caller keeps its procedural house) */
 export function houseType(zone, r) { const L = HOUSES.byZone && HOUSES.byZone[zone]; return L ? L[Math.floor(r() * L.length)] : null; }
+/** the coast painting's own house (its windows warm by day: T.day), or null */
+export const paintingHouse = () => { const L = HOUSES.byZone && HOUSES.byZone.coast; return (L && L.find(t => t.day)) || null; };
 const IDENT4 = new THREE.Matrix4(), _huv = { u0: 0, u1: 0, v0: 0, v1: 0 }, _hp = [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]];
 const hp = (p, o) => { for (let k = 0; k < 4; k++) { _hp[k][0] = p[o + k * 3]; _hp[k][1] = p[o + k * 3 + 1]; _hp[k][2] = p[o + k * 3 + 2]; } };
 // a home window's moment at dusk (as litOf): a byte hashed from where the wall is
@@ -1297,6 +1299,28 @@ export function boat(G, M, r) {
   c.box(-2.4, 0.86, -0.95, 3.0, 1.0, 0.95, PAL.red);
   c.box(-1.6, 0.9, -0.6, -0.1, 2.1, 0.6, PAL.white); c.box(-1.55, 1.5, -0.62, -0.15, 1.85, 0.62, C('#2a3346'));
   c.rod([0.6, 0.9, 0], [0.6, 4.0, 0], 0.05, 0.04, 5, PAL.metal);
+}
+/** the coast painting's small fishing boats out on the bay (step 27): a salmon-red hull (or a white one with a red boot-top) under a
+ *  white gunwale, a white wheelhouse with a band of dark windows under a cream roof, a mast, a white bow wave. k: its scale (1: ~5 m
+ *  long). One random number, as boat()'s */
+export function fishingBoat(G, M, r, k = 1) {
+  const c = G.color; c.setM(M);
+  const i = Math.floor(r() * 3), HULL = [C('#c56b55'), C('#f1eee6'), C('#b8574a')][i], BOOT = i === 1 ? C('#c0473d') : HULL;
+  const WHITE = C('#f4f1ea'), CREAM = C('#e7dcc6'), DARK = C('#2b3443'), x = v => v * k;
+  c.box(x(-2.2), 0, x(-0.75), x(1.6), 0.25 + x(0.2), x(0.75), BOOT); // (the boot-top at the waterline: the sea plane is at local 0.25)
+  c.box(x(-2.2), 0.25 + x(0.2), x(-0.75), x(1.6), 0.25 + x(0.6), x(0.75), HULL);
+  tri(c, [x(1.6), 0, x(-0.75)], [x(2.8), 0.25 + x(0.75), 0], [x(1.6), 0.25 + x(0.6), x(-0.75)], HULL); tri(c, [x(1.6), 0, x(0.75)], [x(1.6), 0.25 + x(0.6), x(0.75)], [x(2.8), 0.25 + x(0.75), 0], HULL);
+  c.box(x(-2.25), 0.25 + x(0.58), x(-0.8), x(1.9), 0.25 + x(0.76), x(0.8), WHITE); // the gunwale
+  c.box(x(-1.45), 0.25 + x(0.7), x(-0.55), x(0.15), 0.25 + x(1.75), x(0.55), WHITE); // the wheelhouse
+  c.box(x(-1.4), 0.25 + x(1.2), x(-0.57), x(0.1), 0.25 + x(1.5), x(0.57), DARK);
+  c.box(x(-1.6), 0.25 + x(1.75), x(-0.66), x(0.3), 0.25 + x(1.86), x(0.66), CREAM);
+  c.rod([x(0.75), 0.25 + x(0.7), 0], [x(0.75), 0.25 + x(3.3), 0], x(0.05), x(0.04), 5, PAL.metal);
+  c.noShadow = true; // (its bow wave and wake: white water lying on the sea)
+  for (const z of [-1, 1]) {
+    c.quad([x(2.9), 0.27, 0], [x(1.2), 0.27, z * x(1.15)], [x(1.0), 0.27, z * x(0.78)], [x(2.6), 0.27, 0], WHITE);
+    c.quad([x(-2.2), 0.27, z * x(0.75)], [x(-3.6), 0.27, z * x(1.0)], [x(-3.8), 0.27, z * x(0.6)], [x(-2.2), 0.27, z * x(0.4)], WHITE);
+  }
+  c.noShadow = false;
 }
 export function smallShrine(G, M, r) {
   const c = G.color; c.setM(M);

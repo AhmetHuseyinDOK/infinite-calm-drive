@@ -2,6 +2,50 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-27 · 02:54 — Gaps 9, 10 and 7: the coast's far shore, its house and its slope as painted
+- **Across the bay, the painting's own far shore.** The coast's horizon is the coast painting's far shore itself — its two big
+  blue-green mountains rising straight from the sea, paler blue ranges behind, green peaks towards the road's end, layered and
+  hazy — where the painting has them from the chase camera; round the loop Grok panoramas of the same shore. It was a flat strip
+  of fields under small pale hills. Golden hour, sunset and night take its repaints' tones (olive-gold, mauve, navy).
+- **The open sea up to them.** At the coast's end the bay no longer fills with the countryside's fields: its shore curves away
+  from the road ~130 m before the zone's end, out to the world's edge 400 m into the countryside, and a low green headland rises
+  out of the water by the road, hazed blue-green with distance (a drive's first zone keeps its own opening view).
+- **Small fishing boats on the bay** (salmon-red or white hulls, white wheelhouses, a bow wave): two where the painting has them,
+  now and then one further along.
+- **The painting's house close above the road:** the two-storey house under its blue tiled roof, its plaster the painting's
+  grey-beige (was cream), its timber darker, its windows warm-lit, 10 m above the road's edge with its gable end to the drive,
+  trees behind it and a big round tree up the slope. It was a small white bungalow further up.
+- **The slope's bright lime:** the painting's yellow-lime in the sun, a mid green in the shade (was near-black), the long grass
+  along the road a deeper green; golden hour, sunset and night keep their tones.
+- Against the painting (CIELAB ΔE of region medians, 1808 × 1088, s = 1100; the far shore's and the house's boxes moved onto
+  where they now stand): far mountains 20.5 → 0.9, house 18.5 → 11.3, slope 18.5 → 4.6, verge 5.9 → 2.7, tree crowns 8.1 → 9.5;
+  the sea, tetrapods, wall, road and sky unchanged; the frame (share-weighted) 7.3 → 4.7 (5.4 by the audit's own boxes, which
+  the moved house and mountains have left). The far shore against its repaints: golden 15.6 → 3.6, sunset 6.7 → 4.4, night 4.0
+  → 2.9.
+- Every other zone's start identical to live in seeded captures but for the cherry avenue's falling petals and a few far pixels
+  (two more objects at load shift the particles' random start); the Bosphorus (sharing the sea, the strip and the wall)
+  identical at its start and along the strait.
+- How: path.js (bayQ, bayShore, bayHill, HL in groundOffsetMix; bandMix; no crossings or rivers there), chunks.js (the
+  headland's ground, the guardrail, the countryside kept off the water; COAST_HOUSE, BOATS, TREE_R), props.js (fishingBoat,
+  paintingHouse), materials.js (coastGround: uCoVerge, uCoFill, land on the sea side in hazed grass), painted.js
+  (loadHousePatch), textures.js (paintHouses: a patch's tiles), main.js (bandco1 with its own tones and coastTurn; the sea
+  through the bay's end; COAST_DAY2, CO_FILL, CV_T; test switch st.slope).
+- Assets: assets/band/bandco1.json, bandco1_hi.webp (39 KB), bandco1_lo.webp (14 KB), WebP q50 from lossless masters
+  (~/cdtest/s27/band, bandco1.py); assets/houses/coasthouse1.json, coasthouse1_hi.webp (37 KB), coasthouse1_lo.webp (21 KB)
+  (houses2's coast house recoloured from its lossless master, drawn over its tiles; ~/cdtest/s27/house). First visit +83 KB
+  desktop / +44 KB phone. Without them: band3's coast row, the cream house; no errors.
+- Programs: 64 desktop / 63 phone, as before; none compiled through sunset, night, rain or the bay's end.
+- Cost: about the same. The M1's whole frame over coast drives (L S S L L S S L): desktop 5.95 / 6.63 / 6.54 / 6.57 → 7.47 /
+  6.50 / 6.38 / 6.56 ms (one outlier), phone 4.52 / 3.30 / 3.20 / 3.54 → 3.39 / 4.94 / 3.06 / 4.94 (both bimodal); the
+  Bosphorus 6.13 / 5.45 → 5.12 / 4.95. Per draw on the shared box's Vega over drives through the bay's end: all draws desktop
+  19.6 → 20.4 ms, phone 13.2 → 13.5 (the ground +0.65 / +0.3: the bay's end shows land where it showed sea). World build the
+  same (M1 genbench 30.7 / 30.4 → 31.8 / 31.5 ms; no spikes flat out on a throttled phone); start-up the same (M1: desktop 0.91 s,
+  a 3 Mbps phone 6.05 → 6.08 s). 0 shader errors in all eleven zones, on the phone tier at dawn, noon, sunset and night, and at
+  q=low; no console errors at q=low, mid and high; embed starts on tap.
+- Left over: the house's walls at sunset and night (magenta, near-black; the repaints' are moonlit grey); its side-on view
+  without porch or dormer; the slope bare round it; the headland a bare smooth grass hill to drive past where the painting's is
+  a wooded cape; soft haze at the band's joins; the bay's end, house and boats repeat every coast pass; the wall's rail.
+
 ## 2026-10-26 · 23:53 — Gaps 3 and 6: the cherry canopy and the avenue's road as painted
 - **The avenue's cherry trees are the painting's broad umbrellas of blossom.** Each crown is wider than tall, a domed top over a
   rim hanging down round it; along the row they meet in one canopy and from both sides they close in over the road, leaving the

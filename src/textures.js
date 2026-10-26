@@ -1411,9 +1411,11 @@ export function paintHouses(A, ha) {
   A.x = 0; A.y = y0; A.rowH = 0;
   A.a.clearRect(0, y0 - 8, SW, A.H - y0 + 8);
   try {
-    for (const t of ha.tiles) A.add(t.name, t.w, t.h, (a, e, w, h) => {
-      a.clearRect(0, 0, w, h); a.drawImage(ha.img, t.x, t.y, t.w, t.h, 0, 0, w, h);
-      e.drawImage(ha.img, t.x, t.ey, t.w, t.h, 0, 0, w, h); // (the emissive canvas is half size: its context is scaled)
+    for (const t0 of ha.tiles) A.add(t0.name, t0.w, t0.h, (a, e, w, h) => {
+      // (a tile of the patch drawn instead where it has one of the same size: the coast painting's house, step 27, painted.js loadHousePatch)
+      const q = ha.patch && ha.patch.tiles[t0.name], pt = q && q.w === t0.w && q.h === t0.h ? q : null, img = pt ? ha.patch.img : ha.img, t = pt || t0;
+      a.clearRect(0, 0, w, h); a.drawImage(img, t.x, t.y, t.w, t.h, 0, 0, w, h);
+      e.drawImage(img, t.x, t.ey, t.w, t.h, 0, 0, w, h); // (the emissive canvas is half size: its context is scaled)
     });
   } catch (err) { console.warn('painted houses:', err.message); return false; }
   return true;

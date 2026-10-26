@@ -1,0 +1,54 @@
+{
+ "period": 120.0,
+ "files": {
+  "hi": "bandco1_hi.webp",
+  "lo": "bandco1_lo.webp"
+ },
+ "bytes": {
+  "hi": 39122,
+  "lo": 14230
+ },
+ "size": {
+  "hi": [
+   3840,
+   272
+  ],
+  "lo": [
+   1920,
+   140
+  ]
+ },
+ "zones": {
+  "hi": {
+   "coast": {
+    "v0": 0.05147058823529416,
+    "v1": 0.9558823529411765,
+    "e0": 0.0,
+    "e1": 7.6875,
+    "ahead": 0.325,
+    "tiles": [
+     "ch2 (the painting, its sky painted out: its key)",
+     "cs1",
+     "cs3",
+     "cs2"
+    ]
+   }
+  },
+  "lo": {
+   "coast": {
+    "v0": 0.06428571428571428,
+    "v1": 0.9428571428571428,
+    "e0": 0.0,
+    "e1": 7.6875,
+    "ahead": 0.325,
+    "tiles": [
+     "ch2 (the painting, its sky painted out: its key)",
+     "cs1",
+     "cs3",
+     "cs2"
+    ]
+   }
+  }
+ },
+ "encode": "WebP q50, alpha_quality 90 method 6 from the lossless master (~/cdtest/s27/band/masters, bandco1.py)"
+}

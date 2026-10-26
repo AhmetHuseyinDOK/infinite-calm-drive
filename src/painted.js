@@ -206,6 +206,28 @@ export async function loadHouseAtlas(tier, timeoutMs = 15000, dir = 'houses/', n
     return { img, tiles, types, rows: J.rows[file], tier: file, extras: J.extras || {} };
   })(), timeoutMs, what);
 }
+/** The coast painting's house as painted (step 27; assets/houses/coasthouse1.*, ~/cdtest/s27/house/coasthouse1.py): its two
+ *  elevations (h4s, h4f) with the painting's grey-beige plaster and darker timber, and their glow, drawn over houses2's own h4 tiles
+ *  (textures.js paintHouses: ha.patch), so every other house keeps houses2's pixels. Null when missing or broken: the coast house
+ *  then keeps houses2's cream */
+export async function loadHousePatch(tier, timeoutMs = 15000) {
+  const base = ASSETS + 'houses/';
+  return orNull((async () => {
+    const r = await fetch(base + 'coasthouse1.json');
+    if (!r.ok) throw new Error('coasthouse1.json ' + r.status);
+    const J = await r.json();
+    const file = J.files && J.files[tier] ? tier : 'hi', tiles = (J.tiles && J.tiles[file]) || [];
+    if (!tiles.length) throw new Error('no tiles listed');
+    const ri = await fetch(base + J.files[file]);
+    if (!ri.ok) throw new Error(J.files[file] + ' ' + ri.status);
+    const blob = await ri.blob(); // (checked whole: a truncated image decodes without complaint)
+    if (J.bytes && J.bytes[file] && blob.size !== J.bytes[file]) throw new Error(J.files[file] + ' is ' + blob.size + ' bytes, not ' + J.bytes[file]);
+    const img = await createImageBitmap(blob, { premultiplyAlpha: 'none' });
+    if (J.size && J.size[file] && (img.width !== J.size[file][0] || img.height !== J.size[file][1])) throw new Error(J.files[file] + ' has the wrong size');
+    const t = {}; for (const q of tiles) t[q.name] = q;
+    return { img, tiles: t, tier: file };
+  })(), timeoutMs, "the coast painting's house unavailable, keeping houses2's:");
+}
 /** …and the Bosphorus's painted Ottoman houses (assets/trhouses/, made by ~/cdtest/w2/scripts/packtr.py from Grok Imagine
  *  elevations anchored on its concept painting, ref/world/istanbul_bosphorus.png): each type's gable end (its front to the
  *  lane: the stone or plastered ground floor, the upper floor jutting out on brackets, the gable) and its long side, cut out

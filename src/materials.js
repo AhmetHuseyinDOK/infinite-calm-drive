@@ -139,6 +139,8 @@ export const U = {
   // skies): its tint near the eye and from ~22 m on
   uRoadN: { value: new THREE.Vector3(1, 1, 1) }, uRoadF: { value: new THREE.Vector3(1, 1, 1) },
   uSakRT: { value: 1 }, // the cherry avenue's share of that tint (step 26; main.js st.road: 0 skips its work in the avenue's variants)
+  uCoFill: { value: new THREE.Vector3() }, // the coast's slope: how much more light its shade takes (the painter's fill; main.js, step 27)
+  uCoVerge: { value: new THREE.Vector3(1, 1, 1) }, // …and its long grass by the road: how much deeper a green (main.js, step 27)
   // Cappadocia's ground (W5, the ground shader's uchGround; main.js, by the time of day): the albedo of its sandy shoulder and plain,
   // of its dry grass, and of its pale tuff (linear)
   uUchS: { value: new THREE.Vector3(0.52, 0.43, 0.38) }, uUchG: { value: new THREE.Vector3(0.16, 0.115, 0.075) }, uUchT: { value: new THREE.Vector3(0.95, 0.84, 0.74) },
@@ -567,6 +569,12 @@ vec3 coastGround(float s, float u, float rw){
     float tone = 0.55 * (vnoise(p * 0.035 + 9.1) - 0.5);
     vec3 g = fieldTex(1.25) * uFieldCo * (1.0 + tone * vec3(1.8, 1.0, 0.2));
     g *= mix(0.5, 1.0, smoothstep(rw + 0.35, rw + 2.6, a));
+#if defined(Z_COAST) && !defined(Z_BOS)
+    // (step 27: the long grass by the road a deeper green than the lime slope above it, as painted, out to ~7 m from the road, by the
+    // hour under a clear sky (uCoVerge: 1 under grey skies); the slope's shade takes the painter's fill: below, after the lights)
+    g *= mix(uCoVerge, vec3(1.0), clamp((a - rw - 2.0) * 0.154, 0.0, 1.0));
+    gSlope = clamp((a - rw - 0.3) * 0.435, 0.0, 1.0);
+#endif
     return mix(L(vec3(0.42, 0.34, 0.24)) * (0.85 + 0.3 * vnoise(p * vec2(1.5, 9.0))), g, smoothstep(rw + 0.12, rw + 0.32, a));
   }
 #else
@@ -576,6 +584,18 @@ vec3 coastGround(float s, float u, float rw){
   // the sea wall: its top a warm sand-coloured concrete, as in the reference art; its face grey, dark and wet low down
   if (a < rw + 1.97) return L(vec3(0.86, 0.76, 0.6)) * (0.86 + 0.14*vnoise(p*vec2(0.4, 5.0)));
   if (a < rw + 2.08) return L(vec3(0.70, 0.70, 0.68)) * (0.82 + 0.12*vnoise(p*vec2(0.4, 5.0))) * (0.45 + 0.55 * smoothstep(0.2, 1.4, vWY));
+#if !defined(Z_BOS)
+  // (land on the sea side, out of the water: the bay's end's headland, step 27 (path.js), and the coast's tunnel spurs: the slope's
+  // grass, a bluer green the further off it is, as the painting's green headland across the water, its haze bluer than the fog's)
+  if (vWY > 1.2) {
+#ifdef F_PAINT
+    vec3 g = fieldTex(1.25) * uFieldCo;
+#else
+    vec3 g = grassCol(p, L(vec3(0.31, 0.60, 0.25)), L(vec3(0.52, 0.79, 0.32)));
+#endif
+    return mix(g, L(vec3(0.6, 0.84, 0.82)), 0.85 * smoothstep(120.0, 420.0, distance(vWP, cameraPosition)));
+  }
+#endif
   vec3 sand = mix(L(vec3(0.94, 0.87, 0.71)), L(vec3(0.85, 0.77, 0.62)), fbm2(p*0.2));
   return mix(sand, L(vec3(0.6, 0.55, 0.46)), 0.6*(1.0 - smoothstep(0.0, 0.9, vWY)));
 }
@@ -964,6 +984,7 @@ export function groundMaterial(defines = groundDefines(Object.keys(ZDEF)), key =
     for (const k of ['uReflTex', 'uReflOn', 'uReflRes', 'uHorizon', 'uReflK', 'uRoadN', 'uRoadF']) sh.uniforms[k] = U[k];
     if (defines.Z_UCH !== undefined) for (const k of ['uUchS', 'uUchG', 'uUchT', 'uPasS', 'uPasG', 'uPasT']) sh.uniforms[k] = U[k];
     if (defines.Z_SAKURA !== undefined) sh.uniforms.uSakRT = U.uSakRT;
+    if (defines.Z_COAST !== undefined && defines.Z_BOS === undefined) { sh.uniforms.uCoFill = U.uCoFill; sh.uniforms.uCoVerge = U.uCoVerge; }
     if (paint) { sh.uniforms.uFieldTex = { value: FIELD.tex }; for (const k of ['uFieldK', 'uFieldC', 'uFieldCo', 'uFieldSa', 'uFieldM', 'uFieldBo']) sh.uniforms[k] = FIELD[k]; }
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
@@ -979,11 +1000,18 @@ uniform float uSakRT;
 #endif
 varying vec2 vSU; varying vec4 vZW; varying vec2 vRK; varying float vWY; varying float vRV; varying vec3 vWN; varying float vZS;
 float gWater = 0.0; vec3 gRoadT = vec3(1.0);
+#if defined(Z_COAST) && !defined(Z_BOS)
+uniform vec3 uCoFill, uCoVerge; float gSlope = 0.0;
+#endif
 ${GROUND}`, WET + MIRROR, false);
     sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
 diffuseColor.rgb *= groundAlbedo();`).replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
 #if defined(Z_COAST) || defined(Z_COUNTRY) || defined(Z_GAL) || defined(Z_TOWN) || defined(Z_UCH) || defined(Z_SAKURA)
 reflectedLight.directDiffuse *= gRoadT;
+#endif
+#if defined(Z_COAST) && !defined(Z_BOS)
+// (the coast's green slope, step 27: the painter's fill in its shade, a mid green under the trees as painted, not near-black)
+reflectedLight.indirectDiffuse *= 1.0 + gSlope * vZW.z * uCoFill;
 #endif`);
   };
   m.customProgramCacheKey = () => 'ground-v21-' + key + (paint ? '-fp' : '');

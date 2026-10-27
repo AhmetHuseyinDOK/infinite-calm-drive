@@ -2,6 +2,56 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-28 · 01:18 — Rooms behind every shop window: the Turkish town, the chain stores and the shopping street's other shops
+- **The Turkish town's shops have rooms behind their glass** (the user's rule: "the shops on turkey as well they should have interior
+  3d this is a general rule"):
+  - a bakery's racks of simit, round loaves and pide over a glass counter of pastries;
+  - a bakkal's packed shelves, drinks fridge and old till, and a mini market's aisles;
+  - a tea house's samovar and double teapots behind the counter, and small tables with tulip glasses and stools along dark panelling
+    under old photographs;
+  - a barber's chairs before their mirrors and a red bench on a chequered floor;
+  - a pharmacy's white shelves and counter, and a greengrocer's tiers of crates.
+  In about half of them the baker, the grocer, the çaycı, the barber or the pharmacist stands at the back.
+- **The chain stores too:** the konbini look into a bright white store, with shelves of onigiri, snacks and cup noodles and drinks
+  fridges along the back. Through their doors you see the counter with its till, coffee machine and hot-snack case, and a clerk. Their
+  stripes, badges and magazine rack stay on the glass. BİN, ŞAK and A·110 look into a discount market's aisles, with pallets under
+  red-and-white price boards and the till; their offer posters stay on the glass.
+- **And the shopping street's last flat windows:** the plain shopfronts' windows and glass doors (a general store, a bakery, a
+  bookshop, a florist, a clothes shop, a café) and the doorways under a noren look into the painted bays' rooms of their kind. Their
+  posters, door bars, handles and boards stay in front.
+- They are painted as a polished anime film's backgrounds (the user's quality rule), checked at eye level, 1:1 at 1080p. As the car
+  passes, the walls shift behind the glass; the rooms are lit as the windows were, by day, at dusk and at night.
+- Seeded captures on the desktop: every other zone and Audit 2's places are identical to live (the cherry avenue and the mountain
+  starts in five live and five staging loads each). The town's start differs only inside its shop windows (44k px), the city's start in
+  842 px down the street. Without the new room files the town and the konbini are identical to live.
+- How:
+  - materials.js: roomSet (one room set's uniforms per material); makeAtlasWRooms (the town's room program, M.atlasWI); makeChainRooms
+    (the chains on the street's room program); RM_N 24; uRmLo.
+  - props.js: PROC_ROOMS; the town's bays take the shop codes 5–8.
+  - textures.js: SHOP_GLASS, stickerHolesJ.
+  - painted.js: loadRoomAtlas for region sheets, roomTexture, roomGlass.
+  - chunks.js, and main.js: rooms1jp at every start, rooms1tr with Turkey's assets and in its lazy load.
+  - +5.8 KB of code, +2.3 KB gzipped.
+- Research: interior mapping in its one-image form, as step 31, and Turkish shop interiors. Grok Imagine image_edit on drawn one-point
+  rooms carrying each bay's goods, repainted crisp; the shopkeepers from a second edit.
+- Assets: assets/rooms/rooms1tr.json, rooms1tr_hi.webp (269 KB), rooms1tr_lo.webp (87 KB); rooms1jp.json, rooms1jp_hi.webp (48 KB),
+  rooms1jp_lo.webp (15 KB). WebP q50 from lossless masters (~/cdtest/s34). First visit +55 KB desktop / +23 KB phone at a Japanese
+  start, +324 / +114 KB at a Turkish one.
+- Programs: 66 / 65 at a Japanese start (unchanged); 80 / 79 at a Turkish start (+1, compiled at load and in the lazy load). None
+  compiled through sunset, night or rain, on drives past the town's shops and the konbini, or in Turkey's lazy load (no frame over
+  12 ms).
+- Cost (the desktop machine, GTX 1660):
+  - The shop draws over drives: town +0.04–0.06 ms desktop and +0.06 phone tier, the chains +0.06; city shops +0.06 / +0.08.
+  - Whole frame over drives: town desktop 3.19 / 3.20 / 3.20 → 3.26 / 3.28 / 3.62 ms (one outlier); phone 4.35 / 4.20 / 4.34
+    → 4.08 / 4.08 / 4.09. City desktop 3.28 / 3.21 / 3.20 → 3.22 / 3.28 / 3.28.
+  - World build over the town's chunks the same (desktop 119.3 / 120.8 → 117.6 / 119.4 ms per 20 chunks).
+  - Start-up the same on desktops (city 1751 / 1727 / 1675 → 1759 / 1767 / 1649 ms; town 2283 / 2241 → 2284 / 2203). On a 3 Mbps
+    phone +0.3 s at a town start (7845 / 7751 → 8151 / 8031 ms: the 114 KB) and +0.1 s at a city start.
+  - The town's room sheet takes ~23 MB of GPU memory on desktops at a Turkish start.
+  - 0 shader errors in all eleven zones, and in the city and the town at night on the phone tier and at q=low. No console errors at
+    q=low, mid and high; the embed starts on tap.
+- Left over: per-chain clerks' uniforms; the general store's room shared by three window kinds; the upper floors' lit home windows.
+
 ## 2026-10-28 · 00:22 — Fix: the Galata tram was invisible in some Chromes
 - **The tram shows in every Chrome now.** Its painted texture was drawn on a GPU-backed canvas, which Chrome 148 handed back empty,
   so the whole tram was cut away there (Chrome 156 drew it). It is drawn on a CPU-backed canvas now (tram.js paintTram), as the

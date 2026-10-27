@@ -1486,9 +1486,20 @@ export function makeAtlasW(M, worldTex) {
  *  so the windows keep their light by day, at dusk and at night (windowLights' shop rule: uLitN). The room per bay: its painting's own (a
  *  bakery's window, a bakery), mirrored by the code's low bit, the second room of its kind (if any) by the high one. A program of
  *  its own (M.atlasI), taken by the chunks that hold painted shop bays (chunks.js), so every other chunk keeps the atlas's. Made
- *  once the rest of the scene is (as makeAtlasW: its ids draw random numbers) */
-export const RM_N = 12; // (the painted shop cells it can tell: shop_p0…p10)
-export function makeAtlasRooms(M, tex, glass, table, geo) {
+ *  once the rest of the scene is (as makeAtlasW: its ids draw random numbers). (Step 34: every shop window that was still a painting
+ *  takes a room the same way: the shopping street's procedural ones (their glass laid into its mask at load, their rooms borrowed from
+ *  its painted bays'), the chain stores' (makeChainRooms: the same program, their own room set) and the Turkish town's (makeAtlasWRooms:
+ *  the world variant's room program), each region's rooms in a sheet of its own) */
+export const RM_N = 24; // (the shop cells one room set can tell: the shopping street's painted bays shop_p0…p9 and its procedural shop windows,
+// step 34; the Turkish town's bays; a region's chain bays)
+/** (step 34) One room set's uniforms (a material's own: its rooms' sheet, its glass, its table of shop cells and their rooms; the
+ *  shopping street's, the Turkish town's, each region's chain stores'). tex: the rooms' sheet; glass: the one-channel glass mask; table:
+ *  [{ cell: the shop cell's uv rect, a: its room's corner in the sheet, b: its second room's (or null), mask: [u, v, du, dv] its glass in
+ *  the mask, box: [x0, y0, x1, y1] its panes' bounds in the bay (0..1 from its bottom-left) }]; geo: { half (the room box's half size,
+ *  m: half the bay across and up, half its depth), size (a room in the sheet), f (its back wall's share), e (the glow's gain, rgb),
+ *  warp }; lo: the lowest light code a room is cast for (4.5: the shop codes 5…8, whose low bit mirrors the room and high bit picks its
+ *  kind's second; −0.5: any code, the chain stores' bays, which are lit always (code 0) and take the first room, unmirrored) */
+export function roomSet(tex, glass, table, geo, lo = 4.5) {
   const cells = [], ofs = [], masks = [], boxes = [];
   for (let i = 0; i < RM_N; i++) {
     const t = table[i], a = t && t.a, b = t && (t.b || t.a);
@@ -1497,37 +1508,61 @@ export function makeAtlasRooms(M, tex, glass, table, geo) {
     masks.push(t ? new THREE.Vector4(...t.mask) : new THREE.Vector4());
     boxes.push(t ? new THREE.Vector4(t.box[0], t.box[1], 1 / (t.box[2] - t.box[0]), 1 / (t.box[3] - t.box[1])) : new THREE.Vector4(0, 0, 1, 1));
   }
-  const R = { uRoom: { value: tex }, uGlass: { value: glass }, uRmCell: { value: cells }, uRmOf: { value: ofs }, uRmMask: { value: masks }, uRmBox: { value: boxes }, uRmHalf: { value: new THREE.Vector3(...geo.half) }, uRmS: { value: new THREE.Vector2(...geo.size) }, uRmQ: { value: (1 / geo.f - 1) / 2 }, uRmE: { value: geo.e }, uRmW: { value: geo.warp }, uRmOn: U.uRmOn };
+  const e = Array.isArray(geo.e) ? geo.e : [geo.e, geo.e, geo.e];
+  return { uRoom: { value: tex }, uGlass: { value: glass }, uRmCell: { value: cells }, uRmOf: { value: ofs }, uRmMask: { value: masks }, uRmBox: { value: boxes }, uRmHalf: { value: new THREE.Vector3(...geo.half) }, uRmS: { value: new THREE.Vector2(...geo.size) }, uRmQ: { value: (1 / geo.f - 1) / 2 }, uRmE: { value: new THREE.Vector3(...e) }, uRmW: { value: geo.warp }, uRmLo: { value: lo }, uRmOn: U.uRmOn };
+}
+/** the shopping street's rooms (step 31): the atlas material's room variant (M.atlasI), its room set R (roomSet) */
+export function makeAtlasRooms(M, R) {
   M.atlasI = M.atlas.clone();
   M.atlasI.onBeforeCompile = sh => { contactAO(sh); windowLights(sh); worldShade(sh); paintedAtlas(sh, M.ptex); roomsAtlas(sh, R); };
-  M.atlasI.customProgramCacheKey = () => 'atlasi-v1';
-  return R;
+  M.atlasI.customProgramCacheKey = () => 'atlasi-v1'; M.atlasI.userData.rooms = R; // (its room set: __dbg)
+  return M.atlasI;
+}
+/** (step 34) the Turkish town's rooms: the atlas material's world variant with the rooms (M.atlasWI, a program of its own, one of Turkey's:
+ *  made with its assets, at a Turkish start or in its lazy load), taken by the chunks holding the town's shop bays (chunks.js), so every
+ *  other chunk of Turkey's keeps the world variant and its pixels. Its shadow twin is the world variant's (M.atlasWDepth). R: roomSet */
+export function makeAtlasWRooms(M, R) {
+  const P = M.ptex;
+  M.atlasWI = M.atlasW.clone();
+  M.atlasWI.onBeforeCompile = sh => { contactAO(sh); windowLights(sh); worldShade(sh); paintedAtlas(sh, P, false, true); roomsAtlas(sh, R); };
+  M.atlasWI.customProgramCacheKey = () => 'atlaswi-v1'; M.atlasWI.userData.rooms = R;
+  return M.atlasWI;
+}
+/** (step 34) a chain store material's room variant: the chain material (makeAtlasChain: its own texture pair) under the shopping street's
+ *  room program (the same shader under the same key as M.atlasI: nothing new is compiled) with its own room set R (roomSet, lo −0.5: its
+ *  bays are lit always). Its shadow twin stays the chain material's */
+export function makeChainRooms(M, base, R) {
+  const m = base.clone(); m.map = base.map; m.emissiveMap = base.emissiveMap; m.emissiveIntensity = base.emissiveIntensity;
+  m.onBeforeCompile = sh => { contactAO(sh); windowLights(sh); worldShade(sh); paintedAtlas(sh, M.ptex); roomsAtlas(sh, R); };
+  m.customProgramCacheKey = () => 'atlasi-v1'; m.userData.rooms = R;
+  return m;
 }
 function roomsAtlas(sh, R) {
   Object.assign(sh.uniforms, R);
   sh.vertexShader = sh.vertexShader
-    .replace('#include <common>', `#include <common>\nuniform vec4 uRmCell[${RM_N}]; uniform vec3 uRmHalf; uniform float uRmOn; varying vec4 vRmA; varying float vRmZ; flat varying float vRmI;`)
-    // a painted shop bay's vertex: where it is in the bay (0…1 from its bottom-left), the ray from the camera through it in its box's units
-    // (across: the bay's u, its viewer's right, mirrored with the room; up: the world's; in: into the wall), and which bay and room
-    // (1 + cell + 16 · code; 0: none). Six numbers a vertex, for every vertex of the chunk's atlas mesh: the rest is read per pixel
+    .replace('#include <common>', `#include <common>\nuniform vec4 uRmCell[${RM_N}]; uniform vec3 uRmHalf; uniform float uRmOn, uRmLo; varying vec4 vRmA; varying float vRmZ; flat varying float vRmI;`)
+    // a shop bay's vertex (a light code over uRmLo, up to the shop codes' 8, its uv in a cell of the table): where it is in the bay (0…1
+    // from its bottom-left), the ray from the camera through it in its box's units (across: the bay's u, its viewer's right, mirrored with
+    // the room; up: the world's; in: into the wall), and which bay and room (1 + cell + 32 · code; 0: none). Six numbers a vertex, for
+    // every vertex of the chunk's atlas mesh: the rest is read per pixel
     .replace('#include <project_vertex>', /* glsl */`#include <project_vertex>
 vRmA = vec4(0.0); vRmZ = 1.0; vRmI = 0.0;
 { float rc = aLit * 255.0;
-  if (uRmOn > 0.5 && rc > 4.5 && rc < 8.5 && uv.x > 1.5) {
+  if (uRmOn > 0.5 && rc < 8.5 && rc > uRmLo) {
     for (int i = 0; i < ${RM_N}; i++) {
       vec4 c = uRmCell[i];
       if (uv.x > c.x - 1e-4 && uv.x < c.z + 1e-4 && uv.y > c.y - 1e-4 && uv.y < c.w + 1e-4) {
-        float k = floor(rc - 4.5), fl = mod(k, 2.0) > 0.5 ? -1.0 : 1.0;
+        float k = max(floor(rc - 4.5), 0.0), fl = mod(k, 2.0) > 0.5 ? -1.0 : 1.0;
         vec3 rN = normalize(transformedNormal), rB = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz), rT = normalize(cross(rB, rN));
         vRmA = vec4((uv - c.xy) / (c.zw - c.xy), fl * dot(mvPosition.xyz, rT) / uRmHalf.x, dot(mvPosition.xyz, rB) / uRmHalf.y);
-        vRmZ = -dot(mvPosition.xyz, rN) / uRmHalf.z; vRmI = 1.0 + float(i) + 16.0 * k;
+        vRmZ = -dot(mvPosition.xyz, rN) / uRmHalf.z; vRmI = 1.0 + float(i) + 32.0 * k;
         break;
       }
     }
   }
 }`);
   sh.fragmentShader = sh.fragmentShader
-    .replace('#include <common>', `#include <common>\nuniform sampler2D uRoom, uGlass; uniform vec4 uRmOf[${RM_N}], uRmMask[${RM_N}], uRmBox[${RM_N}]; uniform vec2 uRmS; uniform float uRmQ, uRmE, uRmW; varying vec4 vRmA; varying float vRmZ; flat varying float vRmI;`)
+    .replace('#include <common>', `#include <common>\nuniform sampler2D uRoom, uGlass; uniform vec4 uRmOf[${RM_N}], uRmMask[${RM_N}], uRmBox[${RM_N}]; uniform vec2 uRmS; uniform vec3 uRmE; uniform float uRmQ, uRmW; varying vec4 vRmA; varying float vRmZ; flat varying float vRmI;`)
     // the bay's glass (its mask, read in step with the triangle's other pixels), and only inside its glass box (half its pixels: the frame,
     // the boards and the beams round it pay nothing), whose edge lies on the frame where the glass is 0 (the room's read across it, with
     // its neighbours outside, is never seen): the ray's exit from the box (the nearest of the three far planes), then its place in the
@@ -1536,7 +1571,7 @@ vRmA = vec4(0.0); vRmZ = 1.0; vRmI = 0.0;
     // times the texels)
     .replace('diffuseColor *= sampledDiffuseColor;', /* glsl */`vec3 rmC = vec3(0.0); float rmK = 0.0;
 if (vRmI > 0.5) {
-  int rmX = int(vRmI + 0.5) - 1, rmI = rmX - (rmX / 16) * 16, rmJ = rmX / 16;
+  int rmX = int(vRmI + 0.5) - 1, rmI = rmX - (rmX / 32) * 32, rmJ = rmX / 32;
   vec4 rmB = uRmBox[rmI], rmM = uRmMask[rmI]; vec2 rmb = (vRmA.xy - rmB.xy) * rmB.zw;
   float rmG = texture2D(uGlass, rmM.xy + vRmA.xy * rmM.zw).r; // (read where every pixel of the bay's triangle reads it: its mip holds)
   if (rmb.x >= 0.0 && rmb.y >= 0.0 && rmb.x <= 1.0 && rmb.y <= 1.0) {

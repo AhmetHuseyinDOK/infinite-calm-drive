@@ -16,6 +16,11 @@ const grainC = canvas(256, 256);
   g.putImageData(d, 0, 0);
 }
 
+/** (step 34) the shopping street's procedural shop windows' glass, by cell (shop_glass…, shop_door, shop_cafe, shop_noren…): { w, h,
+ *  panes: [[x0, y0, x1, y1]…], holes: […] } in the cell's px from its top-left (holes: what hangs on or in front of the glass: a poster,
+ *  the door's bar, handles and sign, the café's board, the bakery's tag), recorded as buildAtlas draws them (nothing is drawn
+ *  differently): main.js lays them into the street's glass mask, so the rooms behind them (props.js PROC_ROOMS) show only through the glass */
+export const SHOP_GLASS = {};
 export class Atlas {
   /** h: its rows (the procedural atlas: 4096). uOff: added to its cells' u (the painted atlas: 2, so the atlas material
    *  can tell its cells from the procedural ones by their uv alone, materials.js); cells: the map its cells are listed in
@@ -237,6 +242,7 @@ export function buildAtlas() {
   // ---------------- ground-floor bays (3 m × 3.6 m → 240×288) ----------------
   const SH = 288;
   // what a shop window shows: a general store's shelves of goods, or (theme) a bakery, a bookshop, a florist, a clothes shop
+  let _gl = null; const glP = (x0, y0, x1, y1) => { if (_gl) _gl.panes.push([x0, y0, x1, y1]); }, glH = (x0, y0, x1, y1) => { if (_gl) _gl.holes.push([x0, y0, x1, y1]); };
   const shopInterior = (a, x, y, ww, wh, r, theme) => {
     const ell = (cx, cy, rx, ry, col, rot = 0) => { a.fillStyle = col; a.beginPath(); a.ellipse(cx, cy, rx, ry, rot, 0, 7); a.fill(); };
     const pk = arr => arr[Math.floor(r() * arr.length)]; // (the cell's own rng: the shared one would change every later cell)
@@ -248,7 +254,7 @@ export function buildAtlas() {
       }
       rect(a, x + 4, y + wh * 0.8, ww - 8, wh * 0.2, '#efe7d8'); rect(a, x + 4, y + wh * 0.8, ww - 8, 3, '#9a9a96');
       for (let bx = x + 14; bx < x + ww - 10; bx += 18) ell(bx, y + wh * 0.9, 6, 4, pk(['#e8b35a', '#c06a3a', '#f2d29a']));
-      rect(a, x + ww - 64, y + 10, 52, 22, '#7a3e1e'); textFit(a, '焼きたて', x + ww - 38, y + 21, 46, 14, '#fff3dc', 800);
+      rect(a, x + ww - 64, y + 10, 52, 22, '#7a3e1e'); textFit(a, '焼きたて', x + ww - 38, y + 21, 46, 14, '#fff3dc', 800); glH(x + ww - 64, y + 10, x + ww - 12, y + 32);
     } else if (theme === 'books') { // 書店: tall shelves of book spines, a rack of magazines at the front
       rect(a, x, y, ww, wh, '#6f5a46');
       for (let sy = y + 6; sy < y + wh * 0.72; sy += wh * 0.17) {
@@ -382,19 +388,19 @@ export function buildAtlas() {
     if (kind === 'glass' || kind === 'door' || kind === 'konbini' || kind === 'cafe') {
       const x = 6, y = h * 0.22, ww = w - 12, wh = h * 0.78 - 4;
       const inner = kind === 'konbini' ? '#f6f4ea' : kind === 'cafe' ? '#7a5a40' : '#8a7a68';
-      rect(a, x, y, ww, wh, inner);
+      rect(a, x, y, ww, wh, inner); glP(x, y + 4, x + ww, y + wh); // (its glass: under the frame's top bar)
       shopInterior(a, x, y, ww, wh, r, theme || kind);
       if (kind === 'konbini') rect(a, x, y + 4, ww, 5, '#ffffff');
       // posters and the open sign hang inside the glass
-      if (kind === 'door') { rect(a, w / 2 - 30, y + 18, 60, 24, '#fff'); textFit(a, '営業中', w / 2, y + 30, 54, 18, '#c82828'); }
-      if (kind === 'glass' && !theme && r() < 0.7) { rect(a, x + 10, y + 14, 44, 60, R.pick(['#f6d34a', '#fff', '#ff8aa0'])); textFit(a, R.pick(['特売', '新商品', 'SALE', '本日']), x + 32, y + 44, 40, 16, '#c02020'); }
+      if (kind === 'door') { rect(a, w / 2 - 30, y + 18, 60, 24, '#fff'); textFit(a, '営業中', w / 2, y + 30, 54, 18, '#c82828'); glH(w / 2 - 30, y + 18, w / 2 + 30, y + 42); }
+      if (kind === 'glass' && !theme && r() < 0.7) { rect(a, x + 10, y + 14, 44, 60, R.pick(['#f6d34a', '#fff', '#ff8aa0'])); textFit(a, R.pick(['特売', '新商品', 'SALE', '本日']), x + 32, y + 44, 40, 16, '#c02020'); glH(x + 10, y + 14, x + 54, y + 74); }
       // at night: the shop seen lit from inside (cool white in a konbini, amber in a cafe, warm white elsewhere)
       litInterior(a, e, x, y, ww, wh, kind === 'konbini' ? '#e4eef8' : kind === 'cafe' ? '#f0a868' : '#f2d2a6');
       // the glass's reflection over it all, then the frames and the cafe's board out front, dark at night
       a.save(); a.globalAlpha = 0.35; glass(a, x, y, ww, wh, r); a.restore();
       rect(a, x, y, ww, 4, '#4a4e57'); rect(e, x, y, ww, 4, '#000');
-      if (kind === 'door') { rect(a, w / 2 - 2, y, 4, wh, '#4a4e57'); rect(e, w / 2 - 2, y, 4, wh, '#000'); rect(a, w / 2 - 14, y + wh * 0.45, 3, 40, '#c0c4c8'); rect(a, w / 2 + 11, y + wh * 0.45, 3, 40, '#c0c4c8'); }
-      if (kind === 'cafe') { rect(a, w * 0.62, h - 70, 46, 62, '#2c3a30'); rect(e, w * 0.62, h - 70, 46, 62, '#000'); textFit(a, 'ランチ', w * 0.62 + 23, h - 50, 40, 13, '#fff', 700); }
+      if (kind === 'door') { rect(a, w / 2 - 2, y, 4, wh, '#4a4e57'); rect(e, w / 2 - 2, y, 4, wh, '#000'); rect(a, w / 2 - 14, y + wh * 0.45, 3, 40, '#c0c4c8'); rect(a, w / 2 + 11, y + wh * 0.45, 3, 40, '#c0c4c8'); glH(w / 2 - 2, y, w / 2 + 2, y + wh); glH(w / 2 - 14, y + wh * 0.45, w / 2 - 11, y + wh * 0.45 + 40); glH(w / 2 + 11, y + wh * 0.45, w / 2 + 14, y + wh * 0.45 + 40); }
+      if (kind === 'cafe') { rect(a, w * 0.62, h - 70, 46, 62, '#2c3a30'); rect(e, w * 0.62, h - 70, 46, 62, '#000'); textFit(a, 'ランチ', w * 0.62 + 23, h - 50, 40, 13, '#fff', 700); glH(w * 0.62, h - 70, w * 0.62 + 46, h - 8); }
     } else if (kind === 'shutter') {
       const x = 6, y = h * 0.2, ww = w - 12, wh = h * 0.8;
       rect(a, x, y, ww, wh, '#b8bcc0');
@@ -406,6 +412,7 @@ export function buildAtlas() {
       for (let x = 0; x < w; x += 10) rect(a, x, h * 0.2, 3, h * 0.8, 'rgba(25,15,8,0.6)');
       grain(a, A, w, h, 0.15);
       const nx = w * 0.12, ny = h * 0.24, nw = w * 0.76, nh = h * 0.34, ncol = R.pick(['#1f3570', '#7a1f24', '#2a2a2a', '#365e3a']);
+      glP(nx, ny + nh, nx + nw, h); // (the lit doorway under the noren: its room seen under the cloth)
       rect(a, nx, ny, nw, nh, ncol);
       for (let i = 1; i < 3; i++) rect(a, nx + nw * i / 3 - 1, ny + nh * 0.25, 2, nh * 0.75, 'rgba(255,255,255,0.25)');
       textFit(a, R.pick(NOREN), w / 2, ny + nh * 0.55, nw * 0.9, 46, '#f5f0e6', 800);
@@ -433,11 +440,13 @@ export function buildAtlas() {
       grain(a, A, w, h, 0.1);
     }
   };
+  // (step 34: each shop cell's glass recorded as it is drawn: SHOP_GLASS)
+  const glRec = (name, f) => (a, e, w, h) => { _gl = { w, h, panes: [], holes: [] }; f(a, e, w, h); if (_gl.panes.length) SHOP_GLASS[name] = _gl; _gl = null; };
   ['glass', 'door', 'shutter', 'noren', 'konbini', 'house', 'garage', 'cafe'].forEach((k, i) => {
-    A.add('shop_' + k, B, SH, (a, e, w, h) => shopBay(a, e, w, h, k, 100 + i));
-    if (k === 'glass' || k === 'noren' || k === 'house') A.add('shop_' + k + '2', B, SH, (a, e, w, h) => shopBay(a, e, w, h, k, 200 + i));
+    A.add('shop_' + k, B, SH, glRec('shop_' + k, (a, e, w, h) => shopBay(a, e, w, h, k, 100 + i)));
+    if (k === 'glass' || k === 'noren' || k === 'house') A.add('shop_' + k + '2', B, SH, glRec('shop_' + k + '2', (a, e, w, h) => shopBay(a, e, w, h, k, 200 + i)));
     // glass shopfronts you can tell apart: a bakery, a bookshop, a florist, a clothes shop (props.js pickV picks among them)
-    if (k === 'glass') ['bakery', 'books', 'florist', 'clothes'].forEach((th, j) => A.add('shop_glass' + (j + 3), B, SH, (a, e, w, h) => shopBay(a, e, w, h, 'glass', 300 + j, th)));
+    if (k === 'glass') ['bakery', 'books', 'florist', 'clothes'].forEach((th, j) => A.add('shop_glass' + (j + 3), B, SH, glRec('shop_glass' + (j + 3), (a, e, w, h) => shopBay(a, e, w, h, 'glass', 300 + j, th))));
   });
 
   // ---------------- horizontal shop signs (6 m × 0.9 m) ----------------
@@ -1469,6 +1478,14 @@ function stickersJ(a, e, w, h, c, door) {
     }
     g.restore();
   }
+}
+/** (step 34) where stickersJ puts chain c's stickers on a konbini bay's glass (w × h px; door: its doors'), as rects [x0, y0, x1, y1] in px
+ *  from the top-left: the stripe band across the panes and, on the doors, each leaf's badge. They stay painted in front of the room behind
+ *  the glass (main.js: holes in the chain's glass mask) */
+export function stickerHolesJ(w, h, c, door) {
+  const y = h * (door ? 0.5 : 0.62), x0 = w * 0.08, x1 = w * 0.92, s = h * 0.012, H = [[x0, y, x1, y + s * (c === 0 ? 4.2 : c === 1 ? 3.4 : 2.6)]];
+  if (door) for (const cx of [w * 0.3, w * 0.7]) { const sz = h * 0.085, cy = h * 0.42; H.push([cx - sz / 2, cy - sz / 2, cx + sz / 2, cy + sz / 2]); }
+  return H;
 }
 /** Builds a region's chain atlas for a tier ('hi' or 'lo': half the px): `ca` its painted bays (painted.js loadChainAtlas), `region`
  *  'jp' (the konbini) or 'tr' (the markets). Its cells (cj… / ct…) are listed in the one namespace (`main`: the procedural atlas's

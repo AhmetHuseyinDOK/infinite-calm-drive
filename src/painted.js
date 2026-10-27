@@ -186,13 +186,17 @@ export async function loadFrontAtlas(tier, timeoutMs = 15000) {
  *  a mask sheet laid out as the fronts' albedo tiles (its alpha; a texture of its own: materials.js makeAtlasRooms), with each bay's
  *  glass box (its panes' bounds, a little grown: the room is cast only inside it). 'hi' or 'lo' (half:
  *  phones, the embed), as the fronts. Null (never rejects) when anything is missing, broken, truncated or too slow: the windows then
- *  keep their painted glass (materials.js makeAtlasRooms is not made). Room corners are returned in GL texture space (v up). */
-export async function loadRoomAtlas(tier, timeoutMs = 15000) {
+ *  keep their painted glass (materials.js makeAtlasRooms is not made). Room corners are returned in GL texture space (v up).
+ *  (Step 34: name: the sheet, rooms1 (the shopping street's) or a region's (rooms1tr: the Turkish town's and its chain markets', rooms1jp:
+ *  Japan's konbini; ~/cdtest/s34/scripts/packrooms2.py), whose glass is listed as each cell's panes and holes ([x0, y0, x1, y1] in
+ *  fractions of the cell from its top-left: roomGlass draws them) and whose rooms come in sets (.sets: { name: { cells, bay (m), e } },
+ *  a material each). A rooms1-style sheet is one set, 'street') */
+export async function loadRoomAtlas(tier, timeoutMs = 15000, name = 'rooms1') {
   const base = ASSETS + 'rooms/';
   return orNull((async () => {
-    const r = await fetch(base + 'rooms1.json');
-    if (!r.ok) throw new Error('rooms1.json ' + r.status);
-    const J = await r.json(), file = J.files && J.files[tier] ? tier : 'hi', mk = J.mask || {};
+    const r = await fetch(base + name + '.json');
+    if (!r.ok) throw new Error(name + '.json ' + r.status);
+    const J = await r.json(), file = J.files && J.files[tier] ? tier : 'hi', mk = J.mask || null;
     const sheet = async (F, opt) => { // (checked whole: a truncated image decodes without complaint)
       const ri = await fetch(base + F.files[file]);
       if (!ri.ok) throw new Error(F.files[file] + ' ' + ri.status);
@@ -202,17 +206,75 @@ export async function loadRoomAtlas(tier, timeoutMs = 15000) {
       if (F.size && F.size[file] && (img.width !== F.size[file][0] || img.height !== F.size[file][1])) throw new Error(F.files[file] + ' has the wrong size');
       return img;
     };
-    const sz = J.room || [0, 0], rooms = {}, cells = {};
+    const sz = J.room || [0, 0], rooms = {}, okR = v => Array.isArray(v) && v.length === 4 && v[2] > v[0] && v[3] > v[1];
     for (const [n, p] of Object.entries(J.rooms || {})) if (p[0] >= 0 && p[1] >= 0 && p[0] + sz[0] <= 1 && p[1] + sz[1] <= 1) rooms[n] = [p[0], 1 - p[1] - sz[1]];
-    for (const [c, rs] of Object.entries(J.cells || {})) { const ok = (rs || []).filter(n => rooms[n]); if (ok.length) cells[c] = ok; }
-    if (!(sz[0] > 0 && sz[1] > 0) || !Object.keys(cells).length || !(J.f > 0 && J.f < 1) || !(J.depth > 0)) throw new Error('no rooms listed');
-    if (!mk.files || !(mk.tiles || []).length) throw new Error('no glass listed');
-    const [img, mimg] = await Promise.all([sheet(J, { imageOrientation: 'flipY', premultiplyAlpha: 'none' }), sheet(mk, { premultiplyAlpha: 'none' })]);
-    const W = mimg.width, H = mimg.height, okBox = b => Array.isArray(b) && b.length === 4 && b[0] >= 0 && b[1] >= 0 && b[2] <= 1 && b[3] <= 1 && b[2] > b[0] && b[3] > b[1];
-    const tiles = mk.tiles.filter(t => cells[t.name] && t.w > 0 && t.h > 0 && t.x >= 0 && t.y >= 0 && t.x + t.w <= 1 && t.y + t.h <= 1).map(t => ({ name: t.name, x: t.x * W, y: t.y * H, w: t.w * W, h: t.h * H, box: okBox(t.box) ? t.box : [0, 0, 1, 1] }));
-    if (!tiles.length) throw new Error('no glass listed');
-    return { img, mask: { img: mimg, tiles }, rooms, cells, size: sz, f: J.f, depth: J.depth, e: J.e || 1, warp: J.warp > 0 && J.warp <= 1 ? J.warp : 1, tier: file };
-  })(), timeoutMs, 'the shops\' rooms unavailable, keeping their painted glass:');
+    // (each set's cells: those with at least one room; with a pane list, at least one pane)
+    const sets = {}, panes = {}, setsJ = J.sets || (J.cells ? { street: { cells: J.cells, bay: [3, 3.6], e: J.e || 1 } } : {});
+    for (const [n, g] of Object.entries(J.glass || {})) { const pq = (g.panes || []).filter(okR); if (pq.length) panes[n] = { panes: pq, holes: (g.holes || []).filter(okR) }; }
+    for (const [sn, S] of Object.entries(setsJ)) {
+      const cells = {};
+      for (const [c, rs] of Object.entries(S.cells || {})) { const ok = (rs || []).filter(n => rooms[n]); if (ok.length && (mk || panes[c])) cells[c] = ok; }
+      const bay = Array.isArray(S.bay) && S.bay[0] > 0 && S.bay[1] > 0 ? S.bay : [3, 3.6], e = Array.isArray(S.e) ? S.e : [S.e || 1, S.e || 1, S.e || 1];
+      if (Object.keys(cells).length) sets[sn] = { cells, bay, e };
+    }
+    if (!(sz[0] > 0 && sz[1] > 0) || !Object.keys(sets).length || !(J.f > 0 && J.f < 1) || !(J.depth > 0)) throw new Error('no rooms listed');
+    if (mk && (!mk.files || !(mk.tiles || []).length)) throw new Error('no glass listed');
+    const [img, mimg] = await Promise.all([sheet(J, { imageOrientation: 'flipY', premultiplyAlpha: 'none' }), mk ? sheet(mk, { premultiplyAlpha: 'none' }) : null]);
+    let mask = null;
+    if (mk) {
+      const W = mimg.width, H = mimg.height, okBox = b => Array.isArray(b) && b.length === 4 && b[0] >= 0 && b[1] >= 0 && b[2] <= 1 && b[3] <= 1 && b[2] > b[0] && b[3] > b[1];
+      const tiles = mk.tiles.filter(t => t.w > 0 && t.h > 0 && t.x >= 0 && t.y >= 0 && t.x + t.w <= 1 && t.y + t.h <= 1).map(t => ({ name: t.name, x: t.x * W, y: t.y * H, w: t.w * W, h: t.h * H, box: okBox(t.box) ? t.box : [0, 0, 1, 1] }));
+      if (!tiles.length) throw new Error('no glass listed');
+      mask = { img: mimg, tiles };
+    }
+    return { img, mask, panes, rooms, sets, cells: (sets.street || {}).cells || {}, size: sz, f: J.f, depth: J.depth, e: J.e || 1, warp: J.warp > 0 && J.warp <= 1 ? J.warp : 1, tier: file, name };
+  })(), timeoutMs, 'the shops\' rooms (' + name + ') unavailable, keeping their painted glass:');
+}
+/** (step 34) a rooms sheet (loadRoomAtlas's img, flipped as decoded) as a texture: mipmapped, anisotropic on desktops, plain trilinear on
+ *  phones; the bitmap closed once it is on the GPU */
+export function roomTexture(img, aniso) {
+  const t = new THREE.Texture(img); t.colorSpace = THREE.SRGBColorSpace; t.flipY = false; t.generateMipmaps = true;
+  t.minFilter = THREE.LinearMipmapLinearFilter; t.anisotropy = aniso; t.needsUpdate = true;
+  t.onUpdate = () => { t.onUpdate = null; img.close(); };
+  return t;
+}
+/** (step 34) a room set's glass as a one-channel texture (rows from the bottom: v up), and each listed cell's tile in it. base: a mask
+ *  image whose alpha is the glass (rooms1's: { img, tiles: [{ name, x, y, w, h, box }] in px }) or null; extra: [{ name, panes, holes }]
+ *  (fractions of the cell from its top-left) drawn into base's free slots (a grid of its first tile's size: the slots no tile of it
+ *  touches) or, without a base, into a grid of tiles of their own (tw × th px, as the cell's own px); cells with the same glass share a tile. Returns { tex, tiles: { name: {
+ *  mask: [u, v, du, dv], box: [x0, y0, x1, y1] (the panes' bounds in the bay from its bottom-left, grown by 0.03) } } } */
+export function roomGlass(base, extra, tw = 256, th = 256) {
+  const pad = 0.03, tiles = {};
+  let W, H, slots = [];
+  if (base) {
+    W = base.img.width; H = base.img.height; const t0 = base.tiles[0], sw = Math.round(t0.w), sh = Math.round(t0.h);
+    for (let y = 0; y + sh <= H; y += sh) for (let x = 0; x + sw <= W; x += sw) if (!base.tiles.some(t => t.x < x + sw && t.x + t.w > x && t.y < y + sh && t.y + t.h > y)) slots.push([x, y, sw, sh]);
+  } else {
+    const n = new Set(extra.map(q => JSON.stringify([q.panes, q.holes || []]))).size, cols = Math.max(1, Math.ceil(Math.sqrt(n))), rows = Math.ceil(n / cols); W = cols * tw; H = rows * th;
+    for (let i = 0; i < n; i++) slots.push([(i % cols) * tw, Math.floor(i / cols) * th, tw, th]);
+  }
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const g = cv.getContext('2d', { willReadFrequently: true });
+  if (base) { g.drawImage(base.img, 0, 0); for (const t of base.tiles) tiles[t.name] = { mask: [t.x / W, 1 - (t.y + t.h) / H, t.w / W, t.h / H], box: t.box }; }
+  const seen = new Map(); let k = 0; // (cells with the same glass share a tile)
+  extra.forEach(q => {
+    const key = JSON.stringify([q.panes, q.holes || []]), had = seen.get(key); if (had) { tiles[q.name] = had; return; }
+    const sl = slots[k++]; if (!sl) { console.warn('rooms: no room left in the glass mask for', q.name); return; } const [x, y, w, h] = sl;
+    g.globalCompositeOperation = 'source-over'; g.fillStyle = '#fff';
+    for (const p of q.panes) g.fillRect(x + p[0] * w, y + p[1] * h, (p[2] - p[0]) * w, (p[3] - p[1]) * h);
+    g.globalCompositeOperation = 'destination-out';
+    for (const p of q.holes || []) g.fillRect(x + p[0] * w, y + p[1] * h, (p[2] - p[0]) * w, (p[3] - p[1]) * h);
+    g.globalCompositeOperation = 'source-over';
+    const bx0 = Math.min(...q.panes.map(p => p[0])), by0 = Math.min(...q.panes.map(p => p[1])), bx1 = Math.max(...q.panes.map(p => p[2])), by1 = Math.max(...q.panes.map(p => p[3]));
+    tiles[q.name] = { mask: [x / W, 1 - (y + h) / H, w / W, h / H], box: [Math.max(0, bx0 - pad), Math.max(0, 1 - by1 - pad), Math.min(1, bx1 + pad), Math.min(1, 1 - by0 + pad)] };
+    seen.set(key, tiles[q.name]);
+  });
+  const px = g.getImageData(0, 0, W, H).data, a8 = new Uint8Array(W * H);
+  for (let y = 0; y < H; y++) { const r = (H - 1 - y) * W * 4, o = y * W; for (let x = 0; x < W; x++) a8[o + x] = px[r + x * 4 + 3]; }
+  if (base) base.img.close();
+  const tex = new THREE.DataTexture(a8, W, H, THREE.RedFormat, THREE.UnsignedByteType);
+  tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter; tex.magFilter = THREE.LinearFilter; tex.needsUpdate = true;
+  return { tex, tiles };
 }
 
 /** Loads the painted houses of the country, the coast and the cherry avenue (assets/houses/, made by

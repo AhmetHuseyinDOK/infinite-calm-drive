@@ -1,0 +1,141 @@
+{
+ "files": {
+  "hi": "rooms1jp_hi.webp",
+  "lo": "rooms1jp_lo.webp"
+ },
+ "bytes": {
+  "hi": 48276,
+  "lo": 15328
+ },
+ "size": {
+  "hi": [
+   1056,
+   596
+  ],
+  "lo": [
+   528,
+   298
+  ]
+ },
+ "room": [
+  0.48484848484848486,
+  0.9731543624161074
+ ],
+ "rooms": {
+  "kj0": [
+   0.007575757575757576,
+   0.013422818791946308
+  ],
+  "kj1": [
+   0.5075757575757576,
+   0.013422818791946308
+  ]
+ },
+ "sets": {
+  "chains": {
+   "bay": [
+    3.0,
+    3.4
+   ],
+   "e": [
+    0.9,
+    0.96,
+    1.0
+   ],
+   "cells": {
+    "pjW1": [
+     "kj0"
+    ],
+    "pjW2": [
+     "kj0"
+    ],
+    "pjD": [
+     "kj1"
+    ]
+   }
+  }
+ },
+ "glass": {
+  "pjW1": {
+   "panes": [
+    [
+     0.0733,
+     0.1412,
+     0.9267,
+     0.6324
+    ]
+   ],
+   "holes": [
+    [
+     0.1133,
+     0.2412,
+     0.2333,
+     0.3765
+    ],
+    [
+     0.78,
+     0.2412,
+     0.9,
+     0.3765
+    ]
+   ]
+  },
+  "pjW2": {
+   "panes": [
+    [
+     0.0867,
+     0.1412,
+     0.92,
+     0.6618
+    ]
+   ],
+   "holes": [
+    [
+     0.1333,
+     0.4353,
+     0.3067,
+     0.6618
+    ],
+    [
+     0.75,
+     0.4647,
+     0.9067,
+     0.6618
+    ]
+   ]
+  },
+  "pjD": {
+   "panes": [
+    [
+     0.06,
+     0.1118,
+     0.4633,
+     0.9471
+    ],
+    [
+     0.5133,
+     0.1118,
+     0.9367,
+     0.9471
+    ]
+   ],
+   "holes": [
+    [
+     0.0533,
+     0.5118,
+     0.9467,
+     0.5559
+    ]
+   ]
+  }
+ },
+ "f": 0.4,
+ "depth": 6.0,
+ "warp": 0.7,
+ "note": "step 34: the rooms behind the konbini's shop windows (Grok Imagine image_edit of a drawn one-point room carrying each bay's own goods, ~/cdtest/s34); rooms in fractions of the sheet (top-left origin); the back wall is the middle f x f of each; sets: a material each (its cells' rooms, its bay in metres, its glow's gain); glass: each cell's panes and holes in fractions of the cell from its top-left",
+ "encode": "WebP q50 method 6 from the lossless masters (~/cdtest/s34/masters)",
+ "lift": {
+  "kj0": 0.792,
+  "kj1": 0.878
+ }
+}

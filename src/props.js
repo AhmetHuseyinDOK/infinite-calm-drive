@@ -42,7 +42,7 @@ const litOf = (g, cell, a, b) => {
   if (!g.hasLit) return; const c0 = cell.charCodeAt(0);
   if (c0 === 118 && cell.charCodeAt(1) === 115) { g.litV = 12; return; } // a neon vertical sign: glows by day too
   if (c0 === 104 && cell.charCodeAt(1) === 115) { const n = +cell.slice(2); if (n === 1 || n === 5 || n === 9 || n === 11) g.litV = 3; return; } // (step 30: a white or cream shop board: dimmer at night)
-  if (c0 === 115 && cell.startsWith('shop_')) { const c5 = cell[5]; if (c5 === 'p') { g.litV = 5 + roomCode(g, a, b); g.rooms = true; return; } if ((c5 === 'g' && cell[6] === 'l') || c5 === 'd' || c5 === 'k' || c5 === 'c' || c5 === 'n') g.litV = 6; return; } // a lit shop: warm by day too (shop_p…: the painted ones, below)
+  if (c0 === 115 && cell.startsWith('shop_')) { const c5 = cell[5]; if (c5 === 'p' || PROC_ROOMS[cell]) { g.litV = 5 + roomCode(g, a, b); g.rooms = true; return; } if ((c5 === 'g' && cell[6] === 'l') || c5 === 'd' || c5 === 'k' || c5 === 'c' || c5 === 'n') g.litV = 6; return; } // a lit shop: warm by day too (shop_p…: the painted ones, below; step 34: the procedural ones with a room, PROC_ROOMS)
   if (c0 !== 119) return; const k = cell.charCodeAt(cell.length - 1); if (k !== 76 && k !== 67) return;
   const h = Math.sin(a * 12.9898 + b * 78.233 + g.e[12] * 0.731 + g.e[14] * 0.513) * 43758.5453; g.litV = 24 + Math.floor((h - Math.floor(h)) * 231);
 };
@@ -50,6 +50,11 @@ const litOf = (g, cell, a, b) => {
 // says how the room behind its glass is shown (materials.js makeAtlasRooms: the low bit mirrors it, the high one takes its kind's second
 // room), hashed from where the bay is (no random numbers drawn: the street's layout stays); the chunk then takes the atlas's room variant
 const roomCode = (g, a, b) => { const h = Math.sin(a * 91.3458 + b * 47.123 + g.e[12] * 1.917 + g.e[14] * 0.371) * 24634.6345; return Math.floor((h - Math.floor(h)) * 4) & 3; };
+/** (step 34) the shopping street's procedural shop windows that have a room behind their glass, and the painted bay whose rooms each
+ *  borrows (main.js: their glass laid into the street's mask; textures.js SHOP_GLASS): a general store's window and glass door, a
+ *  bakery's, a bookshop's, a florist's, a clothes shop's, a café's; under a noren (とんかつ, そば…) the counter of the ramen shop's
+ *  entrance. They take the shop codes 5…8 as the painted bays do (the same light) */
+export const PROC_ROOMS = { shop_glass: 'shop_p0', shop_glass2: 'shop_p0', shop_glass3: 'shop_p4', shop_glass4: 'shop_p1', shop_glass5: 'shop_p5', shop_glass6: 'shop_p6', shop_door: 'shop_p0', shop_cafe: 'shop_p3', shop_noren: 'shop_p7', shop_noren2: 'shop_p7' };
 const fq = (g, x0, x1, y0, y1, z, cell, c = W1) => { litOf(g, cell, x0 + z, y0); g.quad([x1, y0, z], [x0, y0, z], [x0, y1, z], [x1, y1, z], c, uv(cell)); g.litV = 0; };
 const pxq = (g, x, z0, z1, y0, y1, cell, c = W1) => { litOf(g, cell, x + z0, y0); g.quad([x, y0, z1], [x, y0, z0], [x, y1, z0], [x, y1, z1], c, uv(cell)); g.litV = 0; };
 const nxq = (g, x, z0, z1, y0, y1, cell, c = W1) => { litOf(g, cell, x + z0, y0); g.quad([x, y0, z0], [x, y0, z1], [x, y1, z1], [x, y1, z0], c, uv(cell)); g.litV = 0; };
@@ -1998,8 +2003,10 @@ function townApt(G, M, r, s) {
       G.chain.setM(M);
       if (chainHash(G.chain, xa, 84) < TR_CHAIN_P) { chainMarket(G, M, r, s, pickW(chainHash(G.chain, xa, 8), CHAINS_T), sh, bw, xa, xb, SB, G0); bay += sh.n; continue; }
     }
-    // (their interiors warm by day too: light code 6, as the shopping street's)
-    for (let i = 0; i < sh.n; i++) { wq(a, bayX(bay + i), bayX(bay + i + 1), 0, SB, 0, 'twBay' + sh.k, TW_SHOP, 6); lampAt(G, M, bayX(bay + i) + bw / 2, 1.9, -0.8, 0.7); }
+    // (their interiors warm by day too: light code 6, as the shopping street's; step 34: one of the shop codes 5…8 by where each bay
+    // stands (the same light), which mirrors the room behind its glass or takes its kind's second, and the chunk takes the world
+    // variant's room program: chunks.js)
+    for (let i = 0; i < sh.n; i++) { wq(a, bayX(bay + i), bayX(bay + i + 1), 0, SB, 0, 'twBay' + sh.k, TW_SHOP, 5 + roomCode(a, bayX(bay + i), 1.7)); a.rooms = true; lampAt(G, M, bayX(bay + i) + bw / 2, 1.9, -0.8, 0.7); }
     const S = TOWN_SHOPS[sh.k][sh.j];
     // (its signboard as large as the concept's: the fascia's height, ~1 m, along the shop's whole front)
     townSignboard(G, xa + 0.1, xb - 0.1, SB + 0.1, G0 - 0.12, -0.15, 'twSg' + sh.k + '_' + sh.j, C(S[1]), 24 + Math.floor(r() * 60));

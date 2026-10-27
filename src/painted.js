@@ -338,7 +338,9 @@ function layout(list, seed) {
 // at night (ref/tod/; the zones' ramps averaged): honey and peach at golden hour, salmon and orange over mauve at sunset,
 // moonlit blue-grey at night. By day the clouds are the painting itself (these only show while it hands over)
 const CL_DAY = { shade: [172, 196, 234], mid: [214, 226, 246], lit: [246, 249, 253], rim: [255, 246, 228] };
-const CL_GOLD = { shade: [137, 114, 117], mid: [184, 147, 138], lit: [238, 196, 146], rim: [255, 214, 150] };
+// (Audit 2: at golden hour the repaints' cloud shade is a cool blue-grey under a mauve-grey middle (the darkest quarter of their cumulus
+// (80–112, 101–108, 132), the median (153–165, 127–130, 133–134)); the old warm taupe ones (137, 114, 117) and (184, 147, 138) read muddy)
+const CL_GOLD = { shade: [66, 89, 133], mid: [149, 118, 132], lit: [238, 196, 146], rim: [255, 214, 150] };
 const CL_SUNSET = { shade: [96, 65, 92], mid: [158, 82, 98], lit: [226, 124, 100], rim: [242, 172, 122] };
 const CL_NIGHT = { shade: [33, 58, 90], mid: [45, 76, 116], lit: [78, 112, 152], rim: [140, 166, 200] };
 // (dusk: the high clouds keep the afterglow, lilac over a slate shade, on the way from the sunset's salmon to the moonlit grey)

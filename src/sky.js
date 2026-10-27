@@ -125,10 +125,13 @@ export function makeSky() {
       uNoiseTex: MU.uNoiseTex, uSunCol: { value: TOD.sunCol }, uNight: { value: 0 }, uWarm: { value: 0 }, uTime: { value: 0 }, uCirrus: { value: 0.6 }, uCirrusCol: { value: new THREE.Color() }, uOvercast: { value: 0 }, uDeckLit: { value: new THREE.Color() }, uDeckDark: { value: new THREE.Color() },
       uMilky: { value: 0 }, uMetA: { value: new THREE.Vector3(0, 1, 0) }, uMetB: { value: new THREE.Vector3(0, 1, 0) }, uMetP: { value: -1 },
       uBright: { value: 0 }, uMoon: { value: 0 },
+      // (Audit 2) the painted evening sky (main.js sets them by the hour): its weight, its three tones (linear: from ~21° up, ~7° up,
+      // the horizon), the sun the sky's glow and disc are drawn round (the real sun lowered towards the horizon) and the glow's strength
+      uEve: { value: 0 }, uEveZ: { value: new THREE.Color() }, uEveM: { value: new THREE.Color() }, uEveH: { value: new THREE.Color() }, uSkySun: { value: new THREE.Vector3(0, 1, 0) }, uEveG: { value: 1 },
     },
     vertexShader: /* glsl */`varying vec3 vDir; void main(){ vDir = position; vec4 p = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * p; }`,
     fragmentShader: /* glsl */`
-      uniform vec3 uZenith, uHorizon, uSunDir, uMoonDir, uSunCol, uCirrusCol, uDeckLit, uDeckDark, uMetA, uMetB; uniform float uNight, uWarm, uTime, uCirrus, uOvercast, uMilky, uMetP, uBright, uMoon;
+      uniform vec3 uZenith, uHorizon, uSunDir, uMoonDir, uSunCol, uCirrusCol, uDeckLit, uDeckDark, uMetA, uMetB, uEveZ, uEveM, uEveH, uSkySun; uniform float uNight, uWarm, uTime, uCirrus, uOvercast, uMilky, uMetP, uBright, uMoon, uEve, uEveG;
       varying vec3 vDir;
       ${GLSL_NOISE}
       float hash13(vec3 p){ p = fract(p * .1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
@@ -139,10 +142,16 @@ export function makeSky() {
         // sky blue (red comes in last) to near-white at the horizon; dawn, dusk, night and grey skies keep the old curve
         float hb = clamp(1.0 - max(e, 0.0) * 2.8, 0.0, 1.0);
         vec3 col = mix(uZenith, uHorizon, mix(vec3(h), vec3(hb * hb, hb, hb), uBright));
+        // (Audit 2) at golden hour and sunset under a clear sky, the paintings' repaints' sky (ref/tod/): a deep steel blue down to
+        // ~21° (blue-violet at sunset), a pale band ~7° up, the warm colour only along the horizon; the glow round a sun drawn low
+        if (uEve > 0.0) {
+          vec3 ev = mix(uEveM, uEveZ, smoothstep(0.12, 0.36, e));
+          col = mix(col, mix(uEveH, ev, smoothstep(0.0, 0.12, e)), uEve);
+        }
         if (e < 0.0) col = uHorizon * (1.0 - clamp(-e * 2.0, 0.0, 0.25));
-        float sd = max(dot(d, uSunDir), 0.0);
+        float sd = max(dot(d, uSkySun), 0.0);
         float day = (1.0 - uNight) * (1.0 - uOvercast);
-        col += uSunCol * (pow(sd, 6.0) * (0.10 + 0.35 * uWarm) * (0.4 + h) + pow(sd, 48.0) * 0.45) * day;
+        col += uSunCol * (pow(sd, 6.0) * (0.10 + 0.35 * uWarm) * mix(0.4 + h, h * h * uEveG, uEve) + pow(sd, 48.0) * 0.45) * day; // (the evening's glow hugs the horizon)
         // high wispy cirrus, brushed along one direction
         if (e > 0.015) {
           vec2 p = d.xz / (e + 0.12);

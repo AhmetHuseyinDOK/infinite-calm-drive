@@ -217,7 +217,7 @@ async function main() {
   // (bo: the Bosphorus's gardens and hill: the coast's by day; in the evening and at night darker and less blue than the coast's
   // slope, as the concept repainted at those hours (ref/tod/bosphorus_*.png) has its hillside: its steep banks face the road)
   const FT = (c, co, sa, bo) => ({ c, co, sa, bo });
-  const F_DAY = FT([...FIELD_DAY], [...COAST_DAY], [...SAK_DAY], [...COAST_DAY]), F_GOLD = FT([3.8, 1.6, 3.2], [3.4, 2.0, 3.0], [7.0, 4.6, 2.6], [1.45, 1.0, 1.9]);
+  const F_DAY = FT([...FIELD_DAY], [...COAST_DAY], [...SAK_DAY], [...COAST_DAY]), F_GOLD = FT([2.2, 1.02, 3.6], [2.51, 1.25, 3.05], [3.4, 1.62, 3.61], [1.45, 1.0, 1.9]); // (Audit 2: was [3.8, 1.6, 3.2], [3.4, 2.0, 3.0], [7.0, 4.6, 2.6])
   const F_SUNSET = FT([2.3, 1.4, 5.6], [0.62, 0.85, 4.0], [2.6, 2.3, 10.0], [0.65, 0.5, 1.15]), F_NIGHT = FT([2.6, 1.8, 6.0], [5.5, 3.0, 8.0], [4.0, 2.6, 6.0], [0.55, 0.55, 1.1]);
   const FIELD_T = todTones([[0, F_NIGHT], [0.2, mixTones(F_NIGHT, F_SUNSET, 0.3)], [0.245, mixTones(F_SUNSET, F_GOLD, 0.4)], [0.3, F_DAY], [0.62, F_DAY], [0.7, F_GOLD], [0.75, F_SUNSET], [0.765, mixTones(F_SUNSET, F_NIGHT, 0.25)], [0.8, mixTones(F_SUNSET, F_NIGHT, 0.55)], [0.86, F_NIGHT], [1, F_NIGHT]]);
   { // the fields: the painted meadow once its texture is in (the country's ground variants then read it), else the paddies
@@ -264,13 +264,13 @@ async function main() {
   const BL_DAY = { b: [...BL_SHADE_DAY] }; // (its daytime key: kept as the old tint, deeper by TOD.warm, each frame)
   // the broadleaf crowns' leaves by the time of day (materials.js uGhTint; read against the coast painting repainted at those
   // hours: darker at golden hour and sunset, a little bluer at night)
-  const GH_D = { c: [1, 1, 1] }, GH_G = { c: [0.78, 0.82, 1.15] }, GH_S = { c: [0.52, 0.56, 1.3] }, GH_N = { c: [1.25, 1.9, 2.2] };
+  const GH_D = { c: [1, 1, 1] }, GH_G = { c: [0.9, 0.69, 1.11] } /* (Audit 2: was [0.78, 0.82, 1.15]) */, GH_S = { c: [0.52, 0.56, 1.3] }, GH_N = { c: [1.25, 1.9, 2.2] };
   const GH_T = todTones([[0, GH_N], [0.2, mixTones(GH_N, GH_S, 0.3)], [0.245, mixTones(GH_S, GH_G, 0.4)], [0.3, GH_D], [0.62, GH_D], [0.7, GH_G], [0.75, GH_S], [0.765, mixTones(GH_S, GH_N, 0.25)], [0.8, mixTones(GH_S, GH_N, 0.55)], [0.86, GH_N], [1, GH_N]]);
   // …and the Bosphorus's (W2), as its concept repainted at those hours (ref/tod/bosphorus_*.png) has its gardens' trees: a deep
   // olive at golden hour, nearly black-green against the sunset, a dark moonlit blue-green at night (the coast's moonlit teal
   // read far too light on its hillside, which faces the road)
   const GH_TR = todTones([[0, { c: [0.5, 0.72, 1.0] }], [0.2, { c: [0.5, 0.62, 0.95] }], [0.245, { c: [0.6, 0.6, 0.9] }], [0.3, GH_D], [0.62, GH_D], [0.7, { c: [0.66, 0.68, 0.85] }], [0.75, { c: [0.42, 0.42, 0.72] }], [0.765, { c: [0.44, 0.48, 0.8] }], [0.8, { c: [0.46, 0.56, 0.88] }], [0.86, { c: [0.5, 0.72, 1.0] }], [1, { c: [0.5, 0.72, 1.0] }]]);
-  const BL_T = todTones([[0, { b: [22, 16, 6] }], [0.2, { b: [16, 12, 5.5] }], [0.245, { b: [7, 4.6, 3] }], [0.3, BL_DAY], [0.62, BL_DAY], [0.7, { b: [7.5, 5, 2.3] }], [0.75, { b: [4.2, 3.0, 2.6] }], [0.765, { b: [8, 6.5, 3.8] }], [0.8, { b: [14, 11, 5] }], [0.86, { b: [22, 16, 6] }], [1, { b: [22, 16, 6] }]]);
+  const BL_T = todTones([[0, { b: [22, 16, 6] }], [0.2, { b: [16, 12, 5.5] }], [0.245, { b: [7, 4.6, 3] }], [0.3, BL_DAY], [0.62, BL_DAY], [0.7, { b: [5.63, 2.68, 1.09] }] /* (Audit 2: was [7.5, 5, 2.3]) */, [0.75, { b: [4.2, 3.0, 2.6] }], [0.765, { b: [8, 6.5, 3.8] }], [0.8, { b: [14, 11, 5] }], [0.86, { b: [22, 16, 6] }], [1, { b: [22, 16, 6] }]]);
   // the tetrapods' tones in coast.png (sRGB, by lightness): its deep blue (creases, the wet band), blue-grey shade, neutral
   // middle and warm light grey, and the white of its foam lit and in its light-blue shade
   // …and at golden hour, sunset and night from the coast painting repainted at those hours (ref/tod/; the same pixels'
@@ -292,11 +292,11 @@ async function main() {
   // the coast's long grass by the road (step 27): a deeper green than the slope above it, as painted, by the hour (a factor on its albedo,
   // materials.js uCoVerge): by day and at night as the painting and its night repaint have it, darker and less yellow at golden hour, as it
   // was at sunset (ref/tod/coast_*.png); grey skies keep the old verge
-  const CV_T = todKeys({ v: [0.3, 0.5, 0.65] }, { v: [1, 1, 1] }, { v: [0.4, 0.62, 0.95] }, { v: [0.3, 0.35, 0.6] });
+  const CV_T = todKeys({ v: [0.3, 0.5, 0.65] }, { v: [1, 1, 1] }, { v: [0.4, 0.62, 0.95] }, { v: [0.125, 0.143, 0.873] }); // (Audit 2: golden was [0.3, 0.35, 0.6])
   // (step 28) the country's verge banks' grass by the hour (materials.js M.bank, U.uBankT: a factor on its green texels' albedo; 1 on a
   // bright day), read against the painting's evening repaints (ref/tod/country_*.png: the verge a dark olive in the low sun's shade at
   // golden hour, a dusky mauve at sunset, a deep teal under the moon); grey skies keep 1
-  const BKV_T = todKeys({ v: [0.62, 0.8, 1.9] }, { v: [0.52, 0.6, 1.6] }, { v: [1, 1, 1] }, { v: [0.34, 0.3, 1.0] });
+  const BKV_T = todKeys({ v: [0.62, 0.8, 1.9] }, { v: [0.52, 0.6, 1.6] }, { v: [1, 1, 1] }, { v: [0.33, 0.26, 1.09] }); // (Audit 2: golden was [0.34, 0.3, 1.0])
   const TP_T = todKeys(TP_NIGHT, TP_SUNSET, TP_DAY, TP_GOLD), BK_T = todKeys(BK_NIGHT, BK_SUNSET, BK_DAY, BK_GOLD);
   // Cappadocia's fairy chimneys (W5: materials.js tuffMaterial) under a clear sky: their tones (sRGB) in its concept painting
   // (ref/world/cappadocia_uchisar.png: the cones' mauve-brown shade, ochre middle and warm sandy light, the pale cream tuff at their
@@ -356,8 +356,17 @@ async function main() {
   // higher, more of each flower keeps the rose): on a bright day the painting's (its crowns' pink pixels: CIELAB L*
   // median 57, three quarters under 69; with the old ramp ours were 64–68 and 77–78), the old ramp at golden hour,
   // sunset and night (their tones were read against ref/tod/ with it)
-  const BLM_OLD = { m: [205, 105, 150], w: [0.3, 0, 0] }, BLM_DAY = { m: [186, 91, 135], w: [0.47, 0, 0] }, /* (step 26: a little less saturated for the new canopy, was 188, 88, 132) */ BLM_T = todKeys(BLM_OLD, BLM_OLD, BLM_DAY, BLM_OLD), blMid = new THREE.Color();
-  const BL_TIP = new THREE.Color().setRGB(1, 232 / 255, 242 / 255, THREE.SRGBColorSpace); // (the petal tips' pale pink, (255, 232, 242) as before)
+  // (Audit 2: at golden hour the canopy as its repaint has it, mostly a deep salmon-rose against the low sun with peach-lit edges, ref/tod/
+  // sakura_golden.png (it was a pale peach: median ΔE 31); its petal tips (t) by the hour too, so the lit edges darken with the rest)
+  const BLM_GOLD = { m: [121, 65, 119], w: [0.3, 0, 0], t: [155, 163, 196] };
+  const BLM_OLD = { m: [205, 105, 150], w: [0.3, 0, 0], t: [255, 232, 242] }, BLM_DAY = { m: [186, 91, 135], w: [0.47, 0, 0], t: [255, 232, 242] }, /* (step 26: a little less saturated for the new canopy, was 188, 88, 132) */ BLM_T = todKeys(BLM_OLD, BLM_OLD, BLM_DAY, BLM_GOLD), blMid = new THREE.Color(), blTip = new THREE.Color();
+  // (Audit 2) the evening sky under a clear sky (sky.js uEve), as all seven paintings repainted at golden hour and sunset have it
+  // (ref/tod/: their upper sky's rows, ~/cdtest/gap2): a deep steel blue from ~21° up to the top of the frame (z), a pale blue-grey band
+  // ~7° up (m), the warm colour only along the horizon (h); blue-violet over a mauve band at sunset (display sRGB). g: the sun's glow
+  // round it (a factor), drawn round the sun lowered to EVE_EL (the paintings' evening sun sits on the horizon; ours stands 19° up at
+  // golden hour, its glow washing the frame's upper sky lilac). The day before 0.62 and the night from 0.8 keep their old sky
+  const EVE_G = { z: [30, 70, 124], m: [100, 112, 136], h: [235, 190, 150], g: [2.2, 1, 1] }, EVE_S = { z: [60, 70, 122], m: [125, 98, 130], h: [235, 130, 95], g: [2.6, 1, 1] };
+  const EVE_T = todTones([[0, EVE_G], [0.7, EVE_G], [0.75, EVE_S], [1, EVE_S]]), EVE_EL = 0.06;
   const LIGHTS_ON = QS.has('lightson') ? parseFloat(QS.get('lightson')) : -1; // (test hook)
   // the car's painter's sun (CAR_KEY): the real sun pulled round to within KEY_A of the car's heading (see the frame loop)
   const KEY_A = 1.4, carKey = new THREE.Vector3();
@@ -410,7 +419,7 @@ async function main() {
   // towards the kerb of the side the traffic keeps to (path.js trafficSide: left in Japan, right in Turkey), so through a
   // border tunnel the car moves over to the other side of the road with the traffic
   const MULT_MIN = 0.4, MULT_MAX = 5.5, SIDE0 = trafficSide(S0) < 0 ? -1 : 1;
-  const st = { s: S0, u: 1.65 * SIDE0, uHome: 1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, spray: QS.has('nospray') ? 0 : 1 /* test switch */, grass: 1 /* test switch: the meadow's blades */, pclouds: 1 /* test switch: painted clouds (0: the procedural ones, with ?clouds=both) */, band: 1 /* test switch: the painted horizon (0: the mountain rings) */, waves: 1 /* test switch: the painted sea's waves (0: its flat tones) */, shore: 1 /* test switch: the waves and foam along the sea wall (0: the open sea's colour there) */, surf: 1 /* test switch: the spray over the tetrapods */, tetra: 1 /* test switch: the tetrapods */, bark: 1 /* test switch: the bark's painted tones (0: the old colours, lit) */, trunks: 1 /* test switch: the painted trees' bark (0: hidden) */, todpaint: 1 /* test switch: the painted look at golden hour, sunset and night (0: only on a bright day, as before) */, road: 1 /* test switch: the coast's, the country's and the cherry avenue's painted asphalt (0: the old road; in the avenue's ground it also skips the tint's work) */, carkey: 1 /* test switch: the car lit by the painter's sun (0: by the real sun) */, sunroad: 1 /* test switch: the sun and the moon stand by the road's heading, as in the paintings (0: fixed in the world, as before) */, volkey: 1 /* test switch: the crowns and the tetrapods lit by the painted volumes' key (0: by the real sun) */, shsoft: 1 /* test switch: soft shadow edges near the camera (0: one tap everywhere, as before) */, shfit: 1 /* test switch: the sun's shadow box fitted to what can be seen at a low sun (0: the old square box) */, tuff: 1 /* test switch: Cappadocia's fairy chimneys in their painted tones (0: their own colours, lit) */, slope: 1 /* test switch: the coast's slope in the painting's lime with its painter's fill in the shade (0: as before, step 27) */, bandnear: 1 /* test switch: the country's painted horizon drawn just inside the world's far fade, over the next zone's far slopes (0: as before, step 28) */, banktod: 1 /* test switch: the country's verge banks' grass by the hour (0: lit only), step 28 */, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
+  const st = { s: S0, u: 1.65 * SIDE0, uHome: 1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, spray: QS.has('nospray') ? 0 : 1 /* test switch */, grass: 1 /* test switch: the meadow's blades */, pclouds: 1 /* test switch: painted clouds (0: the procedural ones, with ?clouds=both) */, band: 1 /* test switch: the painted horizon (0: the mountain rings) */, waves: 1 /* test switch: the painted sea's waves (0: its flat tones) */, shore: 1 /* test switch: the waves and foam along the sea wall (0: the open sea's colour there) */, surf: 1 /* test switch: the spray over the tetrapods */, tetra: 1 /* test switch: the tetrapods */, bark: 1 /* test switch: the bark's painted tones (0: the old colours, lit) */, trunks: 1 /* test switch: the painted trees' bark (0: hidden) */, todpaint: 1 /* test switch: the painted look at golden hour, sunset and night (0: only on a bright day, as before) */, road: 1 /* test switch: the coast's, the country's and the cherry avenue's painted asphalt (0: the old road; in the avenue's ground it also skips the tint's work) */, carkey: 1 /* test switch: the car lit by the painter's sun (0: by the real sun) */, sunroad: 1 /* test switch: the sun and the moon stand by the road's heading, as in the paintings (0: fixed in the world, as before) */, volkey: 1 /* test switch: the crowns and the tetrapods lit by the painted volumes' key (0: by the real sun) */, shsoft: 1 /* test switch: soft shadow edges near the camera (0: one tap everywhere, as before) */, shfit: 1 /* test switch: the sun's shadow box fitted to what can be seen at a low sun (0: the old square box) */, tuff: 1 /* test switch: Cappadocia's fairy chimneys in their painted tones (0: their own colours, lit) */, slope: 1 /* test switch: the coast's slope in the painting's lime with its painter's fill in the shade (0: as before, step 27) */, bandnear: 1 /* test switch: the country's painted horizon drawn just inside the world's far fade, over the next zone's far slopes (0: as before, step 28) */, banktod: 1 /* test switch: the country's verge banks' grass by the hour (0: lit only), step 28 */, evesky: 1 /* test switch: the painted evening sky (0: the old sky at golden hour and sunset), Audit 2 */, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
   let started = false;
   // (the atlas's world variant and its shadow twin are made, and their programs compiled, at every start: without Turkey's
   // atlas yet, on a stand-in, its textures swapped in when they load (materials.js setWorldTex))
@@ -1068,6 +1077,15 @@ async function main() {
     // the moon (the night's light: ahead and to the left, sky.js) shows once the twilight has gone, not beside the sunset
     // glow ahead (a full moon there read wrong); and fades out before dawn
     su.uMoon.value = sstep(0.4, 0.8, TOD.night);
+    { // (Audit 2) the painted evening sky: its weight and tones by the hour, the sun its glow is drawn round lowered to the horizon
+      const ev = paintSky() * sstep(0.62, 0.7, TOD.t) * (1 - sstep(0.765, 0.8, TOD.t)) * st.evesky; su.uEve.value = ev;
+      if (ev > 0) {
+        const P = EVE_T.at(TOD.t), g = post.grade.uniforms, sd = TOD.sunDir; P.ug(g, 'z', su.uEveZ.value); P.ug(g, 'm', su.uEveM.value); P.ug(g, 'h', su.uEveH.value);
+        su.uEveG.value = P.rgb('g')[0];
+        const el = Math.asin(clamp(sd.y, -1, 1)), el2 = lerp(el, Math.min(el, EVE_EL), ev), k = Math.cos(el2) / Math.max(Math.hypot(sd.x, sd.z), 1e-6);
+        su.uSkySun.value.set(sd.x * k, Math.sin(el2), sd.z * k);
+      } else su.uSkySun.value.copy(TOD.sunDir);
+    }
     // shooting stars on clear nights, somewhere ahead of us
     if (TOD.night > 0.65 && ov < 0.3) {
       if (meteor.p < 0 && (meteor.next -= dt) < 0) {
@@ -1186,7 +1204,8 @@ async function main() {
       const P = BLM_T.at(TOD.t), m = P.rgb('m'), o = BLM_OLD.m, k = paintSky();
       blMid.setRGB(lerp(o[0], m[0], k) / 255, lerp(o[1], m[1], k) / 255, lerp(o[2], m[2], k) / 255, THREE.SRGBColorSpace);
       const e = lerp(BLM_OLD.w[0], P.rgb('w')[0], k); // (the tips' edge: as scale and offset, and the step to them, for the shader)
-      U.uBlMid.value.set(blMid.r, blMid.g, blMid.b, 1 / (1 - e)); U.uBlTip.value.set(BL_TIP.r - blMid.r, BL_TIP.g - blMid.g, BL_TIP.b - blMid.b, -e / (1 - e)); }
+      const tp = P.rgb('t'); blTip.setRGB(lerp(255, tp[0], k) / 255, lerp(232, tp[1], k) / 255, lerp(242, tp[2], k) / 255, THREE.SRGBColorSpace); // (the tips by the hour: Audit 2)
+      U.uBlMid.value.set(blMid.r, blMid.g, blMid.b, 1 / (1 - e)); U.uBlTip.value.set(blTip.r - blMid.r, blTip.g - blMid.g, blTip.b - blMid.b, -e / (1 - e)); }
     // home lights come on one by one over the two hours after sunset (18:00 → ~20:00 on the clock, ~40 s of driving) and
     // go off one by one at dawn; on a dark rainy day some are on in the daytime too
     U.uLightsOn.value = LIGHTS_ON >= 0 ? LIGHTS_ON : Math.max(sstep(0.02, 0.75, TOD.night), 0.3 * ov);

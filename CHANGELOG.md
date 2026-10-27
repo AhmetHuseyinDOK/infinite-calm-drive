@@ -2,6 +2,33 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-27 · 06:27 — Gap audit 2: golden hour as painted
+- **A second gap audit** (ref/GAPS.md, Audit 2): the four audit frames re-shot at noon and, for the first time, at golden hour,
+  sunset and night against the paintings' repaints. At noon they are now 4.9–10.7 from the paintings; the evening and the night
+  were 12–26 from theirs. Ranked: golden hour, the night, sunset, the city's shopfronts, the car. Golden hour is fixed here.
+- **The evening sky as painted:** at golden hour and sunset under a clear sky the sky keeps the repaints' deep steel blue from ~20°
+  up (blue-violet at sunset) over a pale band, the warm colour only along the horizon, the sun's glow hugging it round a sun drawn
+  low ahead (its light and shadows unchanged). It was a pale lilac haze to the top of the frame. In Turkey too.
+- **Golden hour's grass, cherry canopy and clouds as painted:** lawns, slopes and verges a warm olive-gold in the low sun (were a
+  garish chartreuse and yellow), the round crowns olive, the cherry canopy a deep salmon-rose (was a pale peach), the clouds' shade
+  a cool blue-grey under mauve (was a muddy taupe).
+- Against the repaints (share-weighted ΔE): golden hour city 15.8 → 13.9, avenue 23.6 → 11.2, coast 17.4 → 9.5, country 16.6 →
+  9.1; sunset 18.0 → 18.0, 18.3 → 17.0, 14.3 → 11.4, 18.1 → 14.5. The sky at the top of the frame 20–44 → 3.7–8.7; the avenue's
+  lawn 44.4 → 6.3, the coast's slope 21.1 → 0.4, the canopy 31.1 → 9.2; the Bosphorus's evening sky golden 13.7 → 1.8, sunset
+  29.5 → 6.3. Worse: the city's far street at sunset 1.9 → 11.2, the avenue's near road at golden hour 13.1 → 17.4 (its wet mirror
+  shows the darker sky). Dawn, a sunset turning golden, takes some of the new golden tones.
+- Noon and night unchanged: every zone's start identical to live in seeded captures but for the noise of two loads of one build.
+- How: sky.js (uEve, uEveZ/M/H, uSkySun, uEveG), main.js (EVE_T, EVE_EL; F_GOLD, CV_T, BKV_T, GH_G, BL_T, BLM_GOLD with the petal
+  tips by the hour; test switch st.evesky), painted.js (CL_GOLD). Assets: none (+1.5 KB of code).
+- Programs: 65 desktop / 64 phone, as before; none compiled through sunset, night, rain or drives at golden hour and sunset.
+- Cost: the sky's draw a little heavier in the evening only (per draw on the shared box's Vega at golden hour 1.48 / 1.37 → 1.48 /
+  1.63 ms, ~+0.1), nothing at noon. The M1's whole frame over golden-hour avenue drives: desktop 9.26 / 12.04 → 11.36 / 9.40 ms
+  (the same), phone 6.75 / 4.96 / 4.77 → 6.43 / 5.90 / 6.63 (bimodal; over twelve runs each, medians 4.71 → 5.22, ~+0.24 within
+  the fast cluster). 0 shader errors in all eleven zones and on the phone tier at dawn, golden hour, sunset and night; no console
+  errors at q=low, mid and high; embed starts on tap.
+- Left over: the country's fields lit on one side only in the repaint, the coast's open sea at golden hour, Paşabağ's lighter sunset
+  sky, the city's far street at sunset; sunset's ground and the whole night (next).
+
 ## 2026-10-27 · 04:51 — Gap 8 and the hills: the country's verges, its cedars and its far view as painted
 - **The verges as painted: a deep bank of long arching grass with big flowers in clumps.** Along both edges of the country road
   a bank of tall, broad, sword-shaped blades about 3.4 m deep (was 1.8 m), arching out of dark roots, each blade lit on one side

@@ -42,10 +42,14 @@ const litOf = (g, cell, a, b) => {
   if (!g.hasLit) return; const c0 = cell.charCodeAt(0);
   if (c0 === 118 && cell.charCodeAt(1) === 115) { g.litV = 12; return; } // a neon vertical sign: glows by day too
   if (c0 === 104 && cell.charCodeAt(1) === 115) { const n = +cell.slice(2); if (n === 1 || n === 5 || n === 9 || n === 11) g.litV = 3; return; } // (step 30: a white or cream shop board: dimmer at night)
-  if (c0 === 115 && cell.startsWith('shop_')) { const c5 = cell[5]; if ((c5 === 'g' && cell[6] === 'l') || c5 === 'd' || c5 === 'k' || c5 === 'c' || c5 === 'n' || c5 === 'p') g.litV = 6; return; } // a lit shop: warm by day too (shop_p…: the painted ones)
+  if (c0 === 115 && cell.startsWith('shop_')) { const c5 = cell[5]; if (c5 === 'p') { g.litV = 5 + roomCode(g, a, b); g.rooms = true; return; } if ((c5 === 'g' && cell[6] === 'l') || c5 === 'd' || c5 === 'k' || c5 === 'c' || c5 === 'n') g.litV = 6; return; } // a lit shop: warm by day too (shop_p…: the painted ones, below)
   if (c0 !== 119) return; const k = cell.charCodeAt(cell.length - 1); if (k !== 76 && k !== 67) return;
   const h = Math.sin(a * 12.9898 + b * 78.233 + g.e[12] * 0.731 + g.e[14] * 0.513) * 43758.5453; g.litV = 24 + Math.floor((h - Math.floor(h)) * 231);
 };
+// (step 31) a painted shop bay (shop_p…) takes one of the shop codes 5…8 (one rule to the lights: materials.js windowLights): which one
+// says how the room behind its glass is shown (materials.js makeAtlasRooms: the low bit mirrors it, the high one takes its kind's second
+// room), hashed from where the bay is (no random numbers drawn: the street's layout stays); the chunk then takes the atlas's room variant
+const roomCode = (g, a, b) => { const h = Math.sin(a * 91.3458 + b * 47.123 + g.e[12] * 1.917 + g.e[14] * 0.371) * 24634.6345; return Math.floor((h - Math.floor(h)) * 4) & 3; };
 const fq = (g, x0, x1, y0, y1, z, cell, c = W1) => { litOf(g, cell, x0 + z, y0); g.quad([x1, y0, z], [x0, y0, z], [x0, y1, z], [x1, y1, z], c, uv(cell)); g.litV = 0; };
 const pxq = (g, x, z0, z1, y0, y1, cell, c = W1) => { litOf(g, cell, x + z0, y0); g.quad([x, y0, z1], [x, y0, z0], [x, y1, z0], [x, y1, z1], c, uv(cell)); g.litV = 0; };
 const nxq = (g, x, z0, z1, y0, y1, cell, c = W1) => { litOf(g, cell, x + z0, y0); g.quad([x, y0, z0], [x, y0, z1], [x, y1, z1], [x, y1, z0], c, uv(cell)); g.litV = 0; };

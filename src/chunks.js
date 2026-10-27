@@ -398,7 +398,7 @@ export class World {
     for (const sq of [s0, s0 + 20, s0 + 40, s1]) { const m = zoneMix(sq); zset.add(m.a); if (m.t > 0) zset.add(m.b); }
     { const b = borderNear(s0 + CH / 2); if (b && b.s + 2 * T_RIDGE + CH > s0 && b.s - 2 * T_RIDGE - CH < s1) { zset.clear(); zset.add(b.a); zset.add(b.b); zset.add('border'); } }
     add(ground.build(), groundMaterialFor([...zset]), false, true); yield;
-    { const W = G.atlas.world, m = add(G.atlas.build(), W ? this.M.atlasW : this.M.atlas, true, true); if (m) m.customDepthMaterial = W ? this.M.atlasWDepth : this.M.atlasDepth; } yield; // (the painted cells' outlines in the shadow pass too; the world atlas's cells in its variant)
+    { const W = G.atlas.world, R = !W && G.atlas.rooms && this.M.atlasI, m = add(G.atlas.build(), W ? this.M.atlasW : R || this.M.atlas, true, true); if (m) m.customDepthMaterial = W ? this.M.atlasWDepth : this.M.atlasDepth; } yield; // (the painted cells' outlines in the shadow pass too; the world atlas's cells in its variant; painted shop bays in the rooms' variant, step 31)
     { const m = add(G.color.build(), this.M.color, true, true); if (m) m.customDepthMaterial = PROP_DEPTH; } yield; // (wires cast no shadow)
     add(G.tetra.build(), this.M.tetra, true, true); // (the tetrapods: their shadows from the plain depth material)
     add(G.bark.build(), this.M.bark, true, true, 0, 'leaf'); yield; // (the trees' bark: shown as far as their crowns; plain depth material too)

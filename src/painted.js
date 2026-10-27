@@ -180,6 +180,41 @@ export async function loadFrontAtlas(tier, timeoutMs = 15000) {
   })(), timeoutMs, 'painted fronts unavailable, keeping the procedural shopfronts:');
 }
 
+/** (step 31) Loads the rooms behind the painted shop windows (assets/rooms/rooms1.*, made by ~/cdtest/s31/scripts/packrooms.py from
+ *  Grok Imagine edits of a drawn room carrying each bay's own goods): one painted one-point-perspective view a room (its back wall the
+ *  middle f × f of it), padded, in one sheet; each painted bay's rooms (.cells: shop_p0 → [room, second room]); and the bays' glass,
+ *  a mask sheet laid out as the fronts' albedo tiles (its alpha; a texture of its own: materials.js makeAtlasRooms), with each bay's
+ *  glass box (its panes' bounds, a little grown: the room is cast only inside it). 'hi' or 'lo' (half:
+ *  phones, the embed), as the fronts. Null (never rejects) when anything is missing, broken, truncated or too slow: the windows then
+ *  keep their painted glass (materials.js makeAtlasRooms is not made). Room corners are returned in GL texture space (v up). */
+export async function loadRoomAtlas(tier, timeoutMs = 15000) {
+  const base = ASSETS + 'rooms/';
+  return orNull((async () => {
+    const r = await fetch(base + 'rooms1.json');
+    if (!r.ok) throw new Error('rooms1.json ' + r.status);
+    const J = await r.json(), file = J.files && J.files[tier] ? tier : 'hi', mk = J.mask || {};
+    const sheet = async (F, opt) => { // (checked whole: a truncated image decodes without complaint)
+      const ri = await fetch(base + F.files[file]);
+      if (!ri.ok) throw new Error(F.files[file] + ' ' + ri.status);
+      const blob = await ri.blob();
+      if (F.bytes && F.bytes[file] && blob.size !== F.bytes[file]) throw new Error(F.files[file] + ' is ' + blob.size + ' bytes, not ' + F.bytes[file]);
+      const img = await createImageBitmap(blob, opt);
+      if (F.size && F.size[file] && (img.width !== F.size[file][0] || img.height !== F.size[file][1])) throw new Error(F.files[file] + ' has the wrong size');
+      return img;
+    };
+    const sz = J.room || [0, 0], rooms = {}, cells = {};
+    for (const [n, p] of Object.entries(J.rooms || {})) if (p[0] >= 0 && p[1] >= 0 && p[0] + sz[0] <= 1 && p[1] + sz[1] <= 1) rooms[n] = [p[0], 1 - p[1] - sz[1]];
+    for (const [c, rs] of Object.entries(J.cells || {})) { const ok = (rs || []).filter(n => rooms[n]); if (ok.length) cells[c] = ok; }
+    if (!(sz[0] > 0 && sz[1] > 0) || !Object.keys(cells).length || !(J.f > 0 && J.f < 1) || !(J.depth > 0)) throw new Error('no rooms listed');
+    if (!mk.files || !(mk.tiles || []).length) throw new Error('no glass listed');
+    const [img, mimg] = await Promise.all([sheet(J, { imageOrientation: 'flipY', premultiplyAlpha: 'none' }), sheet(mk, { premultiplyAlpha: 'none' })]);
+    const W = mimg.width, H = mimg.height, okBox = b => Array.isArray(b) && b.length === 4 && b[0] >= 0 && b[1] >= 0 && b[2] <= 1 && b[3] <= 1 && b[2] > b[0] && b[3] > b[1];
+    const tiles = mk.tiles.filter(t => cells[t.name] && t.w > 0 && t.h > 0 && t.x >= 0 && t.y >= 0 && t.x + t.w <= 1 && t.y + t.h <= 1).map(t => ({ name: t.name, x: t.x * W, y: t.y * H, w: t.w * W, h: t.h * H, box: okBox(t.box) ? t.box : [0, 0, 1, 1] }));
+    if (!tiles.length) throw new Error('no glass listed');
+    return { img, mask: { img: mimg, tiles }, rooms, cells, size: sz, f: J.f, depth: J.depth, e: J.e || 1, warp: J.warp > 0 && J.warp <= 1 ? J.warp : 1, tier: file };
+  })(), timeoutMs, 'the shops\' rooms unavailable, keeping their painted glass:');
+}
+
 /** Loads the painted houses of the country, the coast and the cherry avenue (assets/houses/, made by
  *  ~/cdtest/hs/scripts/pack.py from asset batch 1's elevations and Grok Imagine gable ends, anchored on the reference
  *  art): a sheet of flat elevations (front = eave side, gable end) cut out on their alpha, the lit windows' emissive tiles

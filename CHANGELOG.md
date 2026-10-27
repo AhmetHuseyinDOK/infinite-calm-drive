@@ -2,6 +2,41 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-27 · 15:06 — Shop windows with depth: rooms behind the shopping street's glass
+- **Rooms behind the glass:** every painted shop window and glass door on the shopping street now looks into a room: a bakery's
+  shelves of bread running back to its counter, a bookshop's walls of manga, a florist's tiers of buckets, a clothes shop's rails and
+  mannequin, a tea shop's caddies, a sweets shop's jars, a café's cake counter, a ramen counter with its stools, a general store's
+  packed shelves, a delicatessen behind its noren. As the car passes, the side walls, floor and ceiling shift behind the window frames
+  (the window was its painting, flat on the glass). From the chase camera you see mostly the shelves along the far side wall; beside
+  the car, the back wall too.
+- **The windows' bars and light as before:** mullions, transoms, frames and noren stay painted in front of the room. Each room is as
+  bright as its window's painting was: warm by day, lit at dusk, calm at night as step 30 left it, the neon still the brightest thing.
+  A window's room is mirrored or not by where it stands; in about half the bakeries, cafés, tea shops, general stores and ramen shops
+  a shopkeeper stands at the back.
+- Against the painting (Audit 2's boxes): the frame about the same (noon 10.48 → 10.44, golden hour 13.66 → 13.26, sunset 19.29 →
+  19.26, night 10.34 → 10.40); right shops 26.7 → 23.8 at noon, left shops 10.3 → 12.8 (darker). The rooms are painted a little
+  softer than the flat goods were (detail: left 2.19 → 1.93, right 3.92 → 3.75; the painting 3.74 / 4.02).
+- Every other zone identical to live in seeded captures at noon, golden hour, sunset and night (the Turkish town within its own
+  noise). The city differs only inside its windows (at noon 69k px of the frame). With the test switch off, or without the room
+  files, identical to live.
+- How: materials.js (makeAtlasRooms: the shop-front shader's room variant, M.atlasI; uRmOn), props.js (painted shop windows take
+  light codes 5–8: roomCode), chunks.js, painted.js (loadRoomAtlas, which checks each file and falls back to the painted glass),
+  main.js (the glass mask as a one-channel texture, warm-up, test switch st.rooms). +6.6 KB of code, +2.4 KB gzipped.
+- Research: interior mapping (van Dongen 2008) in its one-image form (SimCity 5's, as Ben Golus rebuilt it). Rooms painted by Grok
+  Imagine image_edit on a drawn box room carrying each window's own goods; all kept the drawn layout first time, the shopkeepers came
+  from a second edit.
+- Assets: assets/rooms/rooms1.json, rooms1_hi.webp (290 KB, 15 rooms at 448 × 538), rooms1_lo.webp (96 KB), glass1_hi.png (7 KB),
+  glass1_lo.png (2 KB). First visit +302 KB desktop / +108 KB phone (measured); start-up the same (desktop ready 3685 / 3515 →
+  3484 / 3803 / 4082 ms, box noise).
+- Programs: 66 desktop / 65 phone (+1, compiled at load); none compiled through sunset, night, rain or a drive.
+- Cost (the shared box's Vega; the desktop machine down): the city's shop-front draws +0.05–0.7 ms (desktop 3.89 / 4.17 → 4.57 /
+  4.22 ms, phone 1.86 / 1.76 → 2.18 / 2.22; A/A ±0.2). The room is cast only inside each window's glass area, and phones use plain
+  trilinear filtering. Whole frame over city drives: desktop 21.13 / 21.00 / 19.93 → 20.08 / 21.48 / 21.04 ms, phone 11.38 / 12.33 /
+  13.25 → 12.31 / 13.26 / 13.44 ms (within the box's noise). World build the same. 0 shader errors in all eleven zones, on the phone
+  tier and at q=low; no console errors at q=low, mid and high; embed starts on tap.
+- Left over: the Turkish town's and the Bosphorus's windows, the homes' lit windows upstairs, the izakaya's lattice front, glass
+  reflections; the rooms softer than the painted goods were.
+
 ## 2026-10-27 · 10:34 — Gap audit 2: the night as painted
 - **A full moon in the sky, as painted:** at night under a clear sky the moon stands ~21° up in the frame, straight ahead over the
   road in the city, the avenue and the country, over the sea on the left by the coast and the strait, to the right of Uçhisar's road,

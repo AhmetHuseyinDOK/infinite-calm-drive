@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { Path, zoneW, zoneWeight, zoneAt, zparam, ZINFO, setStartZone, startZone, zoneSets, trafficSide, seaWeight, regionWeight, viewMix, bandMix, bayQ, borderNear, nextBorderS, REGION, crossingS, crossingValid, XING, XOFF, riverNear, RIV, ROFF, groundOffsetMix, tunnelNear, T_HALF, T_RIDGE, ZONE_LEN } from './path.js';
 import { makeCrossingRig, makeTrain, xingPosts } from './crossing.js';
-import { buildAtlas, buildFoliage, buildPaintedAtlas, buildWorldAtlas, buildCapAtlas, buildPasAtlas, albedoTexture } from './textures.js';
-import { makeMaterials, makeAtlasW, makeAtlasRooms, makeCapAtlas, makePasGrass, setWorldTex, U, groundMaterialFor, setGrazeFade, makeCloudMap, makeGhibliLeaf, FIELD, tetraMaterial, barkMaterial, tuffMaterial, PROP_DEPTH } from './materials.js';
-import { setAtlas, setFoliage, warmTrees, warmBare, warmTetrapods, setLeafDensity, GHIBLI, setHouses, setTrHouses } from './props.js';
+import { buildAtlas, buildFoliage, buildPaintedAtlas, buildWorldAtlas, buildCapAtlas, buildPasAtlas, buildChainAtlas, albedoTexture } from './textures.js';
+import { makeMaterials, makeAtlasW, makeAtlasRooms, makeAtlasChain, makeCapAtlas, makePasGrass, setWorldTex, U, groundMaterialFor, setGrazeFade, makeCloudMap, makeGhibliLeaf, FIELD, tetraMaterial, barkMaterial, tuffMaterial, PROP_DEPTH } from './materials.js';
+import { setAtlas, setFoliage, warmTrees, warmBare, warmTetrapods, setLeafDensity, GHIBLI, setHouses, setTrHouses, setChains } from './props.js';
 import { loadTreeAtlas } from './ghibli.js';
 import { World, CH } from './chunks.js';
 import { makeSky, paintClouds, makeClouds, makeMountains, updateTOD, applyWeather, TOD, lightDirAt, KEYS, REGION_KEYS, sunBearing, moonSkyDir } from './sky.js';
@@ -21,7 +21,7 @@ import { makePost } from './post.js';
 import { makeAudio } from './audio.js';
 import { makeParticles } from './particles.js';
 import { clamp, lerp, sstep, setSeed, hash2 } from './util.js';
-import { loadCloudAtlas, makePaintedClouds, loadBandAtlas, makePaintedBand, updatePainted, loadFieldTexture, loadFrontAtlas, loadRoomAtlas, loadHouseAtlas, loadHousePatch, loadTrHouseAtlas, loadTownAtlas, todTones, mixTones, paintSky, PAINT_TOD, BAND_R } from './painted.js';
+import { loadCloudAtlas, makePaintedClouds, loadBandAtlas, makePaintedBand, updatePainted, loadFieldTexture, loadFrontAtlas, loadRoomAtlas, loadHouseAtlas, loadHousePatch, loadTrHouseAtlas, loadTownAtlas, loadChainAtlas, todTones, mixTones, paintSky, PAINT_TOD, BAND_R } from './painted.js';
 
 const QS = new URLSearchParams(location.search);
 // inside an X player card (or any iframe): lighter quality, compact UI, tap-only start
@@ -77,12 +77,16 @@ async function main() {
   const trHouseLoad = TR_START ? loadTrHouseAtlas(HTIER) : null;
   // (…and the Turkish town's painted shops, windows and cat, W4: painted.js loadTownAtlas, on the same tiers, 100 px/m on desktops)
   const townLoad = TR_START ? loadTownAtlas(HTIER) : null;
+  // (step 32) the chain stores' painted bays (painted.js loadChainAtlas), on the same tiers: Japan's konbini with the start zone's assets at
+  // every start (no chunk is built before they are in or have failed: seeded captures stay deterministic), the Turkish town's markets
+  // with Turkey's (a Turkish start's, else trLazy's)
+  const chainLoad = loadChainAtlas(HTIER, 'jp'), chainTrLoad = TR_START ? loadChainAtlas(HTIER, 'tr') : null;
   // the painted cumulus and the horizon band (painted.js; 32 px/° where the frame is tall enough, else 16 px/°): the
   // largest downloads, and needed last (they are awaited once the road is built and the light prepared, below), so they
   // start once the four above are in (or after 4 s, so a stalled one never holds them up for its whole 15 s timeout): on
   // a slow line those then have all of it, instead of a share. On a fast line this costs nothing (all six are in long
   // before the band and the clouds are awaited)
-  const firstLoads = Promise.race([Promise.all([treeLoad, blossomLoad, fieldLoad, frontLoad, roomLoad, houseLoad]), new Promise(r => setTimeout(r, 4000))]);
+  const firstLoads = Promise.race([Promise.all([treeLoad, blossomLoad, fieldLoad, frontLoad, roomLoad, houseLoad, chainLoad]), new Promise(r => setTimeout(r, 4000))]);
   const pcLoad = CLOUDS === 'old' ? Promise.resolve(null) : firstLoads.then(() => loadCloudAtlas(TIER));
   const bandLoad = firstLoads.then(() => loadBandAtlas(TIER));
   // (the coast's far shore as its painting has it, step 27: a row of its own in bandco1, over band3's; without it, band3's)
@@ -174,6 +178,10 @@ async function main() {
   if (patlas.houses) setHouses(ha.types); // (else: the procedural houses)
   if (patlas.houses) U.uHouseV.value = Math.max(...ha.tiles.map(t => atlas.uv(t.name).v1)) + 1e-4; // (step 30: the houses' rows, for their night fill)
   if (fa) fa.img.close(); if (ha) ha.img.close(); if (hp) hp.img.close();
+  // (step 32) the chains' atlases: Japan's konbini's, and at a Turkish start the town's markets' (textures.js buildChainAtlas; null when
+  // their bays failed: the old konbini and markets)
+  const chainAtlas = async (load, region) => { const ca = await load; if (!ca) return null; try { return buildChainAtlas(atlas, HTIER, ca, region); } catch (err) { console.warn('the chain fronts:', err.message); return null; } finally { ca.img.close(); } };
+  const cjAtlas = await chainAtlas(chainLoad, 'jp'), ctAtlas = TR_START ? await chainAtlas(chainTrLoad, 'tr') : null;
   // the world atlas: the regions after Japan (Turkey's flag, signs and wooden houses), on the painted atlas's tiers. (Its
   // textures and the atlas material's world variant are made once the rest of the scene is (makeAtlasW, below): made
   // earlier, their ids drew random numbers ahead of the particles', which moved every falling petal of a seeded capture)
@@ -487,6 +495,12 @@ async function main() {
   if (TR_START) M.tuff = tuffMaterial(quality !== 'high');
   if (catlas) makeCapAtlas(M, catlas.textures(renderer)); // (…and its atlas's material: textures.js buildCapAtlas)
   if (patlasP) makePasGrass(M, { map: albedoTexture(patlasP, renderer) }); // (…and Paşabağ's tall grass, W6: textures.js buildPasAtlas)
+  // (step 32) the chain stores' material (materials.js makeAtlasChain: the atlas's program, their own texture pair), its textures uploaded
+  // now; then the konbini and the markets are built as one of the chains (props.js setChains). Made after everything else made at load
+  // (their ids draw random numbers: made before the ferry, they moved a Turkish start's seeded capture)
+  const chainMat = (A, key) => { const t = A.textures(renderer); renderer.initTexture(t.map); renderer.initTexture(t.emissive); const ch = makeAtlasChain(M, t); M[key] = ch.mat; M[key + 'Depth'] = ch.depth; };
+  if (cjAtlas) { chainMat(cjAtlas, 'atlasC'); setChains('jp', true); }
+  if (ctAtlas) { chainMat(ctAtlas, 'atlasCT'); setChains('tr', true); }
   world.trReady = TR_START; // (no chunk of Turkey's, or of a border's, is built before its assets are in: chunks.js)
   status('building the road…');
   await new Promise(r => setTimeout(r, 10));
@@ -510,9 +524,9 @@ async function main() {
     // triangle without normals too, or the coast's water and surf and the rivers compiled when they first came into view)
     const tri0 = new THREE.BufferGeometry(); tri0.setAttribute('position', tri.attributes.position);
     const bare = new Set([M.shore, M.surf, riverMat]);
-    const mats = [M.color, M.atlas, M.atlasW, ...(M.atlasI ? [M.atlasI] : []), M.foliage, M.leaf, ...(M.bank ? [M.bank] : []), M.lamp, M.sig, M.sodium, M.decal, M.pool, M.shore, M.surf, riverMat, M.tetra, M.bark, ...(M.gleaf ? [M.gleaf] : []), ...(M.gblossom ? [M.gblossom] : []), ...(M.tuff ? [M.tuff, M.capAtlas] : []), ...(M.pasGrass ? [M.pasGrass] : [])];
+    const mats = [M.color, M.atlas, M.atlasW, ...(M.atlasI ? [M.atlasI] : []), ...(M.atlasC ? [M.atlasC] : []), ...(M.atlasCT ? [M.atlasCT] : []), M.foliage, M.leaf, ...(M.bank ? [M.bank] : []), M.lamp, M.sig, M.sodium, M.decal, M.pool, M.shore, M.surf, riverMat, M.tetra, M.bark, ...(M.gleaf ? [M.gleaf] : []), ...(M.gblossom ? [M.gblossom] : []), ...(M.tuff ? [M.tuff, M.capAtlas] : []), ...(M.pasGrass ? [M.pasGrass] : [])];
     for (const zs of zoneSets()) if (TR_START || !trSet(zs)) mats.push(groundMaterialFor(zs)); // (each zone, each pair of neighbours, each border's: Turkey's later if not needed now)
-    for (const m of mats) { const o = new THREE.Mesh(bare.has(m) ? tri0 : tri, m); o.castShadow = o.receiveShadow = !bare.has(m); o.frustumCulled = false; if (m === M.gleaf) o.customDepthMaterial = M.gleafDepth; if (m === M.gblossom) o.customDepthMaterial = M.gblossomDepth; if (m === M.atlas || m === M.atlasI) o.customDepthMaterial = M.atlasDepth; if (m === M.atlasW) o.customDepthMaterial = M.atlasWDepth; if (m === M.color) o.customDepthMaterial = PROP_DEPTH; warm.add(o); }
+    for (const m of mats) { const o = new THREE.Mesh(bare.has(m) ? tri0 : tri, m); o.castShadow = o.receiveShadow = !bare.has(m); o.frustumCulled = false; if (m === M.gleaf) o.customDepthMaterial = M.gleafDepth; if (m === M.gblossom) o.customDepthMaterial = M.gblossomDepth; if (m === M.atlas || m === M.atlasI) o.customDepthMaterial = M.atlasDepth; if (m === M.atlasW) o.customDepthMaterial = M.atlasWDepth; if (m === M.atlasC) o.customDepthMaterial = M.atlasCDepth; if (m === M.atlasCT) o.customDepthMaterial = M.atlasCTDepth; if (m === M.color) o.customDepthMaterial = PROP_DEPTH; warm.add(o); }
     // (the props' shadow-pass twin too, W6: it used to compile only when a real props' mesh stood in the shadow box during the load, and a
     // start in Paşabağ's valley (no poles) met its first props in the city, 20 ms into the drive)
     warm.position.set(0, 0, 0); scene.add(warm);
@@ -626,7 +640,7 @@ async function main() {
   async function trLazy() {
     TRL.started = true; TRL.t0 = performance.now();
     const step = n => TRL.steps.push([n, Math.round(performance.now() - TRL.t0)]);
-    const [trAtlases, th, ta, ba] = await Promise.all([loadTrBands(), loadTrHouseAtlas(HTIER), loadTownAtlas(HTIER), loadBalloonAtlas(TIER)]); step('loaded');
+    const [trAtlases, th, ta, ba, cta] = await Promise.all([loadTrBands(), loadTrHouseAtlas(HTIER), loadTownAtlas(HTIER), loadBalloonAtlas(TIER), loadChainAtlas(HTIER, 'tr')]); step('loaded');
     await nextFrame();
     const wa = buildWorldAtlas(atlas, HTIER, th, ta); if (wa.trHouses) setTrHouses(th.types, th.extras); if (th) th.img.close(); if (ta) ta.img.close(); step('atlas');
     await nextFrame();
@@ -639,6 +653,10 @@ async function main() {
     const wt = wa.textures(renderer); renderer.initTexture(wt.map); step('map');
     await nextFrame();
     renderer.initTexture(wt.emissive); setWorldTex(wt); step('emissive');
+    if (cta) { // (step 32: the town's chain markets: their atlas painted, then its two textures, a frame each)
+      await nextFrame(); const A = await chainAtlas(Promise.resolve(cta), 'tr'); step('chains');
+      if (A) { await nextFrame(); const t = A.textures(renderer); renderer.initTexture(t.map); await nextFrame(); renderer.initTexture(t.emissive); const ch = makeAtlasChain(M, t); M.atlasCT = ch.mat; M.atlasCTDepth = ch.depth; M.atlasCT.emissiveIntensity = M.atlas.emissiveIntensity; setChains('tr', true); step('chainmaps'); }
+    }
     await nextFrame();
     for (const a of trAtlases) if (a) { renderer.initTexture(a.tex); await nextFrame(); } // (a texture a frame: each a few tens of ms on a phone)
     bandTr = makeTrBand(trAtlases); if (band) band.alias = trAlias(trAtlases);
@@ -1217,6 +1235,7 @@ async function main() {
     M.atlas.emissiveIntensity = M.atlasW.emissiveIntensity = 0.1 + nightK * 1.05; // (and the world variant's: Turkey's lit windows)
     if (M.capAtlas) M.capAtlas.emissiveIntensity = M.atlas.emissiveIntensity; // (and Cappadocia's: its cave windows, W5)
     if (M.atlasI) { M.atlasI.emissiveIntensity = M.atlas.emissiveIntensity; U.uRmOn.value = st.rooms; } // (and the shop rooms' variant's, step 31)
+    if (M.atlasC) M.atlasC.emissiveIntensity = M.atlas.emissiveIntensity; if (M.atlasCT) M.atlasCT.emissiveIntensity = M.atlas.emissiveIntensity; // (and the chain stores', step 32)
     // leaves and grass glow when a low sun shines through them (materials.js backlit()): only while it's low and out
     U.uBacklit.value = BACKLIT_K * 1.6 * (1 - ov) * (1 - TOD.night) * sstep(0.0, 0.08, TOD.sunEl) * (1 - sstep(0.25, 0.55, TOD.sunEl)) * (1 - tunS);
     // the painted crowns' shade: the reference art's deep teal on a bright day, neutral at dusk, at night and under grey

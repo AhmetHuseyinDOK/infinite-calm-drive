@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { C, mulC, mixC, rng } from './util.js';
 import { GB, BILL_OCT, BILL_HEX } from './geom.js';
-import { TS_CAP, TS_PAD, TOWN_SHOPS, TOWN_AWNINGS } from './textures.js';
+import { TS_CAP, TS_PAD, TOWN_SHOPS, TOWN_AWNINGS, CHAINS_J, CHAINS_T } from './textures.js';
 
 const W1 = [1, 1, 1];
 export const PAL = {
@@ -915,11 +915,84 @@ function apartment(G, M, r, s) {
 }
 function konbini(G, M, r, s) {
   const { w, d } = s, a = G.atlas, c = G.color, H = 4.4, x0 = -w / 2, bays = Math.max(3, Math.round(w / 3)), bw = w / bays;
+  if (CHAIN.jp && G.chain) return chainKonbini(G, M, r, s, H, x0, bays, bw); // (step 32: one of the chains, once their atlas is in)
   for (let i = 0; i < bays; i++) { fq(a, x0 + i * bw, x0 + (i + 1) * bw, 0, 3.4, 0, 'shop_konbini'); lampAt(G, M, x0 + (i + 0.5) * bw, 1.9, -0.8, 0.8); }
   c.box(x0, 3.4, -0.35, -x0, H, 0, PAL.white);
   fq(a, x0, -x0, 3.4, H, -0.355, 'konbini_band');
   addSides(a, w, d, [0, H], C('#f2f2ee'), r, 0);
   flatRoof(c, w, d, H, r);
+}
+// ------------------------------------------------------------------ the chain stores (step 32)
+// A konbini on the shopping street (konbini, above) or a market in the Turkish town (townApt) is one of the chains (textures.js
+// CHAINS_J, CHAINS_T: lookalikes under names of our own) once its region's chain atlas is in (setChains; without it today's konbini
+// and markets), which one by a hash of where it stands: no random numbers are drawn, so the street's layout and every other building
+// stay as they were. Their bays, signs and stickers are the chain atlas's cells, in a mesh of their own (G.chain: chunks.js)
+const CHAIN = { jp: false, tr: false };
+export function setChains(region, on) { CHAIN[region] = !!on; }
+/** a number in [0, 1) hashed from where g's current matrix stands and (a, b) */
+const chainHash = (g, a, b) => { const h = Math.sin(a * 63.7264 + b * 10.873 + g.e[12] * 0.917 + g.e[14] * 1.371) * 31871.5413; return h - Math.floor(h); };
+/** a chain by its weight (list[i].w) for x in [0, 1) */
+const pickW = (x, list) => { let k = x * list.reduce((t, q) => t + q.w, 0); for (let i = 0; i < list.length; i++) { k -= list[i].w; if (k < 0) return i; } return list.length - 1; };
+/** a chain's sign along x0…x1, y0…y1, its face at z facing −z (its cell: textures.js buildChainAtlas): the logo at its own shape,
+ *  centred on xc as near as the sign's ends allow, the plain slice either side stretched to the ends */
+function chainSign(g, x0, x1, y0, y1, z, cell, xc) {
+  const cl = uv(cell), h = y1 - y0, L = Math.min(((cl.lx1 - cl.lx0) / cl.h) * h, x1 - x0 - 0.1);
+  const xl = Math.min(x1 - 0.05, Math.max(x0 + 0.05 + L, xc + L / 2)); // (the logo's left end as the street sees it: its larger x)
+  const X = [x1, xl, xl - L, x0], U = [[cl.px0, cl.px1], [cl.lx0, cl.lx1], [cl.px0, cl.px1]];
+  g.litV = 0; // (lit from inside: always on, as the old konbini's band)
+  for (let i = 0; i < 3; i++) if (X[i] - X[i + 1] > 1e-3) { const q = cols(cl, U[i][0], U[i][1]); g.quad([X[i], y0, z], [X[i + 1], y0, z], [X[i + 1], y1, z], [X[i], y1, z], W1, q); }
+}
+/** a konbini of one of the chains (CHAINS_J): its painted bays (the two windows, the sliding doors: not at either end) with the chain's
+ *  stickers, the fascia's sign along the front with its logo over the doors, a projecting sign at the end the drive comes from (its
+ *  faces along the street, as the big signs'), the bins by the doors; its sides and roof as the old konbini's (their random numbers) */
+function chainKonbini(G, M, r, s, H, x0, bays, bw) {
+  const { w, d } = s, a = G.atlas, c = G.color, g = G.chain; g.setM(M);
+  const ch = pickW(chainHash(g, 0, 50), CHAINS_J), door = 1 + Math.min(bays - 3, Math.floor(chainHash(g, 3, 7) * (bays - 2))), alt = chainHash(g, 9, 2) < 0.5 ? 1 : 0;
+  for (let i = 0; i < bays; i++) {
+    wq(g, x0 + i * bw, x0 + (i + 1) * bw, 0, 3.4, 0, 'cj' + ch + (i === door ? 'D' : (i + alt) % 2 ? 'W2' : 'W1'));
+    lampAt(G, M, x0 + (i + 0.5) * bw, 1.9, -0.8, 0.8);
+  }
+  const box = C(CHAINS_J[ch].box);
+  c.box(x0, 3.4, -0.35, -x0, H, 0, box);
+  chainSign(g, x0, -x0, 3.4, H, -0.355, 'cj' + ch + 'B', x0 + (door + 0.5) * bw);
+  addSides(a, w, d, [0, H], C('#f2f2ee'), r, 0);
+  flatRoof(c, w, d, H, r);
+  const sg = s.side || 1;
+  { // its projecting sign: a light box at the fascia's end towards the drive's start (-sg × x), on a post rising from the roof's front
+    // edge, so it stands over the neighbours' canopies, as their big signs do (at the fascia's height they hid it from a phone's
+    // narrower view down the street)
+    const x = -sg * (w / 2 - 0.35), t = 0.09, z1 = -0.42, z0 = z1 - 1.0, y0 = H + 0.25, y1 = y0 + 1.0, cl = 'cj' + ch + 'S';
+    c.quad([x + t, y0, z0], [x - t, y0, z0], [x - t, y1, z0], [x + t, y1, z0], box); // (its edge towards the road, its top, its underside)
+    c.quad([x - t, y1, z1], [x + t, y1, z1], [x + t, y1, z0], [x - t, y1, z0], box);
+    c.quad([x - t, y0, z0], [x + t, y0, z0], [x + t, y0, z1], [x - t, y0, z1], box);
+    nxq(g, x - t, z0, z1, y0, y1, cl); pxq(g, x + t, z0, z1, y0, y1, cl);
+    c.box(x - 0.05, H - 0.05, -0.34, x + 0.05, y1 + 0.12, -0.24, PAL.metal); // (the post, from the fascia's top)
+    for (const y of [y0 + 0.18, y1 - 0.24]) c.box(x - 0.03, y, z1, x + 0.03, y + 0.06, -0.24, PAL.metal);
+  }
+  { // its bins beside the doors, on the far side from the drive's start
+    const xb = x0 + (door + 0.5) * bw + sg * (bw / 2 + 0.62), zf = -0.52;
+    c.box(xb - 0.55, 0, zf, xb + 0.55, 0.88, -0.08, C('#cfd2cf'), null, { noBottom: true });
+    c.box(xb - 0.58, 0.88, zf - 0.03, xb + 0.58, 0.93, -0.05, C('#8f9397'), null, { noBottom: true }); // (its lid)
+    wq(g, xb - 0.55, xb + 0.55, 0.02, 0.86, zf - 0.005, 'cjBin');
+  }
+  if (G.chainList) G.chainList.push({ s: s.at, side: sg, c: 'jp' + ch, n: CHAINS_J[ch].n });
+}
+/** the share of the Turkish town's markets that are one of the chains (by a hash of where each stands) */
+const TR_CHAIN_P = 0.18;
+/** a market of one of the chains (CHAINS_T) over the town's shop's n bays (xa…xb, each bw wide): its painted bays (BİN's blue
+ *  frames, ŞAK's red, A·110 takes BİN's), its door's bay (the middle one; of two, either), its board along the front over the fascia,
+ *  its top, underside and ends in the board's colour; no awning. The old signboard's random number is drawn as before */
+function chainMarket(G, M, r, s, ch, sh, bw, xa, xb, SB, G0) {
+  const g = G.chain, c = G.color, n = sh.n, bc = ch === 1 ? 1 : 0, dI = n === 2 ? (chainHash(g, xa, 5) < 0.5 ? 0 : 1) : Math.floor(n / 2);
+  g.tr = true; // (Turkey's chain atlas: chunks.js)
+  for (let i = 0; i < n; i++) { wq(g, xa + i * bw, xa + (i + 1) * bw, 0, SB, 0, 'ct' + bc + (i === dI ? 'D' : 'W')); lampAt(G, M, xa + (i + 0.5) * bw, 1.9, -0.8, 0.7); }
+  r(); // (the old signboard's moment to light up: drawn, so the town's random numbers stay in step)
+  const box = C(CHAINS_T[ch].box), y0 = SB + 0.04, y1 = G0 - 0.03, z = -0.17, D = 0.16, x0 = xa + 0.04, x1 = xb - 0.04; // (the fascia's whole height: larger than a shop's board, as the chains' are)
+  chainSign(g, x0, x1, y0, y1, z, 'ct' + ch + 'B', (xa + xb) / 2);
+  c.quad([x0, y1, z], [x1, y1, z], [x1, y1, z + D], [x0, y1, z + D], mulC(box, 0.95)); // (its top)
+  c.quad([x1, y0, z], [x0, y0, z], [x0, y0, z + D], [x1, y0, z + D], mulC(box, 0.8)); // (its underside)
+  c.quad([x0, y0, z + D], [x0, y0, z], [x0, y1, z], [x0, y1, z + D], mulC(box, 0.88)); c.quad([x1, y0, z], [x1, y0, z + D], [x1, y1, z + D], [x1, y1, z], mulC(box, 0.88)); // (its ends)
+  if (G.chainList) { const sd = -(s.near || -1); G.chainList.push({ s: (s.at || 0) + sd * (xa + xb) / 2, side: sd, c: 'tr' + ch, n: CHAINS_T[ch].n }); }
 }
 const gcol = (s, wood) => (wood ? C('#7a5a42') : s.tint); // a house's gable / wall colour
 let _kawara = null; // the used 240 px of the kawara cell (textures.js), inside its margin of tiles
@@ -1749,6 +1822,11 @@ function townApt(G, M, r, s) {
   for (const sh of s.shops) {
     if (bay === s.door) { wq(a, bayX(bay) + bw, bayX(bay), 0, SB, 0, 'twBay7', W1, 24 + Math.floor(r() * 120)); lampAt(G, M, bayX(bay) + bw / 2, 3.0, -0.6, 0.35); bay++; }
     const xa = bayX(bay), xb = bayX(bay + sh.n);
+    // (step 32: a market now and then one of the chains, by where it stands; never the opening view's)
+    if (sh.k === 2 && !s.hero && CHAIN.tr && G.chain) {
+      G.chain.setM(M);
+      if (chainHash(G.chain, xa, 84) < TR_CHAIN_P) { chainMarket(G, M, r, s, pickW(chainHash(G.chain, xa, 8), CHAINS_T), sh, bw, xa, xb, SB, G0); bay += sh.n; continue; }
+    }
     // (their interiors warm by day too: light code 6, as the shopping street's)
     for (let i = 0; i < sh.n; i++) { wq(a, bayX(bay + i), bayX(bay + i + 1), 0, SB, 0, 'twBay' + sh.k, TW_SHOP, 6); lampAt(G, M, bayX(bay + i) + bw / 2, 1.9, -0.8, 0.7); }
     const S = TOWN_SHOPS[sh.k][sh.j];

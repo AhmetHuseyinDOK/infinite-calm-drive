@@ -1359,6 +1359,143 @@ export function albedoTexture(C, renderer) {
   t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true;
   return t;
 }
+// ------------------------------------------------------------------ the chain stores (step 32)
+// The chains as the paintings' world would have them: no real name or logo, lookalikes as anime backgrounds paint them, the
+// brand's colours, stripes, sign shape and layout under a name of our own. Japan's konbini (props.js konbini): a 7-Eleven-like one
+// most often (a white fascia with orange, green and red stripes and a "7" badge: 7 TWELVE), a FamilyMart-like one (a green band
+// over white over a blue one, blue lettering: FamilyMate) and a Lawson-like one (a blue band, white lettering, a milk bottle:
+// RAWSON) now and then; the Turkish town's discount markets (props.js townApt): a BİM-like one (a red box logo on a white board
+// over a blue stripe, blue frames: BİN), a ŞOK-like one (red over yellow, blue lettering on a red starburst, red frames: ŞAK) and
+// an A101-like one (turquoise, white lettering: A·110). Their bays are paintings (painted.js loadChainAtlas: assets/chains/), each
+// konbini chain's stickers on the glass drawn over them; their signs and lettering are drawn here. w: how often (of its region's
+// chains); box: its fascia's or board's own colour (props.js: the box round the sign)
+export const CHAINS_J = [{ n: '7 TWELVE', w: 0.55, box: '#f6f6f2' }, { n: 'FamilyMate', w: 0.25, box: '#f6f6f2' }, { n: 'RAWSON', w: 0.2, box: '#2a68b8' }];
+export const CHAINS_T = [{ n: 'BİN', w: 0.45, box: '#f4f4f0' }, { n: 'ŞAK', w: 0.35, box: '#e0261c' }, { n: 'A·110', w: 0.2, box: '#18a2c8' }];
+const C7 = { o: '#f47a20', g: '#0b8a4f', r: '#e3262c' }, CFM = { g: '#12a24c', b: '#1f68b8' }, CRW = '#2a6cc0';
+const CBIN = { r: '#d81f2a', b: '#1f4f9e' }, CSAK = { r: '#e2261b', y: '#ffd21f', b: '#27388e' }, CA1 = '#14a3cb';
+/** Latin lettering (the chains' names), bold, fitted to maxW; letter spacing sp (px) */
+function latin(g, str, cx, cy, maxW, size, col, weight = 900, stroke = null, sp = 0) {
+  let s = size; const set = () => { g.font = `${weight} ${s}px ${TR_FONT}`; if ('letterSpacing' in g) g.letterSpacing = sp * s / size + 'px'; };
+  set(); while (g.measureText(str).width > maxW && s > 6) { s -= 1; set(); }
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  if (stroke) { g.lineWidth = Math.max(2, s * 0.16); g.strokeStyle = stroke; g.lineJoin = 'miter'; g.miterLimit = 3; g.strokeText(str, cx, cy); }
+  g.fillStyle = col; g.fillText(str, cx, cy); if ('letterSpacing' in g) g.letterSpacing = '0px';
+}
+/** the 7 TWELVE's three stripes across a white ground (orange, green, red), as its fascia has them */
+function stripes7(g, x, y, w, h) { rect(g, x, y + h * 0.16, w, h * 0.11, C7.o); rect(g, x, y + h * 0.39, w, h * 0.14, C7.g); rect(g, x, y + h * 0.65, w, h * 0.14, C7.r); }
+/** its badge, s px tall round (cx, cy): an orange bar and a red stem leaning back to make a "7", TWELVE in green across it */
+function badge7(g, cx, cy, s) {
+  g.fillStyle = C7.o; g.fillRect(cx - 0.3 * s, cy - 0.46 * s, 0.6 * s, 0.17 * s);
+  g.fillStyle = C7.r; g.beginPath(); g.moveTo(cx + 0.1 * s, cy - 0.29 * s); g.lineTo(cx + 0.3 * s, cy - 0.29 * s); g.lineTo(cx - 0.02 * s, cy + 0.47 * s); g.lineTo(cx - 0.21 * s, cy + 0.47 * s); g.closePath(); g.fill();
+  rect(g, cx - 0.46 * s, cy - 0.1 * s, 0.92 * s, 0.24 * s, '#ffffff');
+  latin(g, 'TWELVE', cx, cy + 0.02 * s, 0.88 * s, 0.22 * s, C7.g, 900);
+}
+/** RAWSON's milk bottle (white, a blue band on it), s px tall round (cx, cy) */
+function bottle(g, cx, cy, s, col = '#ffffff', band = CRW) {
+  g.fillStyle = col; g.beginPath();
+  g.moveTo(cx - 0.13 * s, cy - 0.5 * s); g.lineTo(cx + 0.13 * s, cy - 0.5 * s); g.lineTo(cx + 0.13 * s, cy - 0.3 * s);
+  g.quadraticCurveTo(cx + 0.3 * s, cy - 0.2 * s, cx + 0.3 * s, cy - 0.02 * s); g.lineTo(cx + 0.3 * s, cy + 0.44 * s);
+  g.quadraticCurveTo(cx + 0.3 * s, cy + 0.5 * s, cx + 0.24 * s, cy + 0.5 * s); g.lineTo(cx - 0.24 * s, cy + 0.5 * s);
+  g.quadraticCurveTo(cx - 0.3 * s, cy + 0.5 * s, cx - 0.3 * s, cy + 0.44 * s); g.lineTo(cx - 0.3 * s, cy - 0.02 * s);
+  g.quadraticCurveTo(cx - 0.3 * s, cy - 0.2 * s, cx - 0.13 * s, cy - 0.3 * s); g.closePath(); g.fill();
+  rect(g, cx - 0.3 * s, cy + 0.06 * s, 0.6 * s, 0.16 * s, band);
+}
+/** a chain's sign (konbini fascia 'B', market board 'B'): a plain slice P px wide (props.js stretches it along the sign) then the
+ *  logo; draw(g, x, w, h, plain) paints either. The emissive (the sign lit from inside at night): the same, dimmed so its whites
+ *  stay under the bloom */
+function chainSignCell(A, a, e, w, h, P, draw, dim = '#a6a6a6') {
+  for (const g of [a, e]) { draw(g, 0, P, h, true); draw(g, P, w - P, h, false); }
+  grain(a, A, w, h, 0.05);
+  e.save(); e.globalCompositeOperation = 'multiply'; rect(e, 0, 0, w, h, dim); e.restore();
+}
+const SIGNS_J = [
+  (g, x, w, h, plain) => { rect(g, x, 0, w, h, '#fbfbf7'); vgrad(g, x, 0, w, h, [[0, 'rgba(255,255,255,0.1)'], [1, 'rgba(0,0,0,0.07)']]);
+    if (plain) stripes7(g, x, 0, w, h); else { stripes7(g, x, 0, w * 0.07, h); stripes7(g, x + w * 0.93, 0, w * 0.07, h); rect(g, x + w * 0.08, 0, w * 0.84, h, '#ffffff'); rect(g, x + w * 0.075, h * 0.04, 2, h * 0.92, 'rgba(0,0,0,0.12)'); rect(g, x + w * 0.92, h * 0.04, 2, h * 0.92, 'rgba(0,0,0,0.12)'); badge7(g, x + w / 2, h * 0.5, h * 0.86); } },
+  (g, x, w, h, plain) => { rect(g, x, 0, w, h, '#fbfbf8'); rect(g, x, 0, w, h * 0.21, CFM.g); rect(g, x, h * 0.79, w, h * 0.21, CFM.b);
+    vgrad(g, x, 0, w, h, [[0, 'rgba(255,255,255,0.08)'], [1, 'rgba(0,0,0,0.06)']]);
+    if (!plain) latin(g, 'FamilyMate', x + w / 2, h * 0.51, w * 0.9, h * 0.5, CFM.b, 900, null, -0.5); },
+  (g, x, w, h, plain) => { rect(g, x, 0, w, h, CRW); vgrad(g, x, 0, w, h, [[0, 'rgba(255,255,255,0.12)'], [1, 'rgba(0,0,0,0.12)']]);
+    rect(g, x, h * 0.1, w, h * 0.035, '#e8f0fa'); rect(g, x, h * 0.865, w, h * 0.035, '#e8f0fa');
+    if (!plain) { bottle(g, x + h * 0.42, h * 0.5, h * 0.62); latin(g, 'RAWSON', x + h * 0.82 + (w - h * 0.82) / 2, h * 0.52, w - h * 0.95, h * 0.52, '#ffffff', 900, null, 3); } },
+];
+const SIGNS_T = [
+  (g, x, w, h, plain) => { rect(g, x, 0, w, h, '#f7f7f3'); rect(g, x, h * 0.04, w, h * 0.045, CBIN.b); rect(g, x, h * 0.8, w, h * 0.2, CBIN.b);
+    vgrad(g, x, 0, w, h, [[0, 'rgba(255,255,255,0.08)'], [1, 'rgba(0,0,0,0.08)']]);
+    if (!plain) { const bw = h * 1.45; g.fillStyle = CBIN.r; rrect(g, x + h * 0.12, h * 0.08, bw, h * 0.68, h * 0.07); g.fill();
+      latin(g, 'BİN', x + h * 0.12 + bw / 2, h * 0.44, bw * 0.86, h * 0.56, '#ffffff', 900);
+      latin(g, 'HER GÜN UCUZ', x + h * 0.3 + bw + (w - h * 0.42 - bw) / 2, h * 0.44, w - h * 0.5 - bw, h * 0.3, CBIN.b, 800); } },
+  (g, x, w, h, plain) => { rect(g, x, 0, w, h / 2, CSAK.r); rect(g, x, h / 2, w, h / 2, CSAK.y); vgrad(g, x, 0, w, h, [[0, 'rgba(255,255,255,0.08)'], [1, 'rgba(0,0,0,0.08)']]);
+    if (!plain) { const cx = x + w / 2, cy = h * 0.5; g.fillStyle = '#f5521e'; g.beginPath(); // (the starburst behind the name)
+      for (let i = 0; i < 24; i++) { const t = (i / 24) * Math.PI * 2 - Math.PI / 2, q = i % 2 ? 0.3 : 0.47; g.lineTo(cx + Math.cos(t) * h * q * 1.7, cy + Math.sin(t) * h * q); }
+      g.closePath(); g.fill(); g.fillStyle = CSAK.y; g.beginPath(); g.ellipse(cx, cy, h * 0.42, h * 0.2, 0, 0, 7); g.fill();
+      latin(g, 'ŞAK', cx, h * 0.53, w * 0.8, h * 0.62, CSAK.b, 900, '#ffffff'); } },
+  (g, x, w, h, plain) => { rect(g, x, 0, w, h, CA1); vgrad(g, x, 0, w, h, [[0, 'rgba(255,255,255,0.14)'], [1, 'rgba(0,0,0,0.1)']]);
+    if (!plain) latin(g, 'A·110', x + w / 2, h * 0.53, w * 0.86, h * 0.66, '#ffffff', 900, null, 2); },
+];
+/** a konbini chain's sign over its roof's front corner (its two faces, square: props.js chainKonbini): the 7 TWELVE's badge over its
+ *  stripes, FamilyMate's name between its bands, RAWSON's bottle over its name, lit at night as the fascia */
+function signJ(A, a, e, w, h, c) {
+  for (const g of [a, e]) {
+    if (c === 0) { rect(g, 0, 0, w, h, '#ffffff'); badge7(g, w / 2, h * 0.4, h * 0.62); rect(g, 0, h * 0.8, w, h * 0.05, C7.o); rect(g, 0, h * 0.86, w, h * 0.05, C7.g); rect(g, 0, h * 0.92, w, h * 0.05, C7.r); }
+    else if (c === 1) { rect(g, 0, 0, w, h, '#fbfbf8'); rect(g, 0, 0, w, h * 0.2, CFM.g); rect(g, 0, h * 0.8, w, h * 0.2, CFM.b); latin(g, 'Family', w / 2, h * 0.38, w * 0.86, h * 0.24, CFM.b, 900); latin(g, 'Mate', w / 2, h * 0.62, w * 0.86, h * 0.26, CFM.b, 900); }
+    else { rect(g, 0, 0, w, h, CRW); bottle(g, w / 2, h * 0.38, h * 0.48); latin(g, 'RAWSON', w / 2, h * 0.8, w * 0.86, h * 0.2, '#ffffff', 900, null, 1); }
+    rect(g, 0, 0, w, h * 0.03, 'rgba(0,0,0,0.25)'); rect(g, 0, h * 0.97, w, h * 0.03, 'rgba(0,0,0,0.25)');
+  }
+  grain(a, A, w, h, 0.05); e.save(); e.globalCompositeOperation = 'multiply'; rect(e, 0, 0, w, h, '#a6a6a6'); e.restore();
+}
+/** the konbini's bins by the door (their front): three openings in a pale grey cabinet, each with its label (burnables, cans and
+ *  bottles, PET bottles) */
+function binsJ(A, a, e, w, h) {
+  rect(a, 0, 0, w, h, '#d9dbd8'); vgrad(a, 0, 0, w, h, [[0, 'rgba(255,255,255,0.15)'], [1, 'rgba(0,0,0,0.15)']]);
+  const L = [['もえるゴミ', '#c8382e'], ['カン・ビン', '#2f62b0'], ['ペットボトル', '#2a8a4a']], cw = w / 3;
+  L.forEach(([t, col], i) => { const x = i * cw; rect(a, x + cw * 0.06, h * 0.08, cw * 0.88, h * 0.2, col); textFit(a, t, x + cw / 2, h * 0.18, cw * 0.8, h * 0.14, '#ffffff', 800);
+    a.fillStyle = '#2a2c30'; rrect(a, x + cw * 0.2, h * 0.36, cw * 0.6, h * 0.22, h * 0.05); a.fill(); rect(a, x + cw * 0.04, h * 0.66, cw * 0.92, 2, 'rgba(0,0,0,0.2)'); rect(a, x + cw - 1, 0, 2, h, 'rgba(0,0,0,0.25)'); });
+  grain(a, A, w, h, 0.08);
+}
+/** each konbini chain's stickers on its bays' glass (c: the chain; door: the entrance's), over the painting: a band of the chain's
+ *  colours across the glass at chest height, and on the doors its badge; dark in the glow (they hide the light behind them) */
+function stickersJ(a, e, w, h, c, door) {
+  for (const [g, k] of [[a, 1], [e, 0.3]]) {
+    g.save(); g.globalAlpha = k === 1 ? 0.92 : 1;
+    const y = h * (door ? 0.5 : 0.62), x0 = w * 0.08, x1 = w * 0.92, s = h * 0.012;
+    const dk = col => (k === 1 ? col : '#202020');
+    if (c === 0) { rect(g, x0, y, x1 - x0, s, dk(C7.o)); rect(g, x0, y + s * 1.6, x1 - x0, s, dk(C7.g)); rect(g, x0, y + s * 3.2, x1 - x0, s, dk(C7.r)); }
+    else if (c === 1) { rect(g, x0, y, x1 - x0, s * 1.4, dk(CFM.g)); rect(g, x0, y + s * 2, x1 - x0, s * 1.4, dk(CFM.b)); }
+    else rect(g, x0, y, x1 - x0, s * 2.6, dk(CRW));
+    if (door) for (const cx of [w * 0.3, w * 0.7]) { // (its badge on each door leaf)
+      const sz = h * 0.085, cy = h * 0.42;
+      g.fillStyle = k === 1 ? (c === 2 ? CRW : '#ffffff') : '#202020'; rrect(g, cx - sz / 2, cy - sz / 2, sz, sz, sz * 0.12); g.fill();
+      if (k === 1) { if (c === 0) badge7(g, cx, cy, sz * 0.8); else if (c === 1) { rect(g, cx - sz / 2, cy - sz / 2, sz, sz * 0.22, CFM.g); rect(g, cx - sz / 2, cy + sz * 0.28, sz, sz * 0.22, CFM.b); latin(g, 'FM', cx, cy, sz * 0.8, sz * 0.4, CFM.b, 900); } else bottle(g, cx, cy, sz * 0.7); }
+    }
+    g.restore();
+  }
+}
+/** Builds a region's chain atlas for a tier ('hi' or 'lo': half the px): `ca` its painted bays (painted.js loadChainAtlas), `region`
+ *  'jp' (the konbini) or 'tr' (the markets). Its cells (cj… / ct…) are listed in the one namespace (`main`: the procedural atlas's
+ *  list), their uv their own texture's: drawn by the atlas material with this pair as its map (materials.js makeAtlasChain), so no
+ *  other atlas changes size, mips or program. A sign's cell carries where its plain slice (px0…px1) and its logo (lx0…lx1) are */
+export function buildChainAtlas(main, tier, ca, region) {
+  const k = tier === 'hi' ? 1 : 0.5, T = {}, list = [], SH = Math.round(128 * k), P = Math.round(24 * k);
+  for (const t of ca.tiles) T[t.name] = t;
+  const bay = (name, tn, deco) => { const t = T[tn]; return [name, [t.w, t.h], (A, a, e, w, h) => { a.drawImage(ca.img, t.x, t.y, t.w, t.h, 0, 0, w, h); e.drawImage(ca.img, t.x, t.ey, t.w, t.h, 0, 0, w, h); if (deco) deco(a, e, w, h); }]; };
+  const sign = (name, lw, draw) => [name, [P + Math.round(lw * k), SH], (A, a, e, w, h) => chainSignCell(A, a, e, w, h, P, draw), { px0: 2, px1: P - 2, lx0: P, lx1: P + Math.round(lw * k) }];
+  if (region === 'jp') {
+    if (!T.pjW1 || !T.pjW2 || !T.pjD) throw new Error('the konbini bays are missing');
+    CHAINS_J.forEach((ch, c) => {
+      list.push(bay('cj' + c + 'W1', 'pjW1', (a, e, w, h) => stickersJ(a, e, w, h, c, false)), bay('cj' + c + 'W2', 'pjW2', (a, e, w, h) => stickersJ(a, e, w, h, c, false)), bay('cj' + c + 'D', 'pjD', (a, e, w, h) => stickersJ(a, e, w, h, c, true)));
+      list.push(sign('cj' + c + 'B', [176, 456, 400][c], SIGNS_J[c]), ['cj' + c + 'S', [Math.round(128 * k), Math.round(128 * k)], (A, a, e, w, h) => signJ(A, a, e, w, h, c)]);
+    });
+    list.push(['cjBin', [Math.round(192 * k), Math.round(128 * k)], binsJ]);
+  } else {
+    if (!T.ptW0 || !T.ptD0 || !T.ptW1 || !T.ptD1) throw new Error('the market bays are missing');
+    list.push(bay('ct0W', 'ptW0'), bay('ct0D', 'ptD0'), bay('ct1W', 'ptW1'), bay('ct1D', 'ptD1')); // (A·110 takes BİN's bays)
+    CHAINS_T.forEach((ch, c) => list.push(sign('ct' + c + 'B', [500, 260, 300][c], SIGNS_T[c])));
+  }
+  const H = Math.ceil((flowEnd(list.map(c => c[1])) + 8) / 4) * 4, A = new Atlas(H, 0, main.cells); // (a GPU canvas: no round-capped strokes in it)
+  for (const [n, [w, h], f, lay] of list) { const cl = A.add(n, w, h, (a, e, cw, ch) => f(A, a, e, cw, ch)); if (lay) Object.assign(cl, lay); }
+  A.region = region;
+  return A;
+}
 /** Builds the world atlas for a tier ('hi' or 'lo': half the px). `main`: the procedural atlas, whose cell list it shares;
  *  `th`: the Bosphorus's painted houses (painted.js loadTrHouseAtlas), in rows of their own (.trHouses: whether they are in);
  *  with them the procedural houses' bays and tiles aren't painted (only their fallback, props.js ottomanHouse, uses them) */

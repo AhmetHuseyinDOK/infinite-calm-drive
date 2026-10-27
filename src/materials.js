@@ -1552,6 +1552,18 @@ if (vRmI > 0.5) {
 diffuseColor *= sampledDiffuseColor;`)
     .replace('totalEmissiveRadiance *= emissiveColor.rgb;', 'if (rmK > 0.0) emissiveColor.rgb = mix(emissiveColor.rgb, rmC * uRmE, rmK);\ntotalEmissiveRadiance *= emissiveColor.rgb;');
 }
+/** (step 32) The chain stores' fronts (textures.js buildChainAtlas: their painted bays, signs and stickers, in a texture pair of their
+ *  own): the atlas material with that pair as its map and its glow, sharing the atlas's program (the same shader under the same key:
+ *  nothing new is compiled, and every other chunk keeps its material and its pixels), with its own shadow twin (the atlas's, cloned:
+ *  three hands a shadow material its mesh's map at each draw but refreshes its uniforms only when the material changes, so the
+ *  atlas's own twin, drawn just before, would keep the atlas's map). Made once the rest of the scene is (as makeAtlasW: its ids draw
+ *  random numbers) */
+export function makeAtlasChain(M, tex) {
+  const m = M.atlas.clone(); m.map = tex.map; m.emissiveMap = tex.emissive;
+  m.onBeforeCompile = M.atlas.onBeforeCompile; m.customProgramCacheKey = M.atlas.customProgramCacheKey;
+  const d = M.atlasDepth.clone(); d.onBeforeCompile = M.atlasDepth.onBeforeCompile; d.customProgramCacheKey = M.atlasDepth.customProgramCacheKey;
+  return { mat: m, depth: d };
+}
 /** Cappadocia's atlas material (W5): its own cells (textures.js buildCapAtlas: the caves' doors and windows, the dry grass, the bare
  *  crowns' twigs, its road sign) drawn as the atlas material draws its cells (cut out at alpha 0.5, contact shading, the cave
  *  windows lit one by one at dusk, the cloud shadows), from a texture pair of their own; both faces of its cards (their normals

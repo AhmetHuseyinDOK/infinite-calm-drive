@@ -217,7 +217,9 @@ export class World {
       bark: new GB({ uv: true, ao: true, idx: true }), // (the painted trees' trunks and limbs: smooth tubes in their own soft bark)
       tuff: new GB({ uv: true, idx: true }), // (Cappadocia's fairy chimneys, W5: smooth lathes in their own soft tuff)
       cap: new GB({ uv: true, ao: true, lit: true }), // (…and its own atlas's cells: the caves, the dry grass, the bare crowns, its sign)
-      pgrass: new GB({ uv: true, ao: true }) }; // (Paşabağ's tall grass, W6, in a texture and a material of its own)
+      pgrass: new GB({ uv: true, ao: true }), // (Paşabağ's tall grass, W6, in a texture and a material of its own)
+      chain: new GB({ uv: true, ao: true, lit: true }) }; // (the chain stores' bays and signs, step 32: their own atlas, the atlas's program)
+    G.chainList = []; // (…and where they stand: { s, side, c, n }, for the tools: __dbg.world's chunks' .chains)
     const ground = new GroundB(), shore = { rows: [], puffs: [] }, river = [];
     G.lamps = []; // lights that can light the car: chunk-local x, y, z, power … (props.js lampAt)
     const f = {}, f2 = {};
@@ -400,6 +402,7 @@ export class World {
     add(ground.build(), groundMaterialFor([...zset]), false, true); yield;
     { const W = G.atlas.world, R = !W && G.atlas.rooms && this.M.atlasI, m = add(G.atlas.build(), W ? this.M.atlasW : R || this.M.atlas, true, true); if (m) m.customDepthMaterial = W ? this.M.atlasWDepth : this.M.atlasDepth; } yield; // (the painted cells' outlines in the shadow pass too; the world atlas's cells in its variant; painted shop bays in the rooms' variant, step 31)
     { const m = add(G.color.build(), this.M.color, true, true); if (m) m.customDepthMaterial = PROP_DEPTH; } yield; // (wires cast no shadow)
+    if (G.chain.count) { const T = G.chain.tr, m = add(G.chain.build(), T ? this.M.atlasCT : this.M.atlasC, true, true); if (m) m.customDepthMaterial = T ? this.M.atlasCTDepth : this.M.atlasCDepth; } // (the chain stores, step 32: Japan's or Turkey's chain atlas; most chunks have none, and no mesh)
     add(G.tetra.build(), this.M.tetra, true, true); // (the tetrapods: their shadows from the plain depth material)
     add(G.bark.build(), this.M.bark, true, true, 0, 'leaf'); yield; // (the trees' bark: shown as far as their crowns; plain depth material too)
     if (this.M.tuff) add(G.tuff.build(), this.M.tuff, true, true); // (Cappadocia's fairy chimneys, W5: plain depth material)
@@ -432,7 +435,7 @@ export class World {
     if (shore.puffs.length) add(surfGeometry(shore.puffs), this.M.surf, false, false, 2, 'small'); // (the surf over the tetrapods)
     for (const g of river) add(g, this.riverMat, false, true);
     grp.position.set(ox - this.origin.x, 0, oz - this.origin.z);
-    return { group: grp, ox, oz, s0, lamps: new Float32Array(G.lamps) };
+    return { group: grp, ox, oz, s0, lamps: new Float32Array(G.lamps), chains: G.chainList.length ? G.chainList : null };
   }
 
   // poles + overhead wires (country / coast / city share the rule so wires connect across zones)
@@ -1589,7 +1592,7 @@ export class World {
         const sm = s + w / 2, nb = Math.max(2, Math.round(w / 3.3));
         let door = tr() < 0.18 ? -1 : Math.floor(tr() * nb), shops = [];
         for (let n = nb - (door >= 0 ? 1 : 0); n > 0;) { const k = twKind(tr()), m = Math.min(n, tr() < 0.4 ? 2 : 1), aw = TW_AWN[k][tr() < 0.75 ? 0 : 1]; shops.push({ k, j: Math.floor(tr() * TOWN_SHOPS[k].length), aw, n: m }); n -= m; }
-        const t = tr(), spec = { type: 'townApt', w, d: tr.range(11, 15), floors: 5 + Math.floor(tr() * 3), tint: tr.pick(P.TOWN_TINTS), shops, door, bal: t < 0.4 ? 'full' : t < 0.65 ? 'alt' : t < 0.85 ? 'mid' : 'none', rail: tr() < 0.6 ? 0 : 1, flag: tr() < 0.75, near: -side };
+        const t = tr(), spec = { type: 'townApt', w, d: tr.range(11, 15), floors: 5 + Math.floor(tr() * 3), tint: tr.pick(P.TOWN_TINTS), shops, door, bal: t < 0.4 ? 'full' : t < 0.65 ? 'alt' : t < 0.85 ? 'mid' : 'none', rail: tr() < 0.6 ? 0 : 1, flag: tr() < 0.75, near: -side, at: sm, hero };
         // (the opening view's: on the left, from ahead (its −x end), the entrance, a pharmacy and a bakery under its red and white
         // awning; on the right, from behind, a market under its blue and white one and a tea house under a red one, the entrance)
         if (hero) Object.assign(spec, side < 0 ? { tint: P.TOWN_TINTS[0], floors: 6, bal: 'full', rail: 1, flag: true, door: 0, shops: [{ k: 5, j: 0, aw: -1, n: 1 }, { k: 0, j: 0, aw: 0, n: 2 }] }

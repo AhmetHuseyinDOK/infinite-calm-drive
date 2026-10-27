@@ -296,6 +296,31 @@ export async function loadTownAtlas(tier, timeoutMs = 15000) {
   })(), timeoutMs, "the town's painted shops and windows unavailable, keeping procedural ones:");
 }
 
+/** (step 32) Loads a region's chain stores' painted bays (assets/chains/chains1<region>.*, made by ~/cdtest/s32/scripts/packchains.py
+ *  from Grok Imagine edits of the game's own painted bays): Japan's konbini ('jp': a window with the magazine rack behind the glass, a
+ *  window onto the coffee machine and the bento, the automatic sliding doors, all lit a cool white) or the Turkish town's discount
+ *  markets ('tr': blue- and red-framed windows covered in offer posters, their glass doors), each with what glows in it under it. Drawn
+ *  with the chains' signs (textures.js buildChainAtlas) into an atlas of their own. 'hi' (100 px/m) or 'lo' (50: phones, the embed).
+ *  Null when missing, broken or truncated: the konbini and the markets then keep their old look */
+export async function loadChainAtlas(tier, region, timeoutMs = 15000) {
+  const base = ASSETS + 'chains/', name = 'chains1' + region;
+  return orNull((async () => {
+    const r = await fetch(base + name + '.json');
+    if (!r.ok) throw new Error(name + '.json ' + r.status);
+    const J = await r.json();
+    const file = J.files && J.files[tier] ? tier : 'hi', tiles = (J.tiles && J.tiles[file]) || [];
+    if (!tiles.length || !(J.rows && J.rows[file] > 0)) throw new Error('no tiles listed');
+    const ri = await fetch(base + J.files[file]);
+    if (!ri.ok) throw new Error(J.files[file] + ' ' + ri.status);
+    const blob = await ri.blob(); // (checked whole: a truncated image decodes without complaint)
+    if (J.bytes && J.bytes[file] && blob.size !== J.bytes[file]) throw new Error(J.files[file] + ' is ' + blob.size + ' bytes, not ' + J.bytes[file]);
+    const img = await createImageBitmap(blob, { premultiplyAlpha: 'none' });
+    if (J.size && J.size[file] && (img.width !== J.size[file][0] || img.height !== J.size[file][1])) throw new Error(J.files[file] + ' has the wrong size');
+    if (tiles.some(t => !(t.w > 0 && t.h > 0 && t.x >= 0 && t.x + t.w <= img.width && t.ey + t.h <= img.height))) throw new Error('a tile lies outside the sheet');
+    return { img, tiles, rows: J.rows[file], tier: file, m: J.m || [] };
+  })(), timeoutMs, `the ${region === 'jp' ? 'konbini' : "markets'"} chain fronts unavailable, keeping the old ones:`);
+}
+
 /** Loads the painted meadow (assets/fields/, made by ~/cdtest/ft/scripts/field.py): a tileable top-down painting of the
  *  country paintings' grass, 'hi' or 'lo' (phones, the embed). Resolves to null (never rejects) when the index or the
  *  image is missing, broken, truncated or too slow: the countryside then keeps its procedural paddies. */

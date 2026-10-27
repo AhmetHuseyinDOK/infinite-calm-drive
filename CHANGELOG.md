@@ -2,6 +2,59 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-27 · 18:57 — The chain stores: Japan's konbini and the Turkish town's markets, as anime backgrounds paint them
+- **Konbini you know at a glance, under names of our own** (the user: "even though we don't say the exact name"): every konbini on
+  the shopping street is one of three lookalikes, with the brand's colours, stripes, sign shape and layout but never a real name or
+  logo. Most often a 7-Eleven-like "7 TWELVE" (a white fascia with orange, green and red stripes and a "7" badge); now and then a
+  FamilyMart-like "FamilyMate" (green over white over blue, blue lettering) or a Lawson-like "RAWSON" (a blue band, white lettering,
+  a milk bottle). The first pass of the city has all three: a 7 TWELVE at 668 m, then a FamilyMate and a RAWSON facing each other at
+  770 m.
+- **Their fronts as painted:** windows with the magazine rack behind the glass (or the coffee machine, the bento and the coolers),
+  sliding doors, each chain's stripe band and badge stickers on the glass, a lit sign on a post over the roof's near corner, and the
+  bins by the doors. **At night** they are the street's brightest fronts, cool white inside and along the fascia, but no longer a white
+  blob: the old band bloomed into 13,724 near-white pixels at eye level, now 254.
+- **The Turkish town's discount markets:** about one market in five is a BİM-like "BİN" (a red box logo on a white board over a blue
+  stripe, blue frames, white offer posters), a ŞOK-like "ŞAK" (red over yellow, blue lettering on a red starburst, red frames, yellow
+  posters) or an A101-like "A·110" (turquoise, white lettering). There are 11 in a pass, the first two at the far end of the opening
+  view. Their boards span the fascia, there is no awning, and they are lit a cool white at night. The opening view's market is as it
+  was.
+- Which chain a store is comes from a hash of where it stands (no random numbers drawn, so the layout is as before). Seeded captures
+  on the desktop: every other zone's start and Audit 2's four spots at golden hour, sunset and night are identical to live. The
+  city's start differs in 2 px (the 7 TWELVE 528 m away) and the town's in 5 (its far chain markets). Without the chain files the old
+  konbini and markets come back, identical to live (0 px in the city and the town).
+- How:
+  - textures.js: buildChainAtlas, which draws the signs, badges, stickers and bins round the painted bays (CHAINS_J, CHAINS_T);
+  - painted.js: loadChainAtlas;
+  - materials.js: makeAtlasChain, the atlas's program on the chains' own texture pair with its own shadow twin;
+  - props.js: chainKonbini, chainMarket, setChains;
+  - chunks.js: G.chain, a mesh in the chunks that hold a chain store (chunk.chains);
+  - main.js: Japan's sheet loads with the start's assets, Turkey's in its lazy load.
+  - +11.9 KB of code, +4.1 KB gzipped.
+- Research: Street View of a 7-Eleven, a FamilyMart and a Lawson in Kōenji, and a ŞOK and an A101 in Eskişehir, found through
+  OpenStreetMap; a BİM from Wikimedia Commons. Bays: Grok Imagine image_edit on the game's own painted bays. The lettering is drawn,
+  not Grok's.
+- Assets: assets/chains/chains1jp.json, chains1jp_hi.webp (48 KB), chains1jp_lo.webp (16 KB); chains1tr.json, chains1tr_hi.webp
+  (64 KB), chains1tr_lo.webp (24 KB). WebP q50 from lossless masters (~/cdtest/s32). First visit +59 KB desktop / +29 KB phone, and
+  +123 KB at a Turkish start.
+- Programs: 66 desktop / 65 phone, and 79 / 78 at a Turkish start, unchanged. None compiled through sunset, night or rain, a drive
+  past every chain store, or Turkey's lazy load (66 → 79 as live, no frame over 12 ms).
+- Cost (the desktop machine, GTX 1660):
+  - The chain draws: 0.06 ms in the city (desktop and phone tier) and 0.09–0.10 ms in the town; every other draw group the same.
+  - Whole frame over drives, live → staging:
+    - city desktop 3.25 / 3.26 / 3.30 → 3.30 / 3.38 / 3.28 ms; phone 4.63 / 4.48 / 4.64 → 4.50 / 4.49 / 4.49;
+    - town desktop 3.17 / 3.13 / 3.24 → 3.19 / 3.24 / 3.25; phone 4.35 / 4.50 / 4.33 → 4.22 / 4.22 / 4.32.
+  - World build the same: city 120.5 / 118.6 → 121.8 / 120.1 ms per 20 chunks, town 116.9 / 116.8 → 116.3 / 119.8; no world spikes
+    on a phone at ×4.
+  - Start-up the same: desktop ready 1699 / 1665 / 1680 → 1701 / 1694 / 1678 ms; phone at 3 Mbps 6628 / 6627 → 6686 / 6694 ms (the
+    29 KB).
+  - 0 shader errors in all eleven zones, and in the city and the town on the phone tier and at q=low. No console errors at q=low, mid
+    and high; the embed starts on tap.
+- Left over:
+  - From the chase camera on a phone in portrait they show down the street but hide behind their neighbours as the car nears.
+  - The konbini is still the old single-storey box, and each region's chains share their painted bays.
+  - Japan's chain atlas takes ~11 MB of GPU memory on desktops; a tighter layout would halve it.
+  - No rooms behind their glass yet, and Indonesia's chains are still to come.
+
 ## 2026-10-27 · 15:06 — Shop windows with depth: rooms behind the shopping street's glass
 - **Rooms behind the glass:** every painted shop window and glass door on the shopping street now looks into a room: a bakery's
   shelves of bread running back to its counter, a bookshop's walls of manga, a florist's tiers of buckets, a clothes shop's rails and

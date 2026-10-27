@@ -34,7 +34,8 @@ const BODY = '#edf0f2', ROOF = '#2f7fcf', ROOF_HI = '#62a6e8', BAND = '#2a3037',
  *  terminus on its display, a tail face, a dark one for the coupled cars' inner cabs), a plain white texel */
 function paintTram(tier) {
   const PX = tier === 'hi' ? 100 : 50, cells = {};
-  const A = new Atlas(Math.ceil(7.4 * PX), 0, cells, false, Math.round(20.48 * PX));
+  // (a CPU-backed canvas: on a GPU-backed one Chrome 148 handed back an empty texture, and the tram was cut away to nothing)
+  const A = new Atlas(Math.ceil(7.4 * PX), 0, cells, true, Math.round(20.48 * PX));
   const r = rng(733);
   /** a side cell's row for height y on the body's side (by the cross-section's arc length: the shoulder and the roof above it) */
   const yArc = y => { for (let k = 0; k < PR.length - 1; k++) if (y <= PR[k + 1][0]) return ARC[k] + ((y - PR[k][0]) / (PR[k + 1][0] - PR[k][0])) * (ARC[k + 1] - ARC[k]); return S_TOT; };

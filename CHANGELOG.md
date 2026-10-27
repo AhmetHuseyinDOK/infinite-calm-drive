@@ -2,6 +2,14 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-28 · 00:22 — Fix: the Galata tram was invisible in some Chromes
+- **The tram shows in every Chrome now.** Its painted texture was drawn on a GPU-backed canvas, which Chrome 148 handed back empty,
+  so the whole tram was cut away there (Chrome 156 drew it). It is drawn on a CPU-backed canvas now (tram.js paintTram), as the
+  world and foliage atlases are. Found by the research pass for the people and vehicles.
+- Checked on both Chromes: on 148 the tram overtakes and meets the car again by day and night; on 156 it looks the same as before
+  (a few pixels of canvas rasterisation). Every other zone identical. Turkey's lazy load: no frame over 12 ms on desktop or phone.
+  Start-up at a Galata start +~100 ms on desktops (2251 / 2150 / 2116 → 2341 / 2223 / 2284 ms: the canvas painted on the CPU).
+
 ## 2026-10-27 · 21:45 — The Galata Bridge's tram and fishermen: the T1 runs over the bridge, the fishermen as people
 - **The T1 tram over the Galata Bridge** (the user: "in the galata you can actually add a tram there as well"): Istanbul's Bombardier
   Flexity Swift A32 in its livery, two cars coupled as the T1 runs them (60 m). It has a white body, a blue roof, a charcoal band of

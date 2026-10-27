@@ -1601,6 +1601,110 @@ export function buildFoliage(renderer) {
     g.restore();
     cells[name] = { u0: ox / S, u1: (ox + 512) / S, v0: 1 - (oy + 512 * k) / SH, v1: 1 - (oy + 8 * k) / SH };
   };
+  // 土手の草むら (step 28): the country painting's own verge, a whole clump on one card as before, but as painted: long broad
+  // sword-shaped blades arching out of dark roots, each lit on one side of its midrib and in shade on the other, a deep
+  // green with yellow-green lights and dark depths (its tones painted so that, lit and graded, they come out as the
+  // painting's: ~/cdtest/s28 swatches), and over them on stems big flowers in a clump — golden-yellow five-petalled ones
+  // with a white one or two, whose lower petals are in a blue-grey shade (fk 'y') — or only sprays of small white flowers
+  // (else). Low at its road end, its blades there leaning out over the road's edge; the same frame and empty top 8 px as
+  // `bank`. Its own random numbers
+  const bank2 = (name, ox, oy, seed, fk) => {
+    const br = rng(seed), W = 1024, H = 504;
+    g.save(); g.translate(ox, oy + 8); g.beginPath(); g.rect(0, 0, 512, H); g.clip(); g.scale(0.5, 1);
+    // deep shade at the roots … the sunlit tips (sRGB as painted, before the light)
+    const pal = ['#0e2315', '#16341f', '#21472a', '#336039', '#4b7a43', '#65914c', '#80a856', '#9cc064', '#bcd87a'];
+    // height envelope: low at the road end, full from ~40% across, a little lower at the field end
+    // (its road end a ragged slope of short blades, inside the card's hull there: props.js BANK_HULL2)
+    const env = x => { const t = Math.min(1, Math.max(0, x / W)); return (0.56 + 0.44 * Math.min(1, t / 0.4) ** 0.7) * (1 - 0.35 * Math.max(0, (t - 0.84) / 0.16) ** 1.5); };
+    // a blade: a long pointed leaf along a quadratic curve from its root (bx, H) rising and arching over to its tip, its two
+    // halves either side of the midrib added to two paths (the lit half, the shaded half)
+    const P = new Float32Array(2 * 9), N2 = new Float32Array(2 * 9);
+    const blade = (pl, ps, bx, h, lean, wB, arch) => {
+      h = Math.min(h, H * 0.97);
+      const x0 = bx, y0 = H, x1 = bx + lean * 0.28, y1 = H - h * (1.02 + 0.12 * arch), x2 = bx + lean, y2 = H - h * (1 - 0.32 * arch);
+      for (let i = 0; i <= 8; i++) {
+        const t = i / 8, a = (1 - t) * (1 - t), b = 2 * t * (1 - t), c = t * t;
+        P[i * 2] = a * x0 + b * x1 + c * x2; P[i * 2 + 1] = a * y0 + b * y1 + c * y2;
+        let tx = 2 * (1 - t) * (x1 - x0) + 2 * t * (x2 - x1), ty = 2 * (1 - t) * (y1 - y0) + 2 * t * (y2 - y1); const l = Math.hypot(tx, ty) || 1;
+        const w = (wB / 2) * (1 - t) ** 0.8 * (0.85 + 0.15 * Math.min(1, t * 5));
+        N2[i * 2] = (-ty / l) * w; N2[i * 2 + 1] = (tx / l) * w;
+      }
+      // (the lit half: the side whose edge faces up)
+      const up = N2[9] < 0 || (Math.abs(N2[9]) < 0.2 * Math.abs(N2[8]) && br() < 0.5) ? 1 : -1;
+      for (const [path, sg] of [[pl, up], [ps, -up]]) {
+        path.moveTo(P[0], P[1]);
+        for (let i = 1; i < 8; i++) path.lineTo(P[i * 2] + N2[i * 2] * sg, P[i * 2 + 1] + N2[i * 2 + 1] * sg);
+        path.lineTo(P[16], P[17]);
+        for (let i = 7; i >= 1; i--) path.lineTo(P[i * 2], P[i * 2 + 1]);
+        path.closePath();
+      }
+    };
+    // tufts along the card, fewer at the road end; each fans its blades out of a narrow root
+    const tufts = [];
+    for (let x = 18 + br() * 20; x < W - 16; x += (x < W * 0.22 ? 50 : 38) + br() * 22) tufts.push(x);
+    const tuftOf = () => tufts[Math.floor(br() * tufts.length)];
+    // a layer of blades by tone (darker first: the lit ones on top); each tone's halves in one gradient from the deep root up
+    const grow = (n, hLo, hHi, spread, wLo, wHi, k0, kLo, kHi) => {
+      const lit = pal.map(() => new Path2D()), shd = pal.map(() => new Path2D()), used = pal.map(() => 0);
+      for (let i = 0; i < n; i++) {
+        const tx = tuftOf(), bx = tx + (br() - 0.5) * 30, e = env(bx), u = bx / W;
+        const h = H * (hLo + br() * (hHi - hLo)) * e;
+        // (out from the clump's middle, over the road's edge at its road end, back in at its field end)
+        let lean = (br() - 0.5) * spread + (u < 0.18 ? -150 * (1 - u / 0.18) : (bx - W * 0.5) * 0.28) - Math.max(0, u - 0.88) * 900;
+        lean = Math.max(lean, 10 - bx); // (no blade out past the road end: it would be cut off there in a straight edge)
+        const hh = Math.min(h, H * env(bx + lean * 0.8) * 1.04); // (…nor over the hull where the clump is low: props.js BANK_HULL2)
+        const k = Math.min(7, kLo + Math.floor(br() * (kHi - kLo + 1) + u * 0.9));
+        blade(lit[k + 1], shd[k], bx, hh, lean, wLo + br() * (wHi - wLo), 0.35 + br() * 0.65); used[k] = used[k + 1] = 1;
+      }
+      for (let k = 0; k < pal.length; k++) for (const [paths, kk] of [[shd, k], [lit, k]]) {
+        if (!used[k]) continue;
+        const gr = g.createLinearGradient(0, H, 0, H * (1 - hHi * 0.85));
+        gr.addColorStop(0, pal[k0]); gr.addColorStop(0.5, pal[Math.round((k0 + kk) / 2)]); gr.addColorStop(1, pal[kk]);
+        g.fillStyle = gr; g.fill(paths[k]);
+      }
+    };
+    g.fillStyle = pal[0]; g.beginPath(); g.moveTo(0, H); g.lineTo(0, H - 14); g.lineTo(W * 0.15, H - 40); g.lineTo(W, H - 40); g.lineTo(W, H); g.fill(); // (the roots' own dark mass along the ground: no gaps under the clump)
+    grow(260, 0.2, 0.5, 280, 26, 56, 0, 1, 3);   // the clump's depths: shorter, wider blades in its own shade
+    grow(170, 0.3, 0.78, 400, 22, 48, 1, 3, 5);  // the middle: longer blades, lighter towards their tips
+    // the flowers: a clump of big ones (golden-yellow, or white) where the grass is full height, a stray of the other kind
+    // and sprays of small white ones, all on stems over the grass
+    // ('y': the clump, two or three golden-yellow flowers with a white one or two beside them; else grass with only a spray or
+    // two of small white flowers: P.bank picks the clump for a little under half the cards, so the clumps stand a couple of metres apart)
+    const F = [], cx = W * (0.52 + br() * 0.16);
+    if (fk === 'y') {
+      for (let i = 0; i < 3; i++) F.push({ kind: i === 2 && br() < 0.5 ? 'w' : 'y', x: cx + (i - 1) * W * 0.13 + (br() - 0.5) * 40, top: 0.7 + br() * 0.14, R: 62 * (0.85 + br() * 0.3) });
+      F.push({ kind: 'w', x: cx - W * (0.24 + br() * 0.06), top: 0.6 + br() * 0.1, R: 52 * (0.85 + br() * 0.25) });
+      F.push({ kind: 's', x: cx + W * (0.2 + br() * 0.08), top: 0.62 + br() * 0.15, R: 11 + br() * 4 });
+    } else for (let i = 0; i < 2; i++) F.push({ kind: 's', x: W * (0.3 + i * 0.35 + br() * 0.2), top: 0.6 + br() * 0.2, R: 11 + br() * 4 });
+    for (const f of F) { f.y = Math.max(f.R * 0.9 + 4, H - H * f.top * env(f.x)); f.sx = f.x + (br() - 0.5) * 70; f.rot = br() * 6.28; f.tilt = 0.7 + br() * 0.25; }
+    g.lineCap = 'round'; g.strokeStyle = '#3a6a2c';
+    for (const f of F) { g.lineWidth = f.kind === 's' ? 3.5 : 6; g.beginPath(); g.moveTo(f.sx, H); g.quadraticCurveTo((f.sx + f.x) / 2 + (br() - 0.5) * 50, (H + f.y) / 2, f.x, f.y + f.R * 0.2); g.stroke(); }
+    grow(90, 0.5, 1.0, 480, 18, 40, 2, 5, 7);    // the sunlit top: long blades arching out, bright at their tips
+    const petals = (n, R, rr, w, c) => { g.fillStyle = c; for (let p = 0; p < n; p++) { const a = (p / n) * 6.2832; g.beginPath(); g.ellipse(Math.cos(a) * R * rr, Math.sin(a) * R * rr, R * w, R * w * 0.66, a, 0, 7); g.fill(); } };
+    for (const f of F) {
+      if (f.kind === 's') { // a spray of small white flowers
+        for (let q = 0; q < 6; q++) {
+          const x = f.x + (br() - 0.5) * 70, y = f.y + (br() - 0.5) * 40;
+          g.strokeStyle = '#3f7230'; g.lineWidth = 2.5; g.beginPath(); g.moveTo(f.x, f.y + 30); g.lineTo(x, y); g.stroke();
+          g.save(); g.translate(x, y); g.scale(1, f.tilt); g.rotate(br() * 6.28); petals(5, f.R, 0.5, 0.5, '#f6f7f6'); g.fillStyle = '#e9c43a'; g.beginPath(); g.arc(0, 0, f.R * 0.25, 0, 7); g.fill(); g.restore();
+        }
+        continue;
+      }
+      g.save(); g.translate(f.x, f.y); g.scale(1, f.tilt); g.rotate(f.rot);
+      if (f.kind === 'y') { // golden-yellow, five rounded petals, deeper at their base, an orange eye
+        petals(5, f.R, 0.52, 0.5, '#f4c935'); petals(5, f.R, 0.6, 0.34, '#ffdd52');
+        g.fillStyle = '#fff1a6'; for (let p = 0; p < 5; p++) { const a = (p / 5) * 6.2832 - 0.3; g.beginPath(); g.ellipse(Math.cos(a) * f.R * 0.66, Math.sin(a) * f.R * 0.66, f.R * 0.14, f.R * 0.08, a, 0, 7); g.fill(); }
+        g.fillStyle = '#d4880f'; g.beginPath(); g.arc(0, 0, f.R * 0.19, 0, 7); g.fill(); g.fillStyle = '#eeb028'; g.beginPath(); g.arc(-f.R * 0.05, -f.R * 0.05, f.R * 0.09, 0, 7); g.fill();
+      } else { // white, five petals, the lower ones in a blue-grey shade, a yellow eye
+        for (let p = 0; p < 5; p++) { const a = (p / 5) * 6.2832; g.fillStyle = Math.sin(a + f.rot) > 0.35 ? '#d3d8e6' : '#f7f8f8'; g.beginPath(); g.ellipse(Math.cos(a) * f.R * 0.52, Math.sin(a) * f.R * 0.52, f.R * 0.5, f.R * 0.36, a, 0, 7); g.fill(); }
+        g.fillStyle = '#efc02a'; g.beginPath(); g.arc(0, 0, f.R * 0.2, 0, 7); g.fill(); g.fillStyle = '#d99a16'; g.beginPath(); g.arc(f.R * 0.04, f.R * 0.04, f.R * 0.09, 0, 7); g.fill();
+      }
+      g.restore();
+    }
+    grow(40, 0.45, 0.85, 380, 18, 36, 3, 5, 7);   // a few blades in front of the flowers' feet, so they sit in the grass
+    g.restore();
+    cells[name] = { u0: ox / S, u1: (ox + 512) / S, v0: 1 - (oy + 512) / SH, v1: 1 - (oy + 8) / SH };
+  };
   // 白い花の茂み: a low round bush in white flower, as along the reference art's coast road: a mound of small leaves in
   // its own shade low down and lit yellow-green on top, dotted with five-petalled white flowers (a few blush pink) where
   // the light falls. Its own random numbers, in the cell beside the twigs (free until now), so every other cell paints
@@ -1679,7 +1783,7 @@ export function buildFoliage(renderer) {
   paint('leafA', 0, Y0); paint('leafB', 512, Y0); paint('sakura', 0, Y0 + 512); paint('pine', 512, Y0 + 512);
   paint('momiji', 0, Y0 + 1024); paint('ginkgo', 512, Y0 + 1024);
   tuft('grass', 0, YT, false); tuft('flowers', 512, YT, true); // tufts and banks stay in the two bottom rows (the breeze keys on them)
-  bank('bankA', 0, YK, 4111, 0.7); bank('bankB', 512, YK, 4127, 0.35);
+  bank2('bankA', 0, YK, 28111, 'y'); bank2('bankB', 512, YK, 28127, 'w');
   // (painted last, with their own random numbers): the flower bed, and beside it the coast verge's bank of long grass,
   // without the country's flowers (the coast painting's verge is plain grass; its flowers are on the bushes)
   bed('bedA', 0, YB, 7741); bank('bankC', 512, YB, 4133, 0, 0, true);

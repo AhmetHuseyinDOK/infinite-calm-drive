@@ -119,6 +119,7 @@ export const U = {
   uSunDir: { value: new THREE.Vector3(0, 1, 0) },
   uSunCol: { value: new THREE.Color(1, 1, 1) },
   uTuftV: { value: new THREE.Vector4(0.167, 0.333, 0.164, 0.165) }, // foliage atlas v: the tuft row's bottom and top, the verge banks' top, a split between them
+  uBankT: { value: new THREE.Vector3(1, 1, 1) }, // the country's verge banks' grass by the time of day (M.bank; 1 on a bright day: main.js, step 28)
   uGhShade: { value: new THREE.Vector3(0.3, 0.85, 1.7) }, // the painted crowns' shade tint (makeGhibliLeaf): teal on a bright day, else neutral (main.js)
   uGhTint: { value: new THREE.Vector3(1, 1, 1) },          // …and their leaves' tint by the time of day (1 by day; main.js)
   // the tetrapods' painted tones (tetraMaterial; main.js, ungraded each frame): how much of them (a bright day), and the
@@ -731,7 +732,9 @@ vec3 countryGround(float s, float u, float rw){
   vec2 p = vec2(s, u); float a = abs(u);
   // the verge under its bank of tall grass (the clump cards, chunks.js placeBanks): dense grass in its own shade right
   // up to the asphalt, lighter towards the field (it used to be a gravel shoulder and a ditch)
-  if (a < rw + 2.3) return mix(L(vec3(0.1, 0.25, 0.08)), L(vec3(0.3, 0.54, 0.18)), smoothstep(rw + 0.9, rw + 2.3, a) * (0.55 + 0.45 * vnoise(vec2(s * 1.4, u * 12.0) + 3.1)));
+  // (step 28: its own shade a mid green streaked with blades, darker only in a narrow strip at the asphalt's edge, as painted:
+  // between the clumps' low road ends it used to show as a near-black band)
+  if (a < rw + 2.3) return mix(L(vec3(0.1, 0.25, 0.08)), L(vec3(0.27, 0.5, 0.17)), smoothstep(rw + 0.04, rw + 0.6, a) * (0.45 + 0.55 * vnoise(vec2(s * 2.2, u * 14.0) + 3.1)));
 #ifdef F_PAINT
   if (a < 135.0) {
     // plots 30 × 34 m in their own tones, the lighter ones yellower (the painting's far fields are bands of lime and of
@@ -1513,7 +1516,7 @@ export function makeMaterials(atlasTex, folTex, paintTex) {
   M.decal.customProgramCacheKey = () => 'decal-v1';
   if (folTex) {
     M.leaf = new THREE.MeshToonMaterial({ map: folTex, vertexColors: true, gradientMap: GRAD_SOFT, alphaTest: 0.42, side: THREE.DoubleSide });
-    M.leaf.onBeforeCompile = sh => { // keep the spherical canopy normals on back faces too
+    const leafCompile = M.leaf.onBeforeCompile = sh => { // keep the spherical canopy normals on back faces too
       sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>', THREE.ShaderChunk.normal_fragment_begin.replace('gl_FrontFacing ? 1.0 : - 1.0', '1.0'));
       worldShade(sh); backlit(sh);
       sh.uniforms.uTuftV = U.uTuftV; sh.uniforms.uWind = U.uWind;
@@ -1534,6 +1537,17 @@ export function makeMaterials(atlasTex, folTex, paintTex) {
 #include <alphatest_fragment>`);
     };
     M.leaf.customProgramCacheKey = () => 'leaf-v5';
+    // (step 28) the country's verge banks (props.js bank: bankA / bankB) in a program of their own: the leaves' with their grass
+    // (the green texels; not the flowers) tinted by the time of day (U.uBankT), as the evening repaints of the painting have the
+    // verge: a dark olive in the low sun's shade, mauve at sunset, a deep teal under the moon
+    M.bank = new THREE.MeshToonMaterial({ map: folTex, vertexColors: true, gradientMap: GRAD_SOFT, alphaTest: 0.42, side: THREE.DoubleSide });
+    M.bank.onBeforeCompile = sh => {
+      leafCompile(sh);
+      sh.uniforms.uBankT = U.uBankT;
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform vec3 uBankT;').replace('#include <color_fragment>', `#include <color_fragment>
+{ float gr = clamp((diffuseColor.g - max(diffuseColor.r, diffuseColor.b)) * 10.0, 0.0, 1.0); diffuseColor.rgb *= mix(vec3(1.0), uBankT, gr); }`);
+    };
+    M.bank.customProgramCacheKey = () => 'leaf-v5-bank';
   }
   M.wire = new THREE.MeshBasicMaterial({ color: 0x23242c });
   // soft light pools under street lamps at night (additive)

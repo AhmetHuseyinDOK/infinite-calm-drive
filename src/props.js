@@ -11,7 +11,7 @@ export const PAL = {
   pole: C('#b1b0a9'), metal: C('#8d9198'), black: C('#2a2b30'), yellow: C('#f2c230'), white: C('#f4f3ee'), trans: C('#a0a3a8'),
   lampPole: C('#727780'), lampHead: C('#dcdcd6'), trunk: C('#6a5444'), trunkDark: C('#4b3a33'), bark: C('#7a6556'),
   leaf: C('#86ba4c'), leafShade: C('#2c6640'), sakura: C('#ffd3e3'), sakuraShade: C('#de94b4'),
-  pine: C('#55874c'), pineShade: C('#1d4632'), cedar: C('#41713e'), cedarShade: C('#1b3e2a'),
+  pine: C('#55874c'), pineShade: C('#1d4632'), cedar: C('#41713e'), cedarShade: C('#1b3e2a'), sugi: C('#2f6340'), sugiShade: C('#173a2c'),
   roof: C('#bdbbb3'), parapet: C('#dcdad2'), pipe: C('#c4c4bf'), orange: C('#f07a22'), red: C('#d8352a'),
   vermilion: C('#e2482c'), concrete: C('#c9c7c0'), stone: C('#a8a69e'), terracotta: C('#b8653d'), rail: C('#eeeeea'),
 };
@@ -282,10 +282,15 @@ const BANK_LO = [0.62, 0.68, 0.74]; // (the clump's own shade at its root: darke
 // low road end empty, and every fragment there would only be shaded and thrown away (5% fewer fragments than a quad)
 const BANK_HULL = [[0, 0], [1, 0], [1, 1], [0.36, 1], [0, 0.7]], BANK_TRI = [0, 1, 2, 0, 2, 3, 0, 3, 4];
 const BANK_COL = BANK_HULL.map(([, y]) => mixC(BANK_LO, W1, y));
+// (step 28: the country's clumps, bankA / bankB, as painted now: their road end a low ragged slope of short blades, so their
+// hull is cut lower there)
+const BANK_HULL2 = [[0, 0], [1, 0], [1, 1], [0.4, 1], [0.14, 0.86], [0, 0.62]], BANK_TRI2 = [0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 5];
+const BANK_COL2 = BANK_HULL2.map(([, y]) => mixC(BANK_LO, W1, y));
 export function bank(G, px, py, pz, dx, dz, r, s = 1, cell = null, tint = null) { // (base point, and the horizontal direction away from the road; cell: bankA, bankB, or bankC (the coast's, without flowers, which stands still in the breeze); else A or B at random; tint: its vertex colours' multiplier (the Bosphorus's))
-  const c = FOL[cell || (r() < 0.5 ? 'bankA' : 'bankB')], h = 0.82 * s, w = (h + 0.06) * 2.03, g = G.leaf;
-  for (const k of BANK_TRI) {
-    const [x, y] = BANK_HULL[k], o = (x - 0.5) * w, bc = BANK_COL[k];
+  const two = !cell || cell === 'bankA' || cell === 'bankB', c = FOL[cell || (r() < 0.45 ? 'bankA' : 'bankB')], h = 0.82 * s, w = (h + 0.06) * 2.03, g = two && G.bank ? G.bank : G.leaf; // (the country's clumps in their own mesh: M.bank, step 28)
+  const HU = two ? BANK_HULL2 : BANK_HULL, CO = two ? BANK_COL2 : BANK_COL;
+  for (const k of two ? BANK_TRI2 : BANK_TRI) {
+    const [x, y] = HU[k], o = (x - 0.5) * w, bc = CO[k];
     g.vtx(px + dx * o, py + y * (h + 0.06) - 0.06, pz + dz * o, 0, 1, 0, c.u0 + (c.u1 - c.u0) * x, c.v0 + (c.v1 - c.v0) * y, tint ? [bc[0] * tint[0], bc[1] * tint[1], bc[2] * tint[2]] : bc);
   }
 }
@@ -375,6 +380,18 @@ export function treeSnowCedar(G, M, r, s = 1) { // a cedar weighed down with sno
     const y0 = h * (0.16 + i * 0.19), r0 = (1.9 - i * 0.38) * s, hh = h * 0.3;
     G.foliage.cyl(0, y0, 0, r0, r0 * 0.3, hh, 9, DK);
     G.foliage.cyl(0, y0 + hh * 0.45, 0, r0 * 0.72, 0.05, hh * 0.62, 9, i % 2 ? SN : SN2); // snow resting on each tier
+  }
+}
+/** 杉: a tall slender Japanese cedar in four tiers, each a cone hanging over the next, dark blue-green, as the country painting's
+ *  conifers on its hills (step 28: the country's own; the mountain's and the ridges' keep treeCedar). About as many triangles as
+ *  treeCedar's two cones: seven sides, no caps */
+export function treeSugi(G, M, r, s = 1) {
+  const h = r.range(11, 16) * s;
+  G.color.setM(M); G.color.cyl(0, 0, 0, 0.2 * s, 0.12 * s, h * 0.3, 6, PAL.trunkDark);
+  G.foliage.setM(M);
+  for (let i = 0; i < 4; i++) {
+    const t = i / 4, rr = (1.75 - t * 1.25) * s * r.range(0.9, 1.1);
+    G.foliage.cyl(0, h * (0.17 + t * 0.64), 0, rr, 0, h * (0.36 - t * 0.04), 7, i % 2 ? PAL.sugi : PAL.sugiShade, false);
   }
 }
 export function treeCedar(G, M, r, s = 1) {
@@ -594,7 +611,7 @@ export function treeGhibliSakura(G, M, r, s = 1, ave = false) {
 // trees are built once per (kind, variant) and then stamped — much cheaper than rebuilding every tree. 'sakuraAve': the
 // avenue's cherry trees, built facing the road (chunks.js placeSakura)
 const TREE_BUILDERS = { broad: (G, M, r, s) => (GHIBLI.cells ? treeGhibli : treeBroad)(G, M, r, s), sakura: (G, M, r, s) => (GHIBLI.bcells ? treeGhibliSakura(G, M, r, s) : treeSakura(G, M, r, s)),
-  sakuraAve: (G, M, r, s) => (GHIBLI.bcells ? treeGhibliSakura(G, M, r, s, true) : treeSakura(G, M, r, s)), pine: treePine, cedar: treeCedar, maple: treeMaple, ginkgo: treeGinkgo, birch: treeBirch, snowcedar: treeSnowCedar,
+  sakuraAve: (G, M, r, s) => (GHIBLI.bcells ? treeGhibliSakura(G, M, r, s, true) : treeSakura(G, M, r, s)), pine: treePine, cedar: treeCedar, sugi: treeSugi, maple: treeMaple, ginkgo: treeGinkgo, birch: treeBirch, snowcedar: treeSnowCedar,
   cypress: treeCypress, plane: (G, M, r, s) => (GHIBLI.cells ? treeGhibliPlane : treeBroad)(G, M, r, s), bare: (G, M, r, s) => treeBare(G, M, r, s),
   barePas: (G, M, r, s) => treeBare(G, M, r, s, true) }; // (Paşabağ's, W6: darker, denser crowns)
 const TCACHE = {};

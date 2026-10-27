@@ -2,6 +2,43 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-27 · 04:51 — Gap 8 and the hills: the country's verges, its cedars and its far view as painted
+- **The verges as painted: a deep bank of long arching grass with big flowers in clumps.** Along both edges of the country road
+  a bank of tall, broad, sword-shaped blades about 3.4 m deep (was 1.8 m), arching out of dark roots, each blade lit on one side
+  of its midrib and in shade on the other, in the painting's deep greens with yellow-green lights; over it every couple of metres
+  a clump of big golden-yellow flowers with a white one or two, and sprays of small white flowers between. It was a single row of
+  lighter, yellower clumps with small flowers dotted evenly along it. By the asphalt the clumps are low and lean out over its
+  edge; the ground between them is a mid green, where it showed as a near-black band. (Phones and the lighter tiers keep one row.)
+- **The verge by the hour:** a dark olive in the low sun's shade at golden hour, a dusky mauve at sunset, a deep teal under the
+  moon, its flowers still catching the light, as the painting's repaints have it (it stayed a lit, glowing green).
+- **No more ghost hills:** in the countryside the painted horizon's ring is drawn just inside the world's far fade (620 m, was
+  2500), so the next zone's slopes 640–760 m ahead no longer stand in front of its mountains as pale fogged wedges. Not while the
+  sea is in view (the bay's end keeps its open water to the horizon); eased in and out over a few seconds.
+- **Cedars, as painted:** groups of three to six tall dark cedars behind about two houses in five, as behind the painting's
+  left-hand house; stands of five to nine out in the fields; and the low rise closing the fields wooded with tiered Japanese
+  cedars (杉) in the painting's dark blue-green, where they were plain cones. The mountain's cedars are unchanged.
+- Against the painting (region medians, CIELAB ΔE, 1808 × 1104, s = 600): verge 16.1 → 5.5 (detail 4.88 → 4.29, painting 4.06);
+  the frame (share-weighted) 6.6 → 4.9; the fields, mountains, sky, road and car unchanged. Against the repaints: verge golden
+  53.2 → 9.4, sunset 31.4 → 5.8, night 24.1 → 4.1.
+- Every other zone's start identical to live in seeded captures but for the cherry avenue's falling petals and the mountain's
+  falling leaves (one more material at load shifts the particles' random start), and a few dozen pixels elsewhere (the foliage
+  atlas's anti-aliasing: two loads of one build differ as much). The coast's bay's end keeps its sea.
+- How: textures.js (bank2), props.js (bank's BANK_HULL2 into G.bank; treeSugi), chunks.js (placeBanks: a second row, not on the
+  lighter tiers; placeCountry: cedars behind houses, stands, sugi on the rise), materials.js (M.bank with U.uBankT; countryGround's
+  verge), main.js (BAND_NEAR, BKV_T; test switches st.bandnear, st.banktod), painted.js (BAND_R exported). No new assets (+7 KB
+  of code).
+- Programs: 65 desktop / 64 phone (+1: the banks' own, compiled at load); none compiled through sunset, night, rain or a drive.
+- Cost: on the M1 none measurable — whole frame over country drives (L S S L L S S L) desktop 6.27 → 6.22 ms, phone 3.59 → 3.89
+  (bimodal on both sides); the mountain 8.04 → 7.42. On the shared box's Vega, per draw over drives, the verge and the cedars
+  cost more: desktop all draws 19.5 → 21.3 ms (banks and cedars +1.3, the ground the same), phone 13.6 → 15.2 (banks and
+  cedars +1.0, the ground +0.4). World build ~5% longer (M1 genbench 33.7 / 31.9 → 34.2 / 35.3 ms); no spikes flat out on a
+  4×-throttled phone; start-up the same (M1: desktop 0.91 s, a 3 Mbps phone 6.06 → 6.08 s). 0 shader errors in all eleven zones,
+  on the phone tier at dawn, noon, sunset and night, and at q=low; no console errors at q=low, mid and high; embed starts on tap;
+  without Japan's band, no errors.
+- Left over: the clumps still read as a stepped row on the right-hand verge; two painted clumps repeat; the far mountains are
+  still the Grok panoramas, and the painting's green hill with cedars on the right isn't there; the cedars are flat-shaded; at
+  golden hour and sunset the flowers keep their day colours; the verge's cost on the Vega.
+
 ## 2026-10-27 · 02:54 — Gaps 9, 10 and 7: the coast's far shore, its house and its slope as painted
 - **Across the bay, the painting's own far shore.** The coast's horizon is the coast painting's far shore itself — its two big
   blue-green mountains rising straight from the sea, paler blue ranges behind, green peaks towards the road's end, layered and

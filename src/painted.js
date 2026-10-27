@@ -519,7 +519,7 @@ const BAND_TONES = todTones([
   [0.0, BT_NIGHT], [0.2, mixTones(BT_NIGHT, BT_SUNSET, 0.3)], [0.245, mixTones(BT_SUNSET, BT_GOLD, 0.4)], [0.3, BT_DAY], [0.62, BT_DAY],
   [0.7, BT_GOLD], [0.75, BT_SUNSET], [0.765, mixTones(BT_SUNSET, BT_NIGHT, 0.25)], [0.8, mixTones(BT_SUNSET, BT_NIGHT, 0.55)], [0.86, BT_NIGHT], [1.0, BT_NIGHT],
 ]);
-const BAND_R = 2500, BAND_LO = -8; // ring radius (m) and its bottom (degrees: far fields below the painting)
+export const BAND_R = 2500; const BAND_LO = -8; // ring radius (m) and its bottom (degrees: far fields below the painting)
 // the light the paintings stand in: the clear noon's sun and twice its sky light (sky.js KEYS at t = 0.45)
 const _bc = new THREE.Vector3(), _bn = new THREE.Color(), NOON_SUN = new THREE.Color('#fff5dd').multiplyScalar(3.35), NOON_SKY = new THREE.Color('#8fb1ec').multiplyScalar(1.35 * 2);
 

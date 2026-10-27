@@ -212,6 +212,7 @@ export class World {
     const r = rng(Math.floor(hash2(c, 777) * 4294967295));
     const G = { atlas: new GB({ uv: true, ao: true, lit: true }), color: new GB({ ao: true }), foliage: new GB(), leaf: new GB({ uv: true }), lamp: new GB({ color: false }), sig: new GB({ color: false }), sodium: new GB({ color: false }), decal: new GB({ uv: true }), pool: new GB({ uv: true, color: false }),
       gleaf: new GB({ uv: true, off: true }), gblossom: new GB({ uv: true, off: true }), // (the broadleaf and cherry crowns' painted clusters, camera-facing)
+      bank: new GB({ uv: true }), // (the country's verge banks, in their own tint by the hour: M.bank, step 28)
       tetra: new GB({ uv: true, ao: true, idx: true }), // (the coast's tetrapods, in their own soft concrete; indexed)
       bark: new GB({ uv: true, ao: true, idx: true }), // (the painted trees' trunks and limbs: smooth tubes in their own soft bark)
       tuff: new GB({ uv: true, idx: true }), // (Cappadocia's fairy chimneys, W5: smooth lathes in their own soft tuff)
@@ -406,6 +407,7 @@ export class World {
     if (this.M.pasGrass) add(G.pgrass.build(), this.M.pasGrass, false, true); // (…and Paşabağ's tall grass, W6: casting no shadow)
     add(G.foliage.build(), this.M.foliage, true, true);
     add(G.leaf.build(), this.M.leaf, true, true, 0, 'leaf');
+    add(G.bank.build(), this.M.bank || this.M.leaf, true, true, 0, 'leaf');
     if (this.M.gleaf) { const m = add(G.gleaf.build(), this.M.gleaf, true, true, 0, 'leaf'); if (m) m.customDepthMaterial = this.M.gleafDepth; } // (clusters face the sun in the shadow pass)
     // (blossom casts shadows but doesn't receive them: its shaded undersides already face away from the sun, and the
     // received shadows changed its colours by under 1% for ~0.4 ms on desktop)
@@ -910,10 +912,25 @@ export class World {
         if (side < 0 && (Math.abs(s - sb) < 2.9 || (s > sv - 1.3 && s < sv + 2.7))) continue;
         if (side === jside && Math.abs(s - sj) < 1.6) continue;
         path.at(s, f);
-        const rw = rwAt(s), u = side * (rw + 0.95 + (br() - 0.5) * 0.36), y = f.y + groundOffsetMix(s, u, f.y, rw);
+        const rw = rwAt(s), u = side * (rw + 0.9 + (br() - 0.5) * 0.36), y = f.y + groundOffsetMix(s, u, f.y, rw); // (step 28: its low end's blades lean out over the asphalt's edge, as painted; was rw + 0.95)
         // across the verge, away from the road (the clump's low end at the road), turned by up to ±23°
         const a = (br() - 0.5) * 0.8, ca = Math.cos(a) * side, sa = Math.sin(a) * side;
         P.bank(G, f.x + f.rx * u - ox, y, f.z + f.rz * u - oz, f.rx * ca + f.fx * sa, f.rz * ca + f.fz * sa, br, br.range(0.85, 1.15));
+      }
+      // (step 28) …and a second, taller row behind it, over the verge's slope down to the fields, so the bank of long grass is
+      // ~3.4 m deep as painted (it was 1.8 m, with the meadow's short blades right behind it). Standing at the fields' level,
+      // its road end hidden in the first row. Its own random numbers: the rest of the layout is unchanged. (Not on phones, where
+      // the foliage is thinner: right in front of the camera these alpha-tested cards are many layers deep)
+      const bo = rng(Math.floor(hash2(c, side > 0 ? 2801 : 2803) * 4294967295)), ostep = step * 1.3;
+      if (step <= 1) for (let s = s0 + bo() * ostep; s < s1; s += ostep * bo.range(0.75, 1.25)) {
+        if (zoneAt(s) !== 'country' || nearX(s, 11) || nearR(s, 32)) continue;
+        if (side < 0 && (Math.abs(s - sb) < 3.6 || (s > sv - 1.8 && s < sv + 3.2))) continue;
+        if (side === jside && Math.abs(s - sj) < 2.2) continue;
+        path.at(s, f);
+        const rw = rwAt(s), u = side * (rw + 2.5 + (bo() - 0.5) * 0.3), uo = u + side * 0.95;
+        const y = f.y + Math.min(groundOffsetMix(s, u, f.y, rw), groundOffsetMix(s, uo, f.y, rw)) - 0.02;
+        const a = (bo() - 0.5) * 0.7, ca = Math.cos(a) * side, sa = Math.sin(a) * side;
+        P.bank(G, f.x + f.rx * u - ox, y, f.z + f.rz * u - oz, f.rx * ca + f.fx * sa, f.rz * ca + f.fz * sa, bo, bo.range(1.05, 1.3));
       }
       yield;
     }
@@ -1856,6 +1873,14 @@ export class World {
         if (zoneAt(s) !== 'country' || r() < 0.55 || nearX(s, 16) || nearR(s, 48)) continue;
         const u = side * r.range(16, 95), M = onGround(s, u), T = P.houseType('country', r);
         if (side < 0 && (bayQ(s) < HL.b1 || wet(s, u))) continue; // (the bay's end: its water and its headland, step 27)
+        { // (step 28) 杉: now and then a group of tall cedars behind a house, as behind the painting's left-hand one. Its own random
+          // numbers (by the house's place): the rest of the layout is unchanged
+          const hr = rng(Math.floor(hash2(Math.round(s * 8), side > 0 ? 2821 : 2823) * 4294967295));
+          if (hr() < 0.42) for (let k = 3 + Math.floor(hr() * 4), sg = s + hr.range(-8, 8), ug = u + side * hr.range(15, 24); k > 0; k--) {
+            const ss = sg + hr.range(-7, 7), uu = ug + side * hr.range(-3, 6);
+            if (!wet(ss, uu) && !nearX(ss, 12) && !nearR(ss, 40)) P.tree(G, onGround(ss, uu, -0.3, hr() * 6, false), 'sugi', hr, hr.range(0.85, 1.25));
+          }
+        }
         if (T) { // the country painting's houses: white plaster and cobalt tiles, round trees beside and behind, low hedges
           P.building(G, M, r, { type: 'house', w: T.ww, d: T.wd, ptype: T });
           this.houseGarden(G, r, s, u, side, T, onGround, 1, 2, 2);
@@ -1868,8 +1893,20 @@ export class World {
         if (zoneAt(s) !== 'country' || nearX(s, 7) || nearR(s, 36)) continue;
         const u = side * r.range(140, 210);
         // (the bay's end: none in its water, step 27)
-        if (!wet(s, u)) P.tree(G, onGround(s, u, -0.3, r() * 6, false), 'cedar', r, r.range(0.9, 1.4));
+        if (!wet(s, u)) P.tree(G, onGround(s, u, -0.3, r() * 6, false), 'sugi', r, r.range(0.9, 1.4)); // (step 28: the painting's tiered cedars; were plain cones)
         if (r() < 0.12 && !nearX(s + 2, 8) && !nearR(s + 2, 34)) { const ub = side * r.range(10, 130); if (!wet(s + 2, ub)) P.tree(G, onGround(s + 2, ub, 0, r() * 6), 'broad', r, r.range(0.8, 1.2)); }
+      }
+    }
+    // (step 28) 杉林: stands of five to nine tall cedars out in the fields, beyond the houses (100–135 m from the road), as the painting
+    // has them behind its houses: one every ~250 m on either side. Their own random numbers: the rest of the layout is unchanged
+    for (const side of [-1, 1]) {
+      const sr = rng(Math.floor(hash2(Math.round(s0 / CH), side > 0 ? 2811 : 2813) * 4294967295));
+      if (sr() > CH / 250) continue;
+      const sc = s0 + sr() * CH, uc = side * sr.range(100, 132), n = 5 + Math.floor(sr() * 5);
+      if (zoneAt(sc) !== 'country' || nearX(sc, 30) || nearR(sc, 50) || wet(sc, uc) || wet(sc, uc - 12)) continue;
+      for (let k = 0; k < n; k++) {
+        const a = sr() * 6.28, d = Math.sqrt(sr()) * 11, ss = sc + Math.cos(a) * d, uu = uc + Math.sin(a) * d * 0.8;
+        P.tree(G, onGround(ss, uu, -0.3, sr() * 6, false), 'sugi', sr, sr.range(0.85, 1.3) * (1.15 - 0.35 * d / 11));
       }
     }
     const sb = Math.floor((s0 + CH / 2) / 600) * 600 + 300;

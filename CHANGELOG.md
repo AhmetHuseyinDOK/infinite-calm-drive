@@ -2,6 +2,59 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-27 · 21:45 — The Galata Bridge's tram and fishermen: the T1 runs over the bridge, the fishermen as people
+- **The T1 tram over the Galata Bridge** (the user: "in the galata you can actually add a tram there as well"): Istanbul's Bombardier
+  Flexity Swift A32 in its livery, two cars coupled as the T1 runs them (60 m). It has a white body, a blue roof, a charcoal band of
+  tinted windows with passengers behind them, a red stripe low along its sides, blue plug doors and a pale grey skirt. Its rounded
+  noses rake back up the windscreen, with the terminus on an orange display over it (KABATAŞ towards Karaköy, BAĞCILAR towards
+  Eminönü), its fleet number and round headlamps and tail lamps. On each car's middle section the pantograph reaches up to the contact
+  wire, and there are bellows between the sections.
+- **Now and then, both ways:** on the far track a tram comes towards us from the bridge's far end and meets the car (~32 km/h). On the
+  near track one comes up from behind and passes the car (~47 km/h against its 40), then pulls in at the Eminönü end and waits there
+  until we have gone by. That's one or two each way per crossing, and a Galata start finds one coming towards us beside the control
+  tower. At dusk and night its windows light up warm round their passengers' silhouettes, and its headlamps and display glow.
+- **The fishermen as people, not boxes** (the user: "the firsherman looks like they are from minecraft"): smooth figures (a rounded
+  jacket over the hips, tapered legs and arms, round heads with hair, peaked or knitted caps, shoes) in four poses along the walkway's
+  railing: the rod in both hands, in one hand, leaning their forearms on the rail with the rod propped beside them, or now and then on
+  a camping stool. Their rods are longer and steeper (43–69° up, as the bridge's are held) and bend a little at the tip, with lines
+  down to the water and buckets, white bags or tackle boxes at their feet. They stand where they stood: the builder draws the old one's
+  random numbers in its order, so the boats after them keep their places.
+- Seeded captures on the desktop: the ten other zones' starts and Audit 2's four places at golden hour, sunset and night are identical
+  to live (0 px), the Bosphorus start and the town at night too. The Galata start differs: the fishermen, and the tram coming beside
+  the tower.
+- How:
+  - tram.js (new): its painted texture pair, drawn at load on a canvas (no download); its body, the cross-section lofted along each
+    section with superellipse noses; makeTram, a clone of the atlas material (the same program) with its own shadow twin; its comings
+    and goings, from the frame time on random numbers of its own.
+  - props.js: fisherman (indexed templates per pose and head, stamped and recoloured per figure), gridI, ellI, tubeI, latheI, boxI.
+  - chunks.js: G.fish, the fishermen's own indexed mesh in the props' colour material.
+  - main.js: the tram is made last of all at a Turkish start, and in Turkey's lazy load after the ferry (a frame at a time); test
+    switch st.tram, __dbg.tram.
+  - +18.9 KB of code, +8.0 KB gzipped. No assets.
+- Research: the T1's rolling stock (Bombardier Flexity Swift A32, 29.7 m, and Alstom Citadis X04, both run in coupled pairs);
+  photographs of both and of the bridge's fishermen (their poses, steep rods, buckets, bags and caps).
+- Programs: unchanged (79 desktop / 78 phone at a Turkish start, 66 / 65 at a Japanese one). None compiled through sunset, night or
+  rain, over the bridge on either tier, or in Turkey's lazy load (66 → 79 / 65 → 78, no frame over 12 ms).
+- Cost (the desktop machine, GTX 1660):
+  - Whole frame over Galata drives: desktop 3.07 / 3.05 / 3.04 → 3.04 / 3.05 / 3.06 ms; phone tier 3.15 / 3.15 / 3.08 →
+    3.18 / 3.17 / 3.18; at night desktop 3.46 / 3.52 → 3.70 / 3.58.
+  - Per draw: the fishermen's 13 draws a frame 0.37–0.40 ms (the old ones were in the props' mesh, whose draws fell 0.06–0.17 ms),
+    their shadows 0.05–0.08; the tram 0.005 ms a frame on that drive (it was out of view most of the time).
+  - The fishermen: 82.7k triangles over a Galata start's 15 chunks (the old ones 22.4k) in one more draw per bridge chunk;
+    each tram 6.0k vertices.
+  - World build over the bridge's chunks (median ms per 20) desktop 53.5 / 52.4 → 55.0 / 54.8, phone tier 52.9 / 53.0 → 56.4 / 56.5;
+    the country's the same (67.1 / 67.8 → 66.4 / 66.6); no world spikes on a phone at ×4.
+  - Start-up: at a Galata start +70 ms on desktops (2138 / 2126 / 2074 → 2219 / 2197 / 2187 ms: the tram painted and built); at a
+    city start and on a 3 Mbps phone the same (7665 / 7595 → 7650 / 7716 ms). The tram's textures take ~10 MB of GPU memory on
+    desktops (2.5 on phones).
+  - 0 shader errors in all eleven zones, and on the bridge at golden hour and night, on the phone tier and at q=low. No console errors
+    at q=low, mid and high; the embed starts on tap.
+- Left over:
+  - The tram's sides are drawn on a canvas (crisp but plain), not Grok-painted; no Citadis X04 (the T1's other, red-faced tram) yet.
+  - It is 2.5 m wide (the real ones 2.65) to clear the portals' posts.
+  - The oncoming trams come into view ~480 m ahead or wait at the far end; there is no platform at the Eminönü stop.
+  - The fishermen don't move, and their faces are plain.
+
 ## 2026-10-27 · 18:57 — The chain stores: Japan's konbini and the Turkish town's markets, as anime backgrounds paint them
 - **Konbini you know at a glance, under names of our own** (the user: "even though we don't say the exact name"): every konbini on
   the shopping street is one of three lookalikes, with the brand's colours, stripes, sign shape and layout but never a real name or

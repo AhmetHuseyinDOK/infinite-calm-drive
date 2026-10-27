@@ -218,7 +218,8 @@ export class World {
       tuff: new GB({ uv: true, idx: true }), // (Cappadocia's fairy chimneys, W5: smooth lathes in their own soft tuff)
       cap: new GB({ uv: true, ao: true, lit: true }), // (…and its own atlas's cells: the caves, the dry grass, the bare crowns, its sign)
       pgrass: new GB({ uv: true, ao: true }), // (Paşabağ's tall grass, W6, in a texture and a material of its own)
-      chain: new GB({ uv: true, ao: true, lit: true }) }; // (the chain stores' bays and signs, step 32: their own atlas, the atlas's program)
+      chain: new GB({ uv: true, ao: true, lit: true }), // (the chain stores' bays and signs, step 32: their own atlas, the atlas's program)
+      fish: new GB({ ao: true, idx: true }) }; // (the Galata Bridge's fishermen, step 33: smooth figures, indexed, in the props' colour material)
     G.chainList = []; // (…and where they stand: { s, side, c, n }, for the tools: __dbg.world's chunks' .chains)
     const ground = new GroundB(), shore = { rows: [], puffs: [] }, river = [];
     G.lamps = []; // lights that can light the car: chunk-local x, y, z, power … (props.js lampAt)
@@ -402,6 +403,7 @@ export class World {
     add(ground.build(), groundMaterialFor([...zset]), false, true); yield;
     { const W = G.atlas.world, R = !W && G.atlas.rooms && this.M.atlasI, m = add(G.atlas.build(), W ? this.M.atlasW : R || this.M.atlas, true, true); if (m) m.customDepthMaterial = W ? this.M.atlasWDepth : this.M.atlasDepth; } yield; // (the painted cells' outlines in the shadow pass too; the world atlas's cells in its variant; painted shop bays in the rooms' variant, step 31)
     { const m = add(G.color.build(), this.M.color, true, true); if (m) m.customDepthMaterial = PROP_DEPTH; } yield; // (wires cast no shadow)
+    { const m = add(G.fish.build(), this.M.color, true, true); if (m) m.customDepthMaterial = PROP_DEPTH; } // (the fishermen, step 33: only on the Galata Bridge; their rods and lines cast no shadow)
     if (G.chain.count) { const T = G.chain.tr, m = add(G.chain.build(), T ? this.M.atlasCT : this.M.atlasC, true, true); if (m) m.customDepthMaterial = T ? this.M.atlasCTDepth : this.M.atlasCDepth; } // (the chain stores, step 32: Japan's or Turkey's chain atlas; most chunks have none, and no mesh)
     add(G.tetra.build(), this.M.tetra, true, true); // (the tetrapods: their shadows from the plain depth material)
     add(G.bark.build(), this.M.bark, true, true, 0, 'leaf'); yield; // (the trees' bark: shown as far as their crowns; plain depth material too)
@@ -1507,8 +1509,8 @@ export class World {
       for (let k = 0; k < n; k++) {
         const ss = s + k * gr.range(0.9, 1.7), dl = ss - Math.round(ss / 60) * 60;
         if (!on(ss) || Math.abs(dl) < 1.2 || ss >= s1) continue;
-        const rw = rwAt(ss), y = road(ss) + 0.18;
-        P.fisherman(G, matAt(ss, -(rw + GAL_WALK - 0.62), y, (gr() - 0.5) * 0.5), gr, y);
+        const rw = rwAt(ss), y = road(ss) + 0.18, yaw = (gr() - 0.5) * 0.5; // (his turn: drawn first, as it always was)
+        P.fisherman(G, matAt(ss, -(rw + GAL_WALK - 0.62), y), gr, y, yaw, hash2(Math.floor(ss * 16), 6317));
       }
     }
     yield;

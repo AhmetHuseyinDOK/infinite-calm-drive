@@ -41,6 +41,7 @@ export function sub(M, x, y, z, yaw = 0) {
 const litOf = (g, cell, a, b) => {
   if (!g.hasLit) return; const c0 = cell.charCodeAt(0);
   if (c0 === 118 && cell.charCodeAt(1) === 115) { g.litV = 12; return; } // a neon vertical sign: glows by day too
+  if (c0 === 104 && cell.charCodeAt(1) === 115) { const n = +cell.slice(2); if (n === 1 || n === 5 || n === 9 || n === 11) g.litV = 3; return; } // (step 30: a white or cream shop board: dimmer at night)
   if (c0 === 115 && cell.startsWith('shop_')) { const c5 = cell[5]; if ((c5 === 'g' && cell[6] === 'l') || c5 === 'd' || c5 === 'k' || c5 === 'c' || c5 === 'n' || c5 === 'p') g.litV = 6; return; } // a lit shop: warm by day too (shop_p…: the painted ones)
   if (c0 !== 119) return; const k = cell.charCodeAt(cell.length - 1); if (k !== 76 && k !== 67) return;
   const h = Math.sin(a * 12.9898 + b * 78.233 + g.e[12] * 0.731 + g.e[14] * 0.513) * 43758.5453; g.litV = 24 + Math.floor((h - Math.floor(h)) * 231);

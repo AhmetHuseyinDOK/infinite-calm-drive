@@ -13,7 +13,7 @@
 // If the atlas can't be loaded the game keeps its procedural clouds (sky.js).
 import * as THREE from 'three';
 import { rng } from './util.js';
-import { TOD } from './sky.js';
+import { TOD, MOON_EL, MOON_R } from './sky.js';
 import { S_WRAP, U as MU } from './materials.js';
 
 // The painted assets' WebPs are encoded from lossless masters (PLAN 14b, ~/cdtest/dl/scripts/pack14b.py: the packers'
@@ -342,7 +342,7 @@ const CL_DAY = { shade: [172, 196, 234], mid: [214, 226, 246], lit: [246, 249, 2
 // (80–112, 101–108, 132), the median (153–165, 127–130, 133–134)); the old warm taupe ones (137, 114, 117) and (184, 147, 138) read muddy)
 const CL_GOLD = { shade: [66, 89, 133], mid: [149, 118, 132], lit: [238, 196, 146], rim: [255, 214, 150] };
 const CL_SUNSET = { shade: [96, 65, 92], mid: [158, 82, 98], lit: [226, 124, 100], rim: [242, 172, 122] };
-const CL_NIGHT = { shade: [33, 58, 90], mid: [45, 76, 116], lit: [78, 112, 152], rim: [140, 166, 200] };
+const CL_NIGHT = { shade: [33, 58, 90], mid: [45, 76, 116], lit: [125, 152, 186], rim: [180, 205, 232] };
 // (dusk: the high clouds keep the afterglow, lilac over a slate shade, on the way from the sunset's salmon to the moonlit grey)
 const CL_DUSK = { shade: [58, 56, 96], mid: [104, 86, 132], lit: [170, 128, 168], rim: [214, 150, 170] };
 const CLOUD_TONES = todTones([
@@ -369,7 +369,7 @@ export function makePaintedClouds(atlas, post, seed = 5) {
     transparent: true, depthWrite: false, fog: false, premultipliedAlpha: true,
     uniforms: {
       map: { value: atlas.tex }, uLit: { value: new THREE.Color() }, uMid: { value: new THREE.Color() }, uShade: { value: new THREE.Color() }, uRimCol: { value: new THREE.Color() }, uHaze: { value: TOD.horizon },
-      uPaint: { value: 1 }, uOpacity: { value: 1 }, uRimLod: { value: atlas.tier === 'hi' ? 3.0 : 2.0 }, ...gradeUniforms(post),
+      uPaint: { value: 1 }, uOpacity: { value: 1 }, uRimLod: { value: atlas.tier === 'hi' ? 3.0 : 2.0 }, uKn: { value: 0 }, ...gradeUniforms(post),
     },
     vertexShader: /* glsl */`
       attribute vec4 aRect, aInfo; attribute float aRim; varying vec2 vUv; varying vec4 vInfo; varying float vRim, vY;
@@ -378,7 +378,7 @@ export function makePaintedClouds(atlas, post, seed = 5) {
         gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
       }`,
     fragmentShader: UNGRADE + /* glsl */`
-      uniform sampler2D map; uniform vec3 uLit, uMid, uShade, uRimCol, uHaze; uniform float uPaint, uOpacity, uRimLod;
+      uniform sampler2D map; uniform vec3 uLit, uMid, uShade, uRimCol, uHaze; uniform float uPaint, uOpacity, uRimLod, uKn;
       varying vec2 vUv; varying vec4 vInfo; varying float vRim, vY;
       void main(){
         vec4 t = texture2D(map, vUv);
@@ -386,6 +386,7 @@ export function makePaintedClouds(atlas, post, seed = 5) {
         vec3 c = vec3(0.0);
         if (uPaint < 0.999) { // the time-of-day palette, keeping the brushwork (the painted luminance) and a silver lining
           float k = clamp((dot(t.rgb, vec3(0.299, 0.587, 0.114)) - vInfo.y) * vInfo.z, 0.0, 1.0);
+          k = mix(k, k * k * k, uKn); // (step 30: at night as painted, mostly in the dusk's shade, only the tops and edges moonlit)
           float rim = 1.0 - smoothstep(0.35, 0.95, textureLod(map, vUv, uRimLod).a);
           c = (k < 0.5 ? mix(uShade, uMid, k * 2.0) : mix(uMid, uLit, k * 2.0 - 1.0)) + uRimCol * rim * smoothstep(0.35, 0.8, k) * vRim;
         }
@@ -401,7 +402,7 @@ export function makePaintedClouds(atlas, post, seed = 5) {
   /** the opening view: turn the ring so the gap between two neighbouring towers is centred on the road ahead (the
    *  two flank it, ~15° either side), or ('center') so the nearest tower stands over it; and raise those past the top
    *  of the frame */
-  function frame(az, mode) {
+  function frame(az, mode, raise = true) {
     const T = C.filter(c => c.role === 'tower').sort((a, b) => wrapA(a.phi - az) - wrapA(b.phi - az));
     let best = null, bd = 1e9;
     for (let i = 0; i < T.length; i++) {
@@ -411,22 +412,50 @@ export function makePaintedClouds(atlas, post, seed = 5) {
     if (!best) return;
     const [a, b, mid] = best, rot = wrapA(az - mid);
     for (const c of C) c.phi += rot;
-    for (const c of new Set([a, b])) { // (taller, keeping the sprite's aspect)
+    if (raise) for (const c of new Set([a, b])) { // (taller, keeping the sprite's aspect; not round the moon at night: the repaints keep its sky open)
       const ah = Math.max(c.ah, 31 * D2R), h = c.d * Math.tan(c.e0 + ah) - c.y0;
       c.w *= h / c.h; c.h = h; c.ah = ah; c.half = Math.atan2(c.w / 2, c.d);
     }
   }
+  // (step 30) the moon kept clear of the cumulus, as in all the night repaints: a few of its diameters from the nearest cloud's side
+  // (MOON_C), or at least its disc and the first of its halo (MOON_M) if that is all there is. Each sprite's painted cloud taken as
+  // ~0.92 of its card's width, its top half narrowing to half of that at its top
+  const MOON_M = MOON_R + 1.8 * D2R, MOON_C = MOON_R + 5 * D2R, MOON_TURN = 0.4 * D2R;
+  /** how far the moon at world bearing `az` stands clear of the cumulus' sides with the ring turned by `rot` (radians; ≤ 0: behind one) */
+  const moonClear = (az, rot) => {
+    let g = 9;
+    for (const c of C) {
+      const eb = Math.atan2(c.y0, c.d), et = Math.atan2(c.y0 + c.h, c.d);
+      if (et < MOON_EL - MOON_M || eb > MOON_EL + MOON_M) continue;
+      const f = Math.min(Math.max((MOON_EL - eb) / Math.max(et - eb, 1e-3), 0), 1), x = Math.min(Math.max((f - 0.5) * 2, 0), 1);
+      g = Math.min(g, Math.abs(wrapA(c.phi + rot - az)) - c.half * 0.92 * (1 - 0.5 * x * x * (3 - 2 * x)));
+    }
+    return g;
+  };
+  /** the smallest turn of the ring (within ±40°, by 1°) that leaves the moon at world bearing `az` MOON_C clear of the clouds (else
+   *  MOON_M); 0 if none does */
+  const moonTurn = az => {
+    let fb = NaN;
+    for (let i = 0; i <= 80; i++) { const r = (i % 2 ? 1 : -1) * Math.ceil(i / 2) * D2R, g = moonClear(az, r); if (g >= MOON_C) return r; if (fb !== fb && g >= MOON_M) fb = r; }
+    return fb === fb ? fb : 0;
+  };
   const api = {
     mesh, count: N,
     /** the opening composition (set before the first update): 'flank' or 'center' */
     opening: 'flank',
+    /** (step 30, main.js, each frame) the drawn moon's world bearing while it shows under a clear sky (NaN otherwise): at a night
+     *  start the ring opens round it (two towers flanking it, as the country's night repaint), and while it shows the ring turns
+     *  (at most MOON_TURN a second: the clouds drifting) to keep it clear of them; `night`: the night's painted look's weight */
+    moon: NaN, night: 0,
     /** (test) the layout, for checks */
     layout: C,
     update(camera, dt) {
       const cam = camera.position, sunAz = Math.atan2(TOD.lightDir.x, TOD.lightDir.z);
       camera.getWorldDirection(fw);
       const camAz = Math.atan2(fw.x, fw.z), halfH = Math.atan(Math.tan((camera.fov * D2R) / 2) * camera.aspect);
-      if (first) frame(camAz, api.opening);
+      const moon = api.moon === api.moon;
+      if (first) frame(moon ? api.moon : camAz, moon ? 'flank' : api.opening, !moon);
+      if (moon) { const r = moonTurn(api.moon), k = first ? r : Math.min(Math.max(r, -MOON_TURN * dt), MOON_TURN * dt); if (k !== 0) for (const c of C) c.phi += k; }
       for (let i = 0; i < N; i++) {
         const c = C[i];
         c.phi += (dt * 1.2) / c.d; // the slow drift of the procedural clouds
@@ -438,8 +467,10 @@ export function makePaintedClouds(atlas, post, seed = 5) {
         const dAz = wrapA(sunAz - c.phi), flip = dAz > 0 !== L[c.k].litLeft;
         if (flip !== c.flip && Math.abs(Math.sin(dAz)) > 0.2 && (first || Math.abs(wrapA(c.phi - camAz)) > halfH + c.half + 0.05)) c.flip = flip;
         aInfo.setX(i, c.flip ? 1 : 0);
-        const fr = Math.max(Math.cos(dAz), 0);
-        aRim.setX(i, 0.35 + 0.9 * fr * fr * fr * (0.4 + TOD.warm));
+        const fr = Math.max(Math.cos(dAz), 0), r0 = 0.35 + 0.9 * fr * fr * fr * (0.4 + TOD.warm);
+        // (step 30: at night as painted, the clouds next to the moon catch its light along their edges, fading over ~15° from it)
+        if (api.night > 0 && moon) { const e = Math.max(Math.abs(wrapA(c.phi - api.moon)) - c.half * 0.8, 0); aRim.setX(i, r0 + api.night * (0.25 + 1.35 * Math.exp(-e / (12 * D2R)) - r0)); }
+        else aRim.setX(i, r0);
       }
       first = false;
       mesh.instanceMatrix.needsUpdate = true; aInfo.needsUpdate = true; aRim.needsUpdate = true;
@@ -456,6 +487,7 @@ export function makePaintedClouds(atlas, post, seed = 5) {
       // as the procedural clouds: in rain they melt into the low grey deck the sky draws; at night, under a clear sky, the
       // moonlit cumulus stand as clearly as in the paintings (only dimmer under cloud)
       u.uOpacity.value = (1 - TOD.night * (0.08 + 0.27 * ov)) * (1 - TOD.overcast * 0.55) * (1 - 0.85 * TOD.rain);
+      u.uKn.value = api.night;
     },
   };
   return api;

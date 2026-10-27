@@ -113,6 +113,13 @@ export const U = {
   uWet: { value: 0 },                          // 0 dry … 1 soaked (rain)
   uSakWet: { value: 0 },                       // the cherry avenue's wet road (its zone weight scales it per vertex)
   uLightsOn: { value: 1 },                     // how far into the evening the town's home lights have come on (0 … 1)
+  // (step 30) the night as painted: how bright, once the lights are on, the shops' interiors, the neon, the home windows and the white
+  // shop boards glow (× the old; main.js: 1 by day, at golden hour and at sunset): the repaints' street is calm, its neon the brightest
+  uLitN: { value: new THREE.Vector4(1, 1, 1, 1) }, uBoardD: { value: 1 }, // (…and those boards' paint: 1 by day)
+  // …and the painted houses' walls (their rows of the painted atlas: v under uHouseV), moonlit grey round their warm windows as the
+  // repaints have them, where ours stood black: a fill light on them (linear irradiance / π, added as light; 0 by day, at golden hour
+  // and at sunset: materials.js windowLights)
+  uHouseV: { value: -1 }, uHouseFill: { value: new THREE.Vector3() },
   uBacklit: { value: 0 },                      // how strongly a low sun shines through leaves and grass (0 … 1.6)
   uCloudSh: { value: 0 },                      // strength of drifting cloud shadows
   uOrigin: { value: new THREE.Vector2() },     // world-origin offset, so world-space patterns survive rebasing
@@ -140,6 +147,9 @@ export const U = {
   // skies): its tint near the eye and from ~22 m on
   uRoadN: { value: new THREE.Vector3(1, 1, 1) }, uRoadF: { value: new THREE.Vector3(1, 1, 1) },
   uSakRT: { value: 1 }, // the cherry avenue's share of that tint (step 26; main.js st.road: 0 skips its work in the avenue's variants)
+  // (step 30) the night as painted: the asphalt's and the pavements' (and kerbs') albedo by night under a clear sky (main.js; 1 by day,
+  // at golden hour and at sunset): the repaints' blue-grey asphalt and grey-blue paving under the moon, where ours went indigo-black
+  uNtRoad: { value: new THREE.Vector3(1, 1, 1) }, uNtWalk: { value: new THREE.Vector3(1, 1, 1) },
   uCoFill: { value: new THREE.Vector3() }, // the coast's slope: how much more light its shade takes (the painter's fill; main.js, step 27)
   uCoVerge: { value: new THREE.Vector3(1, 1, 1) }, // …and its long grass by the road: how much deeper a green (main.js, step 27)
   // Cappadocia's ground (W5, the ground shader's uchGround; main.js, by the time of day): the albedo of its sandy shoulder and plain,
@@ -166,6 +176,7 @@ export const U = {
   uLeafKey: { value: new THREE.Vector3(0, 1, 0) }, // …and the broadleaf crowns' (further round towards the camera)
   uBlKey: { value: new THREE.Vector3(0, 1, 0) }, // …and the cherry canopy's (step 26: seen from below, it is lit as painted, not a dark ceiling)
   uCarFill: { value: new THREE.Vector3() },       // …and the painter's fill in its shade (car.js CAR_FILL; main.js, by the time of day)
+  uCarDT: { value: new THREE.Vector3(1, 1, 1) },  // (step 30) …and its sunlit (moonlit) paint × this: the night repaints' pale moonlit roof (1 by day)
   uWind: { value: 1 },
   uNoiseTex: { value: makeNoiseTex() },
   uCloudTex: { value: null },                  // the drifting cloud shadows, painted each frame (makeCloudMap)
@@ -581,9 +592,9 @@ vec3 coastGround(float s, float u, float rw){
 #else
   if (u > 0.0) return grassCol(p, L(vec3(0.31, 0.60, 0.25)), L(vec3(0.52, 0.79, 0.32)));
 #endif
-  if (a < rw + 1.45) return L(vec3(0.73, 0.72, 0.69)) * (0.9 + 0.1*fbm2(p));
+  if (a < rw + 1.45) return L(vec3(0.73, 0.72, 0.69)) * (0.9 + 0.1*fbm2(p)) * uNtWalk; // (step 30: its shoulder and the wall's top take the pavements' night tint)
   // the sea wall: its top a warm sand-coloured concrete, as in the reference art; its face grey, dark and wet low down
-  if (a < rw + 1.97) return L(vec3(0.86, 0.76, 0.6)) * (0.86 + 0.14*vnoise(p*vec2(0.4, 5.0)));
+  if (a < rw + 1.97) return L(vec3(0.86, 0.76, 0.6)) * (0.86 + 0.14*vnoise(p*vec2(0.4, 5.0))) * uNtWalk;
   if (a < rw + 2.08) return L(vec3(0.70, 0.70, 0.68)) * (0.82 + 0.12*vnoise(p*vec2(0.4, 5.0))) * (0.45 + 0.55 * smoothstep(0.2, 1.4, vWY));
 #if !defined(Z_BOS)
   // (land on the sea side, out of the water: the bay's end's headland, step 27 (path.js), and the coast's tunnel spurs: the slope's
@@ -816,9 +827,9 @@ vec3 groundAlbedo(){
 #ifdef F_PAINT
   fUV = vec2(u, s) * uFieldK; fDX = dFdx(fUV); fDY = dFdy(fUV); fPU = max(1.5 * (abs(fDX.x) + abs(fDY.x)) / uFieldK.x, 0.05); // (fPU: ~1.5 pixels across, in m)
 #endif
-  if (kind > 0.5 && kind < 1.5) return roadCol(s, u, rw);
-  if (kind > 1.5 && kind < 2.5) return sidewalkCol(s, u, rw);
-  if (kind > 2.5 && kind < 3.5) return L(vec3(0.80, 0.80, 0.78)) * (0.9 + 0.12*fbm2(vec2(s, u)*2.0));
+  if (kind > 0.5 && kind < 1.5) return roadCol(s, u, rw) * uNtRoad;
+  if (kind > 1.5 && kind < 2.5) return sidewalkCol(s, u, rw) * uNtWalk;
+  if (kind > 2.5 && kind < 3.5) return L(vec3(0.80, 0.80, 0.78)) * (0.9 + 0.12*fbm2(vec2(s, u)*2.0)) * uNtWalk;
 #ifdef K_XING
   if (kind > 4.5 && kind < 5.5) return trackBed(s, u);
   if (kind > 5.5 && kind < 6.5) return crossingPanel(s, u);
@@ -984,7 +995,7 @@ export function groundMaterial(defines = groundDefines(Object.keys(ZDEF)), key =
   const paint = defines.F_PAINT !== undefined;
   m.onBeforeCompile = sh => {
     sh.uniforms.uSkyHor = U.uSkyHor; sh.uniforms.uSkyZen = U.uSkyZen; sh.uniforms.uWet = U.uWet; sh.uniforms.uSakWet = U.uSakWet; sh.uniforms.uNight = U.uNight; sh.uniforms.uSunDir = U.uSunDir; sh.uniforms.uSunCol = U.uSunCol;
-    for (const k of ['uReflTex', 'uReflOn', 'uReflRes', 'uHorizon', 'uReflK', 'uRoadN', 'uRoadF']) sh.uniforms[k] = U[k];
+    for (const k of ['uReflTex', 'uReflOn', 'uReflRes', 'uHorizon', 'uReflK', 'uRoadN', 'uRoadF', 'uNtRoad', 'uNtWalk']) sh.uniforms[k] = U[k];
     if (defines.Z_UCH !== undefined) for (const k of ['uUchS', 'uUchG', 'uUchT', 'uPasS', 'uPasG', 'uPasT']) sh.uniforms[k] = U[k];
     if (defines.Z_SAKURA !== undefined) sh.uniforms.uSakRT = U.uSakRT;
     if (defines.Z_COAST !== undefined && defines.Z_BOS === undefined) { sh.uniforms.uCoFill = U.uCoFill; sh.uniforms.uCoVerge = U.uCoVerge; }
@@ -996,7 +1007,7 @@ varying vec2 vSU; varying vec4 vZW; varying vec2 vRK; varying float vWY; varying
       .replace('#include <begin_vertex>', `#include <begin_vertex>
 vSU = su; vZW = zw; vRK = rk; vRV = rv; vZS = zs; vWY = (modelMatrix * vec4(position, 1.0)).y; vWN = normalize(mat3(modelMatrix) * objectNormal);`);
     worldShade(sh, `
-uniform vec3 uSkyHor, uSkyZen, uSunDir, uSunCol, uRoadN, uRoadF; uniform float uWet, uSakWet, uNight;
+uniform vec3 uSkyHor, uSkyZen, uSunDir, uSunCol, uRoadN, uRoadF, uNtRoad, uNtWalk; uniform float uWet, uSakWet, uNight;
 uniform sampler2D uReflTex; uniform vec2 uReflRes; uniform float uReflOn, uHorizon, uReflK;
 #ifdef Z_SAKURA
 uniform float uSakRT;
@@ -1017,7 +1028,7 @@ reflectedLight.directDiffuse *= gRoadT;
 reflectedLight.indirectDiffuse *= 1.0 + gSlope * vZW.z * uCoFill;
 #endif`);
   };
-  m.customProgramCacheKey = () => 'ground-v21-' + key + (paint ? '-fp' : '');
+  m.customProgramCacheKey = () => 'ground-v22-' + key + (paint ? '-fp' : '');
   return m;
 }
 
@@ -1060,15 +1071,21 @@ function backlit(sh) { // (after worldShade: it rides in the cloud-shadow varyin
 }
 // home windows switch on one by one at dusk (off again at dawn): worked out per vertex, so a pixel pays one multiply
 function windowLights(sh) {
-  sh.uniforms.uLightsOn = U.uLightsOn;
+  sh.uniforms.uLightsOn = U.uLightsOn; sh.uniforms.uLitN = U.uLitN; sh.uniforms.uBoardD = U.uBoardD; sh.uniforms.uHouseV = U.uHouseV; sh.uniforms.uHouseFill = U.uHouseFill;
   sh.vertexShader = sh.vertexShader
-    .replace('#include <common>', '#include <common>\nattribute float aLit; uniform float uLightsOn; varying float vOn;')
+    .replace('#include <common>', '#include <common>\nattribute float aLit; uniform float uLightsOn, uHouseV; uniform vec4 uLitN; varying float vOn; flat varying vec2 vNt;')
     // aLit: 0 always on; 6/255 a shop's interior, warm by day too; 12/255 a neon sign, bright by day too (the shopping
     // street glows in daylight, as in the reference art); 24…255 a home window switching on at its own moment at dusk
-    .replace('#include <begin_vertex>', '#include <begin_vertex>\nvOn = aLit < 0.002 ? 1.0 : aLit < 0.035 ? mix(3.0, 1.0, uLightsOn) : aLit < 0.08 ? mix(16.0, 1.25, uLightsOn) : clamp((uLightsOn - aLit) * 12.0, 0.0, 1.0);');
+    // (step 30: 3/255 a white or cream shop board, always on; uLitN, each kind's strength at night as painted)
+    .replace('#include <begin_vertex>', '#include <begin_vertex>\nvOn = aLit < 0.002 ? 1.0 : aLit < 0.016 ? mix(1.0, uLitN.w, uLightsOn) : aLit < 0.035 ? mix(3.0, uLitN.x, uLightsOn) : aLit < 0.08 ? mix(16.0, 1.25 * uLitN.y, uLightsOn) : clamp((uLightsOn - aLit) * 12.0, 0.0, 1.0) * uLitN.z;\nvNt = vec2(aLit > 0.002 && aLit < 0.016 ? 1.0 : 0.0, uv.x > 1.5 && uv.x < 3.5 && uv.y < uHouseV ? 1.0 : 0.0);');
+  // (step 30) at night as painted: a white shop board's paint dimmer (uBoardD), a painted house's walls in a moonlit fill (uHouseFill: linear
+  // irradiance / π, as an emissive; 0 by day). Their flags come per vertex (vNt): read from the uv in the fragment shader, after the light,
+  // it moved far pixels of the shopping street and the Turkish town at noon (the atlas's coordinates read at another precision)
   sh.fragmentShader = sh.fragmentShader
-    .replace('#include <common>', '#include <common>\nvarying float vOn;')
-    .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance *= vOn;');
+    .replace('#include <common>', '#include <common>\nvarying float vOn; flat varying vec2 vNt; uniform float uBoardD; uniform vec3 uHouseFill;')
+    .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= mix(1.0, uBoardD, vNt.x);')
+    .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance *= vOn;')
+    .replace('#include <opaque_fragment>', 'outgoingLight += (vNt.y * uHouseFill) * diffuseColor.rgb;\n#include <opaque_fragment>');
 }
 /** Contact shading: toward the ground, at the base of walls, poles, trunks and fences, ambient light fades (and a little of
  *  the sun) — from the per-vertex `aoD` byte the geometry builder writes (255 at the ground … 0 from 2.55 m up; absent →

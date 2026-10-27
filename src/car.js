@@ -20,6 +20,7 @@ function plateTexture() {
 // and headrests through the rear window (always in view behind the car), a headrest in each side window
 const GLASS_CELLS = 4;
 const HALO_W = 0.37, HALO_H = 0.61; // the tail lamps' glow cards (m)
+const GLOW_K = 0.03, GLOW_B = 0.02; // (step 30: the red tinge on the road behind the car at night: its peak strength, and braking's extra)
 function glassTexture() {
   const W = 128, H = 128, c = document.createElement('canvas'); c.width = W * GLASS_CELLS; c.height = H;
   const g = c.getContext('2d');
@@ -72,8 +73,9 @@ export function makeCar() {
 #include <lights_fragment_end>
 { vec3 bd = BRDF_Lambert(diffuseColor.rgb); // (the toon's direct light is ramp × shadow × sun × paint in each channel)
   float lf = clamp(reflectedLight.directDiffuse.g / max(directionalLights[0].color.g * bd.g, 1e-7), 0.0, 1.0);
-  reflectedLight.indirectDiffuse = (reflectedLight.indirectDiffuse + bd * uCarFill * (1.0 - lf)) * (0.6 + 0.4 * clamp((vWP.y - uCarPos.y + 0.45) / 0.85, 0.0, 1.0)); }`;
-  const PAINT = { uniforms: { ...LAMPS.uniforms, uCarFill: U.uCarFill }, pars: LAMPS.pars + '\nuniform vec3 uCarFill;', apply: LAMPS.apply };
+  reflectedLight.indirectDiffuse = (reflectedLight.indirectDiffuse + bd * uCarFill * (1.0 - lf)) * (0.6 + 0.4 * clamp((vWP.y - uCarPos.y + 0.45) / 0.85, 0.0, 1.0));
+  reflectedLight.directDiffuse *= uCarDT; }`; // (step 30: the night repaints' moonlit roof: main.js, 1 by day)
+  const PAINT = { uniforms: { ...LAMPS.uniforms, uCarFill: U.uCarFill, uCarDT: U.uCarDT }, pars: LAMPS.pars + '\nuniform vec3 uCarFill, uCarDT;', apply: LAMPS.apply };
   const mPaint = carLit(withGloss(new THREE.MeshToonMaterial({ color: '#ffffff', vertexColors: true, gradientMap: GRAD_CAR }), 0.85, 0.06, 'paint-l', PAINT));
   { const ob = mPaint.onBeforeCompile; mPaint.onBeforeCompile = sh => { ob(sh); sh.fragmentShader = sh.fragmentShader.replace('#include <lights_fragment_end>', FILL); }; }
   const part = (hex, gloss) => Object.assign(new THREE.Color(hex), { gloss });
@@ -305,6 +307,28 @@ export function makeCar() {
   { const q = [];
     for (const x of [-0.56, 0.56]) { const g = new THREE.PlaneGeometry(0.22, 1.5); g.rotateX(-Math.PI / 2); g.translate(x, 0.035, -1.72 - 0.75); q.push(g); }
     const st = new THREE.Mesh(mergeGeometries(q), streakMat); st.renderOrder = 3; st.visible = false; car.add(st); streakMat.mesh = st; }
+  // (step 30) at night as painted, a faint red tinge on the road just behind the tail lamps (the repaints' road reads a dark red-mauve
+  // there): one soft ellipse ~0.6 m behind the bumper, 2.3 m across, fading to exactly nothing 1.0 m nearer (under the car, out of
+  // sight) and 1.6 m further, well inside its card, so no edge ever shows; a tinge (main.js sets its strength by the night's painted
+  // look, so dusk and sunset keep their road, and fades it on a wet road, where the lamps' reflections are). Additive, in the streaks'
+  // program. Made by main.js once the particles are (initGlow): made here, its ids drew random numbers ahead of theirs, which moved
+  // every falling petal and leaf of a seeded capture
+  let glowMat = null;
+  const GW = 3.0, GL = 3.8, GN = 0.8; // (its card: width, length and how far it reaches under the car, m)
+  const initGlow = () => {
+    const W = 64, H = 64, c = document.createElement('canvas'); c.width = W; c.height = H;
+    const g = c.getContext('2d'), img = g.createImageData(W, H);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      // (the canvas's first row is the card's far end: textures are flipped) xm across, dm behind the bumper (m)
+      const xm = ((x + 0.5) / W - 0.5) * GW, dm = (1 - (y + 0.5) / H) * GL - GN, e = dm - 0.6;
+      const r2 = (xm / 1.15) ** 2 + (e / (e < 0 ? 1.0 : 1.6)) ** 2, a = r2 < 1 ? (1 - r2) * (1 - r2) : 0;
+      const i4 = (y * W + x) * 4; img.data[i4] = img.data[i4 + 1] = img.data[i4 + 2] = Math.round(255 * a); img.data[i4 + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+    glowMat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), color: 0xff3a30, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+    const q = new THREE.PlaneGeometry(GW, GL); q.rotateX(-Math.PI / 2); q.translate(0, 0.033, -1.72 + GN - GL / 2);
+    const m = new THREE.Mesh(q, glowMat); m.renderOrder = 3; m.visible = false; m.userData.car = true; car.add(m); glowMat.mesh = m;
+  };
   // the tail lamps' glow: in every painting, by day too, a soft red halo spills from each lamp over the paint around it. A
   // painted glow card per lamp, added to the frame (the bloom runs only at dusk and at night, and the card stays far under
   // its threshold); its strength is set each frame (update): softer at night, where the bloom draws the glow; up when braking
@@ -335,6 +359,10 @@ export function makeCar() {
 
   return {
     group: car, lamps, lampCol, head,
+    /** (step 30) the tail lamps' glow on the road at night as painted: k, its weight (main.js: the night's painted look), brighter braking */
+    /** (step 30) the faint red tinge on the road behind the car at night: k, its weight (main.js: the night's painted look, less on a
+     *  wet road); a little more braking */
+    initGlow, roadGlow(k) { if (!glowMat) return; glowMat.opacity = k * (GLOW_K + GLOW_B * S.br); glowMat.mesh.visible = glowMat.opacity > 0.002; },
     /** m (optional): lat = sideways acceleration (m/s², + = towards the right), lon = speeding up (+) / braking (−),
      *  road = the surface's height under the car (m), jolt = vertical kick this frame (m/s), kick = pitch kick (rad/s, + = nose down),
      *  brake = 1 while the brakes are on */

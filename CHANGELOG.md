@@ -2,6 +2,42 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-27 · 10:34 — Gap audit 2: the night as painted
+- **A full moon in the sky, as painted:** at night under a clear sky the moon stands ~21° up in the frame, straight ahead over the
+  road in the city, the avenue and the country, over the sea on the left by the coast and the strait, to the right of Uçhisar's road,
+  as all seven night repaints have it: a pale disc with its seas in a faint blue-grey, the navy sky lighter round it. It was ~53° up
+  and out of view. Its light, and so every shadow, is the old moon's.
+- **The cumulus leave it a clear sky and catch its light:** the clouds drift slowly round the sky (at most 0.4°/s) so the moon stands
+  in a clear patch; their tops and the edges next to the moon silver over a deep blue-grey body (they were a flat, washed-out blue).
+- **The night sky as painted:** a deep navy at the top of the frame, bluer towards the horizon, thick with small stars down to it (it
+  was a saturated royal indigo with a few). The sea's moon path runs under the moon.
+- **The road and the pavements a moonlit blue-grey,** the moon's shadows soft (the road and the pavements were an indigo near-black);
+  the headlights throw a warm pool round the car's nose and the tail lamps leave a faint red tinge on the road just behind them, as in
+  the repaints.
+- **The shopping street calm, its neon the brightest thing in it:** its shops' interiors, upper windows and white boards dimmer at
+  night, the glow round the lights tighter. **Houses moonlit:** the painted houses' walls a moonlit grey round their warm windows (they
+  stood black); the car's roof pale in the moonlight, its rear window dark (it glowed red). The grass, the round crowns, the cherry
+  canopy, the fields, the verges and the tetrapods take the repaints' night tones.
+- Against the night repaints (share-weighted ΔE of region medians, Audit 2's boxes): city 25.9 → 10.3, avenue 13.7 → 5.4, coast
+  15.5 → 5.7, country 12.3 → 3.3 (all regions × shares: 6639 → 2445). Turkey's nights: the moon where their repaints have it, the top
+  of the frame's sky 15–19 → 1.7–6.3.
+- Noon, golden hour and sunset unchanged: all eleven zones' starts at noon and the four audit places at golden hour and sunset
+  identical to live in seeded captures (the Turkish town: a pixel, within its own noise). The night look comes in from 0.8 (the moon
+  from 0.81) and is gone by 0.245 at dawn (the moon by 0.225); not under grey skies.
+- How: sky.js (moonSkyDir, MOON_EL / MOON_R; the moon's disc, seas and halo; uStarN; uEveT), main.js (nightPaint; NSKY_N, MOON_B, NT
+  and NTZ: the road, the pavements, the shadows' strength, the lights, the bloom, the headlights, the houses' fill, the car's moonlit
+  paint; refitted F_NIGHT, GH_N, BL_T, BLM_NIGHT, TP_NIGHT, CV_T, BKV_T, CF_N; test switch st.nightpaint), materials.js (uNtRoad,
+  uNtWalk; windowLights: uLitN, uBoardD, uHouseFill, per-vertex vNt), painted.js (the moon's clear patch, CL_NIGHT, the k³ contrast,
+  moonlit rims), car.js (uCarDT, the faint red tinge on the road), sea.js (the moon's path), props.js (a light code for white shop
+  boards). No assets (+8.8 KB of code, +2.9 KB gzipped).
+- Programs: 65 desktop / 64 phone, as before; none compiled through sunset, dusk, night, dawn, rain or Turkey's lazy load.
+- Cost: the same. Per draw over the city's night drives on the shared box's Vega: all draws 24.2 / 33.6 → 23.3 / 33.7 ms (two box
+  loads; the sky, the clouds and the atlas the same within ±0.1). Over night drives: desktop coast 31.09 / 31.22 / 30.34 → 31.38 /
+  31.64 / 28.15 ms, phone country 12.48 / 13.57 / 13.68 → 13.93 / 13.15 / 12.94. One more draw at night (the red tinge). 0 shader
+  errors in all eleven zones and on the phone tier at night and at dawn; no console errors at q=low, mid and high; embed starts on tap.
+- Left over: the shopping street's big lit panes; the headlight pool on the car's left; one van for every zone; the Bosphorus's houses'
+  walls at night; the avenue's far wet road; the light still the old moon's (shadows fall back-right while the moon stands ahead).
+
 ## 2026-10-27 · 06:27 — Gap audit 2: golden hour as painted
 - **A second gap audit** (ref/GAPS.md, Audit 2): the four audit frames re-shot at noon and, for the first time, at golden hour,
   sunset and night against the paintings' repaints. At noon they are now 4.9–10.7 from the paintings; the evening and the night

@@ -32,6 +32,9 @@ export const TOD = {
   fog: new THREE.Color(), cLit: new THREE.Color(), cShade: new THREE.Color(), cRim: new THREE.Color(), night: 0, warm: 0, overcast: 0, rain: 0,
   bright: 1, // how much this is a bright clear day (not night, dawn/dusk or overcast): drives the day-only parts of the look
   sunDir: new THREE.Vector3(), moonDir: new THREE.Vector3(), lightDir: new THREE.Vector3(), sunEl: 0,
+  // (step 30) the moon as it is drawn (the sky's disc and halo, its path on the sea, the clouds' moonlit rims): where the
+  // night repaints have it, ~21° up and ahead (main.js moonSkyDir); the night's light keeps the old, higher moon (moonDir)
+  moonSky: new THREE.Vector3(0, 1, 0), moonVis: 0, // (…and how much it shows: main.js, the sky's uMoon)
   t: 0.4, // the time of day (the painted palettes by time of day key on it: painted.js todTones)
   head: null, // the road's heading the sun and the moon stand by (null: fixed in the world, the old sky; see skyDirs)
 };
@@ -95,6 +98,14 @@ function skyDirs(t, sun, moon, light, head = null) {
 const _sd = new THREE.Vector3(), _md = new THREE.Vector3();
 /** the shading light direction at time of day t for the road's heading `head` (null: the old fixed sky); no side effects */
 export function lightDirAt(t, out, head = null) { skyDirs(((t % 1) + 1) % 1, _sd, _md, out, head); return out; }
+// (step 30) the moon as the night repaints draw it (ref/tod/*_night.png, all seven): a full moon ~21° up (20–23° over the
+// frame's middle, the chase camera looking ~1° down), its disc ~3.8° across (3.2–4.4°), straight ahead over the road inland,
+// over the sea on the left by the coast and the strait, to the right of Uçhisar's road (main.js MOON_B: its bearing from the
+// road's mean heading by zone). Only drawn there: the light at night keeps the old moon (moonDir, ~53° up, 20° left), so the
+// shadows, and the light at sunset (part moon), are as before
+export const MOON_EL = 21 * D2R, MOON_R = 1.8 * D2R;
+/** the drawn moon's direction for a bearing `az` (radians, + = left, as the sun's) */
+export function moonSkyDir(az, out) { const c = Math.cos(MOON_EL); return out.set(c * Math.sin(az), Math.sin(MOON_EL), c * Math.cos(az)); }
 
 // overcast palette (day / night), blended over the clear-sky palette by the weather
 const OV = {
@@ -121,17 +132,21 @@ export function makeSky() {
   const mat = new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, fog: false,
     uniforms: {
-      uZenith: { value: TOD.zenith }, uHorizon: { value: TOD.horizon }, uSunDir: { value: TOD.sunDir }, uMoonDir: { value: TOD.moonDir },
+      uZenith: { value: TOD.zenith }, uHorizon: { value: TOD.horizon }, uSunDir: { value: TOD.sunDir }, uMoonDir: { value: TOD.moonSky },
+      // (step 30) the drawn moon's disc and its halo's tones (linear: main.js, the night repaints' ungraded), and the night's extra
+      // stars (the repaints' sky is thick with them: ~20 to a 100 px square at 1296 × 800, ours had 3–8) and their brightness range
+      uMoonCol: { value: new THREE.Color(1, 1, 1) }, uMoonHalo: { value: new THREE.Color(0.2, 0.3, 0.5) }, uStarN: { value: 0 },
       uNoiseTex: MU.uNoiseTex, uSunCol: { value: TOD.sunCol }, uNight: { value: 0 }, uWarm: { value: 0 }, uTime: { value: 0 }, uCirrus: { value: 0.6 }, uCirrusCol: { value: new THREE.Color() }, uOvercast: { value: 0 }, uDeckLit: { value: new THREE.Color() }, uDeckDark: { value: new THREE.Color() },
       uMilky: { value: 0 }, uMetA: { value: new THREE.Vector3(0, 1, 0) }, uMetB: { value: new THREE.Vector3(0, 1, 0) }, uMetP: { value: -1 },
       uBright: { value: 0 }, uMoon: { value: 0 },
       // (Audit 2) the painted evening sky (main.js sets them by the hour): its weight, its three tones (linear: from ~21° up, ~7° up,
       // the horizon), the sun the sky's glow and disc are drawn round (the real sun lowered towards the horizon) and the glow's strength
       uEve: { value: 0 }, uEveZ: { value: new THREE.Color() }, uEveM: { value: new THREE.Color() }, uEveH: { value: new THREE.Color() }, uSkySun: { value: new THREE.Vector3(0, 1, 0) }, uEveG: { value: 1 },
+      uEveT: { value: new THREE.Color() }, uEveTk: { value: 0 }, // (step 30: the night's top tone, from ~21° to ~30° up, and its weight: 0 in the evening)
     },
     vertexShader: /* glsl */`varying vec3 vDir; void main(){ vDir = position; vec4 p = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * p; }`,
     fragmentShader: /* glsl */`
-      uniform vec3 uZenith, uHorizon, uSunDir, uMoonDir, uSunCol, uCirrusCol, uDeckLit, uDeckDark, uMetA, uMetB, uEveZ, uEveM, uEveH, uSkySun; uniform float uNight, uWarm, uTime, uCirrus, uOvercast, uMilky, uMetP, uBright, uMoon, uEve, uEveG;
+      uniform vec3 uZenith, uHorizon, uSunDir, uMoonDir, uSunCol, uCirrusCol, uDeckLit, uDeckDark, uMetA, uMetB, uEveZ, uEveM, uEveH, uSkySun, uMoonCol, uMoonHalo, uEveT; uniform float uNight, uWarm, uTime, uCirrus, uOvercast, uMilky, uMetP, uBright, uMoon, uEve, uEveG, uStarN, uEveTk;
       varying vec3 vDir;
       ${GLSL_NOISE}
       float hash13(vec3 p){ p = fract(p * .1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
@@ -146,6 +161,7 @@ export function makeSky() {
         // ~21° (blue-violet at sunset), a pale band ~7° up, the warm colour only along the horizon; the glow round a sun drawn low
         if (uEve > 0.0) {
           vec3 ev = mix(uEveM, uEveZ, smoothstep(0.12, 0.36, e));
+          ev = mix(ev, uEveT, smoothstep(0.36, 0.5, e) * uEveTk); // (step 30: the night's, a deeper navy again higher up)
           col = mix(col, mix(uEveH, ev, smoothstep(0.0, 0.12, e)), uEve);
         }
         if (e < 0.0) col = uHorizon * (1.0 - clamp(-e * 2.0, 0.0, 0.25));
@@ -184,8 +200,11 @@ export function makeSky() {
         }
         if (uNight * (1.0 - uOvercast) > 0.01 && e > 0.0) {
           vec3 sp = d * 380.0; vec3 cell = floor(sp); float hs = hash13(cell);
-          if (hs > 0.9965 - 0.004 * band * uMilky) { float st = (1.0 - smoothstep(0.0, 0.42, length(fract(sp) - 0.5))) * (0.55 + 0.45 * sin(uTime * 1.7 + hs * 400.0));
-            col += vec3(0.85, 0.9, 1.0) * st * uNight * smoothstep(0.0, 0.25, e) * 1.3; }
+          // (step 30: at night under a clear sky, uStarN more of them, the new ones fainter, as the repaints' dense field of
+          // small stars; 0 until the evening's sky has gone, so dusk keeps its own)
+          if (hs > 0.9965 - 0.004 * band * uMilky - uStarN) { float st = (1.0 - smoothstep(0.0, 0.42, length(fract(sp) - 0.5))) * (0.55 + 0.45 * sin(uTime * 1.7 + hs * 400.0));
+            float sv = smoothstep(0.0, 0.25, e); sv += min(uStarN * 90.0, 1.0) * (1.0 - sv) * smoothstep(0.0, 0.06, e); // (at night as painted, down to the horizon)
+            col += vec3(0.85, 0.9, 1.0) * st * uNight * sv * 1.3 * mix(1.0, 0.5 + smoothstep(0.9965 - uStarN, 0.999, hs), step(0.0001, uStarN)); }
           if (uMetP >= 0.0 && uMetP < 1.3) { // a shooting star: a bright head with a fading tail
             float p = min(uMetP, 1.0);
             vec3 head = normalize(mix(uMetA, uMetB, p)), tail = normalize(mix(uMetA, uMetB, max(0.0, p - 0.32)));
@@ -194,9 +213,28 @@ export function makeSky() {
             float fade = smoothstep(0.0, 0.06, uMetP) * (1.0 - smoothstep(1.0, 1.3, uMetP));
             col += vec3(0.9, 0.95, 1.0) * (1.0 - smoothstep(0.0, 0.0024, dist)) * tt * tt * fade * 2.2 * uNight;
           }
-          float md = dot(d, uMoonDir); // (the moon: uMoon, out of the twilight's sky: main.js)
-          col += vec3(0.5, 0.58, 0.85) * pow(max(md, 0.0), 60.0) * 0.35 * uMoon;
-          col = mix(col, vec3(1.6, 1.6, 1.5), smoothstep(0.99955, 0.9998, md) * uMoon);
+          if (uMoon > 0.0) { // (the moon: uMoon, out of the twilight's sky: main.js)
+            // (step 30) as the night repaints draw it: ~3.8° across, pale, its seas a faint blue-grey, the navy sky round it
+            // lighter out to ~4 of its radii (paler near it, bluer further out: two falloffs, each channel its own share)
+            float md = dot(d, uMoonDir), th = sqrt(max(2.0 - 2.0 * md, 0.0)); // (th: the angle from its middle, rad)
+            if (th < 0.4) {
+              // (fitted to the repaints' rings round their moons, ~/cdtest/s30/tools: a pale glow close in, a bluer one out to
+              // ~3°, a faint one over ~20°)
+              float dr = max(th - ${MOON_R.toFixed(5)}, 0.0), tl = max(1.0 - dr * 2.86, 0.0);
+              vec3 hw = vec3(0.472, 0.352, 0.23) * exp(-dr * 68.8) + vec3(0.014, 0.195, 0.306) * exp(-dr * 34.4) + vec3(0.128, 0.137, 0.185) * (tl * tl);
+              col = mix(col, uMoonHalo, min(hw, vec3(1.0)) * uMoon);
+              if (th < ${(MOON_R + 0.003).toFixed(5)}) {
+                vec3 mu = normalize(cross(uMoonDir, vec3(0.0, 1.0, 0.0))), mv = cross(mu, uMoonDir);
+                vec2 q = vec2(dot(d, mu), dot(d, mv)) * ${(1 / MOON_R).toFixed(3)};
+                float sea = (1.0 - smoothstep(0.16, 0.4, length(q - vec2(-0.3, 0.38)))) + (1.0 - smoothstep(0.14, 0.44, length((q - vec2(-0.58, -0.02)) * vec2(1.0, 0.7))))
+                  + (1.0 - smoothstep(0.08, 0.24, length(q - vec2(0.12, 0.4)))) + (1.0 - smoothstep(0.1, 0.27, length(q - vec2(0.3, 0.1))))
+                  + (1.0 - smoothstep(0.05, 0.15, length(q - vec2(0.64, 0.3)))) + (1.0 - smoothstep(0.06, 0.2, length(q - vec2(0.5, -0.17))))
+                  + (1.0 - smoothstep(0.08, 0.24, length(q - vec2(-0.2, -0.34)))) + (1.0 - smoothstep(0.03, 0.12, length(q - vec2(-0.48, -0.42))));
+                sea = min(sea, 1.0) * (0.55 + 0.45 * vnoise(q * 6.0 + 3.0)) + 0.12 * (vnoise(q * 17.0) - 0.5);
+                col = mix(col, uMoonCol * (1.0 - sea * vec3(0.34, 0.28, 0.24)), (1.0 - smoothstep(${(MOON_R - 0.0014).toFixed(5)}, ${(MOON_R + 0.0014).toFixed(5)}, th)) * uMoon);
+              }
+            }
+          }
         }
         gl_FragColor = vec4(col, 1.0);
       }`,

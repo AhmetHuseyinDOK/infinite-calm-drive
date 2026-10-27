@@ -328,13 +328,17 @@ export function makeSea(lite = false) {
           ugD2(P, g, 'wLite', u.uPWLite.value, u.uPMid.value); ugD2(P, g, 'wTurq', u.uPWTurq.value, u.uPMid.value); }
         // the low sun's path on the water while it is up (sets), then the moon's while it is low (as the paintings draw it:
         // a column from the horizon; a high moon's would wash the near water pale)
-        const L = TOD.sunEl > -0.04 ? TOD.sunDir : TOD.moonDir, hi = Math.min(Math.max((L.y - 0.3) / 0.3, 0), 1);
-        u.uPathK.value = P.rgb('pk')[0] * paint * u.uWaves.value * (1 - hi * hi * (3 - 2 * hi));
+        // (step 30: the moon's under the moon as it is drawn (TOD.moonSky), while it shows; as the coast's and the strait's night
+        // repaints paint it, a column of glints from the horizon over the far water: the light's direction taken as low as the
+        // setting sun's on the moon's bearing (from its real height, ~21°, the glints spread over the whole near sea))
+        const sun = TOD.sunEl > -0.04, m = TOD.moonSky, mh = Math.hypot(m.x, m.z) || 1, L = sun ? TOD.sunDir : _pl.set(m.x / mh * PATH_C, PATH_S, m.z / mh * PATH_C), hi = Math.min(Math.max((L.y - 0.3) / 0.3, 0), 1);
+        u.uPathK.value = P.rgb('pk')[0] * paint * u.uWaves.value * (1 - hi * hi * (3 - 2 * hi)) * (sun ? 1 : TOD.moonVis);
         if (u.uPathK.value > 0) { u.uPathDir.value.copy(L); P.ug(g, 'path', u.uPPath.value); P.ug(g, 'glint', u.uPGlint.value); }
       }
     },
   };
 }
+const PATH_S = Math.sin(3.5 * Math.PI / 180), PATH_C = Math.cos(3.5 * Math.PI / 180), _pl = new THREE.Vector3(); // (step 30: the moon's path)
 const _c = new THREE.Color(), WAVE_N = ['wBack', 'wFace', 'wLite', 'wTurq'], WAVE_U = [SEA_U.uPWBack.value, SEA_U.uPWFace.value, SEA_U.uPWLite.value, SEA_U.uPWTurq.value];
 /** a painted tone's offset from another (ungraded) colour: out = ungrade(tone n of palette P) − m (three's Color.sub would
  *  clamp it at 0) */

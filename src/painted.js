@@ -780,7 +780,7 @@ const BT_DAY = { shade: [84, 112, 132], mid: [142, 170, 190], lit: [200, 220, 23
 const BT_GOLD = { shade: [70, 78, 100], mid: [110, 108, 124], lit: [160, 140, 134], ch: [0.3, 0.3, 0.3] };
 const BT_SUNSET = { shade: [46, 36, 58], mid: [84, 56, 84], lit: [130, 76, 92], ch: [0.25, 0.25, 0.25] };
 const BT_NIGHT = { shade: [20, 38, 60], mid: [30, 54, 84], lit: [46, 76, 112], ch: [0.12, 0.12, 0.12] };
-const BAND_TONES = todTones([
+export const BAND_TONES = todTones([
   [0.0, BT_NIGHT], [0.2, mixTones(BT_NIGHT, BT_SUNSET, 0.3)], [0.245, mixTones(BT_SUNSET, BT_GOLD, 0.4)], [0.3, BT_DAY], [0.62, BT_DAY],
   [0.7, BT_GOLD], [0.75, BT_SUNSET], [0.765, mixTones(BT_SUNSET, BT_NIGHT, 0.25)], [0.8, mixTones(BT_SUNSET, BT_NIGHT, 0.55)], [0.86, BT_NIGHT], [1.0, BT_NIGHT],
 ]);
@@ -922,6 +922,8 @@ export function makePaintedBand(atlas, post, fog, alias = null, haze0 = 0, winZo
     /** rows without the skirt under their foot (the far fields, hazed into the world's far edge) and without the haze over it:
      *  over open water the sea plane runs on up to them instead ({ zone: true }: the Golden Horn up to the old city's quays) */
     noSkirt: {},
+    /** zones whose row is hidden ({ zone: true }: the real Galata zone's skyline, realsky.js, stands there instead: main.js) */
+    hide: {},
     /** rows with their own tones by the time of day ({ zone: todTones(…) with shade, mid, lit, ch }: Cappadocia's, W5, read from its
      *  concept's repaints); the rest take BAND_TONES */
     tones: {},
@@ -930,11 +932,13 @@ export function makePaintedBand(atlas, post, fog, alias = null, haze0 = 0, winZo
      *  exp² density and draw distance */
     update(camera, m, camH = 2.8, fogD = 0.0014, fogFar = 700) {
       const al = this.alias, za = Z[m.a] ? m.a : al && Z[al[m.a]] ? al[m.a] : null, zb = Z[m.b] ? m.b : al && Z[al[m.b]] ? al[m.b] : null;
-      const A = za && Z[za], B = zb && Z[zb], t = m.t;
-      // how much band: a zone without one fades it out and leaves the far horizon to the rings
+      const A = za && Z[za], B = zb && Z[zb], t = m.t, hA = !!(A && this.hide[m.a]), hB = !!(B && this.hide[m.b]);
+      // how much band: a zone without one fades it out and leaves the far horizon to the rings (and a zone whose row is hidden, step
+      // 35R: the real Galata zone's skyline stands there instead; its row's still counted in the ring's span, so its neighbours draw as
+      // they did)
       let w = 0;
-      if (A && B) { u.uRowA.value.copy(A); u.uRowB.value.copy(B); u.map.value = ZT[za]; u.mapB.value = ZT[zb]; u.uMix.value = A === B ? 0 : t; w = 1; }
-      else if (A || B) { u.uRowA.value.copy(A || B); u.map.value = ZT[za || zb]; u.uMix.value = 0; w = A ? 1 - t : t; }
+      if (A && B) { u.uRowA.value.copy(hA ? B : A); u.uRowB.value.copy(B); u.map.value = ZT[hA ? zb : za]; u.mapB.value = ZT[zb]; u.uMix.value = A === B || hA || hB ? 0 : t; w = hA && hB ? 0 : hA ? Math.min(1, Math.max(0, (t - 0.7) / 0.3)) ** 2 : hB ? 1 - t : 1; } // (after a hidden row the next one comes in late: not a ghost over the hidden zone's own skyline)
+      else if (A || B) { u.uRowA.value.copy(A || B); u.map.value = ZT[za || zb]; u.uMix.value = 0; w = A ? (hA ? 0 : 1 - t) : (hB ? 0 : t); }
       u.uAlpha.value = w;
       mesh.visible = w > 0.002;
       if (!mesh.visible) return 0;
@@ -946,7 +950,7 @@ export function makePaintedBand(atlas, post, fog, alias = null, haze0 = 0, winZo
         camera.getWorldDirection(fw);
         u.uRot.value = this.hero + (Math.atan2(fw.x, fw.z) / (Math.PI * 2)) * per; first = false;
       }
-      u.uRotAB.value.set(rotOf(A ? za : zb), rotOf(zb)); // (the rows' own turns: 0 but for a row facing a road)
+      u.uRotAB.value.set(rotOf(A && !hA ? za : zb), rotOf(zb)); // (the rows' own turns: 0 but for a row facing a road)
       // the light now against the light at noon (sun + sky), and the haze: none on a bright clear day, some at dusk and
       // night, more under grey skies, most in rain; the painting itself on a bright day
       _bn.copy(TOD.sunCol).multiplyScalar(TOD.sunI); _bc.set(_bn.r, _bn.g, _bn.b);
@@ -955,7 +959,7 @@ export function makePaintedBand(atlas, post, fog, alias = null, haze0 = 0, winZo
       u.uLightC.value.setRGB(_bc.x / (NOON_SUN.r + NOON_SKY.r), _bc.y / (NOON_SUN.g + NOON_SKY.g), _bc.z / (NOON_SUN.b + NOON_SKY.b)); u.uPaint.value = paint;
       // the time of day's tones (all but a bright day's: the painting itself), under a clear sky; the far city's windows
       u.uTone.value = paintSky() * (1 - paint);
-      if (u.uTone.value > 0) { const P = (this.tones[(A && B ? (t < 0.5 ? za : zb) : za || zb)] || BAND_TONES).at(TOD.t); u.uBS.value.fromArray(P.rgb('shade')).divideScalar(255); u.uBM.value.fromArray(P.rgb('mid')).divideScalar(255); u.uBH.value.fromArray(P.rgb('lit')).divideScalar(255); u.uBCh.value = P.rgb('ch')[0]; }
+      if (u.uTone.value > 0) { const P = (this.tones[(A && B ? (t < 0.5 && !hA ? za : zb) : za || zb)] || BAND_TONES).at(TOD.t); u.uBS.value.fromArray(P.rgb('shade')).divideScalar(255); u.uBM.value.fromArray(P.rgb('mid')).divideScalar(255); u.uBH.value.fromArray(P.rgb('lit')).divideScalar(255); u.uBCh.value = P.rgb('ch')[0]; }
       const nk = Math.min(Math.max((TOD.night - 0.15) / 0.65, 0), 1), wn = nk * nk * (3 - 2 * nk) * (1 - 0.6 * TOD.overcast);
       u.uWin.value.set(wins.has(m.a) ? wn * PAINT_TOD.on : 0, wins.has(m.b) ? wn * PAINT_TOD.on : 0); // (Turkey's: the Asian shore's houses, the old city's)
       // (alpha-tested, without MSAA: a passing haze while one zone's skyline gives way to the next, or to the rings)

@@ -12,7 +12,8 @@ import * as THREE from 'three';
 import { GB } from './geom.js';
 import { Atlas } from './textures.js';
 import { rng, sstep, C } from './util.js';
-import { ZONE_LEN, zoneAt } from './path.js';
+import { ZONE_LEN, zoneAt, galL, zparam } from './path.js';
+import { galTrack } from './galata.js';
 
 // ---- its shape (the real ones are 2.65 m wide: 2.5 here, so it clears the portals' posts, rw + 1.55 and 11.2 m out)
 // the cross-section's right half from its skirt's foot up to the roof's crown ([y over the rail, z out from the track's middle])
@@ -141,7 +142,7 @@ function paintTram(tier) {
 const W1 = [1, 1, 1], BELLOWS = C('#3b3f45'), UNDER = C('#1e2024'), PANT = C('#5a5f66'), ROOFBOX = C('#2a6fb8'), INSUL = C('#8a4a2c');
 /** the train's geometry: two cars nose to nose (its own frame: x along it, its head at +x; y over the rails; z across, +z its right),
  *  dest: the head face's ('K' / 'B') */
-function buildTram(cells, dest) {
+function buildTram(cells, dest, which = 1) {
   const g = new GB({ uv: true, ao: true, lit: true }), I4 = new THREE.Matrix4(); g.setM(I4);
   const plain = cells.plain, pu = (plain.u0 + plain.u1) / 2, pv = (plain.v0 + plain.v1) / 2, PU = { u0: pu, u1: pu, v0: pv, v1: pv };
   const P6 = { nz: PU, pz: PU, nx: PU, px: PU, py: PU, ny: PU };
@@ -239,18 +240,18 @@ function buildTram(cells, dest) {
     }
     box(head[0] - 0.16, PANTO - 0.12, -0.08, head[0] + 0.16, PANTO - 0.04, 0.08, PANT);
   };
-  const c1 = -(CAR + GAPC) / 2, c2 = (CAR + GAPC) / 2;
-  car(c1, 'T', 'D'); car(c2, 'D', dest);
-  box(c1 + CAR / 2 - 0.1, 0.42, -0.14, c2 - CAR / 2 + 0.1, 0.6, 0.14, UNDER); // (the coupler between them)
+  // (step 35R: each car its own body, centred, so each follows the real tracks' bends by its own bogies; the coupler's half on each)
+  if (which === 0) { car(0, 'T', 'D'); box(CAR / 2 - 0.1, 0.42, -0.14, (CAR + GAPC) / 2, 0.6, 0.14, UNDER); }
+  else { car(0, 'D', dest); box(-(CAR + GAPC) / 2, 0.42, -0.14, -CAR / 2 + 0.1, 0.6, 0.14, UNDER); }
   return g.build();
 }
 
 // ---- its comings and goings
-const TRACK = [6.3, 9.7]; // (the tracks' middles from the road's middle: chunks.js placeGalata's TZ)
+// (the tracks: the real ones (galata.js galTrack), the near one (0) ours, towards Eminönü, the far one (1) towards Karaköy)
 const V_OUR = 13.0, V_TOW = 9.0, ACC = 0.9, DEC = 1.1; // its speeds (m/s: ~47 km/h passing the car's 40, ~32 meeting it); starting, braking
-// its run over a bridge (m into the Galata zone): from just past the blue sign by the kerb strip (zone + 96 m: it reaches over the
-// near track) to the stop at the landing (the town begins at zone + 1370; the road is straight from the zone's start)
-const RUN_A = 100, RUN_B = 1362;
+// its run through the zone (m into it): along Kemeraltı Caddesi, over the bridge, round Eminönü's bend to the T1's Eminönü stop on
+// Reşadiye Caddesi (galata.js GAL_STOPS: its front at the platform's end), where ours waits until we have gone by
+const RUN_A = 200, RUN_B = 1272, BOG = CAR / 2 - 3.2; // (BOG: the bogies' distance from a car's middle)
 const _f = {};
 /** the start of the Galata zone the drive is in or about to enter (NaN: none near) */
 function galZone(s) {
@@ -264,24 +265,32 @@ function galZone(s) {
 export async function makeTram(M, renderer, tier, next = null) {
   const wait = () => (next ? next() : null);
   const { A, cells } = paintTram(tier); await wait();
-  // (one body: the far track's tram heads for Kabataş; the near track's is its copy, its head face's display reading Bağcılar)
-  const geoK = buildTram(cells, 'K'), geoB = geoK.clone(), uv = geoB.attributes.uv.array, fK = cells.face_K, fB = cells.face_B; await wait();
+  // (one body a car: the far track's tram heads for Kabataş; the near track's is its copy, its head face's display reading Bağcılar)
+  const geoK = buildTram(cells, 'K'), geoK0 = buildTram(cells, 'K', 0), geoB = geoK.clone(), uv = geoB.attributes.uv.array, fK = cells.face_K, fB = cells.face_B; await wait();
   for (let i = 0; i < uv.length; i += 2) if (uv[i] > fK.u0 - 1e-5 && uv[i] < fK.u1 + 1e-5 && uv[i + 1] > fK.v0 - 1e-5 && uv[i + 1] < fK.v1 + 1e-5) { uv[i] += fB.u0 - fK.u0; uv[i + 1] += fB.v0 - fK.v0; }
   const tex = A.textures(renderer); renderer.initTexture(tex.map); await wait(); renderer.initTexture(tex.emissive);
   // (the atlas's material on the tram's own texture pair, and its own shadow twin: step 32's makeAtlasChain)
   const mat = M.atlas.clone(); mat.map = tex.map; mat.emissiveMap = tex.emissive; mat.onBeforeCompile = M.atlas.onBeforeCompile; mat.customProgramCacheKey = M.atlas.customProgramCacheKey;
   const depth = M.atlasDepth.clone(); depth.onBeforeCompile = M.atlasDepth.onBeforeCompile; depth.customProgramCacheKey = M.atlasDepth.customProgramCacheKey;
   const group = new THREE.Group();
-  const mk = (geo, track, dir, seed, wait) => {
-    const m = new THREE.Mesh(geo, mat); m.castShadow = m.receiveShadow = true; m.customDepthMaterial = depth; m.visible = false; group.add(m);
-    return { mesh: m, u: TRACK[track], dir, on: false, s: 0, v: 0, zs: 0, wait, r: rng(seed) };
+  const mk = (geo, geo0, track, dir, seed, wait) => {
+    const car = g => { const m = new THREE.Mesh(g, mat); m.castShadow = m.receiveShadow = true; m.customDepthMaterial = depth; m.visible = false; group.add(m); return m; };
+    return { mesh: car(geo), mesh0: car(geo0), k: track, dir, on: false, s: 0, v: 0, zs: 0, wait, r: rng(seed) };
   };
   // the near track's (our way, to the T1's Bağcılar end: it passes us) and the far one's (towards Karaköy and Kabataş: it meets us)
-  const T = [mk(geoB, 0, 1, 743, 25), mk(geoK, 1, -1, 751, 8)];
+  const T = [mk(geoB, geoK0, 0, 1, 743, 25), mk(geoK, geoK0, 1, -1, 751, 8)];
+  /** a point of track k at road position s (out: [x, z, y]: the world's, less the origin) */
+  const _p = [0, 0, 0], _q = [0, 0, 0];
+  function trackAt(path, s, k, origin, out) { path.at(s, _f); const u = galTrack(galL(s), zparam(s, 'rw'), k); out[0] = _f.x + _f.rx * u - origin.x; out[1] = _f.z + _f.rz * u - origin.z; out[2] = _f.y; return out; }
+  /** each car on the track by its two bogies (its middle between them, turned along the line through them) */
+  function placeCar(m, path, sc, k, dir, origin, show) {
+    trackAt(path, sc - BOG, k, origin, _p); trackAt(path, sc + BOG, k, origin, _q);
+    m.position.set((_p[0] + _q[0]) / 2, (_p[2] + _q[2]) / 2 - 0.06, (_p[1] + _q[1]) / 2);
+    m.rotation.set(0, Math.atan2(_q[0] - _p[0], _q[1] - _p[1]) - (dir * Math.PI) / 2, 0); m.visible = show;
+  }
   function place(t, path, origin, show) {
-    path.at(t.s, _f);
-    t.mesh.position.set(_f.x + _f.rx * t.u - origin.x, _f.y - 0.06, _f.z + _f.rz * t.u - origin.z);
-    t.mesh.rotation.set(0, _f.h - (t.dir * Math.PI) / 2, 0); t.mesh.visible = show;
+    const d = (CAR + GAPC) / 2; // (the head car, carrying the display, leads)
+    placeCar(t.mesh, path, t.s + t.dir * d, t.k, t.dir, origin, show); placeCar(t.mesh0, path, t.s - t.dir * d, t.k, t.dir, origin, show);
   }
   function step(t, dt, camS, zs, speed) {
     if (!t.on) {
@@ -314,7 +323,7 @@ export async function makeTram(M, renderer, tier, next = null) {
     update(dt, path, s, cam, origin, speed, show = 1) {
       path.at(s, _f);
       const camS = s + (cam.x + origin.x - _f.x) * _f.fx + (cam.z + origin.z - _f.z) * _f.fz, zs = galZone(camS);
-      for (const t of T) { if (step(t, dt, camS, zs, speed)) place(t, path, origin, show > 0); else t.mesh.visible = false; }
+      for (const t of T) { if (step(t, dt, camS, zs, speed)) place(t, path, origin, show > 0); else t.mesh.visible = t.mesh0.visible = false; }
     },
   };
 }

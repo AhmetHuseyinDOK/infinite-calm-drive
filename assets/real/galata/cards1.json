@@ -1,0 +1,123 @@
+{
+ "files": {
+  "hi": "cards1_hi.webp",
+  "lo": "cards1_lo.webp"
+ },
+ "bytes": {
+  "hi": 250190,
+  "lo": 123240
+ },
+ "size": {
+  "hi": [
+   2048,
+   2368
+  ],
+  "lo": [
+   1024,
+   1184
+  ]
+ },
+ "cards": [
+  {
+   "id": "suley",
+   "E": -1227.5,
+   "N": -1076.9,
+   "y0": 0.0,
+   "w": 397.5,
+   "h": 125.3,
+   "ax": 0.4278,
+   "l": [
+    -400,
+    1700
+   ],
+   "src": "Süleymaniye on its hill: its tallest minaret's tip ~125 m ASL (its terrace ~50 m + 76 m). Painted (Grok Imagine) from the photo 'View from Galata bridge to Süleymaniye Cami' by qwesy qwesy, Wikimedia Commons, CC BY 3.0",
+   "uv": [
+    0.0,
+    0.0,
+    0.75781,
+    0.2065
+   ]
+  },
+  {
+   "id": "yeni",
+   "E": -534.3,
+   "N": -997.7,
+   "y0": 0.0,
+   "w": 150.2,
+   "h": 64.9,
+   "ax": 0.4146,
+   "l": [
+    -400,
+    380
+   ],
+   "src": "Yeni Cami: its dome's finial ~41 m ASL (the dome 36 m over a ~4 m terrace). Painted (Grok Imagine) from the photo 'Eminonu waterfront with Yeni Cami and Suleymaniye Mosque from Galata Bridge' by Tarikkaanmuslu, Wikimedia Commons, CC BY-SA 4.0",
+   "uv": [
+    0.0,
+    0.20904,
+    0.70312,
+    0.47171
+   ]
+  },
+  {
+   "id": "karakoy",
+   "E": -356.1,
+   "N": -37.4,
+   "y0": 0.0,
+   "w": 351.1,
+   "h": 97.8,
+   "ax": 0.6979,
+   "l": [
+    470,
+    1700
+   ],
+   "src": "Karaköy and the Galata Tower: the tower's tip 97.6 m ASL (its foot ~35 m + 62.6 m). Painted (Grok Imagine) from the photo 'Karaköy Mars 2013 03' by ArildV, Wikimedia Commons, CC BY-SA 3.0",
+   "uv": [
+    0.0,
+    0.47424,
+    0.75,
+    0.65498
+   ]
+  },
+  {
+   "id": "saray",
+   "E": 400.3,
+   "N": -1616.8,
+   "y0": 0.0,
+   "w": 382.9,
+   "h": 92.2,
+   "ax": 0.7947,
+   "l": [
+    380,
+    1700
+   ],
+   "src": "Sarayburnu and Topkapı: the Tower of Justice's tip ~92 m ASL. Painted (Grok Imagine) from the photo '20131205 Istanbul 188' by Mark Ahsmann, Wikimedia Commons, CC BY-SA 3.0",
+   "uv": [
+    0.0,
+    0.65752,
+    0.85156,
+    0.83488
+   ]
+  },
+  {
+   "id": "hill",
+   "E": -267.7,
+   "N": -1731.1,
+   "y0": 0.0,
+   "w": 464.2,
+   "h": 97.4,
+   "ax": 0.1456,
+   "l": [
+    380,
+    1060
+   ],
+   "src": "The old city's hill behind Eminönü (Sirkeci, Cağaloğlu): painted (Grok Imagine) from the photo 'New Mosque from Galata Bridge - 20250825' by mike, Wikimedia Commons, CC BY-SA 4.0, with the mosque and the waterfront painted out",
+   "uv": [
+    0.0,
+    0.83742,
+    0.875,
+    0.9962
+   ]
+  }
+ ],
+ "encode": "WebP q60, alpha_quality 90, method 6, from the lossless master (~/cdtest/g35/masters/cards1.png, cards.py)"
+}

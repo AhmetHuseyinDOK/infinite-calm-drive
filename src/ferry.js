@@ -9,7 +9,7 @@ import * as THREE from 'three';
 import { GB } from './geom.js';
 import * as P from './props.js';
 import { rng, sstep } from './util.js';
-import { SEA, zoneWeight, tunnelNear } from './path.js';
+import { SEA, zoneWeight, tunnelNear, galL, galWaterXZ } from './path.js';
 
 const V = 6.0, BOW = 24.5, LEN = 47, BEAM = 9.2; // its speed (m/s); its bow from its origin, its length and beam (props.js ferry)
 const _f = {};
@@ -45,11 +45,11 @@ export function makeFerry(M, sea) {
   for (const [g, m] of [[G.color, M.color], [G.atlas, M.atlasW]]) { const geo = g.build(); if (geo) { const o = new THREE.Mesh(geo, m); o.frustumCulled = true; group.add(o); } }
   // (its position in absolute world coordinates, its heading ψ (its bow towards (sin ψ, cos ψ), as the road's), its pause
   // before the next one comes into view; its wake's uniform)
-  const st = { x: 0, z: 0, psi: 0, on: false, wait: 0, r: rng(613), g: group, w: sea.u.uFerry, gal: false };
+  const st = { x: 0, z: 0, psi: 0, on: false, wait: 0, r: rng(613), g: group, w: sea.u.uFerry, gal: false, zs: NaN };
   // a second one (W3), out on the Golden Horn by the Galata Bridge only (its concept has three in view): the same meshes, a
   // wake of its own, random numbers of its own (so the first one's comings and goings on the Bosphorus are as before)
   const group2 = new THREE.Group(); group2.visible = false; for (const o of group.children) group2.add(new THREE.Mesh(o.geometry, o.material));
-  const st2 = { x: 0, z: 0, psi: 0, on: false, wait: 5, r: rng(617), g: group2, w: sea.u.uFerry2, gal: true };
+  const st2 = { x: 0, z: 0, psi: 0, on: false, wait: 5, r: rng(617), g: group2, w: sea.u.uFerry2, gal: true, zs: NaN };
   /** puts ferry F sRel metres ahead of s, u off the road's middle (negative: out on the strait), heading phi round from the
    *  road's direction towards the strait (0: along the road, 90°: straight out, 180°: back towards us) */
   function place(F, path, s, sRel, u, phi) {
@@ -69,9 +69,13 @@ export function makeFerry(M, sea) {
       // (the Golden Horn either side of the bridge: on the right half the time, heading out to the right)
       const sd = gal > 0.5 && r() < 0.5 ? -1 : 1;
       place(F, path, s, sRel, -sd * r.range(60, 300), sd * phi);
+      // (the real Galata zone, step 35R: only where the real Golden Horn is, its bow and its stern on the water)
+      if (gal > 0.5) { const zs = s + sRel - galL(s + sRel), hx = Math.sin(F.psi) * BOW, hz = Math.cos(F.psi) * BOW; if (!galWaterXZ(zs, F.x + hx, F.z + hz) || !galWaterXZ(zs, F.x - hx, F.z - hz)) { F.on = false; F.wait = 1; return; } F.zs = zs; } else F.zs = NaN;
     }
     const dx = Math.sin(F.psi), dz = Math.cos(F.psi);
     F.x += dx * V * dt; F.z += dz * V * dt;
+    // (…and its run ends where it would come to the shore)
+    if (F.zs === F.zs && !galWaterXZ(F.zs, F.x + dx * (BOW + 8), F.z + dz * (BOW + 8))) { F.on = false; F.wait = F.r.range(6, 30); hide(F); return; }
     // gone: fallen behind us, or far off (out of sight in the haze)
     path.at(s, _f);
     const rx = F.x - _f.x, rz = F.z - _f.z, ahead = rx * _f.fx + rz * _f.fz;
@@ -87,7 +91,7 @@ export function makeFerry(M, sea) {
      *  us, its bow to the left, as the concept painting has it; on the Galata Bridge (W3) two, heading out across the Golden Horn
      *  on the left, ~120 m ahead and ~40 m out, and ~210 m ahead and ~70 m out, as its concept has them */
     opening(path, s, zone = 'bosphorus') {
-      if (zone === 'galata') { place(st, path, s, 120, -40, (80 * Math.PI) / 180); place(st2, path, s, 210, -70, (100 * Math.PI) / 180); }
+      if (zone === 'galata') { place(st, path, s, 120, -60, (80 * Math.PI) / 180); place(st2, path, s, 210, -90, (100 * Math.PI) / 180); st.zs = st2.zs = s - galL(s); }
       else place(st, path, s, 95, -52, (100 * Math.PI) / 180);
     },
     /** dt; path, s: the road and where we are on it; origin: the world's (the scene is drawn relative to it); bos: the ferries'

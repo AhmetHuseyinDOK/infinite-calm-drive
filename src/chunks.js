@@ -1,10 +1,14 @@
 // The world is built in 60 m chunks along the infinite road; each chunk merges its contents into a handful of meshes.
 import * as THREE from 'three';
-import { zoneMix, zoneW, zoneAt, zparam, groundOffsetMix, regionWeight, SEA, WALL_U, crossingS, crossingValid, crossingNear, XING, XOFF, riverS, riverValid, riverNear, riverBank, RIV, ROFF, RIVER_DROP, tunnelNear, borderNear, REGION, T_HALF, T_RIDGE, RAISE, TUFF, ridgeHr, tubeHalf, GAL_R, GAL_WALK, GAL_KERB, ZONE_LEN, TOWN_SW, townLanding, bayQ, HL } from './path.js';
+import { zoneMix, zoneW, zoneAt, zparam, groundOffsetMix, regionWeight, SEA, WALL_U, crossingS, crossingValid, crossingNear, XING, XOFF, riverS, riverValid, riverNear, riverBank, RIV, ROFF, RIVER_DROP, tunnelNear, borderNear, REGION, T_HALF, T_RIDGE, RAISE, TUFF, ridgeHr, tubeHalf, GAL_WALK, GAL_L, GAL_BR, galL, galBridge, ZONE_LEN, TOWN_SW, townLanding, bayQ, HL } from './path.js';
+import { galSect, GAL_STOPS } from './galata.js';
+import { galWorld, galFrame, galWater } from './path.js';
+import { GR } from './real_galata.js';
 import { TOWN_SHOPS } from './textures.js';
 import { xingPosts } from './crossing.js';
 import { GB } from './geom.js';
 import * as P from './props.js';
+const P_ = P; // (the props, where a builder's locals use P)
 import { rng, hash2, clamp, sstep } from './util.js';
 import { S_WRAP, groundMaterialFor, PROP_DEPTH } from './materials.js';
 import { SURF, surfGeometry } from './surf.js';
@@ -27,6 +31,18 @@ const TREE_R = [37, 56, 1.6];
 // the coast's water along its sea wall (placeCoast): how far out from the wall each column of the strip lies (m)
 const SHORE_D = [-0.2, 2.2, 5.5, 10, 17, 27, 38];
 const WIRE = [0.025, 0.026, 0.032], BIRD = [0.05, 0.05, 0.065];
+// (step 35R: the Galata Bridge's kerb walls' concrete, lit and shaded faces and their tops; Kemeraltı's iron)
+const C_KERB = [0.62, 0.62, 0.6], C_KERB2 = [0.55, 0.55, 0.54], C_KERBT = [0.7, 0.7, 0.68], C_IRON = [0.022, 0.024, 0.027], C_ROOF = [0.42, 0.4, 0.38], C_STONE = [0.6, 0.57, 0.5], C_PIER = [0.86, 0.87, 0.86];
+// (a point (E, N) in an outline, or within m of its walls; an outline's middle)
+const nearPoly = (E, N, P, m) => { let inn = false, d2 = Infinity; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [x1, y1] = P[j], [x2, y2] = P[i];
+  if ((y1 > N) !== (y2 > N) && E < x1 + ((N - y1) * (x2 - x1)) / (y2 - y1)) inn = !inn;
+  const ex = x2 - x1, ey = y2 - y1, t = Math.max(0, Math.min(1, ((E - x1) * ex + (N - y1) * ey) / (ex * ex + ey * ey || 1))), qx = x1 + ex * t - E, qy = y1 + ey * t - N; d2 = Math.min(d2, qx * qx + qy * qy); }
+  return inn || d2 < m * m; };
+const mid = P => { let x = 0, y = 0; for (const p of P) { x += p[0] / P.length; y += p[1] / P.length; } return [x, y]; };
+const GAL_DOL = [[588, 15, 0], [598.5, 20.4, 1], [570, 36.9, 0]]; // (Karaköy's car park: where its dolmuşes stand, l, u, livery)
+const P_GALW = P.GAL_WALLS, C_ASPH = [0.2, 0.2, 0.21], C_BAY = [0.78, 0.78, 0.76]; // (Karaköy's car park: its asphalt and its bays' lines)
+/** a light at a chunk-local point (props.js lampAt's list: lights that can light the car) */
+const lampAtW = (G, p) => { if (G.lamps) G.lamps.push(p[0], p[1], p[2], 0.7); };
 const IDENT = new THREE.Matrix4(), _sc = new THREE.Matrix4(), W1G = [1, 1, 1];
 const mod = (a, n) => ((a % n) + n) % n;
 /** true within m metres of a level crossing (keeps the track corridor clear) */
@@ -261,25 +277,32 @@ export class World {
     {
       const rr = riverNear(s0 + CH / 2), fine = !!rr && rr.s > s0 - 40 && rr.s < s1 + 40;
       const rows = fine ? 61 : 21, rwMid = rwAt(s0 + CH / 2);
-      // (on the Galata Bridge, W3: a column at its deck's far edge, its face 0.4 m wide; a chunk all on the bridge, away from
-      // the border tunnel's headland, has only its deck and its faces down to the water: the open sea draws the rest)
-      const gal = Math.max(zoneW(s0).galata, zoneW(s1).galata) > 0, deck = gal && Math.min(zoneW(s0).galata, zoneW(s1).galata) > 0.999 && !nearB(s0 + CH / 2, 2 * T_RIDGE + CH);
+      // (the real Galata zone, step 35R: on its bridge a column at each edge of the deck (the west walkway's on the right, the east
+      // one's on the left) and its face 0.4 m out; a chunk all on the bridge has only its deck and its faces down to the water (the open
+      // sea draws the rest); its land (Karaköy, Eminönü) the denser columns of Cappadocia's for its quays' faces)
+      const gal = Math.max(zoneW(s0).galata, zoneW(s1).galata) > 0, deck = gal && galBridge(galL(s0)) && galBridge(galL(s1));
       const uch = Math.max(zoneW(s0).uchisar + zoneW(s0).pasabag, zoneW(s1).uchisar + zoneW(s1).pasabag) > 0 && !nearB(s0 + CH / 2, 2 * T_RIDGE + CH); // (Cappadocia's, W5, W6)
-      const far = gal ? [...FAR.filter(v => v <= GAL_R), GAL_R + 0.4, ...FAR.filter(v => v > GAL_R && !deck)] : uch ? UCH_FAR : FAR;
+      const far = uch ? UCH_FAR : FAR;
       const cols = (() => { const right = [0, ...NEAR]; const out = right.map(n => n); far.forEach(v => out.push(v - rwMid)); return out; })();
-      // columns: −far … −rw | rw … far, expressed as offsets from the road edge (a deck: its left side to the walkway's face)
-      const offs = deck ? [...cols.filter(v => v <= GAL_WALK + 0.41).reverse().map(v => -v), ...cols] : [...cols.slice().reverse().map(v => -v), ...cols];
+      // columns: −far … −rw | rw … far, expressed as offsets from the road edge (on the Galata Bridge: its own, either side)
+      let offs, half;
+      if (gal) {
+        const uq = a => [...new Set(a.map(v => Math.round(v * 100) / 100))].filter(v => v >= 0).sort((p, q) => p - q), rest = UCH_FAR.map(v => v - rwMid), eL = GAL_L - rwMid;
+        const R = uq([0, ...NEAR, GAL_WALK, GAL_WALK + 0.4, ...(deck ? [] : rest.filter(v => v > GAL_WALK + 0.9))]);
+        const L = uq([0, ...NEAR, 6, 9, 12, 15, 18, eL, eL + 0.4, ...(deck ? [] : rest.filter(v => v > eL + 0.9))]);
+        offs = [...L.slice().reverse().map(v => -v), ...R]; half = L.length;
+      } else { offs = [...cols.slice().reverse().map(v => -v), ...cols]; half = offs.length / 2; }
       const nc = offs.length;
       // two halves (left / right of the road) so neither build step is long; normals from grid neighbours
       // rows: uniform, plus a pair right at each tunnel portal so the ground steps up exactly behind the portal face
       const sl = Array.from({ length: rows }, (_, i) => s0 + (i / (rows - 1)) * CH);
       { const tq = tunnelNear(s0 + CH / 2); if (tq) for (const sp of [tq.s - T_HALF, tq.s + T_HALF]) if (sp > s0 + 0.1 && sp < s1 - 0.1) sl.push(sp - 0.03, sp + 0.03); }
-      // (and either side of the Galata Bridge's landing in the town, W4: the quay walls' faces stand there)
-      { const tl = townLanding(s0 + CH / 2); if (tl && tl.s > s0 + 0.1 && tl.s < s1 - 0.1) sl.push(tl.s - 0.03, tl.s + 0.03); }
+      // (and either side of the Galata Bridge's ends, step 35R: its deck's faces stand there)
+      if (gal) { const zs = s0 - galL(s0); for (const b of GAL_BR) { const sb = zs + b; if (sb > s0 + 0.1 && sb < s1 - 0.1) sl.push(sb - 0.03, sb + 0.03); } }
       sl.sort((p, q) => p - q);
       // (the bay's end, step 27: its headland's land in the coast's own ground, its land on the sea side (materials.js coastGround),
       // not the blend's sand under the water and the next zone's fields: wn, HEADW)
-      const half = deck ? nc - cols.length : nc / 2, rowS = sl.map(s => { path.at(s, f); return { s, f: { ...f }, rw: rwAt(s), w: zw4(s), rb: fine ? riverBank(s) : 0, wn: bayQ(s) < 0 ? zw4(Math.floor(s / ZONE_LEN) * ZONE_LEN + ZONE_LEN + 1) : null }; });
+      const rowS = sl.map(s => { path.at(s, f); return { s, f: { ...f }, rw: rwAt(s), w: zw4(s), rb: fine ? riverBank(s) : 0, wn: bayQ(s) < 0 ? zw4(Math.floor(s / ZONE_LEN) * ZONE_LEN + ZONE_LEN + 1) : null }; });
       const qtr = Math.round(half / 2), qtrR = Math.round((nc - half) / 2); // (half: the left side's columns)
       // quarters, so no single build step is long; they share a column and use ghost columns for seamless normals
       for (const [j0, j1, gl, gr] of [[0, qtr, 0, 1], [qtr - 1, half, 1, 0], [half, half + qtrR + 1, 0, 1], [half + qtrR, nc, 1, 0]]) {
@@ -347,30 +370,36 @@ export class World {
       }
     }
 
-    // ---------- the Galata Bridge's walkway and kerb strip (W3) ----------
-    // the walkway on the left, a kerb higher than the road, out to the deck's edge (its railing and the fishermen along it); on
-    // the right a narrow strip of the same slabs out to the tram line's railing (GAL_KERB): their tops, their kerbs and their
-    // outer edges' faces down to the deck. Where the bridge is (galOn)
+    // ---------- the real Galata zone's surfaces beside the road (step 35R) ----------
+    // keeping right, as the real ones are (galata.js galSect, by where on the road): our right-hand pavement (on the bridge its west
+    // walkway out to the deck's edge, the fishermen along its railing); on our left the median under Kemeraltı's iron fence (the
+    // bridge's strip of slabs by the tram line's fence; Karaköy's square and its tram stop's island where the tracks swing out),
+    // the T1's reserve (its rails let into its slabs: materials.js kind 11), a kerb, the northbound carriageway (its own lanes: the
+    // road's paint about its own middle) and the far pavement (the bridge's east walkway). Tops, kerbs and outer faces, each facing
+    // out of its slabs. Where the zone is (galOn)
     {
-      const runs = []; let cur = null, ss = [];
+      const runs = []; let cur = null; const ss = [];
       for (let i = 0; i <= 30; i++) ss.push(s0 + (i / 30) * CH);
-      { const tl = townLanding(s0 + CH / 2); if (tl && tl.s > s0 + 0.05 && tl.s < s1 - 0.05) { ss.push(tl.s); ss.sort((p, q) => p - q); } } // (the walkway runs to the landing, W4)
+      { const zs = s0 - galL(s0); for (const b of GAL_BR) { const sb = zs + b; if (sb > s0 + 0.05 && sb < s1 - 0.05) ss.push(sb - 0.02, sb + 0.02); } ss.sort((p, q) => p - q); } // (rows either side of the bridge's ends)
       for (const s of ss) { if (this.galOn(s)) { if (!cur) { cur = []; runs.push(cur); } cur.push(s); } else cur = null; }
-      const KH = 0.18, v = (s, u, y, nx, nz, kind) => { path.at(s, f); const w = zw4(s), rw = rwAt(s); return [f.x + f.rx * u - ox, f.y + y, f.z + f.rz * u - oz, nx, nx === 0 && nz === 0 ? 1 : 0, nz, mod(s, S_WRAP), u, w[0], w[1], w[2], w[3], rw, kind, 0, w[4]]; };
+      const v = (s, u, y, nx, nz, kind, uS, rwS) => { path.at(s, f); const w = zw4(s); return [f.x + f.rx * u - ox, f.y + y, f.z + f.rz * u - oz, nx, nx === 0 && nz === 0 ? 1 : 0, nz, mod(s, S_WRAP), uS, w[0], w[1], w[2], w[3], rwS, kind, 0, w[4]]; };
       for (const run of runs) {
         if (run.length < 2) continue;
-        const n = run.length, rwOf = i => rwAt(run[i]);
-        // the tops (kind 2: the walkway's slabs), from the smaller u to the larger (facing up)
-        ground.grid(n, 2, (i, j) => { const rw = rwOf(i); return v(run[i], j ? -rw : -(rw + GAL_WALK), KH, 0, 0, 2); });
-        ground.grid(n, 2, (i, j) => { const rw = rwOf(i); return v(run[i], j ? rw + GAL_KERB : rw, KH, 0, 0, 2); });
-        // the kerbs (kind 3) and the outer faces: each facing out of the slabs (the walkway's kerb to the road, +R; its outer
-        // face to the water, −R; the strip's kerb to the road, −R; its outer face to the tram line, +R)
-        for (const [uk, out, y0] of [[-1, 1, 0], [-1 - GAL_WALK, -1, -0.06], [1, -1, 0], [1 + GAL_KERB, 1, -0.06]]) {
-          ground.grid(n, 2, (i, j) => {
-            const rw = rwOf(i), u = uk < 0 ? uk + 1 - rw : uk - 1 + rw, top = out > 0 ? 1 - j : j; path.at(run[i], f);
-            return v(run[i], u, top ? KH : y0, out * f.rx, out * f.rz, 3);
-          });
-        }
+        const n = run.length, X = run.map(s => { const rw = rwAt(s); return { s, rw, g: galSect(galL(s), rw, {}) }; });
+        // a top from u = a(row) to b(row) (a < b: facing up) at height y(row); its paint's own u and rw about cU(row), rS(row)
+        const top = (a, b, y, kind, cU, rS) => ground.grid(n, 2, (i, j) => { const R = X[i], u = j ? b(R) : a(R); return v(R.s, u, y(R), 0, 0, kind, u - cU(R), rS(R)); });
+        // a face at u(row) facing out (+1: towards +u) from y0(row) up to y1(row) (kind 3: the kerbs' stone)
+        const face = (uf, out, y0, y1) => ground.grid(n, 2, (i, j) => { const R = X[i], u = uf(R), up = out > 0 ? 1 - j : j; path.at(R.s, f); return v(R.s, u, up ? y1(R) : y0(R), out * f.rx, out * f.rz, 3, u, R.rw); });
+        const kh = R => R.g.kh, z0 = () => 0, gnd = () => -0.06, zero = () => 0, rwO = R => R.rw, Y = () => 0.005;
+        // our right-hand pavement (the west walkway)
+        top(R => R.rw, R => R.rw + R.g.pr, kh, 2, zero, rwO); face(R => R.rw, -1, z0, kh); face(R => R.rw + R.g.pr, 1, gnd, kh);
+        // the median (the bridge's strip of slabs; Karaköy's island)
+        top(R => R.g.med, R => -R.rw, kh, 2, zero, rwO); face(R => -R.rw, 1, z0, kh); face(R => R.g.med, -1, z0, kh);
+        // the T1's reserve, the kerb under the second fence, the northbound carriageway, the far pavement (the east walkway)
+        top(R => R.g.t1, R => R.g.t0, Y, 11, R => (R.g.tn + R.g.tf) / 2, R => ((R.g.tn - R.g.tf) / 2) * (R.g.bridge ? 1 : -1)); // (its paint's rw < 0 off the bridge: its setts)
+        top(R => R.g.n0, R => R.g.t1, kh, 3, zero, rwO); face(R => R.g.t1, 1, z0, kh); face(R => R.g.n0, -1, z0, kh);
+        top(R => R.g.n1, R => R.g.n0, Y, 1, R => (R.g.n0 + R.g.n1) / 2, R => (R.g.n0 - R.g.n1) / 2);
+        top(R => R.g.p1, R => R.g.n1, kh, 2, zero, R => -R.g.n1); face(R => R.g.n1, 1, z0, kh); face(R => R.g.p1, -1, gnd, kh);
       }
     }
     yield;
@@ -396,6 +425,9 @@ export class World {
     yield* this.placeCoast(G, r, c, s0, s1, matAt, onGround, rwAt, shore, world);
     yield* this.placeBosphorus(G, c, s0, s1, matAt, onGround, road, rwAt, world, ox, oz);
     yield* this.placeGalata(G, c, s0, s1, matAt, road, rwAt, world);
+    yield* this.placeGalBlocks(G, s0, s1, road, ox, oz);
+    yield* this.placeGalSquares(G, c, s0, s1, matAt, road, rwAt);
+    yield* this.placeGalQuay(G, s0, s1, matAt, road, ox, oz);
     yield;
     yield* this.placeTown(G, c, s0, s1, matAt, road, rwAt);
     yield* this.placeUchisar(G, c, s0, s1, matAt, onGround, road, rwAt, H, ox, oz);
@@ -1469,77 +1501,286 @@ export class World {
       c.noShadow = false;
     }
   }
-  /** the Galata Bridge where it is (W3): its weight half or more, clear of the border tunnel's headland at its far end */
+  /** the real Galata zone where it is (step 35R): its weight half or more, clear of a border tunnel's mouth */
   galOn(s) { return zoneW(s).galata >= 0.5 && !nearB(s, T_RIDGE + 8); }
-  /** Galata Köprüsü (W3): the Galata Bridge from Karaköy over the Golden Horn towards Eminönü, as its concept painting has it.
-   *  Our carriageway between the walkway on the left (chunks.js gen: its slabs) and the tram line's reserve on the right: the
-   *  walkway's patterned cast-iron railing (blue-grey) along the deck's edge with the fishermen at it, their rods out over the
-   *  water; the tram line's railings (brown) either side of its reserve, its portals (their lamps over our lane) and wires; lamp
-   *  posts along the walkway; the far carriageway's railing; by the lifting span in the bridge's middle its control towers with
-   *  their flags and barriers; flags at the bridge's Karaköy end, the blue sign for Eminönü, small boats on the water either
-   *  side (the city ferries: ferry.js). On random numbers of its own (Japan's chunks never draw them) */
+  /** …and its bridge's deck (its real 460 m) */
+  galDeck(s) { return this.galOn(s) && galBridge(galL(s)); }
+  /** Galata Köprüsü as it really is (step 35R: the approved route; OpenStreetMap, Commons photos, Street View as the reference), keeping
+   *  right. On the bridge: the west walkway on our right behind its concrete kerb wall, its pale teal lattice railing along the deck's
+   *  edge with the fishermen at it and the tall swan-necked lamps; on our left the strip of slabs and the tram line's lattice fence, the
+   *  T1's masts between its tracks with their wires, the second fence, the northbound carriageway and the east walkway with its own
+   *  railing and lamps; the lifting span's four control towers at the deck's outer edges beyond the walkways, and the red barriers
+   *  across the walkways and the tram line there; small boats on the Golden Horn. Off it (Karaköy, Eminönü): the median's iron fence,
+   *  the T1's masts and wires along the street. (Its buildings: placeGalBlocks.) On random numbers of its own (no other zone's chunks
+   *  draw them) */
   *placeGalata(G, c, s0, s1, matAt, road, rwAt, world) {
     if (zoneW(s0).galata < 0.25 && zoneW(s1).galata < 0.25) return;
-    const gr = rng(Math.floor(hash2(c, 6301) * 4294967295)), on = s => this.galOn(s);
-    // (the zone's start; the lifting span's middle: near the Karaköy end, so a Galata start finds its towers ~50 m ahead, as the
-    // concept painting (and the real bridge's Street View) has them)
-    const zs = Math.floor((s0 + CH / 2) / ZONE_LEN) * ZONE_LEN, sm = zs + 192;
-    // the railings, as the concept has them: the walkway's along its outer edge (blue-grey), the tram line's along the kerb strip
-    // and the far side of its reserve (brown). [u (from the road's edge on its side, or absolute), whether from the road's edge,
-    // the cell, its foot over the road]. (The far carriageway's outer railing, further out, only cluttered the view: none)
-    for (const [uu, rel, cell, y0] of [[-(GAL_WALK - 0.15), true, 'galRailL', 0.18], [GAL_KERB - 0.1, true, 'galRailR', 0.18], [11.55, false, 'galRailR', -0.06]]) {
-      this.galRailing(G, s0, s1, world, road, s => (rel ? Math.sign(uu) * rwAt(s) + uu : uu), y0, cell, on);
+    const gr = rng(Math.floor(hash2(c, 6301) * 4294967295)), on = s => this.galOn(s), dk = s => this.galDeck(s), land = s => on(s) && !dk(s);
+    const zs = s0 - galL(s0), Gs = {}, sect = s => galSect(galL(s), rwAt(s), Gs), TW = GR.towers;
+    const nearTower = (s, m = 3) => { const l = s - zs; return TW.some(t => l > t[0] - m && l < t[1] + m); };
+    // the railings on the bridge: [u at s, the cell, its tint, its foot over the road, its height]: the west walkway's along the deck's
+    // edge (pale teal), the tram line's fence on the strip by our road and the second one beyond the tracks (grey-teal, lower), the
+    // east walkway's (pale teal)
+    const TEAL = [0.62, 0.86, 0.86], FENCE = [0.62, 0.72, 0.74];
+    for (const [ua, cell, tint, y0, ht, cut] of [[s => rwAt(s) + GAL_WALK - 0.15, 'galRailL', TEAL, 0.18, 1.18, true], [s => sect(s).med - 0.1, 'galRailL', FENCE, 0.18, 1.0, false],
+      [s => sect(s).t1 - 0.15, 'galRailL', FENCE, 0.18, 1.0, false], [s => -(GAL_L - 0.15), 'galRailL', TEAL, 0.18, 1.18, true]]) {
+      this.galRailing(G, s0, s1, world, road, ua, y0, cell, s => dk(s) && !(cut && nearTower(s, 0.5)), tint, ht);
       yield;
     }
-    // the tram line: its portals every 30 m (the road-side posts' lamps over our right lane), the contact wire and its catenary
-    // over each track between them, zig-zagging a little
-    const TZ = [6.3, 9.7];
-    for (let k = Math.ceil((s0 - 15) / 30); k * 30 + 15 < s1; k++) {
-      const sk = k * 30 + 15; if (!on(sk)) continue;
-      const rw = rwAt(sk); P.galPortal(G, matAt(sk, 0, road(sk), 0, false), rw + 1.55, 11.2, TZ, rw - 1.3);
-      if (!on(sk + 30)) continue;
-      G.color.setM(IDENT);
-      for (const t of TZ) {
-        const zz = (k % 2 ? 0.18 : -0.18), y = road(sk), y2 = road(sk + 30);
-        G.color.wire(world(sk, t + zz, y + 5.9), world(sk + 30, t - zz, y2 + 5.9), 0.03, 0.012, WIRE, 4);
-        G.color.wire(world(sk, t, y + 6.85), world(sk + 30, t, y2 + 6.85), 0.42, 0.012, WIRE, 8);
+    // the walkways' concrete kerb walls along the road (as the real ones: ~45 cm, rounded): ours, and the east walkway's
+    for (let p = Math.floor(s0 / 2.6) * 2.6; p < s1; p += 2.6) {
+      const a = Math.max(p, s0), b = Math.min(p + 2.6, s1); if (b - a < 0.05 || !dk(a) || !dk(b)) continue;
+      for (const [ua, sd] of [[s => rwAt(s) + 0.16, 1], [s => sect(s).n1 - 0.16, -1]]) {
+        const y = road(a) + 0.18, y2 = road(b) + 0.18, u0 = ua(a), u1 = ua(b), w = 0.14, h = 0.42, K = C_KERB;
+        G.color.setM(IDENT);
+        // (its face to the carriageway (at u − sd·w, facing −sd·R) and its face to the walkway (at u + sd·w, facing +sd·R))
+        const fa = (uu0, uu1, out, col) => (out > 0 ? G.color.quad(world(a, uu0, y), world(b, uu1, y2), world(b, uu1, y2 + h), world(a, uu0, y + h), col) : G.color.quad(world(b, uu1, y2), world(a, uu0, y), world(a, uu0, y + h), world(b, uu1, y2 + h), col));
+        fa(u0 - sd * w, u1 - sd * w, -sd, K); fa(u0 + sd * w, u1 + sd * w, sd, C_KERB2);
+        G.color.quad(world(a, u0 - w, y + h), world(a, u0 + w, y + h), world(b, u1 + w, y2 + h), world(b, u1 - w, y2 + h), C_KERBT); // (its top, facing up)
       }
     }
     yield;
-    // lamp posts along the walkway, every 60 m between the portals; the flags at the Karaköy end; the signs for the old city
-    for (let sl = Math.ceil(s0 / 60) * 60; sl < s1; sl += 60) if (on(sl)) P.galLamp(G, matAt(sl, -(rwAt(sl) + 0.42), road(sl) + 0.18));
-    for (const sf of [zs + 36, zs + 48]) if (sf >= s0 && sf < s1 && on(sf)) P.flagPole(G, matAt(sf, -(rwAt(sf) + GAL_WALK - 0.45), road(sf) + 0.18), 9.5);
-    { const sg = zs + 96; if (sg >= s0 && sg < s1 && on(sg)) P.trSign(G, matAt(sg, rwAt(sg) + 0.75, road(sg) + 0.18), 'trSignGal', 2.6, 1.7, 0.85); }
-    { const sl = zs + 420; if (sl >= s0 && sl < s1 && on(sl)) P.trSign(G, matAt(sl, rwAt(sl) + 0.75, road(sl) + 0.18), 'trSign50', 2.2, 0.62, 0.62); }
-    // the lifting span's control tower beyond the tram line's reserve, its barrier in front of it, as the concept has them (the
-    // real bridge has one on the left too, beyond the walkway: the concept leaves the old city's skyline open there)
-    if (sm >= s0 && sm < s1 && zoneAt(sm) === 'galata' && on(sm)) {
-      const e = road(sm);
-      P.galTower(G, matAt(sm, 11.8, e - 0.06), 0); P.galBarrier(G, matAt(sm - 9.6, 11.3, e - 0.06));
+    // Kemeraltı Caddesi's median: its black iron fence (its posts every 2.6 m, finials, bars), off the bridge
+    this.galIronFence(G, s0, s1, world, road, s => -rwAt(s) - 0.3, 0.15, s => land(s) && sect(s).med > -rwAt(s) - 1.5);
+    yield;
+    // Kemeraltı Caddesi's plane trees along our pavement, in its stretches of them (as the real ones), its black bollards along the
+    // kerb; the T1's stops' shelters on their platforms (Karaköy's by the bridge, Eminönü's on Reşadiye Caddesi: galata.js GAL_STOPS)
+    const lite = P.bankStep() > 1; // (phones and the embed: fewer trees, fewer far windows)
+    for (let s = s0 + gr() * 14; s < s1; s += gr.range(13, 19) * (lite ? 1.6 : 1)) {
+      const l = s - zs, k = gr(), sc = gr.range(1.0, 1.25);
+      if (!land(s) || l < 30 || l > 430 || hash2(Math.floor(l / 70), 6311) < 0.3 || nearTower(s)) continue;
+      P.tree(G, matAt(s, rwAt(s) + 2.9, road(s) + 0.15, k * 6, false), 'broad', gr, sc);
+    }
+    for (let p = Math.ceil(s0 / 2.6) * 2.6; p < s1; p += 2.6) { const l = p - zs; if (land(p) && l > 0 && l < 440 && Math.round(p / 2.6) % 6) P.bollard(G, matAt(p, rwAt(p) + 0.35, road(p) + 0.15)); }
+    for (const [a, b] of GAL_STOPS) {
+      // (its shelter along the stretch of the platform wide enough for it: Karaköy's narrows to nothing by the bridge's end)
+      const sm0 = zs + (a + b) / 2; if (sm0 < s0 || sm0 >= s1 || !land(sm0)) continue;
+      let r0 = NaN, r1 = NaN, wm = Infinity;
+      for (let l = a + 3; l <= b - 3; l += 2) { const w = -(galSect(l, rwAt(zs + l), Gs).med + rwAt(zs + l)); if (w >= 3.4) { if (r0 !== r0) r0 = l; r1 = l; wm = Math.min(wm, w); } }
+      if (!(r1 - r0 > 12)) continue;
+      const sm = zs + (r0 + r1) / 2;
+      P.galShelter(G, matAt(sm, -rwAt(sm) - 0.4, road(sm) + 0.15), r1 - r0, Math.min(2.6, wm - 1.2));
     }
     yield;
-    // the fishermen at the walkway's railing, in ones, twos and threes, facing the water
+    // the T1's masts every 30 m: on the bridge between its tracks, their lamps over both carriageways; along the street on the
+    // median's side of the tracks (Kemeraltı's, their lamps over our road and the tracks); the contact wires between them
+    const TZ = [0, 0], tz = s => { sect(s); TZ[0] = Gs.tn; TZ[1] = Gs.tf; return TZ; };
+    for (let k = Math.ceil((s0 - 15) / 30); k * 30 + 15 < s1; k++) {
+      const sk = k * 30 + 15; if (!on(sk) || (dk(sk) && nearTower(sk, 4))) continue;
+      const g = sect(sk), onB = dk(sk), mz = onB ? (g.tn + g.tf) / 2 : g.med - 0.35;
+      P.galMast(G, matAt(sk, 0, road(sk) + (onB ? 0.005 : 0.15), 0, false), mz, [g.tn, g.tf], onB ? 2 : 1);
+      if (!on(sk + 30)) continue;
+      G.color.setM(IDENT);
+      const ta = [g.tn, g.tf], tb = tz(sk + 30).slice();
+      for (let q = 0; q < 2; q++) {
+        const zz = (k % 2 ? 0.18 : -0.18), y = road(sk), y2 = road(sk + 30);
+        G.color.wire(world(sk, ta[q] + zz, y + 5.9), world(sk + 30, tb[q] - zz, y2 + 5.9), 0.03, 0.012, WIRE, 4);
+        G.color.wire(world(sk, ta[q], y + 6.85), world(sk + 30, tb[q], y2 + 6.85), 0.42, 0.012, WIRE, 8);
+      }
+    }
+    yield;
+    // the walkways' lamp posts every 30 m, between the masts (at their outer railings, their necks out over the walkways)
+    for (let sl = Math.ceil(s0 / 30) * 30; sl < s1; sl += 30) if (dk(sl) && !nearTower(sl, 2)) {
+      P.galLamp(G, matAt(sl, rwAt(sl) + GAL_WALK - 0.32, road(sl) + 0.18));
+      P.galLamp(G, matAt(sl, -(GAL_L - 0.32), road(sl) + 0.18));
+    }
+    // the four control towers by the lifting span, beyond the walkways' railings (GR.towers: [l0, l1, u0, u1] from OpenStreetMap's
+    // outline of the span, its lower deck too: the towers out to the outline's outer edge), and the red barriers before them
+    for (const t of TW) {
+      const sm = zs + (t[0] + t[1]) / 2; if (sm < s0 || sm >= s1 || !dk(sm)) continue;
+      const e = road(sm), sd = t[2] > 0 ? 1 : -1, uIn = sd > 0 ? rwAt(sm) + GAL_WALK : GAL_L, len = t[1] - t[0], dep = Math.min(14, Math.abs(t[3]) - uIn);
+      P.galTower(G, matAt(sm, sd * uIn, e), len, Math.max(8, dep), 11.5);
+      // (a barrier across the walkway at the span's near end, and one across the tram's reserve)
+      const sb = zs + t[0] - 3.5, g = sect(sb);
+      if (sb >= s0 && sb < s1) P.galBarrier(G, matAt(sb, sd > 0 ? rwAt(sb) + GAL_WALK / 2 + 0.6 : -(GAL_L - 3.1), road(sb) + 0.18, Math.PI / 2), sd > 0 ? 4.6 : 5.2);
+      if (sd < 0 && sb >= s0 && sb < s1) P.galBarrier(G, matAt(sb + 1.5, (g.t0 + g.t1) / 2, road(sb) + 0.005, Math.PI / 2, false), 6.6);
+    }
+    yield;
+    // the lower deck's restaurant row under the walkways, as the real one (Commons photos 09, 10, 22–24, 42): its terraces' roofs just
+    // under the walkways' railings, sloping out over the water, their fronts on the lower promenade (a bay every 5.2 m: its window band,
+    // its awning in its restaurant's colours, its sign board), the promenade's pale blue railing along the water; not at the towers
+    {
+      const c = G.color, AWN = [[0.78, 0.16, 0.14], [0.16, 0.32, 0.62], [0.2, 0.46, 0.3], [0.86, 0.84, 0.8], [0.7, 0.42, 0.12]], ROOF = [0.55, 0.6, 0.64], FRONT = [0.82, 0.8, 0.74], GLASS = [0.18, 0.2, 0.24], RAIL = [0.55, 0.72, 0.8];
+      c.setM(IDENT);
+      for (let p = Math.floor(s0 / 5.2) * 5.2; p < s1; p += 5.2) {
+        const a = Math.max(p, s0), b = Math.min(p + 5.2, s1); if (b - a < 0.05 || !dk(a) || !dk(b) || nearTower(a, 1) || nearTower(b, 1)) continue;
+        const k = Math.floor(hash2(Math.round(p / 5.2), 6337) * AWN.length), aw = AWN[k], ya = road(a), yb = road(b);
+        for (const sd of [1, -1]) {
+          const e0 = sd > 0 ? rwAt(a) + GAL_WALK : -GAL_L, e1 = sd > 0 ? rwAt(b) + GAL_WALK : -GAL_L, o = 4.4, W = (s, u, y) => world(s, u, y);
+          const q = (p0, p1, p2, p3, col) => (sd > 0 ? c.quad(p1, p0, p3, p2, col) : c.quad(p0, p1, p2, p3, col)); // (each facing up or out, over the water)
+          // (its roof, sloping out; its front's sign band, awning, window band and its foot; the promenade's railing)
+          q(W(a, e0, ya - 0.9), W(b, e1, yb - 0.9), W(b, e1 + sd * o, yb - 1.5), W(a, e0 + sd * o, ya - 1.5), ROOF);
+          const fu0 = e0 + sd * o, fu1 = e1 + sd * o;
+          q(W(b, fu1, yb - 2.3), W(a, fu0, ya - 2.3), W(a, fu0, ya - 1.5), W(b, fu1, yb - 1.5), [0.16, 0.2, 0.32]);
+          q(W(b, fu1 + sd * 0.9, yb - 3.0), W(a, fu0 + sd * 0.9, ya - 3.0), W(a, fu0, ya - 2.35), W(b, fu1, yb - 2.35), aw);
+          q(W(b, fu1, yb - 5.0), W(a, fu0, ya - 5.0), W(a, fu0, ya - 2.35), W(b, fu1, yb - 2.35), FRONT);
+          q(W(b, fu1 + sd * 0.02, yb - 4.6), W(a, fu0 + sd * 0.02, ya - 4.6), W(a, fu0 + sd * 0.02, ya - 3.1), W(b, fu1 + sd * 0.02, yb - 3.1), GLASS);
+          q(W(b, fu1 + sd * 3.0, yb - 4.1), W(a, fu0 + sd * 3.0, ya - 4.1), W(a, fu0 + sd * 3.0, ya - 4.02), W(b, fu1 + sd * 3.0, yb - 4.02), RAIL);
+          q(W(b, fu1 + sd * 3.0, yb - 5.0), W(a, fu0 + sd * 3.0, ya - 5.0), W(a, fu0 + sd * 3.0, ya - 4.95), W(b, fu1 + sd * 3.0, yb - 4.95), RAIL);
+          c.quad(W(a, fu0, ya - 5.0), W(b, fu1, yb - 5.0), W(b, fu1 + sd * 3.1, yb - 5.0), W(a, fu0 + sd * 3.1, ya - 5.0), [0.6, 0.6, 0.6]);
+          c.quad(W(b, fu1, yb - 5.0), W(a, fu0, ya - 5.0), W(a, fu0 + sd * 3.1, ya - 5.0), W(b, fu1 + sd * 3.1, yb - 5.0), [0.6, 0.6, 0.6]);
+        }
+        lampAtW(G, world((a + b) / 2, rwAt(a) + GAL_WALK + 4.4, ya - 2.6));
+      }
+    }
+    yield;
+    // the fishermen at the west walkway's railing (on our right), in ones, twos and threes, facing the water; not before the towers
     for (let s = s0 + gr() * 6; s < s1; s += gr.range(4.5, 15)) {
       const n = 1 + (gr() < 0.45 ? 1 : 0) + (gr() < 0.15 ? 1 : 0);
       for (let k = 0; k < n; k++) {
-        const ss = s + k * gr.range(0.9, 1.7), dl = ss - Math.round(ss / 60) * 60;
-        if (!on(ss) || Math.abs(dl) < 1.2 || ss >= s1) continue;
+        const ss = s + k * gr.range(0.9, 1.7), dl = ss - Math.round(ss / 30) * 30;
+        if (!dk(ss) || Math.abs(dl) < 1.2 || ss >= s1 || nearTower(ss, 4)) continue;
         const rw = rwAt(ss), y = road(ss) + 0.18, yaw = (gr() - 0.5) * 0.5; // (his turn: drawn first, as it always was)
-        P.fisherman(G, matAt(ss, -(rw + GAL_WALK - 0.62), y), gr, y, yaw, hash2(Math.floor(ss * 16), 6317));
+        P.fisherman(G, matAt(ss, rw + GAL_WALK - 0.62, y), gr, y, yaw, hash2(Math.floor(ss * 16), 6317));
       }
     }
     yield;
-    // small boats out on the Golden Horn either side
-    if (gr() < 0.4 && on(s0 + 30)) { const s = s0 + gr() * CH, sd = gr() < 0.5 ? -1 : 1; P.boat(G, matAt(s, sd < 0 ? -(rwAt(s) + gr.range(35, 170)) : GAL_R + gr.range(30, 170), SEA - 0.25, gr() * 6, false), gr); }
+    // small boats out on the Golden Horn either side of the bridge
+    if (gr() < 0.4 && dk(s0 + 30)) { const s = s0 + gr() * CH, sd = gr() < 0.5 ? -1 : 1; P.boat(G, matAt(s, sd < 0 ? -(GAL_L + gr.range(35, 170)) : rwAt(s) + GAL_WALK + gr.range(30, 170), SEA - 0.25, gr() * 6, false), gr); }
+  }
+  /** the real Galata zone's buildings near the road (step 35R): Karaköy's and Eminönü's blocks on their OpenStreetMap outlines
+   *  (real_galata.js blk, sorted by where along the road; moved back to the pavements' edges where OSM had them nearer), each built
+   *  whole by the chunk its middle falls in: its walls and flat roof in the colour material, a cornice; its faces towards the road
+   *  with their shops and windows (props.js galFacade) */
+  *placeGalBlocks(G, s0, s1, road, ox, oz) {
+    if (zoneW(s0).galata < 0.25 && zoneW(s1).galata < 0.25) return;
+    const zs = s0 - galL(s0), l0 = s0 - zs, l1 = s1 - zs, B = GR.blk, q = [0, 0], c = G.color, farWin = P_.bankStep() > 1 ? 40 : 70; // (the far walls' windows: phones nearer)
+    // Yeni Cami (its outline's middle and the axis from its courtyard to its prayer hall: real_galata.js yeni)
+    { const Y = GR.yeni, mid = Y && Y.l; if (Y && mid >= l0 && mid < l1 && this.galOn(zs + mid)) {
+      const ctr = (pts) => { let x = 0, z = 0; for (const [E, N] of pts) { galWorld(zs, E, N, q); x += q[0]; z += q[1]; } return [x / pts.length - ox, z / pts.length - oz]; };
+      const o = ctr(Y.outer), k = ctr(Y.court), dx = o[0] - k[0], dz = o[1] - k[1], d = Math.hypot(dx, dz) || 1, D = new THREE.Vector3(dx / d, 0, dz / d), X = new THREE.Vector3(D.z, 0, -D.x);
+      const M = new THREE.Matrix4().makeBasis(X, new THREE.Vector3(0, 1, 0), D); M.setPosition(o[0] + (dx / d) * 1.0, road(zs + mid) - 0.4, o[1] + (dz / d) * 1.0); M.groundY = road(zs + mid) - 0.4;
+      P_.yeniCami(G, M); yield;
+    } }
+    let n = 0;
+    for (const b of B) {
+      if (b.l < l0 || b.l >= l1 || !this.galOn(zs + b.l)) continue;
+      const P = b.p.map(([E, N]) => { galWorld(zs, E, N, q); return [q[0] - ox, q[1] - oz]; }), m = P.length, y0 = road(zs + b.l) - 0.3, y1 = y0 + 0.3 + 0.15 + b.h;
+      // (its plaster, or a church's and a mosque's stone, a ferry terminal's white)
+      const tint = b.k === 'church' || b.k === 'mosque' || b.k === 'tomb' ? C_STONE : b.k === 'pier' ? C_PIER : P_GALW[b.id % P_GALW.length], dark = [tint[0] * 0.8, tint[1] * 0.8, tint[2] * 0.82];
+      // (the outline's winding, as seen from above in the world: the frame's x is the compass's mirror)
+      let ar = 0, cx = 0, cz = 0; for (let i = 0; i < m; i++) { const [x0, z0] = P[i], [x1, z1] = P[(i + 1) % m]; ar += x0 * z1 - x1 * z0; cx += x0 / m; cz += z0 / m; }
+      const out = ar > 0 ? 1 : -1; // (the walls' quads face out with the order kept, else reversed)
+      c.setM(IDENT);
+      for (let i = 0; i < m; i++) {
+        const a = P[i], e = P[(i + 1) % m];
+        if (out > 0) c.quad([a[0], y0, a[1]], [e[0], y0, e[1]], [e[0], y1, e[1]], [a[0], y1, a[1]], i % 2 ? tint : dark);
+        else c.quad([e[0], y0, e[1]], [a[0], y0, a[1]], [a[0], y1, a[1]], [e[0], y1, e[1]], i % 2 ? tint : dark);
+      }
+      // the roof: its outline triangulated (a parapet's band round it)
+      const tri = THREE.ShapeUtils.triangulateShape(P.map(([x, z]) => new THREE.Vector2(x, z)), []);
+      for (const [i, j, k] of tri) {
+        const A_ = [P[i][0], y1, P[i][1]], B_ = [P[j][0], y1, P[j][1]], C_ = [P[k][0], y1, P[k][1]];
+        const up = (B_[2] - A_[2]) * (C_[0] - A_[0]) - (B_[0] - A_[0]) * (C_[2] - A_[2]) > 0; // ((B−A)×(C−A)).y > 0
+        if (up) c.quad(A_, B_, C_, C_, C_ROOF); else c.quad(A_, C_, B_, B_, C_ROOF);
+      }
+      // its fronts towards the road: each edge's own frame (x along it, −z out)
+      // (and the other long walls their windows: the corners and the backs over the lower ones seen from the road)
+      // (a church's, a mosque's, a ferry terminal's and the bazaar's walls their windows, no shops; the shops' fronts the blocks' only)
+      if (b.k !== 'shed' && b.k !== 'site' && b.k !== 'tomb') for (let i = 0; i < m; i++) {
+        const fr = b.k === 'block' && b.f && b.f.includes(i) && (farWin > 40 || b.d < 40), a = P[i], e = P[(i + 1) % m], dx = e[0] - a[0], dz = e[1] - a[1], w = Math.hypot(dx, dz); if (w < (fr ? 2.5 : 4.5) || (!fr && b.d > farWin)) continue;
+        const nx = (out > 0 ? dz : -dz) / w, nz = (out > 0 ? -dx : dx) / w; // (its outward normal)
+        const M = new THREE.Matrix4().makeRotationY(Math.atan2(-nx, -nz)); M.setPosition((a[0] + e[0]) / 2, y0 + 0.3 + 0.15, (a[1] + e[1]) / 2);
+        // (its x along the edge: the frame's x is (cos, −sin) of the turn; a front painted left to right, either way)
+        P_.galFacade(G, M, rng(b.id * 131 + i), w, b.k === 'block' ? Math.max(2, b.lv) : Math.max(2, Math.round((b.h - 1) / 3.6)), tint, fr);
+      }
+      // (the Spice Bazaar's and a mosque's lead domes over their roofs: the bazaar's in a row along its long halls, a mosque's one great
+      // dome and its minaret)
+      if (b.k === 'tomb') { const f = G.fish; f.setM(IDENT); P_.galDome(f, cx, y1, cz, Math.min(5.5, Math.sqrt(Math.abs(ar) / 2) * 0.42)); }
+      if (b.k === 'bazaar' || b.k === 'mosque') {
+        const f = G.fish; f.setM(IDENT);
+        if (b.k === 'mosque') { const r = Math.min(7, Math.sqrt(Math.abs(ar) / 2) * 0.32); P_.galDome(f, cx, y1, cz, r); P_.galMinaret(G, P[0][0] + (cx - P[0][0]) * 0.15, y0, P[0][1] + (cz - P[0][1]) * 0.15, y1 + 14); }
+        else for (let i = 0; i < m; i++) { const a = P[i], e = P[(i + 1) % m], L = Math.hypot(e[0] - a[0], e[1] - a[1]); for (let t = 4; t < L - 3; t += 7) { const k = t / L, x = a[0] + (e[0] - a[0]) * k, z = a[1] + (e[1] - a[1]) * k, ix = x + (cx - x) * (5 / Math.max(5, Math.hypot(cx - x, cz - z))), iz = z + (cz - z) * (5 / Math.max(5, Math.hypot(cx - x, cz - z))); P_.galDome(f, ix, y1, iz, 2.4); } }
+      }
+      if (++n % 4 === 0) yield;
+    }
+  }
+  /** the real Galata zone's open squares (step 35R): Karaköy's by the bridge's end and its fish market's quay beside it, Eminönü's round
+   *  Yeni Cami and the tomb's garden east of it, as the real ones: their round trees in the open paving (not on the water, nor in a
+   *  building: real_galata.js blk, their outlines), half as many on phones. (Their people: painted walkers to come, step 35f) */
+  *placeGalSquares(G, c, s0, s1, matAt, road, rwAt) {
+    if (zoneW(s0).galata < 0.25 && zoneW(s1).galata < 0.25) return;
+    const zs = s0 - galL(s0), tr = rng(Math.floor(hash2(c, 6331) * 4294967295)), Gs = {};
+    const inSq = (l, sd) => (l > 440 && l < 575) || (sd > 0 && l >= 575 && l < 700) || (l > 1045 && l < 1235);
+    if (!inSq(s0 - zs, 1) && !inSq(s1 - zs, 1)) return;
+    const l0 = s0 - zs, l1 = s1 - zs, B = GR.blk.filter(b => b.l > l0 - 100 && b.l < l1 + 100), lite = P.bankStep() > 1, bays = GR.park || []; // (the buildings near this chunk)
+    // (a place in the open: on the square's land, not on the car park's bays (placeGalQuay), not in a building nor within 3 m
+    // of its walls, nor on Yeni Cami's terrace (the model's own footprint: placeGalBlocks))
+    const free = (sj, u, lj, sd) => {
+      if (!inSq(lj, sd) || galWater(sj, u, lj)) return false;
+      if (sd > 0 && lj > 545 && lj < 612 && bays.some(([bl, bu]) => Math.abs(bl - lj) < 2.8 && Math.abs(bu - u) < 4.2)) return false;
+      this.path.at(sj, Gs); const F = galFrame(zs), x = Gs.x + Gs.rx * u - F.x, z = Gs.z + Gs.rz * u - F.z, N = F.s * x + F.c * z, E = -F.c * x + F.s * z; // (the point in the zone's frame: the inverse of galWorld)
+      for (const b of B) if (Math.abs(b.l - lj) < 90 && nearPoly(E, N, b.p, 3)) return false;
+      const Y = GR.yeni; if (Y && Math.abs(Y.l - lj) < 90) { const o = mid(Y.outer), k = mid(Y.court); let dx = o[0] - k[0], dy = o[1] - k[1]; const d = Math.hypot(dx, dy) || 1; dx /= d; dy /= d;
+        const pz = (E - o[0] - dx) * dx + (N - o[1] - dy) * dy, px = (E - o[0] - dx) * -dy + (N - o[1] - dy) * dx; if (Math.abs(px) < 24.5 && pz > -43 && pz < 45) return false; }
+      return true;
+    };
+    for (let s = Math.ceil(s0 / 13) * 13; s < s1; s += 13) {
+      const l = s - zs; if (!inSq(l, 1) || !this.galOn(s)) continue;
+      const rw = rwAt(s), g = galSect(l, rw, Gs);
+      for (const sd of [-1, 1]) for (let k = 0; k < 6; k++) {
+        const a = sd > 0 ? rw + g.pr + 4 + k * 12 + tr() * 6 : -g.p1 + 4 + k * 12 + tr() * 6, u = sd * a, sj = s + (tr() - 0.5) * 8, lj = sj - zs;
+        // (Eminönü's right, round the tomb's garden: its plane trees thicker)
+        const tp = (sd > 0 && lj > 1150 && lj < 1235 ? 0.42 : 0.26) * (lite ? 0.5 : 1), isT = tr() <= tp;
+        if (isT && free(sj, u, lj, sd)) P.tree(G, matAt(sj, u, road(sj) - 0.06, tr() * 6, false), 'broad', tr, tr.range(1.0, 1.35));
+      }
+    }
+    yield;
+  }
+  /** Karaköy's fish market quay at the bridge's end, right (review 35R, OpenStreetMap): the İSPARK car park (Balıkçılar Önü), its asphalt
+   *  and its bays' lines (rows back to back), three of the town's painted dolmuşes parked in it */
+  *placeGalQuay(G, s0, s1, matAt, road, ox, oz) {
+    if (zoneW(s0).galata < 0.25 && zoneW(s1).galata < 0.25) return;
+    const zs = s0 - galL(s0), l0 = s0 - zs, l1 = s1 - zs; if (l1 < 540 || l0 > 720) return;
+    // (its asphalt over the quay's paving, by the chunk its bays' middle falls in, and each bay's white lines)
+    const PK = GR.parkP || [], bays = GR.park || [], lm = bays.length ? (bays[0][0] + bays[bays.length - 1][0]) / 2 : -1;
+    if (PK.length > 2 && lm >= l0 && lm < l1 && this.galOn(zs + lm)) {
+      const c = G.color, q = [0, 0], y = road(zs + lm) - 0.035, PP = PK.map(([E, N]) => { galWorld(zs, E, N, q); return [q[0] - ox, q[1] - oz]; });
+      c.setM(IDENT); c.noShadow = true;
+      for (const [i, j, k] of THREE.ShapeUtils.triangulateShape(PP.map(([x, z]) => new THREE.Vector2(x, z)), [])) {
+        const A_ = [PP[i][0], y, PP[i][1]], B_ = [PP[j][0], y, PP[j][1]], C_ = [PP[k][0], y, PP[k][1]];
+        if ((B_[2] - A_[2]) * (C_[0] - A_[0]) - (B_[0] - A_[0]) * (C_[2] - A_[2]) > 0) c.quad(A_, B_, C_, C_, C_ASPH); else c.quad(A_, C_, B_, B_, C_ASPH);
+      }
+      for (const [l, u] of bays) { c.setM(matAt(zs + l, u, y, 0, false)); c.box(-1.36, 0, -2.3, -1.24, 0.02, 2.3, C_BAY); }
+      c.setM(IDENT); c.noShadow = false;
+    }
+    // (in three of its bays, nose to the road, the town's painted dolmuşes (step 35b: their model and atlas, M.atlasDol), the yellow and
+    // the white; only the painted model: before it has loaded, or should it fail, the bays stay empty (review 35R: no box cars))
+    if (P.DOLMUS.T) for (const [tl, tu, k] of GAL_DOL) {
+      let bi = -1, bd = 1e9; bays.forEach(([l, u], i) => { const d = Math.hypot(l - tl, u - tu); if (d < bd) { bd = d; bi = i; } });
+      if (bi < 0 || bd > 4) continue; const [l, u] = bays[bi]; if (l < l0 || l >= l1 || !this.galOn(zs + l)) continue;
+      P.dolmus(G, matAt(zs + l, u, road(zs + lm) - 0.035, Math.PI / 2, false), k);
+    }
+    yield;
+  }
+  /** Kemeraltı Caddesi's median fence (step 35R, as the real one: Street View): black iron, posts every 2.6 m with ball finials, a top
+   *  rail and a foot rail, bars between them (both faces), from s0 to s1 at u(s), its foot y0 over the road; where ok */
+  galIronFence(G, s0, s1, world, road, uAt, y0, ok) {
+    const c = G.color, K = C_IRON, HT = 1.05; c.setM(IDENT);
+    for (let p = Math.floor(s0 / 2.6) * 2.6; p < s1; p += 2.6) {
+      const a = Math.max(p, s0), b = Math.min(p + 2.6, s1); if (b - a < 0.05 || !ok(a) || !ok(b)) continue;
+      const ua = uAt(a), ub = uAt(b), ya = road(a) + y0, yb = road(b) + y0;
+      if (p >= s0) { const q = world(p, uAt(p), ya); c.box(q[0] - 0.045, ya, q[2] - 0.045, q[0] + 0.045, ya + HT + 0.12, q[2] + 0.045, K); c.box(q[0] - 0.06, ya + HT + 0.12, q[2] - 0.06, q[0] + 0.06, ya + HT + 0.22, q[2] + 0.06, K); }
+      for (const [h0, h1] of [[HT - 0.04, HT], [0.1, 0.14], [0.78, 0.81]]) {
+        c.quad(world(a, ua + 0.012, ya + h0), world(b, ub + 0.012, yb + h0), world(b, ub + 0.012, yb + h1), world(a, ua + 0.012, ya + h1), K);
+        c.quad(world(b, ub - 0.012, yb + h0), world(a, ua - 0.012, ya + h0), world(a, ua - 0.012, ya + h1), world(b, ub - 0.012, yb + h1), K);
+      }
+      for (let q = a + 0.13; q < b - 0.06; q += 0.13) { // (the bars: a flat both ways, a little bent at their middle as the tulips' stems)
+        const u = uAt(q) + (Math.round(q / 0.13) % 2 ? 0.02 : -0.02), y = road(q) + y0;
+        c.quad(world(q - 0.012, u, y + 0.12), world(q + 0.012, u, y + 0.12), world(q + 0.012, u, y + HT), world(q - 0.012, u, y + HT), K);
+        c.quad(world(q + 0.012, u, y + 0.12), world(q - 0.012, u, y + 0.12), world(q - 0.012, u, y + HT), world(q + 0.012, u, y + HT), K);
+      }
+    }
   }
   /** a run of the Galata Bridge's railing (W3) from s0 to s1 at u(s), its foot y0 over the road: square posts with caps every
    *  2.6 m (on a grid along the road: the pieces either side of a chunk's edge meet), a flat handrail on top, a foot rail, and
    *  between them the patterned cast-iron panel (the world atlas's cell, cut out by its alpha; both faces, so it casts its
    *  lattice's shadow whichever side the sun is on) */
-  galRailing(G, s0, s1, world, road, uAt, y0, cell, ok) {
-    const c = G.color, a = G.atlas, cl = P.atlasCell(cell), col = cell === 'galRailL' ? [0.27, 0.36, 0.48] : [0.2, 0.14, 0.105], cap = cell === 'galRailL' ? [0.36, 0.45, 0.57] : [0.3, 0.21, 0.155];
+  galRailing(G, s0, s1, world, road, uAt, y0, cell, ok, tint = W1G, HT = 1.18) {
+    // (step 35R: tinted as the real ones: the walkways' pale teal, the tram line's fences a greyer teal, lower)
+    const c = G.color, a = G.atlas, cl = P.atlasCell(cell), col = [0.27 * tint[0] * 1.6, 0.36 * tint[1] * 1.6, 0.48 * tint[2] * 1.4], cap = [0.36 * tint[0] * 1.6, 0.45 * tint[1] * 1.6, 0.57 * tint[2] * 1.4];
     c.setM(IDENT); a.setM(IDENT); a.world = true;
-    const HT = 1.18, uv = { u0: 0, u1: 0, v0: cl.v0, v1: cl.v1 };
+    const uv = { u0: 0, u1: 0, v0: cl.v0, v1: cl.v1 };
     for (let p = Math.floor(s0 / 2.6) * 2.6; p < s1; p += 2.6) {
       const s = Math.max(p, s0), t = Math.min(p + 2.6, s1); if (t - s < 0.05 || !ok(s) || !ok(t)) continue;
       const ua = uAt(s), ub = uAt(t), ya = road(s) + y0, yb = road(t) + y0;
@@ -1551,9 +1792,9 @@ export class World {
         c.quad(world(s, ua + w, ya + h1), world(t, ub + w, yb + h1), world(t, ub - w, yb + h1), world(s, ua - w, ya + h1), cap);
       }
       uv.u0 = cl.u0 + (cl.u1 - cl.u0) * ((s - p) / 2.6); uv.u1 = cl.u0 + (cl.u1 - cl.u0) * ((t - p) / 2.6);
-      a.quad(world(s, ua, ya + 0.06), world(t, ub, yb + 0.06), world(t, ub, yb + HT - 0.03), world(s, ua, ya + HT - 0.03), W1G, uv);
+      a.quad(world(s, ua, ya + 0.06), world(t, ub, yb + 0.06), world(t, ub, yb + HT - 0.03), world(s, ua, ya + HT - 0.03), tint, uv);
       const u0 = uv.u0; uv.u0 = uv.u1; uv.u1 = u0;
-      a.quad(world(t, ub, yb + 0.06), world(s, ua, ya + 0.06), world(s, ua, ya + HT - 0.03), world(t, ub, yb + HT - 0.03), W1G, uv);
+      a.quad(world(t, ub, yb + 0.06), world(s, ua, ya + 0.06), world(s, ua, ya + HT - 0.03), world(t, ub, yb + HT - 0.03), tint, uv);
     }
   }
   /** the Turkish town where it is (W4): its weight a half or more (from the Galata Bridge's landing on), clear of the border

@@ -1618,38 +1618,48 @@ export function ferry(G, M, r) {
   flagCloth(G, M, [-L + 0.5, 6.4, 0], 0.9, 1, -1);
 }
 
-// ------------------------------------------------------------------ the Galata Bridge (W3)
-// its steel in the concept's green-grey, the lamps' dark housings, the control towers' pale concrete
-const GAL_POLE = C('#5d6b63'), GAL_LAMP = C('#3a403d'), GAL_CONC = C('#cdcbc3'), GAL_JOINT = C('#a9a7a0'), GAL_DARK = C('#34383d'), GAL_WIN = C('#46525e');
+// ------------------------------------------------------------------ the Galata Bridge (W3; as it really is since step 35R)
 const POOL_UV = { u0: 0, u1: 1, v0: 0, v1: 1 };
 /** a face to −z (towards the road, in a prop's own frame): x0 … x1, y0 … y1 at z */
 const fz = (c, x0, x1, y0, y1, z, col) => c.quad([x1, y0, z], [x0, y0, z], [x0, y1, z], [x1, y1, z], col);
-/** the T1 tram line's portal over its two tracks, in a frame at the road's middle (local x along the road, z across it: +z the
- *  right), as the bridge's: green-grey steel posts at the reserve's edges (z0 by the road, z1 beyond), a crossbar, drop arms
- *  over the tracks (tz) holding the contact wires (chunks.js strings them, their anchors returned); the road-side post goes on
- *  up to a street lamp, its short arm reaching over our right lane (lampZ), as the concept's */
-export function galPortal(G, M, z0, z1, tz, lampZ) {
-  const c = G.color; c.setM(M);
-  c.cyl(0, 0, z0, 0.14, 0.1, 9.0, 8, GAL_POLE); c.cyl(0, 0, z1, 0.13, 0.1, 7.3, 8, GAL_POLE);
-  c.box(-0.09, 6.95, z0, 0.09, 7.22, z1, GAL_POLE); c.box(-0.05, 6.4, z0 + 0.1, 0.05, 6.5, z1 - 0.1, GAL_POLE); // (a truss's two chords)
-  for (let z = z0 + 0.6; z < z1 - 0.3; z += 1.2) c.rod([0, 6.47, z], [0, 6.96, z + 0.6], 0.025, 0.025, 4, GAL_POLE);
-  for (const t of tz) { c.box(-0.035, 5.95, t - 0.035, 0.035, 6.45, t + 0.035, GAL_POLE); c.box(-0.45, 5.92, t - 0.03, 0.45, 5.99, t + 0.03, GAL_POLE); }
-  c.rod([0, 8.75, z0], [0, 8.95, lampZ + 0.35], 0.055, 0.045, 6, GAL_POLE);
-  c.box(-0.22, 8.84, lampZ - 0.4, 0.22, 9.02, lampZ + 0.4, GAL_LAMP);
-  G.lamp.setM(M); G.lamp.box(-0.17, 8.81, lampZ - 0.34, 0.17, 8.84, lampZ + 0.34, W1);
-  lampAt(G, M, 0, 8.7, lampZ, 1.1);
-  G.pool.setM(M); G.pool.quad([-4.2, 0.04, lampZ + 4.2], [4.2, 0.04, lampZ + 4.2], [4.2, 0.04, lampZ - 4.2], [-4.2, 0.04, lampZ - 4.2], W1, POOL_UV);
-}
-/** a lamp post on the bridge's walkway (its own frame: −z to the road): a tall slender post, its arm curving out over the road
- *  to a flat luminaire */
+/** a lamp post on the bridge's walkways (step 35R, as the real ones: Commons photos 11, 25, 40 and Street View): a tall slender pale
+ *  grey pole by the walkway's outer railing (its own frame: −z to the road), a long swan neck curving out over the walkway towards
+ *  the road, a flat luminaire */
 export function galLamp(G, M) {
+  const c = G.color; c.setM(M); const PG = C('#a9b0b3'), PH = C('#8b9396');
+  c.cyl(0, 0, 0, 0.13, 0.08, 10.4, 10, PG);
+  c.cyl(0, 0, 0, 0.17, 0.15, 0.6, 10, PH); // (its foot)
+  // (the neck: a smooth arc of short rods from the pole's top out over the walkway)
+  let px = 0, py = 10.2, pz = 0;
+  for (let k = 1; k <= 6; k++) { const t = k / 6, a = t * Math.PI * 0.5, ny = 10.2 + 0.85 * Math.sin(a), nz = -1.9 * (1 - Math.cos(a)) - 0.5 * t; c.rod([0, py, pz], [0, ny, nz], 0.07 - 0.02 * t, 0.07 - 0.02 * (t + 1 / 6), 7, PG); py = ny; pz = nz; }
+  c.rod([0, py, pz], [0, py - 0.05, pz - 0.75], 0.05, 0.045, 7, PG);
+  const lz = pz - 1.0;
+  c.box(-0.2, py - 0.2, lz - 0.45, 0.2, py - 0.02, lz + 0.45, PH);
+  G.lamp.setM(M); G.lamp.box(-0.16, py - 0.23, lz - 0.4, 0.16, py - 0.2, lz + 0.4, W1);
+  lampAt(G, M, 0, py - 0.3, lz, 1.1);
+  G.pool.setM(M); G.pool.quad([-4.5, 0.04, 2.0], [4.5, 0.04, 2.0], [4.5, 0.04, -7.0], [-4.5, 0.04, -7.0], W1, POOL_UV);
+}
+/** the T1 line's mast between its two tracks (step 35R, as the real ones: Commons photo 02 and Street View), in a frame at the road's
+ *  middle (x along the road, +z the right): a dark green steel pole at mz, a crossarm at the contact wire's height over both tracks
+ *  (tz) with their drop arms and registration arms, and on top a lamp reaching out each way (lamps: −1, +1 or both, 0 none) */
+const T1_MAST = C('#3c4a44');
+export function galMast(G, M, mz, tz, lamps = 2) {
   const c = G.color; c.setM(M);
-  c.cyl(0, 0, 0, 0.11, 0.075, 8.4, 8, GAL_POLE);
-  c.rod([0, 8.2, 0], [0, 8.72, -0.55], 0.055, 0.05, 6, GAL_POLE); c.rod([0, 8.72, -0.55], [0, 8.86, -1.65], 0.05, 0.045, 6, GAL_POLE);
-  c.box(-0.22, 8.76, -2.2, 0.22, 8.95, -1.5, GAL_LAMP);
-  G.lamp.setM(M); G.lamp.box(-0.17, 8.73, -2.15, 0.17, 8.76, -1.55, W1);
-  lampAt(G, M, 0, 8.62, -1.85, 1.1);
-  G.pool.setM(M); G.pool.quad([-4.2, 0.04, 2.3], [4.2, 0.04, 2.3], [4.2, 0.04, -6.1], [-4.2, 0.04, -6.1], W1, POOL_UV);
+  c.cyl(0, 0, mz, 0.2, 0.15, 0.5, 10, T1_MAST); c.cyl(0, 0.5, mz, 0.15, 0.11, 9.4, 10, T1_MAST);
+  for (const t of tz) {
+    const z0 = Math.min(mz, t) - 0.08, z1 = Math.max(mz, t) + 0.08;
+    c.box(-0.06, 6.78, z0, 0.06, 6.92, z1, T1_MAST); c.rod([0, 6.3, mz], [0, 6.85, (mz + t) / 2], 0.03, 0.03, 5, T1_MAST); // (its arm and its brace)
+    c.box(-0.035, 5.98, t - 0.035, 0.035, 6.8, t + 0.035, T1_MAST); c.box(-0.5, 5.94, t - 0.03, 0.5, 6.0, t + 0.03, T1_MAST);
+    c.cyl(0, 6.62, t, 0.05, 0.05, 0.16, 6, C('#7d6a4a')); // (the insulator)
+  }
+  for (const sd of [-1, 1]) {
+    if (lamps !== 2 && lamps !== sd) continue;
+    const lz = mz + sd * 3.2;
+    c.rod([0, 9.6, mz], [0, 9.98, mz + sd * 1.5], 0.06, 0.05, 7, T1_MAST); c.rod([0, 9.98, mz + sd * 1.5], [0, 10.05, lz], 0.05, 0.045, 7, T1_MAST);
+    c.box(-0.2, 9.9, lz - 0.42, 0.2, 10.08, lz + 0.42, T1_MAST);
+    G.lamp.setM(M); G.lamp.box(-0.16, 9.87, lz - 0.37, 0.16, 9.9, lz + 0.37, W1); c.setM(M);
+    lampAt(G, M, 0, 9.8, lz, 1.1);
+  }
 }
 const JACKETS = ['#2f3d5a', '#5b5f3d', '#676c73', '#77482f', '#8a2f2a', '#3d5a6e', '#45474b', '#b9a47c', '#2d4a3a'].map(C);
 const TROUSERS = ['#2b2e36', '#3a3d45', '#4a4238', '#22252b', '#5a5d64'].map(C), SKIN = ['#c99a7a', '#b58463', '#d6a98a'].map(C);
@@ -1905,47 +1915,88 @@ function paintedFisher(G, c, M, drop, yaw, h, sit, s, L, el0, sw, bucket) {
   if (h3 > 0.62 && h3 < 0.82) latheI(c, BAG_L, 7, -bx * 0.95); // (a white plastic bag, knotted at the top)
   else if (h3 > 0.9) boxI(c, -bx - 0.16, 0.0, -0.04, -bx + 0.16, 0.17, 0.16, TACKLE[Math.floor(h2 * 3)]); // (a tackle box)
 }
-/** one of the bridge's control towers by its lifting span, as the concept and the real bridge have them (its own frame: −z to
- *  the road): a block of pale concrete panels 13 m along the road, 7.5 m deep and 10.5 m tall over the deck, a great round-headed
- *  arch in its face to the road, small windows in its ends, a hood curving up over the back of its roof; a flag on the roof.
- *  pier: standing beyond the deck's edge, on a pier of dressed stone that many metres down into the water */
-export function galTower(G, M, pier = 0) {
+/** one of the four control towers of the bridge's lifting span (step 35R, as the real ones: Commons photos 08, 11, 19 and Street View)
+ *  in its own frame (−z to the road, x along it): a block at the deck's outer edge, beyond the walkway's railing, clad in pale
+ *  grey-teal panels, len along the road, d out over the water, H over the road, its foot on the lower deck 5.2 m under it; a
+ *  round-headed arch through it at the walkway's level, the control room's band of windows under its roof, a curved hood over the
+ *  roof's outer half */
+const TW_PAN = C('#a7bac0'), TW_JNT = C('#869ba3'), TW_GL = C('#2d3a45'), TW_HOOD = C('#c3d1d4'), TW_IN = C('#5d6f76');
+export function galTower(G, M, len = 15, d = 11, H = 11.5) {
   const c = G.color; c.setM(M);
-  const L = 6.5, D = 7.5, H = 10.5;
-  if (pier > 0) c.box(-L - 0.35, -pier, -0.2, L + 0.35, 0.02, D + 0.35, C('#a39d92'), null, { noBottom: true });
-  c.box(-L, 0, 0, L, H, D, GAL_CONC, null, { noBottom: true });
-  c.box(-L - 0.12, H - 0.45, -0.12, L + 0.12, H, D + 0.12, C('#d9d7cf'));       // the cornice
-  // the arch in the face to the road: a dark round-headed opening (6 m high, 4.2 wide) in a frame a shade darker than the wall
-  const R = 2.6, ya = 4.6, z = -0.012, N = 12, arc = (k, rr) => { const t = (k / N) * Math.PI; return [rr * Math.cos(t), ya + rr * Math.sin(t)]; };
-  for (const [rr, col, zz] of [[R + 0.3, GAL_JOINT, z], [R, GAL_DARK, z - 0.01]]) {
-    fz(c, -rr, rr, 0, ya, zz, col);
-    for (let k = 0; k < N; k++) { const [x0, y0] = arc(k, rr), [x1, y1] = arc(k + 1, rr); c.quad([0, ya, zz], [x1, y1, zz], [x0, y0, zz], [x0, y0, zz], col); }
+  const hl = len / 2, y0 = -5.2, za = 0.6, zb = 4.6, ys = 2.6, R = (zb - za) / 2, zc = (za + zb) / 2, N = 12;
+  // the faces to the road and to the water, the roof
+  c.quad([hl, y0, 0], [-hl, y0, 0], [-hl, H, 0], [hl, H, 0], TW_PAN);
+  c.quad([-hl, y0, d], [hl, y0, d], [hl, H, d], [-hl, H, d], TW_PAN);
+  c.quad([-hl, H, 0], [-hl, H, d], [hl, H, d], [hl, H, 0], TW_HOOD);
+  // the ends, the arch through them: their solid parts either side of it, then strips from its curve up to the roof
+  for (const sx of [-1, 1]) {
+    const x = sx * hl, q = (z0, ya, z1, yb, col) => sx < 0 ? c.quad([x, ya, z0], [x, ya, z1], [x, yb, z1], [x, yb, z0], col) : c.quad([x, ya, z1], [x, ya, z0], [x, yb, z0], [x, yb, z1], col);
+    q(0, y0, za, H, TW_PAN); q(zb, y0, d, H, TW_PAN); q(za, y0, zb, 0, TW_PAN);
+    for (let k = 0; k < N; k++) {
+      const t0 = Math.PI - (k / N) * Math.PI, t1 = Math.PI - ((k + 1) / N) * Math.PI;
+      const zA = zc + R * Math.cos(t0), yA = ys + R * Math.sin(t0), zB = zc + R * Math.cos(t1), yB = ys + R * Math.sin(t1);
+      if (sx < 0) c.quad([x, yA, zA], [x, yB, zB], [x, H, zB], [x, H, zA], TW_PAN); else c.quad([x, yA, zA], [x, H, zA], [x, H, zB], [x, yB, zB], TW_PAN);
+      if (sx < 0) c.quad([x, 0, zA], [x, 0, zB], [x, ys, zB], [x, ys, zA], TW_PAN); else c.quad([x, 0, zA], [x, ys, zA], [x, ys, zB], [x, 0, zB], TW_PAN);
+    }
+    // (the arch's frame, the panels' joints, the control room's windows)
+    for (let k = 0; k < N; k++) {
+      const t0 = (k / N) * Math.PI, t1 = ((k + 1) / N) * Math.PI, e = sx * 0.012;
+      const a0 = [x + e, ys + (R + 0.25) * Math.sin(t0), zc + (R + 0.25) * Math.cos(t0)], a1 = [x + e, ys + (R + 0.25) * Math.sin(t1), zc + (R + 0.25) * Math.cos(t1)];
+      const b0 = [x + e, ys + R * Math.sin(t0), zc + R * Math.cos(t0)], b1 = [x + e, ys + R * Math.sin(t1), zc + R * Math.cos(t1)];
+      if (sx > 0) c.quad(b0, a0, a1, b1, TW_JNT); else c.quad(b0, b1, a1, a0, TW_JNT);
+    }
+    for (let z = 1.5; z < d - 0.4; z += 1.6) if (z < za - 0.2 || z > zb + 0.2) q(z - 0.035, y0 + 0.2, z + 0.035, H - 3.4, TW_JNT);
+    for (let y = y0 + 1.6; y < H - 3.4; y += 1.8) q(0.15, y, d - 0.15, y + 0.06, TW_JNT);
+    q(0.6, H - 3.0, d - 0.6, H - 1.3, TW_GL);
   }
-  // the panels' joints (on the face, either side of the arch) and the ends' windows, a column of three
-  for (const x of [-5.4, -4.2, -3.0, 3.0, 4.2, 5.4]) fz(c, x - 0.03, x + 0.03, 0.2, H - 0.5, -0.006, GAL_JOINT);
-  for (const y of [3.0, 6.2]) { fz(c, -L + 0.1, -R - 0.35, y - 0.03, y + 0.03, -0.006, GAL_JOINT); fz(c, R + 0.35, L - 0.1, y - 0.03, y + 0.03, -0.006, GAL_JOINT); }
-  for (const sx of [-1, 1]) for (const y of [2.4, 5.2, 8.0]) for (const zc of [2.2, 5.3]) {
-    const x = sx * (L + 0.006), z0 = zc - 0.5, z1 = zc + 0.5;
-    if (sx < 0) c.quad([x, y, z0], [x, y, z1], [x, y + 1.1, z1], [x, y + 1.1, z0], GAL_WIN); else c.quad([x, y, z1], [x, y, z0], [x, y + 1.1, z0], [x, y + 1.1, z1], GAL_WIN);
-  }
-  // the hood over the back of the roof: a quarter round rising 2.4 m from the middle of the roof to its back edge, its ends closed
-  const K = 6, hz = t => D - 3.0 + 3.0 * Math.sin(t), hy = t => H + 2.4 * (1 - Math.cos(t)), HL = L - 0.4, HC = C('#dedcd5');
+  // inside the arch: its barrel and its walls up to the springing
+  for (let k = 0; k < N; k++) { const t0 = (k / N) * Math.PI, t1 = ((k + 1) / N) * Math.PI, p = (x, t) => [x, ys + R * Math.sin(t), zc + R * Math.cos(t)]; c.quad(p(-hl, t0), p(-hl, t1), p(hl, t1), p(hl, t0), TW_IN); }
+  c.quad([-hl, 0, za], [hl, 0, za], [hl, ys, za], [-hl, ys, za], TW_IN); c.quad([hl, 0, zb], [-hl, 0, zb], [-hl, ys, zb], [hl, ys, zb], TW_IN);
+  c.quad([-hl, 0.02, za], [-hl, 0.02, zb], [hl, 0.02, zb], [hl, 0.02, za], C('#9a9894')); // (its floor)
+  // the road face's joints and the control room's windows
+  for (let x = -hl + 1.5; x < hl - 0.4; x += 1.5) c.quad([x + 0.035, y0 + 0.2, -0.012], [x - 0.035, y0 + 0.2, -0.012], [x - 0.035, H - 3.4, -0.012], [x + 0.035, H - 3.4, -0.012], TW_JNT);
+  for (let y = y0 + 1.6; y < H - 3.4; y += 1.8) fz(c, -hl + 0.15, hl - 0.15, y, y + 0.06, -0.012, TW_JNT);
+  fz(c, -hl + 0.6, hl - 0.6, H - 3.0, H - 1.3, -0.012, TW_GL);
+  c.box(-hl - 0.1, H - 0.35, -0.1, hl + 0.1, H, d + 0.1, TW_HOOD); // (the cornice)
+  // the hood: a quarter round rising from the roof's middle to its outer edge, over its whole length, its ends closed
+  const K = 7, hz = t => d * 0.45 + d * 0.55 * Math.sin(t), hy = t => H + 3.2 * (1 - Math.cos(t)), HL = hl - 0.5;
   for (let k = 0; k < K; k++) {
     const t0 = (k / K) * (Math.PI / 2), t1 = ((k + 1) / K) * (Math.PI / 2);
-    c.quad([HL, hy(t0), hz(t0)], [-HL, hy(t0), hz(t0)], [-HL, hy(t1), hz(t1)], [HL, hy(t1), hz(t1)], HC);
-    for (const sx of [-1, 1]) { const p0 = [sx * HL, H, D], p1 = [sx * HL, hy(t0), hz(t0)], p2 = [sx * HL, hy(t1), hz(t1)]; if (sx > 0) c.quad(p0, p1, p2, p2, HC); else c.quad(p0, p2, p1, p1, HC); }
+    c.quad([HL, hy(t0), hz(t0)], [-HL, hy(t0), hz(t0)], [-HL, hy(t1), hz(t1)], [HL, hy(t1), hz(t1)], TW_HOOD);
+    for (const sx of [-1, 1]) { const p0 = [sx * HL, H, d], p1 = [sx * HL, hy(t0), hz(t0)], p2 = [sx * HL, hy(t1), hz(t1)]; if (sx > 0) c.quad(p0, p1, p2, p2, TW_HOOD); else c.quad(p0, p2, p1, p1, TW_HOOD); }
   }
-  c.quad([-HL, H, D], [HL, H, D], [HL, hy(Math.PI / 2), D], [-HL, hy(Math.PI / 2), D], HC); // (its back)
-  flagPole(G, sub(M, -L + 1.2, H, 1.2), 4.2);
+  c.quad([-HL, H, d], [HL, H, d], [HL, hy(Math.PI / 2), d], [-HL, hy(Math.PI / 2), d], TW_HOOD);
+  flagPole(G, sub(M, -hl + 1.0, H, 1.0), 4.0);
 }
-/** the lifting span's barrier beside a control tower (its own frame: −z to the road): an orange steel gate 5 m long, its
- *  frame braced with white diagonals, as the concept paints it */
-export function galBarrier(G, M) {
+/** a T1 tram stop's shelter on its platform (step 35R, as the real ones at Karaköy and Eminönü: Commons photos 37, 38 and Street View),
+ *  in its own frame (x along the platform, −z towards our road): its posts and their roof beams, a long roof of pale panels over the
+ *  platform, its back wall of green-tinted glass over a low base, a bench or two, the stop's name board at each end */
+const SH_FR = C('#4b5a5f'), SH_RF = C('#dfe6e6'), SH_GL = C('#7fa7a0'), SH_BS = C('#9a5a48'), SH_BN = C('#6d7375');
+export function galShelter(G, M, len, depth = 2.6) {
+  const c = G.color; c.setM(M); const L = len / 2, H = 3.1;
+  for (let x = -L; x <= L + 0.01; x += Math.max(4, len / Math.round(len / 5))) {
+    c.box(x - 0.07, 0, depth - 0.07, x + 0.07, H, depth + 0.07, SH_FR); c.box(x - 0.05, 0, -0.05, x + 0.05, H - 0.15, 0.05, SH_FR);
+    c.box(x - 0.06, H - 0.18, -0.2, x + 0.06, H, depth + 0.2, SH_FR);
+  }
+  c.box(-L - 0.3, H, -0.45, L + 0.3, H + 0.14, depth + 0.35, SH_RF, null, { ny: C('#b8c2c2') });
+  c.box(-L, 0, depth - 0.04, L, 0.7, depth + 0.04, SH_BS); c.box(-L, 0.7, depth - 0.02, L, H - 0.2, depth + 0.02, SH_GL);
+  for (let x = -L + 3; x < L - 2; x += 9) { c.box(x, 0.42, depth - 0.7, x + 2.2, 0.48, depth - 0.25, SH_BN); for (const xx of [x + 0.1, x + 2.0]) c.box(xx, 0, depth - 0.6, xx + 0.1, 0.42, depth - 0.35, SH_BN); }
+  lampAt(G, M, 0, H - 0.3, depth / 2, 0.8);
+}
+/** a black bollard with its yellow bands (Karaköy's kerbs, as the real ones: Street View), at the frame's origin */
+export function bollard(G, M) {
   const c = G.color; c.setM(M);
-  const OR = C('#e2742c'), WH = C('#f2f0ea'), L = 2.5;
-  for (const x of [-L, 0, L]) c.box(x - 0.07, 0, -0.07, x + 0.07, 1.35, 0.07, OR);
-  c.box(-L, 1.2, -0.06, L, 1.36, 0.06, OR); c.box(-L, 0.18, -0.05, L, 0.3, 0.05, OR);
-  for (const x0 of [-L, 0]) { c.rod([x0 + 0.1, 0.3, 0], [x0 + L - 0.1, 1.2, 0], 0.04, 0.04, 4, WH); c.rod([x0 + 0.1, 1.2, 0], [x0 + L - 0.1, 0.3, 0], 0.04, 0.04, 4, WH); }
+  c.cyl(0, 0, 0, 0.07, 0.065, 0.8, 8, C('#1e2022')); c.cyl(0, 0.62, 0, 0.072, 0.072, 0.08, 8, C('#e3b628')); c.cyl(0, 0.46, 0, 0.072, 0.072, 0.06, 8, C('#e3b628'));
+}
+/** the lifting span's barrier on a walkway or across the tram's reserve (step 35R, as the real ones: Street View): a red steel gate
+ *  braced with white diagonals on its posts, its housing at one end (its own frame: x along it, len long) */
+export function galBarrier(G, M, len = 5) {
+  const c = G.color; c.setM(M);
+  const RD = C('#c43a32'), WH = C('#f2f0ea'), L = len / 2, GR_ = C('#9ea4a6');
+  for (const x of [-L, 0, L]) c.box(x - 0.06, 0, -0.06, x + 0.06, 1.25, 0.06, RD);
+  c.box(-L, 1.12, -0.05, L, 1.26, 0.05, RD); c.box(-L, 0.2, -0.045, L, 0.31, 0.045, RD);
+  for (const x0 of [-L, 0]) { c.rod([x0 + 0.1, 0.31, 0], [x0 + L - 0.1, 1.12, 0], 0.035, 0.035, 5, WH); c.rod([x0 + 0.1, 1.12, 0], [x0 + L - 0.1, 0.31, 0], 0.035, 0.035, 5, RD); }
+  c.box(L + 0.1, 0, -0.3, L + 0.7, 1.45, 0.3, GR_); c.box(L + 0.05, 1.45, -0.34, L + 0.75, 1.55, 0.34, C('#c8cbcc'));
 }
 
 // ------------------------------------------------------------------ the Turkish town (W4)
@@ -2275,6 +2326,126 @@ export function townBack(G, M, r, s) {
   c.box(x0 - 0.04, H, -0.3, -x0 + 0.04, H + 0.4, 0.2, TW_CORN, null, { ny: mulC(tint, 0.85) });
   c.quad([-w / 2, H + 0.4, d], [w / 2, H + 0.4, d], [w / 2, H + 0.4, 0.2], [-w / 2, H + 0.4, 0.2], PAL.roof);
   if (r() < 0.45) { const xs = (r() - 0.5) * w * 0.5, zs = d * 0.4; c.box(xs - 1.0, H + 0.4, zs, xs + 1.0, H + 1.5, zs + 0.08, C('#2e3d5c')); c.box(xs - 1.0, H + 1.45, zs + 0.3, xs + 1.0, H + 1.85, zs + 0.7, C('#e6e6e2')); }
+}
+
+// ------------------------------------------------------------------ the real Galata zone's buildings (step 35R)
+// Karaköy's and Eminönü's blocks on their OpenStreetMap outlines (real_galata.js blk; chunks.js placeGalBlocks): plaster or stone walls
+// in the colour material (no alpha in the shadow pass), a flat roof behind a cornice; the faces towards the road with their shops (the
+// town's painted bays, rooms behind their glass) under a fascia and a stone string course, the upper floors' tall windows
+/** their plaster and stone, as Karaköy's and Eminönü's: a warm grey stone, cream, ochre, a pale pink, an off-white, a grey-blue, a
+ *  sandstone, a pale green */
+export const GAL_WALLS = ['#cfcac0', '#ece3cf', '#e5d3b0', '#e9d6cf', '#f0eee8', '#c2c7c9', '#d9cdb5', '#bcb8b0'].map(C);
+/** a front towards the road (its own frame: x along it from −w/2 to w/2, −z out to the road): kind 'block': its ground floor's
+ *  shops (bays ~3.4 m, the town's painted ones: their rooms, lit as theirs), a fascia and string course, the upper floors' windows
+ *  (lv storeys in all, the ground one 4.6 m, then 3.6 m each) in stone surrounds, a cornice under the roof */
+export function galFacade(G, M, r, w, lv, tint, shops = true) {
+  const a = G.atlas, c = G.color; a.setM(M); c.setM(M); a.world = true;
+  const nb = Math.max(1, Math.round(w / 3.4)), bw = w / nb, x0 = -w / 2, SB = 3.4, G0 = 4.6, FH = 3.6, H = G0 + (lv - 1) * FH;
+  const surround = mulC(tint, 0.82), sill = mulC(tint, 1.06);
+  if (shops) for (let i = 0; i < nb; i++) {
+    const xa = x0 + i * bw, xb = xa + bw, k = Math.floor(r() * 7);
+    if (r() < 0.12 || bw < 2.2) wq(a, xb, xa, 0, SB, -0.02, 'twBay7', W1, 24 + Math.floor(r() * 120)); // (a door now and then)
+    else { wq(a, xa, xb, 0, SB, -0.02, 'twBay' + k, TW_SHOP, 5 + roomCode(a, xa, 1.7)); a.rooms = true; lampAt(G, M, xa + bw / 2, 1.9, -0.8, 0.7); }
+  }
+  if (shops) fz(c, x0, -x0, SB, G0, -0.03, mulC(tint, 0.86)); // (the fascia)
+  c.box(x0, G0 - 0.18, -0.16, -x0, G0, 0.0, mulC(tint, 1.04)); // (the string course)
+  const cell = ['twWinA', 'twWinB', 'twWinC'][Math.floor(r() * 3)];
+  for (let f = 1; f < lv; f++) {
+    const y0 = G0 + (f - 1) * FH;
+    for (let i = 0; i < nb; i++) {
+      const xm = x0 + i * bw + bw / 2, ww = Math.min(1.3, bw - 0.7), wh = 2.1;
+      a.noShadow = true; wq(a, xm - ww / 2, xm + ww / 2, y0 + 0.75, y0 + 0.75 + wh, -0.03, cell, W1, homeLit(a, xm + y0, f)); a.noShadow = false;
+      c.noShadow = true; // (its sill and its lintel: their fronts and tops, all that shows from the street)
+      const xa = xm - ww / 2 - 0.16, xb = xm + ww / 2 + 0.16;
+      fz(c, xa, xb, y0 + 0.62, y0 + 0.75, -0.08, sill); c.quad([xa, y0 + 0.75, 0], [xb, y0 + 0.75, 0], [xb, y0 + 0.75, -0.08], [xa, y0 + 0.75, -0.08], sill);
+      fz(c, xa, xb, y0 + 0.75 + wh, y0 + 0.95 + wh, -0.1, surround); c.quad([xa, y0 + 0.95 + wh, 0], [xb, y0 + 0.95 + wh, 0], [xb, y0 + 0.95 + wh, -0.1], [xa, y0 + 0.95 + wh, -0.1], surround);
+      c.noShadow = false;
+    }
+    if (f < lv - 1) c.box(x0, y0 + FH - 0.1, -0.06, -x0, y0 + FH, 0.0, surround); // (the floors' bands)
+  }
+  c.box(x0 - 0.05, H - 0.1, -0.45, -x0 + 0.05, H + 0.3, 0.0, sill, null, { ny: mulC(tint, 0.7) }); // (the cornice)
+}
+
+/** a lead dome (step 35R: the Spice Bazaar's, a small mosque's) in the indexed GB f: its drum's foot at (x, y, z), its radius r */
+export function galDome(f, x, y, z, r) {
+  const rows = [[y, r * 1.02, r * 1.02, z, YC_ST], [y + r * 0.25, r * 1.02, r * 1.02, z, YC_ST]];
+  for (let i = 0; i <= 6; i++) { const a = (i / 6) * Math.PI / 2, rr = r * Math.cos(a); rows.push([y + r * 0.25 + r * 0.85 * Math.sin(a), rr, rr, z, YC_LD]); }
+  latheI(f, rows, Math.max(8, Math.round(r * 4)), x);
+}
+/** a small mosque's minaret (step 35R) by the corner of its building at (x, y0, z), its cone's tip at y1 */
+export function galMinaret(G, x, y0, z, y1) {
+  const f = G.fish, h = y1 - y0;
+  latheI(f, [[y0, 1.1, 1.1, z, YC_ST], [y0 + h * 0.6, 0.9, 0.9, z, YC_ST], [y0 + h * 0.6 + 0.1, 1.5, 1.5, z, YC_SH], [y0 + h * 0.6 + 0.9, 1.5, 1.5, z, YC_SH], [y0 + h * 0.6 + 1.0, 0.85, 0.85, z, YC_ST], [y0 + h * 0.86, 0.8, 0.8, z, YC_ST], [y0 + h * 0.86 + 0.1, 0.9, 0.9, z, YC_LD], [y1, 0.0, 0.0, z, YC_LD]], 10, x);
+}
+/** Yeni Cami, the New Mosque at Eminönü (step 35R, after the real one: OpenStreetMap's outline, Commons photos), in its own frame (the
+ *  outline's middle; +z from its courtyard to its prayer hall, x across): on its terrace (the shops' arcade under it), the courtyard's
+ *  outer wall with its arched windows, the porticos round the courtyard under their small lead domes and the fountain's kiosk in its
+ *  middle; the prayer hall's walls with two rows of arched windows, its cascade of lead domes (the great dome on its windowed drum, the
+ *  four half domes, the corner domes and turrets), gilded finials; the two minarets at the courtyard's far corners, each with three
+ *  balconies under its lead cone. Smooth domes and shafts (the indexed GB f, the props' colour material), the walls flat (c) */
+const YC_ST = C('#b9bcc1'), YC_SH = C('#a0a3a8'), YC_LD = C('#6e7883'), YC_GD = C('#d7b04c'), YC_WN = C('#46525e'), YC_AR = C('#b8ad99');
+const YC_FR = C('#c8ccd2'), YC_GR = C('#858c94'), YC_IN = C('#5c5a58'); // (the openings' stone frames, their iron grilles, an arcade's shade)
+export function yeniCami(G, M) {
+  const c = G.color, f = G.fish; c.setM(M); f.setM(M);
+  const T = 3.0; // (the terrace)
+  // (a lathe in the indexed GB: rows [y, r] from its foot up, at (x, z), its colour by row)
+  const lathe = (x, z, rows, sides, col) => latheI(f, rows.map(([y, r, cc]) => [y, r, r, z, cc || col]), sides, x);
+  const dome = (x, z, y0, r, h, n, col) => { const rows = []; for (let i = 0; i <= n; i++) { const a = (i / n) * Math.PI / 2; rows.push([y0 + h * Math.sin(a), r * Math.cos(a) + (i === n ? 0 : 0.0001)]); } lathe(x, z, rows, Math.max(10, Math.round(r * 5)), col); };
+  const fin = (x, z, y, k) => { lathe(x, z, [[y, 0.12 * k], [y + 0.5 * k, 0.1 * k], [y + 0.7 * k, 0.3 * k], [y + 0.95 * k, 0.05 * k], [y + 1.2 * k, 0.24 * k], [y + 1.5 * k, 0.02 * k], [y + 2.2 * k, 0.0]], 8, YC_GD); };
+  // (an arched window or arcade opening on a wall facing −z (s = −1) or +z (s = 1) at z, or −x / +x at x (ax): its pale stone frame
+  // round it, then the opening: a window's dark glass behind its iron grille (two bars up, one across), an arcade's shade inside)
+  const arch = (u, y0, w, h, at, ax, sd, arc = false) => {
+    const N = 6, P = (a, b, e) => (ax ? [at + e * sd, b, a] : [a, b, at + e * sd]);
+    const q = (p0, p1, p2, p3, col) => (sd > 0) !== ax ? c.quad(p0, p1, p2, p3, col) : c.quad(p1, p0, p3, p2, col);
+    const shape = (R, yb, ys, e, col) => {
+      q(P(u - R, yb, e), P(u + R, yb, e), P(u + R, ys, e), P(u - R, ys, e), col);
+      for (let k = 0; k < N; k++) { const t0 = Math.PI - (k / N) * Math.PI, t1 = Math.PI - ((k + 1) / N) * Math.PI; q(P(u, ys, e), P(u + R * Math.cos(t1), ys + R * Math.sin(t1), e), P(u + R * Math.cos(t0), ys + R * Math.sin(t0), e), P(u + R * Math.cos(t0), ys + R * Math.sin(t0), e), col); }
+    };
+    const R = w / 2, ys = y0 + h - R, F = Math.min(0.32, w * 0.14);
+    shape(R + F, y0 - F * 0.6, ys, 0.03, YC_FR); shape(R, y0, ys, 0.06, arc ? YC_IN : YC_WN);
+    if (!arc) { const b = 0.085, g = 0.05; for (const x of [u - R / 3, u + R / 3]) q(P(x - g, y0, b), P(x + g, y0, b), P(x + g, ys + R * 0.75, b), P(x - g, ys + R * 0.75, b), YC_GR);
+      q(P(u - R, ys - 0.05, b), P(u + R, ys - 0.05, b), P(u + R, ys + 0.05, b), P(u - R, ys + 0.05, b), YC_GR); }
+  };
+  // the terrace under it all (its arcade of shops: dark arches), the courtyard (z −39 … 0) and the prayer hall (0 … 41)
+  c.box(-21.5, -1.0, -40, 21.5, T, 42, YC_SH);
+  for (let x = -19; x <= 19; x += 3.8) { arch(x, 0.2, 2.6, 2.6, -40.01, false, -1, true); }
+  for (let z = -37; z <= 39; z += 3.8) { arch(z, 0.2, 2.6, 2.6, -21.51, true, -1, true); arch(z, 0.2, 2.6, 2.6, 21.51, true, 1, true); }
+  // the courtyard's outer wall (9 m) and its arched windows; its porticos inside under their small domes; the fountain's kiosk
+  const CW = 9;
+  c.box(-19.5, T, -39, -18.6, T + CW, 0, YC_ST); c.box(18.6, T, -39, 19.5, T + CW, 0, YC_ST); c.box(-19.5, T, -39, 19.5, T + CW, -38.1, YC_ST);
+  for (let x = -16; x <= 16; x += 4) arch(x, T + 2.0, 1.6, 3.4, -39.01, false, -1);
+  for (let z = -35; z <= -4; z += 4) { arch(z, T + 2.0, 1.6, 3.4, -19.51, true, -1); arch(z, T + 2.0, 1.6, 3.4, 19.51, true, 1); }
+  c.box(-19.6, T + CW, -39.1, 19.6, T + CW + 0.4, -38.0, YC_SH); c.box(-19.6, T + CW, -39.1, -18.5, T + CW + 0.4, 0, YC_SH); c.box(18.5, T + CW, -39.1, 19.6, T + CW + 0.4, 0, YC_SH);
+  for (let x = -16; x <= 16; x += 5.4) { dome(x, -35.6, T + CW + 0.4, 2.3, 2.0, 5, YC_LD); fin(x, -35.6, T + CW + 2.4, 0.5); }
+  for (let z = -30.2; z <= -4; z += 5.4) for (const x of [-16.1, 16.1]) { dome(x, z, T + CW + 0.4, 2.3, 2.0, 5, YC_LD); fin(x, z, T + CW + 2.4, 0.5); }
+  c.box(-18.6, T, -39, 18.6, T + 0.15, 0, C('#cfc6b4')); // (its paving)
+  lathe(0, -19.5, [[T, 3.2], [T + 2.6, 3.2], [T + 2.7, 3.6], [T + 3.0, 3.6], [T + 3.1, 2.6]], 8, YC_ST); dome(0, -19.5, T + 3.1, 2.6, 2.2, 5, YC_LD); fin(0, -19.5, T + 5.3, 0.5);
+  // the prayer hall: its walls (17 m over the terrace) with two rows of arched windows, a cornice
+  const HW = 17;
+  c.box(-20.5, T, 0, 20.5, T + HW, 41, YC_ST);
+  c.box(-20.9, T + HW - 0.6, -0.4, 20.9, T + HW, 41.4, YC_SH);
+  for (let k = -3; k <= 3; k++) { const u = k * 5.2; for (const y of [T + 3.5, T + 9.5]) { arch(u, y, 1.6, 3.6, -0.01, false, -1); arch(u + 20.5, y, 1.6, 3.6, -20.51, true, -1); arch(u + 20.5, y, 1.6, 3.6, 20.51, true, 1); } }
+  // its domes: the corner domes and their turrets, the four half domes, the great dome on its drum, the finials
+  const cx = 0, cz = 20.5, Y = T + HW;
+  for (const [x, z] of [[-15, 5.5], [15, 5.5], [-15, 35.5], [15, 35.5]]) { lathe(x, z, [[Y, 3.6], [Y + 1.2, 3.6]], 12, YC_ST); dome(x, z, Y + 1.2, 3.6, 3.2, 6, YC_LD); fin(x, z, Y + 4.4, 0.7); }
+  for (const [x, z] of [[-20.5, 0], [20.5, 0], [-20.5, 41], [20.5, 41]]) { c.box(x - 1.3, Y, z - 1.3, x + 1.3, Y + 3.2, z + 1.3, YC_ST); lathe(x, z, [[Y + 3.2, 1.0], [Y + 3.6, 1.0]], 8, YC_ST); dome(x, z, Y + 3.6, 1.0, 1.2, 4, YC_LD); }
+  for (const [dx, dz] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) { // (the half domes: a quarter sphere each, against the great dome's drum)
+    const R = 8.4, ox = cx + dx * 8.6, oz = cz + dz * 8.6, rows = [], N = 6, S = 14;
+    for (let i = 0; i <= N; i++) { const a = (i / N) * Math.PI / 2, row = []; for (let j = 0; j <= S; j++) { const t = (j / S) * Math.PI - Math.PI / 2, r = R * Math.cos(a); const ux = Math.cos(t), uz = Math.sin(t); row.push([ox + (dx * ux - dz * uz) * r, Y + 0.6 + R * 0.9 * Math.sin(a), oz + (dz * ux + dx * uz) * r]); } rows.push(row); }
+    gridI(f, rows, null, () => YC_LD, false);
+  }
+  lathe(cx, cz, [[Y, 9.4], [Y + 6.0, 9.4], [Y + 6.1, 9.8], [Y + 6.5, 9.8], [Y + 6.6, 9.2], [Y + 9.0, 9.2]], 28, YC_ST);
+  for (let k = 0; k < 16; k++) { const a = (k / 16) * Math.PI * 2, x = cx + Math.cos(a) * 9.23, z = cz + Math.sin(a) * 9.23, wx = Math.cos(a), wz = Math.sin(a), R = 0.55, y0 = Y + 6.8, h = 1.8; // (the drum's windows)
+    c.quad([x - wz * R, y0, z + wx * R], [x + wz * R, y0, z - wx * R], [x + wz * R, y0 + h, z - wx * R], [x - wz * R, y0 + h, z + wx * R], YC_WN); }
+  dome(cx, cz, Y + 9.0, 9.2, 8.6, 9, YC_LD); fin(cx, cz, Y + 17.6, 1.6);
+  // the two minarets at the courtyard's far corners: a square foot, the fluted shaft, three balconies, the lead cone, the finial
+  for (const x of [-19.0, 19.0]) {
+    const z = -38.5, y0 = T; c.box(x - 2.1, y0, z - 2.1, x + 2.1, y0 + CW + 1.5, z + 2.1, YC_ST);
+    const rows = [[y0 + CW + 1.5, 1.75], [y0 + CW + 2.5, 1.45], [y0 + 27, 1.32], [y0 + 27.2, 2.25, YC_SH], [y0 + 28.4, 2.25, YC_SH], [y0 + 28.6, 1.25], [y0 + 38, 1.18], [y0 + 38.2, 2.1, YC_SH], [y0 + 39.4, 2.1, YC_SH], [y0 + 39.6, 1.12], [y0 + 48, 1.05], [y0 + 48.2, 1.95, YC_SH], [y0 + 49.4, 1.95, YC_SH], [y0 + 49.6, 1.0], [y0 + 54.5, 0.95], [y0 + 54.6, 1.1, YC_LD], [y0 + 62.5, 0.0, YC_LD]];
+    lathe(x, z, rows, 14, YC_ST); fin(x, z, y0 + 62.3, 1.0);
+  }
+  // (the lamps of its courtyard and arcade, lit at night)
+  lampAt(G, M, 0, T + 3, -19.5, 1.0); lampAt(G, M, 0, T + 2, -41, 1.0);
 }
 
 // ------------------------------------------------------------------ Cappadocia (W5)

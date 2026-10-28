@@ -1,5 +1,6 @@
 // The infinite road: a centre-line integrated from smooth curvature noise, plus the zone schedule.
 import { clamp, lerp, smooth, sstep, noise1, fbm1, hash2 } from './util.js';
+import { GR } from './real_galata.js'; // (step 35R: the real Galata zone, from its approved route and OpenStreetMap)
 
 // ---- the world's route: regions of zones, ZONE_LEN each, driven in order and round again
 // Japan's six zones (as they always were), then through the border tunnel into Turkey, then back through another border
@@ -39,10 +40,12 @@ export const ZINFO = {
   // strait on the left behind a stone sea wall and an iron railing, the Asian shore's hills across it, the wooden houses
   // up the slope on the right. It winds gently with the shore and runs ~1.4 m above the water
   bosphorus: { loc: 'Boğaziçi', en: 'Bosphorus · Arnavutköy', curv: 1 / 420, hill: 0.3, base: 1.4, rw: 3.3, speed: 11.5 },
-  // Istanbul: the Galata Bridge (W3), from Karaköy over the Golden Horn towards Eminönü: straight and level, its deck ~6 m over
-  // the water (its base), our carriageway's two lanes between a walkway on the left (the fishermen at its railing) and the
-  // tram line's reserve on the right (the T1 runs down the middle of the bridge), the old city's domes and minarets ahead
-  galata:  { loc: 'Galata Köprüsü', en: 'Galata Bridge · Karaköy → Eminönü', curv: 0, hill: 0, base: 6.2, rw: 3.3, speed: 11 },
+  // Istanbul: the Galata Bridge as it really is (step 35R; W3 was its concept painting's): its approved route, Karaköy's
+  // Kemeraltı Caddesi, the bridge's southbound carriageway over the Golden Horn, Eminönü and Reşadiye Caddesi towards Sirkeci,
+  // its bends the real road's (path.js galK: the curv here is 0) and its width the real road's (galRW: the rw here is the
+  // hand-overs'), level at the bridge's deck ~6 m over the water (its base); keeping right, the west walkway and its fishermen
+  // on our right, the T1 tram's reserve on our left (real: the zone's places are OpenStreetMap's)
+  galata:  { loc: 'Galata Köprüsü', en: 'Galata Bridge · Karaköy → Eminönü → Sirkeci', curv: 0, hill: 0, base: 6.2, rw: 3.4, speed: 11, real: true },
   // a typical Turkish town (W4), its concept painting (ref/world/turkish_town.png) after a real street (Eskişehir's İnönü
   // Caddesi): a straight high street, two lanes between wide pavements, five- to seven-storey apartment blocks over a row of
   // shops either side, plane trees, a mosque closing the far end. Straight and nearly level (its base the bridge's deck: the
@@ -69,21 +72,59 @@ export const B_TRANS = 150;
 /** the zones whose shore is the sea's (the painted sea, the water along the wall, the sea wall: sea.js, chunks.js; the Galata
  *  Bridge's water on both sides) */
 export const SEA_ZONES = ['coast', 'bosphorus', 'galata'];
-/** the Galata Bridge (W3): its deck's right-hand edge (m from the road's middle: the far carriageway's kerb), how far the
- *  left-hand walkway reaches past our carriageway (its railing at rw + GAL_WALK − 0.15, then the deck's edge), and the narrow
- *  kerb strip on the right (the tram line's railing at rw + GAL_KERB − 0.1, as the concept has it right by the road) */
-export const GAL_R = 18, GAL_WALK = 2.65, GAL_KERB = 0.7;
-/** the Turkish town (W4): its pavements' width (the frontage stands at rw + TOWN_SW + 0.15); and the Galata Bridge's landing,
- *  TOWN_LAND metres into the bridge's hand-over to the town (its blend's middle: the bridge's things end where its weight falls
- *  under a half, chunks.js galOn, and the town's begin): there the bridge's deck meets the quay, its water ends in a quay wall
- *  on either side and the street begins (path.js groundOffsetMix, chunks.js gw) */
-export const TOWN_SW = 4.4, TOWN_LAND = TRANS / 2;
-/** where the Galata Bridge lands in the town at s: { s: the landing } in the bridge's hand-over to the town, else null */
-export function townLanding(s) {
+/** the real Galata Bridge (step 35R), its cross-section as OpenStreetMap has it (m from our carriageway's middle; keeping right):
+ *  the west walkway on our right, GAL_WALK wide from our kerb (its railing at its outer edge); on our left the strip of slabs by
+ *  the tram line's fence (GAL_KERB), the T1's reserve (its tracks: GR.tram), the second fence, the northbound carriageway and the
+ *  east walkway, the deck's left edge GAL_L from our middle. GAL_BR: the upper deck's ends (m into the zone) */
+export const GAL_WALK = 6.0, GAL_KERB = 0.7, GAL_L = 29.5, GAL_BR = GR.bridge;
+/** the Turkish town (W4): its pavements' width (the frontage stands at rw + TOWN_SW + 0.15) */
+export const TOWN_SW = 4.4;
+/** where the Galata Bridge landed in the town (W4): the real zone (step 35R) ends on land, Reşadiye Caddesi's, so never */
+export function townLanding() { return null; }
+/** m into the Galata zone at s: its own, or the next one's (negative: in the hand-over before it), else NaN */
+export function galL(s) {
   const z = Math.floor(s / ZONE_LEN), l = s - z * ZONE_LEN;
-  if (l < ZONE_LEN - TRANS - 1 || zkey(z) !== 'galata' || zkey(z + 1) !== 'town') return null;
-  return { s: z * ZONE_LEN + ZONE_LEN - TRANS + TOWN_LAND };
+  if (zkey(z) === 'galata') return l;
+  if (zkey(z + 1) === 'galata') return l - ZONE_LEN;
+  return NaN;
 }
+/** on the real bridge's upper deck, l m into the Galata zone */
+export const galBridge = l => l >= GR.bridge[0] && l <= GR.bridge[1];
+/** the road's half-width l m into the Galata zone: Kemeraltı Caddesi's two lanes, widening to the bridge's three over Karaköy's
+ *  square (OSM: lanes 2, then 3 from ~520 m), three on over the bridge and round through Eminönü (the hand-overs blend it) */
+export const galRW = l => (l < 430 ? 3.4 : l < 560 ? 3.4 + 1.85 * smooth((l - 430) / 130) : 5.25);
+/** the real road's curvature (game sign: + turns left) l m into the zone, per 2 m step (path.js Path.ensure takes the step's
+ *  middle: the steps integrate to the real road's headings exactly; real_galata.js) */
+const galK = l => (l >= 0 && l < ZONE_LEN ? GR.k[Math.min(GR.k.length - 1, Math.floor(l / 2))] : 0);
+/** the zone's frame (real_galata.js): the real places are E', N' metres from its start in its own compass, which the road there
+ *  heads along at GR.b0; in the world x = x0 + sin(h0)·N − cos(h0)·E, z = z0 + cos(h0)·N + sin(h0)·E with h0 its heading + b0.
+ *  galFrame(zs): { x, z, s, c } (sin and cos of h0) for the zone starting at zs (cached per zone) */
+const GFR = new Map(), B0 = (GR.b0 * Math.PI) / 180;
+let GPATH = null;
+export function galFrame(zs) {
+  let F = GFR.get(zs); if (F) return F;
+  const f = GPATH.at(zs, {}), h0 = f.h + B0;
+  F = { x: f.x, z: f.z, s: Math.sin(h0), c: Math.cos(h0) }; GFR.set(zs, F); if (GFR.size > 8) GFR.delete(GFR.keys().next().value);
+  return F;
+}
+/** a real place (E', N') into the world (out: [x, z]) for the zone starting at zs */
+export function galWorld(zs, E, N, out) { const F = galFrame(zs); out[0] = F.x + F.s * N - F.c * E; out[1] = F.z + F.c * N + F.s * E; return out; }
+// the water (real_galata.js land: 2 m cells, rows from the south, run lengths from land)
+const GW = (() => {
+  const L = GR.land, m = new Uint8Array(L.nx * L.ny), rows = L.rle.split(';');
+  for (let i = 0; i < rows.length; i++) { let j = i * L.nx, w = 0; for (const t of rows[i].split(',')) { const n = parseInt(t, 36); if (w) m.fill(1, j, j + n); j += n; w ^= 1; } }
+  return m;
+})();
+const _gw = {};
+/** the Golden Horn's water (or the Bosphorus's) at the world's (x, z) for the Galata zone starting at zs: the real shore (the point into
+ *  the zone's frame and its raster); off the raster, land */
+export function galWaterXZ(zs, x, z) {
+  const F = galFrame(zs), dx = x - F.x, dz = z - F.z, N = F.s * dx + F.c * dz, E = -F.c * dx + F.s * dz, L = GR.land;
+  const i = Math.floor((N - L.n0) / L.cs), j = Math.floor((E - L.e0) / L.cs);
+  return i >= 0 && j >= 0 && i < L.ny && j < L.nx && GW[i * L.nx + j] === 1;
+}
+/** …and at (s, u) in the Galata zone, l its own m */
+export function galWater(s, u, l) { GPATH.at(s, _gw); return galWaterXZ(s - l, _gw.x + _gw.rx * u, _gw.z + _gw.rz * u); }
 
 let START = 0;
 /** where the drive starts: a zone's key (an unknown key: Japan's first; a planned one: its region's first built zone) */
@@ -123,7 +164,12 @@ export function trafficSide(s) {
   const m = zoneMix(s), a = SIDE[REGION[m.a]], b = SIDE[REGION[m.b]];
   return a === b ? a : lerp(a, b, m.t);
 }
-export function zparam(s, key) { const m = zoneMix(s); return lerp(ZINFO[m.a][key], ZINFO[m.b][key], m.t); }
+export function zparam(s, key) {
+  const m = zoneMix(s);
+  // (the real Galata zone's width, step 35R: its own by where on its road; the hand-overs blend it with the neighbours')
+  if (key === 'rw' && (m.a === 'galata' || m.b === 'galata')) { const g = galRW(galL(s)); return lerp(m.a === 'galata' ? g : ZINFO[m.a].rw, m.b === 'galata' ? g : ZINFO[m.b].rw, m.t); }
+  return lerp(ZINFO[m.a][key], ZINFO[m.b][key], m.t);
+}
 /** the zones seen `ahead` metres on from s (the far horizon's: painted.js band), except round a border: there the camera's
  *  own, so the next region's horizon only takes over while the camera is inside the border tunnel */
 export function viewMix(s, ahead) {
@@ -237,11 +283,14 @@ export const tubeHalf = rw => rw + 1.4;
 const STEP = 2;
 export class Path {
   // (I: the heading's running integral, ∫₀ˢ H, for meanHeading)
-  constructor() { this.X = [0]; this.Z = [0]; this.H = [0.3]; this.I = [0]; this.Y = [this.elev(0)]; }
+  constructor() { this.X = [0]; this.Z = [0]; this.H = [0.3]; this.I = [0]; this.Y = [this.elev(0)]; GPATH = this; } // (GPATH: the real Galata zone's frame, galFrame)
   curv(s) {
     const v = (noise1(s / 300, 11) - 0.5) * 2 + (noise1(s / 95, 17) - 0.5) * 0.35;
     const a = Math.abs(v), c = a < 0.22 ? 0 : Math.sign(v) * (a - 0.22) / 0.78;
-    return c * zparam(s, 'curv') * (1 - Math.max(crossingW(s), riverW(s), tunnelW(s)));
+    // (the real Galata zone's own bends, step 35R, by its weight: its real road from its start (none in the Bosphorus's hand-over before
+    // it: that one's sea keeps its roll, sea.js coastDir); the hand-over after it to the town bends them out)
+    const g = galL(s), wg = g >= 0 ? zoneWeight(s, 'galata') : 0;
+    return c * zparam(s, 'curv') * (1 - Math.max(crossingW(s), riverW(s), tunnelW(s))) + (wg > 0 ? wg * galK(g) : 0);
   }
   elevRaw(s) { return zparam(s, 'base') + zparam(s, 'hill') * (fbm1(s / 380, 29) - 0.5) * 2; }
   elev(s) {
@@ -411,11 +460,19 @@ export function groundOffset(zone, s, u, e, rw) {
       // plots, paved a little higher, as the city's
       return a < rw + TOWN_SW + 0.05 ? -0.06 : 0.14;
     case 'galata': {
-      // the Galata Bridge (W3): its deck at the road's level, from the walkway's outer edge on the left (rw + GAL_WALK: its
-      // slabs a kerb higher, chunks.js) to the far carriageway's kerb on the right (GAL_R); beyond either edge the deck's face
-      // drops into the Golden Horn, the bed shelving off under the water as the coast's (absolute heights: the water at 0)
-      if (a <= (u < 0 ? rw + GAL_WALK : GAL_R) + 0.01) return -0.06;
-      return SEA_FOOT - Math.min(a - (u < 0 ? rw + GAL_WALK : GAL_R), 40) * 0.13 - e;
+      // the real Galata zone (step 35R). On the bridge (its real 460 m) its deck at the road's level, from the east walkway's outer
+      // edge on the left (GAL_L) to the west walkway's on the right (rw + GAL_WALK: its slabs a kerb higher, chunks.js); beyond
+      // either edge the deck's face drops into the Golden Horn, the bed shelving off under the water as the coast's (absolute heights:
+      // the water at 0). Off it the land at the road's level (Karaköy, Eminönü: their streets' strips and pavements on it, chunks.js)
+      // and the water where the real shore has it (galWater); in the hand-over before the zone a waterfront 24 m off on the left
+      const l = galL(s);
+      if (galBridge(l)) {
+        const ed = u > 0 ? rw + GAL_WALK : GAL_L;
+        if (a <= ed + 0.01) return -0.06;
+        return SEA_FOOT - Math.min(a - ed, 40) * 0.13 - e;
+      }
+      if (l < 0 ? u < -24 : a > rw + 0.5 && galWater(s, u, l)) return SEA_FOOT - 1.5 - e;
+      return -0.06;
     }
     case 'mountain': {
       if (u > 0) { // uphill: gutter, then a concrete-framed slope face (法面), then the forest slope
@@ -498,17 +555,9 @@ export function groundOffsetMix(s, u, e, rw) {
   const tuffA = CAPPA.includes(m.a) ? TUFF : 0; // (Cappadocia's, W5, W6)
   let base = m.t > 0 ? lerp(a, groundOffset(m.b, s, u, e, rw), tm) : a;
   TUFF = m.t > 0 ? lerp(tuffA, CAPPA.includes(m.b) ? TUFF : 0, tm) : tuffA;
-  // (the shore road onto the Galata Bridge, W3: at Karaköy the bridge leaves the land, so beyond its deck the hill on the right
-  // turns away from the road, its foot (a quay) running off over the water at ~50° from the road, past the ground's far edge by
-  // the bridge's first metre; it starts where the Bosphorus's houses and trees end (their weight 0.6, 112 m into the hand-over:
-  // chunks.js), not sinking into the water)
-  if (u > GAL_R + 0.2 && m.a === 'bosphorus' && m.b === 'galata' && m.t > 0) {
-    const sh = Math.max(0, s - Math.floor(s / ZONE_LEN) * ZONE_LEN - (ZONE_LEN - TRANS) - 112) * 1.3;
-    base = u - sh > 8.3 ? groundOffset('bosphorus', s, u - sh, e, rw) : groundOffset('galata', s, u, e, rw);
-  }
-  // (the Galata Bridge's landing in the town, W4: the bridge's deck and the water either side up to it, the town's street and
-  // its plots from it, the quay wall's face between (chunks.js lays a pair of the ground's rows either side of it))
-  if (m.a === 'galata' && m.b === 'town' && m.t > 0) { const tl = townLanding(s); if (tl) base = groundOffset(s < tl.s ? 'galata' : 'town', s, u, e, rw); }
+  // (the shore road into Karaköy, step 35R: the Bosphorus's hill blends into Karaköy's street; W3's hill turning away from the bridge
+  // as a quay went with the concept's bridge)
+
   RAISE = 0;
   const r = riverNear(s);
   if (r) {

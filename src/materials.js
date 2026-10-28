@@ -398,7 +398,16 @@ vec3 roadCol(float s, float u, float rw){
   if (wR > 0.004) gRoadT = mix(vec3(1.0), mix(uRoadN, uRoadF, smoothstep(3.0, 22.0, distance(vWP, cameraPosition))), wR);
 #endif
   paint += step(abs(a - (rw - 0.28)), 0.07);
+#ifdef Z_GAL
+  // (the real Galata zone's lanes, step 35R: the lane lines between as many 3.4 m lanes as its width holds, two along Kemeraltı Caddesi,
+  // three over the bridge and through Eminönü; the northbound carriageway's about its own middle: chunks.js. Every other zone's
+  // programs keep their line as it was, below)
+  float ca = a;
+  if (vZW.y > 0.5) { float nl = max(2.0, floor(rw / 1.7 + 0.5)), lw = 2.0 * rw / nl; ca = a > rw - 0.6 ? 9.0 : abs(fract((u + rw) / lw + 0.5) - 0.5) * lw; }
+  paint += (1.0 - step(0.5, mtn)) * step(ca, 0.07) * step(fract(s/10.0), 0.55);
+#else
   paint += (1.0 - step(0.5, mtn)) * step(a, 0.07) * step(fract(s/10.0), 0.55); // (the dashed centre line: in the city too, as in its painting)
+#endif
   float cs = mod(s, 150.0);
 #ifdef Z_CITY
   // (only at the signalised crossings, every 4th opening: chunks.js bigX. The alleys between have no markings)
@@ -669,54 +678,46 @@ vec3 bosGround(float s, float u, float rw){
 }
 #endif
 #ifdef Z_GAL
-// the Galata Bridge (W3), as its concept painting has it (drawn in the cherry avenue's weight channel: the two never meet).
-// Its deck: under the walkway's and the kerb strip's slabs (chunks.js) plain concrete; on the right, past the tram line's
-// railing, its reserve (two tracks of rusty rails let into grey concrete slabs, the space between each track's rails a little
-// darker), the second railing's footing, the far carriageway (the road's own paint, its own lanes) and its kerb. Beyond either
-// edge the deck's face down to the water: the edge girder's grey-blue band, under it the lower level's arcade (piers and dark
-// openings), wet at the water; under the water, nothing to see (the sea draws over it). Where the shore road hands over to it,
-// the hill turning away beyond the deck: its quay wall and grass (path.js groundOffsetMix)
+// the real Galata zone (step 35R; drawn in the cherry avenue's weight channel: the two never meet). Its ground: on the bridge the
+// deck's plain concrete (under its walkways' and its tram line's slabs: chunks.js), off it Karaköy's and Eminönü's grey granite
+// paving at the road's level; the faces: the deck's (the edge girder's grey-blue band, under it the lower deck's arcade of piers and
+// dark openings) where the deck ends (its walkways' outer edges), elsewhere the quays' dressed stone in courses, dark and wet down by
+// the water; under the water, nothing to see (the sea draws over it). In the hand-over from the Bosphorus its meadow
 float galRail(float d, float fw){ return crackLine(d, 0.036, fw); }
 vec3 galGround(float s, float u, float rw){
-  vec2 p = vec2(s, u); float a = abs(u), edge = u < 0.0 ? rw + 2.65 : 18.0;
-  if (a > edge + 0.6) {
-    if (vWY < 0.0) return L(vec3(0.35, 0.36, 0.33));
-    if (vWN.y < 0.6) return L(vec3(0.68, 0.65, 0.6)) * (0.7 + 0.3 * smoothstep(0.0, 2.0, vWY)) * (0.9 + 0.1 * vnoise(p * vec2(0.4, 2.0)));
-#if defined(Z_BOS) && defined(F_PAINT)
-    return fieldTex(1.25) * uFieldBo;
-#else
-    return grassCol(p, L(vec3(0.31, 0.60, 0.25)), L(vec3(0.52, 0.79, 0.32)));
-#endif
-  }
+  vec2 p = vec2(s, u); float a = abs(u);
+  if (vWY < 0.0) return L(vec3(0.35, 0.36, 0.33));
   if (vWN.y < 0.6) {
-    if (vWY > 5.05) return L(vec3(0.5, 0.55, 0.6)) * (0.88 + 0.12 * vnoise(p * vec2(0.5, 4.0))) * (1.0 - 0.25 * step(fract(s / 2.6), 0.04));
-    if (vWY > 0.35) {
-      float q = fract(s / 5.2), pier = step(q, 0.2) + step(4.6, vWY);
-      return mix(L(vec3(0.15, 0.16, 0.19)), L(vec3(0.66, 0.64, 0.6)) * (0.85 + 0.15 * vnoise(p * 1.3)), clamp(pier, 0.0, 1.0));
+    if (abs(u - rw - 6.0) < 0.6 || abs(u + 29.5) < 0.6) { // (the deck's)
+      if (vWY > 5.05) return L(vec3(0.5, 0.55, 0.6)) * (0.88 + 0.12 * vnoise(p * vec2(0.5, 4.0))) * (1.0 - 0.25 * step(fract(s / 2.6), 0.04));
+      if (vWY > 0.35) { float q = fract(s / 5.2), pier = step(q, 0.2) + step(4.6, vWY); return mix(L(vec3(0.15, 0.16, 0.19)), L(vec3(0.66, 0.64, 0.6)) * (0.85 + 0.15 * vnoise(p * 1.3)), clamp(pier, 0.0, 1.0)); }
+      return L(vec3(0.28, 0.3, 0.29));
     }
-    return L(vec3(0.28, 0.3, 0.29));
+    float cr = floor(vWY / 0.6), q = s / 1.3 + 0.5 * cr;
+    vec3 c = mix(L(vec3(0.70, 0.67, 0.61)), L(vec3(0.60, 0.58, 0.54)), hash12(vec2(floor(q), cr))) * (1.0 - 0.25 * max(step(fract(q), 0.03), step(fract(vWY / 0.6), 0.07)));
+    return c * (0.55 + 0.45 * smoothstep(0.1, 1.4, vWY));
   }
-  if (u < 0.0 || a < rw + 0.7) return L(vec3(0.7, 0.7, 0.68));
-  if (a < 11.4) {
-    // the tram line's reserve: slabs 1.5 m long, the rails' heads ~7 cm wide (a rusty brown, their running surface a worn
-    // steel), each with its groove beside it
-    vec2 t = vec2(s / 1.5, (a - rw - 0.7) / 1.7), f = fract(t);
-    vec3 c = mix(L(vec3(0.5, 0.42, 0.38)), L(vec3(0.43, 0.37, 0.34)), hash12(floor(t) + 9.0)) * (1.0 - 0.14 * max(step(f.x, 0.02), step(f.y, 0.03))); // (the concept's rust-brown bed)
-    float fw = fwidth(a) + 0.3 * fwidth(s), rails = 0.0, run = 0.0, inner = 0.0;
-    for (int k = 0; k < 2; k++) {
-      float tc = k == 0 ? 6.3 : 9.7, dc = a - tc;
-      inner += 1.0 - smoothstep(0.62, 0.7, abs(dc));
-      rails += galRail(abs(dc) - 0.7175, fw);
-      run += crackLine(abs(dc) - 0.7175 + 0.012, 0.014, fw);
-      rails += 0.6 * crackLine(abs(dc) - 0.66, 0.02, fw);
-    }
-    c *= 1.0 - 0.1 * inner;
-    c = mix(c, L(vec3(0.33, 0.22, 0.16)), clamp(rails, 0.0, 1.0));
-    return mix(c, L(vec3(0.74, 0.7, 0.66)), clamp(run, 0.0, 1.0) * 0.8);
+#if defined(Z_BOS) && defined(F_PAINT)
+  if (vZW.z > 0.02) return fieldTex(1.25) * uFieldBo; // (the hand-over's: the Bosphorus's meadow)
+#endif
+  vec2 t = p / 1.1, f = fract(t);
+  vec3 c = mix(L(vec3(0.71, 0.69, 0.65)), L(vec3(0.62, 0.61, 0.58)), 0.6 * hash12(floor(t) + 7.0) + 0.4 * fbm2(p * 0.3));
+  return c * (1.0 - 0.13 * max(step(f.x, 0.035), step(f.y, 0.035))) * (0.92 + 0.1 * vnoise(p * 3.0));
+}
+// the T1's reserve (step 35R, chunks.js kind 11): u from the reserve's middle, |rw| the half spacing of its two tracks (rw < 0 off
+// the bridge): on the bridge grey concrete slabs, along Kemeraltı Caddesi and through Eminönü red-brown setts, as the real ones; the
+// rails' heads let in, worn bright along their tops, a groove beside each
+vec3 galTramBed(float s, float u, float rw){
+  float h = abs(rw); vec3 c;
+  if (rw > 0.0) { vec2 t = vec2(s / 1.5, u / 1.7), f = fract(t); c = mix(L(vec3(0.58, 0.57, 0.55)), L(vec3(0.5, 0.5, 0.49)), hash12(floor(t) + 9.0)) * (1.0 - 0.14 * max(step(f.x, 0.02), step(f.y, 0.03))); }
+  else { vec2 t = vec2(s / 0.24 + 0.5 * floor(u / 0.15), u / 0.15), f = fract(t); c = mix(L(vec3(0.56, 0.37, 0.31)), L(vec3(0.46, 0.31, 0.27)), hash12(floor(t) + 3.0)) * (1.0 - 0.2 * max(step(f.x, 0.07), step(f.y, 0.09))); }
+  float fw = fwidth(u) + 0.3 * fwidth(s), rails = 0.0, run = 0.0;
+  for (int k = 0; k < 2; k++) {
+    float dc = abs(u - (k == 0 ? h : -h));
+    rails += galRail(dc - 0.7175, fw); run += crackLine(dc - 0.7175 + 0.012, 0.014, fw); rails += 0.6 * crackLine(dc - 0.66, 0.02, fw);
   }
-  if (a < 11.75) return L(vec3(0.76, 0.75, 0.72));
-  if (a < edge - 0.55) return roadCol(s, a - (11.75 + edge - 0.55) * 0.5, (edge - 0.55 - 11.75) * 0.5);
-  return L(vec3(0.74, 0.74, 0.72)) * (0.9 + 0.1 * fbm2(p));
+  c = mix(c, L(vec3(0.27, 0.26, 0.26)), clamp(rails, 0.0, 1.0));
+  return mix(c, L(vec3(0.75, 0.73, 0.71)), clamp(run, 0.0, 1.0) * 0.8) * (0.93 + 0.1 * fbm2(vec2(s, u) * 0.8));
 }
 #endif
 #ifdef Z_UCH
@@ -856,6 +857,9 @@ vec3 groundAlbedo(){
 #endif
 #ifdef K_RIVER
   if (kind > 8.5) return L(vec3(0.78, 0.72, 0.6)) * (0.86 + 0.18 * vnoise(vec2(s, u) * 3.0));   // levee-top path
+#endif
+#ifdef Z_GAL
+  if (kind > 10.5 && kind < 11.5) return galTramBed(s, u, rw) * uNtRoad; // (the real Galata zone's T1 reserve, step 35R)
 #endif
   if (kind > 6.5) return L(vec3(0.95, 0.95, 0.92)) * (0.82 + 0.18 * vnoise(vec2(s, u) * 6.0));
   vec3 c = vec3(0.0);

@@ -1,11 +1,12 @@
 import * as THREE from 'three';
-import { Path, zoneW, zoneWeight, zoneAt, zparam, ZINFO, setStartZone, startZone, zoneSets, trafficSide, seaWeight, regionWeight, viewMix, bandMix, bayQ, borderNear, nextBorderS, REGION, crossingS, crossingValid, XING, XOFF, riverNear, RIV, ROFF, groundOffsetMix, tunnelNear, T_HALF, T_RIDGE, ZONE_LEN } from './path.js';
+import { Path, zoneW, zoneWeight, zoneAt, zparam, ZINFO, setStartZone, startZone, zoneSets, trafficSide, seaWeight, regionWeight, viewMix, bandMix, bayQ, borderNear, nextBorderS, REGION, crossingS, crossingValid, XING, XOFF, riverNear, RIV, ROFF, groundOffsetMix, tunnelNear, T_HALF, T_RIDGE, ZONE_LEN, GAL_BR } from './path.js';
 import { makeCrossingRig, makeTrain, xingPosts } from './crossing.js';
 import { buildAtlas, buildFoliage, buildPaintedAtlas, buildWorldAtlas, buildCapAtlas, buildPasAtlas, buildChainAtlas, albedoTexture, SHOP_GLASS, stickerHolesJ } from './textures.js';
 import { GRAD_CAR, trainRamp, makeMaterials, makeAtlasW, makeAtlasRooms, makeAtlasWRooms, makeChainRooms, roomSet, makeAtlasChain, makeCapAtlas, makePasGrass, setWorldTex, U, groundMaterialFor, setGrazeFade, makeCloudMap, makeGhibliLeaf, FIELD, tetraMaterial, barkMaterial, tuffMaterial, PROP_DEPTH } from './materials.js';
 import { setAtlas, setFoliage, warmTrees, warmBare, warmTetrapods, setLeafDensity, GHIBLI, setHouses, setTrHouses, setChains, PROC_ROOMS, setFishers, setDolmus } from './props.js';
 import { loadTreeAtlas } from './ghibli.js';
 import { World, CH } from './chunks.js';
+import { loadRealSky, makeRealSky } from './realsky.js';
 import { makeSky, paintClouds, makeClouds, makeMountains, updateTOD, applyWeather, TOD, lightDirAt, KEYS, REGION_KEYS, sunBearing, moonSkyDir } from './sky.js';
 import { makeWeather, makeRain, makeSnow, PLIGHT } from './weather.js';
 import { makeSpray } from './spray.js';
@@ -37,6 +38,8 @@ const status = t => { const el = $('loading'); if (el) el.textContent = t; };
 
 /** a zone set (path.js zoneSets) holding any of Turkey's zones: its ground variant is one of Turkey's programs */
 const trSet = zs => zs.some(z => REGION[z] === 'tr');
+/** a Galata start (step 35R): m into the zone, ~35 m before the real bridge's Karaköy end (path.js GAL_BR) */
+const GAL_S0 = GAL_BR[0] - 35;
 async function main() {
   await new Promise(r => setTimeout(r, 30));
   // ------------------------------------------------------------ renderer & scene
@@ -78,7 +81,8 @@ async function main() {
   // houses, 32 px/m on desktops, 24 on phones and in the X card) and its programs only for a start in Turkey or within TR_NEAR
   // of a border tunnel; otherwise they load and compile in the background as the drive comes that close (trLazy, below: the
   // border is then ~4–5 minutes away at a cruising speed, ~1 at full speed)
-  const TR_NEAR = 3200, S0 = Math.max(100, parseFloat(QS.get('s')) || 140), TR_START = REGION[startZone()] === 'tr' || nextBorderS(S0) - S0 < TR_NEAR;
+  // (a Galata start, step 35R: at Karaköy's end of the real bridge, its old city ahead, as the zone's concept had it; elsewhere 140 m in)
+  const TR_NEAR = 3200, S0 = Math.max(100, parseFloat(QS.get('s')) || (startZone() === 'galata' ? GAL_S0 : 140)), TR_START = REGION[startZone()] === 'tr' || nextBorderS(S0) - S0 < TR_NEAR;
   const trHouseLoad = TR_START ? loadTrHouseAtlas(HTIER) : null;
   // (…and the Turkish town's painted shops, windows and cat, W4: painted.js loadTownAtlas, on the same tiers, 100 px/m on desktops)
   const townLoad = TR_START ? loadTownAtlas(HTIER) : null;
@@ -108,8 +112,10 @@ async function main() {
   // and the distant town round it, W4; Cappadocia's castle rock of Uçhisar at the end of its road among the fairy chimneys' valleys,
   // W5: a row each, in files of their own), with Japan's when it is needed at the start
   // (…and Paşabağ's rounded tuff hill at the end of its road among the valley's chimneys, W6)
-  const loadTrBands = () => Promise.all([loadBandAtlas(TIER, 15000, 'bandtr1'), loadBandAtlas(TIER, 15000, 'bandtr2'), loadBandAtlas(TIER, 15000, 'bandtr3'), loadBandAtlas(TIER, 15000, 'bandtr4'), loadBandAtlas(TIER, 15000, 'bandtr5')]);
-  const bandTrLoad = TR_START ? firstLoads.then(loadTrBands) : null;
+  // (step 35R: the real Galata zone's skyline, its landmarks' cards (realsky.js), with Turkey's assets; the concept's old city, bandtr2,
+  // stays loaded: the bridge keeps it if they fail (and leaving it out moved a few of the town's pixels in seeded captures))
+  const loadRealSky1 = () => loadRealSky(HTIER), loadTrBands = () => Promise.all([loadBandAtlas(TIER, 15000, 'bandtr1'), loadBandAtlas(TIER, 15000, 'bandtr2'), loadBandAtlas(TIER, 15000, 'bandtr3'), loadBandAtlas(TIER, 15000, 'bandtr4'), loadBandAtlas(TIER, 15000, 'bandtr5')]);
+  const realSkyLoad = TR_START ? firstLoads.then(loadRealSky1) : null, bandTrLoad = TR_START ? firstLoads.then(loadTrBands) : null;
   // (and Cappadocia's hot-air balloons, W5: on the clouds' tiers)
   const balloonLoad = TR_START ? firstLoads.then(() => loadBalloonAtlas(TIER)) : null, BALLOONS_N = quality === 'high' ? 36 : 22;
 
@@ -277,7 +283,7 @@ async function main() {
   U.uReflTex.value = post.refl.rt.texture;
   // the cumulus (painted or procedural) and the painted horizon: made once the road is built and the light prepared
   // (below), so their downloads overlap that work
-  let pclouds = null, clouds = null, band = null, bandTr = null, balloons = null, bandNear = -1; // (bandNear: step 28, below)
+  let pclouds = null, clouds = null, band = null, bandTr = null, balloons = null, bandNear = -1, realSky = null; // (bandNear: step 28, below; realSky: step 35R)
   const hz = new THREE.Vector3(), camFlat = new THREE.Vector3(), REFL = QS.get('refl') || 'auto';
   const BACKLIT_K = QS.has('backlit') ? parseFloat(QS.get('backlit')) : 1; // (test hook)
   // the cherry blossom's shade tint (materials.js makeGhibliLeaf): a bright rose-magenta on a bright day (the shaded
@@ -480,7 +486,7 @@ async function main() {
   // towards the kerb of the side the traffic keeps to (path.js trafficSide: left in Japan, right in Turkey), so through a
   // border tunnel the car moves over to the other side of the road with the traffic
   const MULT_MIN = 0.4, MULT_MAX = 5.5, SIDE0 = trafficSide(S0) < 0 ? -1 : 1;
-  const st = { s: S0, u: 1.65 * SIDE0, uHome: 1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, spray: QS.has('nospray') ? 0 : 1 /* test switch */, grass: 1 /* test switch: the meadow's blades */, pclouds: 1 /* test switch: painted clouds (0: the procedural ones, with ?clouds=both) */, band: 1 /* test switch: the painted horizon (0: the mountain rings) */, waves: 1 /* test switch: the painted sea's waves (0: its flat tones) */, shore: 1 /* test switch: the waves and foam along the sea wall (0: the open sea's colour there) */, surf: 1 /* test switch: the spray over the tetrapods */, tetra: 1 /* test switch: the tetrapods */, bark: 1 /* test switch: the bark's painted tones (0: the old colours, lit) */, trunks: 1 /* test switch: the painted trees' bark (0: hidden) */, todpaint: 1 /* test switch: the painted look at golden hour, sunset and night (0: only on a bright day, as before) */, road: 1 /* test switch: the coast's, the country's and the cherry avenue's painted asphalt (0: the old road; in the avenue's ground it also skips the tint's work) */, carkey: 1 /* test switch: the car lit by the painter's sun (0: by the real sun) */, sunroad: 1 /* test switch: the sun and the moon stand by the road's heading, as in the paintings (0: fixed in the world, as before) */, volkey: 1 /* test switch: the crowns and the tetrapods lit by the painted volumes' key (0: by the real sun) */, shsoft: 1 /* test switch: soft shadow edges near the camera (0: one tap everywhere, as before) */, shfit: 1 /* test switch: the sun's shadow box fitted to what can be seen at a low sun (0: the old square box) */, tuff: 1 /* test switch: Cappadocia's fairy chimneys in their painted tones (0: their own colours, lit) */, slope: 1 /* test switch: the coast's slope in the painting's lime with its painter's fill in the shade (0: as before, step 27) */, bandnear: 1 /* test switch: the country's painted horizon drawn just inside the world's far fade, over the next zone's far slopes (0: as before, step 28) */, banktod: 1 /* test switch: the country's verge banks' grass by the hour (0: lit only), step 28 */, evesky: 1 /* test switch: the painted evening sky (0: the old sky at golden hour and sunset), Audit 2 */, nightpaint: 1 /* test switch: the night as painted (0: as before), step 30 */, rooms: 1 /* test switch: the rooms behind the shop windows (0: their painted glass), step 31 */, tram: 1 /* test switch: the Galata Bridge's tram (0: hidden), step 33 */, fish: 1 /* test switch: the Galata Bridge's painted fishermen (0: hidden; their 3D rods and buckets stay), step 35a */, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
+  const st = { s: S0, u: 1.65 * SIDE0 * (1 - zoneWeight(S0, 'galata') * clamp((zparam(S0, 'rw') - 3.4) / 1.85, 0, 1)), uHome: 1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, spray: QS.has('nospray') ? 0 : 1 /* test switch */, grass: 1 /* test switch: the meadow's blades */, pclouds: 1 /* test switch: painted clouds (0: the procedural ones, with ?clouds=both) */, band: 1 /* test switch: the painted horizon (0: the mountain rings) */, waves: 1 /* test switch: the painted sea's waves (0: its flat tones) */, shore: 1 /* test switch: the waves and foam along the sea wall (0: the open sea's colour there) */, surf: 1 /* test switch: the spray over the tetrapods */, tetra: 1 /* test switch: the tetrapods */, bark: 1 /* test switch: the bark's painted tones (0: the old colours, lit) */, trunks: 1 /* test switch: the painted trees' bark (0: hidden) */, todpaint: 1 /* test switch: the painted look at golden hour, sunset and night (0: only on a bright day, as before) */, road: 1 /* test switch: the coast's, the country's and the cherry avenue's painted asphalt (0: the old road; in the avenue's ground it also skips the tint's work) */, carkey: 1 /* test switch: the car lit by the painter's sun (0: by the real sun) */, sunroad: 1 /* test switch: the sun and the moon stand by the road's heading, as in the paintings (0: fixed in the world, as before) */, volkey: 1 /* test switch: the crowns and the tetrapods lit by the painted volumes' key (0: by the real sun) */, shsoft: 1 /* test switch: soft shadow edges near the camera (0: one tap everywhere, as before) */, shfit: 1 /* test switch: the sun's shadow box fitted to what can be seen at a low sun (0: the old square box) */, tuff: 1 /* test switch: Cappadocia's fairy chimneys in their painted tones (0: their own colours, lit) */, slope: 1 /* test switch: the coast's slope in the painting's lime with its painter's fill in the shade (0: as before, step 27) */, bandnear: 1 /* test switch: the country's painted horizon drawn just inside the world's far fade, over the next zone's far slopes (0: as before, step 28) */, banktod: 1 /* test switch: the country's verge banks' grass by the hour (0: lit only), step 28 */, evesky: 1 /* test switch: the painted evening sky (0: the old sky at golden hour and sunset), Audit 2 */, nightpaint: 1 /* test switch: the night as painted (0: as before), step 30 */, rooms: 1 /* test switch: the rooms behind the shop windows (0: their painted glass), step 31 */, tram: 1 /* test switch: the Galata Bridge's tram (0: hidden), step 33 */, fish: 1 /* test switch: the Galata Bridge's painted fishermen (0: hidden; their 3D rods and buckets stay), step 35a */, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
   let started = false;
   // (the atlas's world variant and its shadow twin are made, and their programs compiled, at every start: without Turkey's
   // atlas yet, on a stand-in, its textures swapped in when they load (materials.js setWorldTex))
@@ -640,7 +646,13 @@ async function main() {
     renderer.setRenderTarget(post.composer.readBuffer); renderer.compile(scene, camera); renderer.setRenderTarget(null);
     if (balloons) { renderer.initTexture(balloons.mesh.material.uniforms.map.value); balloons.mesh.visible = false; }
     if (pcAtlas) renderer.initTexture(pcAtlas.tex); if (bandAtlas) renderer.initTexture(bandAtlas.tex); if (bandAtlas && bandCo) renderer.initTexture(bandCo.tex); if (trAtlases) for (const a of trAtlases) if (a) renderer.initTexture(a.tex);
+    // (step 35R) the real Galata zone's skyline: made last of all (its ids draw random numbers), its programs compiled and its sheet
+    // uploaded here; the painted band's Galata row (the concept's old city) gives way to it
+    if (TR_START) { const sk = await realSkyLoad; if (sk) try { realSky = makeRealSky(sk, post, scene.fog.color, ANISO); useRealSky(); scene.add(realSky.group); realSky.group.visible = true;
+      renderer.setRenderTarget(post.composer.readBuffer); renderer.compile(scene, camera); renderer.setRenderTarget(null); renderer.initTexture(realSky.tex); realSky.group.visible = false; } catch (e) { console.warn('real skyline:', e); realSky = null; } }
   }
+  /** (step 35R) the real skyline in: the painted band's Galata row (the concept's old city) gives way to it */
+  function useRealSky() { if (bandTr) bandTr.hide.galata = true; if (band) band.hide.galata = true; }
   /** Turkey's zones without a row of their own (their file failed, or isn't in yet) borrow the coast's from Japan's band */
   // (the Turkish town's, W4, borrows Japan's far city in haze)
   // (…and Cappadocia's, W5, the country's far hills)
@@ -710,7 +722,7 @@ async function main() {
   async function trLazy() {
     TRL.started = true; TRL.t0 = performance.now();
     const step = n => TRL.steps.push([n, Math.round(performance.now() - TRL.t0)]);
-    const [trAtlases, th, ta, ba, cta, rtr, fla, dla] = await Promise.all([loadTrBands(), loadTrHouseAtlas(HTIER), loadTownAtlas(HTIER), loadBalloonAtlas(TIER), loadChainAtlas(HTIER, 'tr'), loadRoomAtlas(RTIER, 15000, 'rooms1tr'), loadFisherAtlas(HTIER), loadDolmus(HTIER)]); step('loaded');
+    const skl = loadRealSky1(), [trAtlases, th, ta, ba, cta, rtr, fla, dla, sk] = await Promise.all([loadTrBands(), loadTrHouseAtlas(HTIER), loadTownAtlas(HTIER), loadBalloonAtlas(TIER), loadChainAtlas(HTIER, 'tr'), loadRoomAtlas(RTIER, 15000, 'rooms1tr'), loadFisherAtlas(HTIER), loadDolmus(HTIER), skl]); step('loaded');
     await nextFrame();
     const wa = buildWorldAtlas(atlas, HTIER, th, ta); if (wa.trHouses) setTrHouses(th.types, th.extras); if (th) th.img.close(); if (ta) ta.img.close(); step('atlas');
     await nextFrame();
@@ -762,6 +774,14 @@ async function main() {
       catch (e) { console.warn('dolmus:', e); M.atlasDol = null; setDolmus(null); }
       step('dolmus');
     }
+    if (sk) { // (step 35R: the real Galata zone's skyline: its sheet a frame, its two programs compiled off the main thread)
+      try {
+        await nextFrame(); const rs = makeRealSky(sk, post, scene.fog.color, ANISO); renderer.initTexture(rs.tex); rs.group.visible = true;
+        renderer.setRenderTarget(post.composer.readBuffer); const ready = renderer.compileAsync(rs.group, camera, scene); renderer.setRenderTarget(null);
+        await ready; rs.group.visible = false; scene.add(rs.group); realSky = rs; useRealSky();
+      } catch (e) { console.warn('real skyline:', e); }
+      step('realsky');
+    }
     if (ba) { // (Cappadocia's balloons, W5: their texture a frame, their program compiled off the main thread)
       await nextFrame(); renderer.initTexture(ba.tex);
       const bl = makeBalloons(ba, post, BALLOONS_N); bl.mesh.visible = true;
@@ -804,6 +824,10 @@ async function main() {
     if (!started || z === curZone) return;
     curZone = z;
     $zone.querySelector('.jp').textContent = ZINFO[z].loc; $zone.querySelector('.en').textContent = ZINFO[z].en;
+    // (a real place's card credits its map data, step 35R: OpenStreetMap's licence asks for it where its data is shown)
+    let src = $zone.querySelector('.src');
+    if (!src) { src = document.createElement('div'); src.className = 'src'; src.style.cssText = 'font-size:11px;letter-spacing:.12em;opacity:.8;margin-top:10px'; $zone.appendChild(src); }
+    src.textContent = ZINFO[z].real ? 'map data © OpenStreetMap contributors' : '';
     $zone.classList.add('on'); clearTimeout(zoneTimer); zoneTimer = setTimeout(() => $zone.classList.remove('on'), 5200);
   }
   function begin() {
@@ -973,7 +997,8 @@ async function main() {
     st.s += st.speed * dt; st.dist += st.speed * dt;
     const rw = zparam(st.s, 'rw');
     if (st.steer) st.u = clamp(st.u + st.steer * dt * 2.4, -rw + 0.85, rw - 0.85);
-    else if (now - st.lastInput > 3000) st.u += (clamp(st.uHome * tside, -rw + 0.85, rw - 0.85) + Math.sin(t / 11) * 0.1 - st.u) * Math.min(1, dt * 0.9);
+    // (on the real Galata zone's three lanes, step 35R, the car settles in the middle one, as a calm drive over the bridge takes it)
+    else if (now - st.lastInput > 3000) { const g3 = zoneWeight(st.s, 'galata') * clamp((rw - 3.4) / 1.85, 0, 1); st.u += (clamp(st.uHome * tside - 1.65 * tside * g3, -rw + 0.85, rw - 0.85) + Math.sin(t / 11) * 0.1 - st.u) * Math.min(1, dt * 0.9); }
 
     // time of day (nights pass a little quicker)
     if (!st.todPaused && started) st.tod = (st.tod + (dt / 480) * (TOD.night > 0.5 ? 1.7 : 1)) % 1;
@@ -1312,7 +1337,8 @@ async function main() {
     const vm = bandMix(st.s, 200), camH = Math.max(1, camera.position.y - f.y + 0.45); galTurn(st.s); uchTurn(st.s, dt); coastTurn(st.s);
     const bandW = Math.max(band && st.band !== 0 ? band.update(camera, vm, camH, scene.fog.near, scene.fog.far) : 0, bandTr && st.band !== 0 ? bandTr.update(camera, vm, camH, scene.fog.near, scene.fog.far) : 0);
     if (band && st.band === 0) band.mesh.visible = false; if (bandTr && st.band === 0) bandTr.mesh.visible = false;
-    mountains.update(camera.position, Math.max(w.snow, zoneW(st.s + 600).snow * 0.7), 1 - bandW);
+    const realW = realSky ? realSky.update(camera, st.s, world.origin) : 0; // (step 35R: the real Galata zone's skyline)
+    mountains.update(camera.position, Math.max(w.snow, zoneW(st.s + 600).snow * 0.7), 1 - Math.max(bandW, realW));
     if (balloons) { // (over Cappadocia's zone, while it is here or ahead: W5; over Paşabağ's once the drive is in it, W6: they come down one
       // by one through the hand-over from Uçhisar and go up over Paşabağ's valley as it ends)
       const zi = Math.floor(st.s / ZONE_LEN), pz = w.pasabag > w.uchisar ? 'pasabag' : 'uchisar'; let bz = NaN;
@@ -1537,7 +1563,7 @@ async function main() {
     if (started && frames > 150 && dt > 0.03) slowT += dt; else slowT = Math.max(0, slowT - dt * 0.5);
     if (slowT > 3 && !QS.has('q')) { slowT = 0; stepDown(); }
   }
-  window.__dbg = { renderer, st, scene, camera, world, TOD, KEYS, X, train, weather, U, birds, cine, post, car, sun, M, cells: atlas.cells, clouds, pclouds, band, get bandTr() { return bandTr; }, sky, mountains, shadowDir, CM, spray, grass, sea, get ferry() { return ferry; }, get tram() { return tram; }, get fishers() { return fishers; }, get dolmus() { return M.atlasDol || null; }, get trainPaint() { return M.train || null; }, get balloons() { return balloons; }, TRL, get audio() { return audio; }, uch: { TF_DAY, TF_GOLD, TF_SUNSET, TF_NIGHT, UG_DAY, UCH }, pas: { TFP_DAY, TFP_GOLD, TFP_SUNSET, TFP_NIGHT, PG_DAY, PG_GOLD, PG_SUNSET, PG_NIGHT, PAS_Z, PAS_R, pasAz }, night: { NT, NTZ, NSKY_N, MOON_B, CF_N } };
+  window.__dbg = { renderer, st, scene, camera, world, TOD, KEYS, X, train, weather, U, birds, cine, post, car, sun, M, cells: atlas.cells, clouds, pclouds, band, get bandTr() { return bandTr; }, sky, mountains, shadowDir, CM, spray, grass, sea, get ferry() { return ferry; }, get tram() { return tram; }, get fishers() { return fishers; }, get dolmus() { return M.atlasDol || null; }, get trainPaint() { return M.train || null; }, get balloons() { return balloons; }, get realSky() { return realSky; }, TRL, get audio() { return audio; }, uch: { TF_DAY, TF_GOLD, TF_SUNSET, TF_NIGHT, UG_DAY, UCH }, pas: { TFP_DAY, TFP_GOLD, TFP_SUNSET, TFP_NIGHT, PG_DAY, PG_GOLD, PG_SUNSET, PG_NIGHT, PAS_Z, PAS_R, pasAz }, night: { NT, NTZ, NSKY_N, MOON_B, CF_N } };
   status('');
   $start.classList.add('ready');
   if (QS.has('auto')) begin();

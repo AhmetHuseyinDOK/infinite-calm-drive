@@ -1,0 +1,140 @@
+{
+ "files": {
+  "hi": {
+   "a": "eminonu1a_hi.webp",
+   "e": "eminonu1e_hi.webp"
+  },
+  "lo": {
+   "a": "eminonu1a_lo.webp",
+   "e": "eminonu1e_lo.webp"
+  }
+ },
+ "bytes": {
+  "hi": {
+   "a": 93088,
+   "e": 4660
+  },
+  "lo": {
+   "a": 36006,
+   "e": 1658
+  }
+ },
+ "size": {
+  "hi": {
+   "a": [
+    2048,
+    840
+   ],
+   "e": [
+    1024,
+    420
+   ]
+  },
+  "lo": {
+   "a": [
+    1024,
+    432
+   ],
+   "e": [
+    512,
+    216
+   ]
+  }
+ },
+ "tiles": {
+  "emk_nw": [
+   0.001953,
+   0.004762,
+   0.585449,
+   0.669048
+  ],
+  "emk_nimet": [
+   0.591309,
+   0.004762,
+   0.19043,
+   0.55
+  ],
+  "emk_ramp": [
+   0.785645,
+   0.004762,
+   0.140625,
+   0.530952
+  ],
+  "emk_ad": [
+   0.001953,
+   0.683333,
+   0.087891,
+   0.311905
+  ],
+  "emk_ne": [
+   0.09375,
+   0.683333,
+   0.249512,
+   0.283333
+  ],
+  "emk_ash": [
+   0.347168,
+   0.683333,
+   0.140625,
+   0.27381
+  ],
+  "emk_sign": [
+   0.491699,
+   0.683333,
+   0.043945,
+   0.154762
+  ],
+  "emk_gwall": [
+   0.539551,
+   0.683333,
+   0.214844,
+   0.152381
+  ],
+  "emk_name": [
+   0.758301,
+   0.683333,
+   0.205078,
+   0.061905
+  ]
+ },
+ "m": {
+  "emk_nw": [
+   33.3,
+   15.6
+  ],
+  "emk_ne": [
+   14.2,
+   6.6
+  ],
+  "emk_ramp": [
+   8.0,
+   12.4
+  ],
+  "emk_ash": [
+   8.0,
+   6.4
+  ],
+  "emk_gwall": [
+   10.0,
+   2.9
+  ],
+  "emk_nimet": [
+   6.5,
+   7.7
+  ],
+  "emk_ad": [
+   1.2,
+   1.75
+  ],
+  "emk_name": [
+   2.8,
+   0.35
+  ],
+  "emk_sign": [
+   0.5,
+   0.72
+  ]
+ },
+ "ppm": {},
+ "note": "Eminönü's square (g37, step 35R-galata-2c): painted elevations of the Hünkâr Kasrı (NW side, NE end), its ramp gallery, the tomb garden's wall and an ashlar tile (Grok Imagine image_edit repaints of Wikimedia Commons photos), the Nimet Abla lottery kiosk's front, a bus shelter's ad poster, the stop's name board and its İETT sign (drawn). tiles: [x, y, w, h] fractions of the albedo (top-left origin), valid for both images of both tiers; the emissive file is the same layout at half scale. m: each tile in metres."
+}

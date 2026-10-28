@@ -36,6 +36,11 @@ export class GB {
   constructor({ uv = false, color = true, ao = false, lit = false, off = false, idx = false } = {}) {
     this.hasUV = uv; this.hasColor = color; this.hasAO = ao; this.hasLit = lit; this.hasOff = off; this.litV = 0; this.aoY0 = NaN; this.noShadow = false;
     this.hasIdx = idx; this.I = null; this.ni = 0; this.icap = 0;
+    // (the flags the builders set on a chunk's GBs (world: the world atlas's cells; rooms: shop bays with a room behind their glass; tr: Turkey's
+    // chain atlas), declared here so every GB has one shape: set later, in their builders' own orders, they gave GB a hidden class for each
+    // combination, and its hot methods (quad, vtx) slowed for every caller once they had seen too many (step 35R-galata-2: a phone's world
+    // build after Galata's fronts)
+    this.world = false; this.rooms = false; this.tr = false;
     this.n = 0; this.cap = 0; this.P = null; this.N = null; this.U = null; this.Cl = null; this.A = null; this.Lt = null; this.O = null; this.offX = 0; this.offY = 0;
     this.bb = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
     this.m = new THREE.Matrix4(); this.nm = new THREE.Matrix3();

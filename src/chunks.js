@@ -1,9 +1,10 @@
 // The world is built in 60 m chunks along the infinite road; each chunk merges its contents into a handful of meshes.
 import * as THREE from 'three';
 import { zoneMix, zoneW, zoneAt, zparam, groundOffsetMix, regionWeight, SEA, WALL_U, crossingS, crossingValid, crossingNear, XING, XOFF, riverS, riverValid, riverNear, riverBank, RIV, ROFF, RIVER_DROP, tunnelNear, borderNear, REGION, T_HALF, T_RIDGE, RAISE, TUFF, ridgeHr, tubeHalf, GAL_WALK, GAL_L, GAL_BR, galL, galBridge, ZONE_LEN, TOWN_SW, townLanding, bayQ, HL } from './path.js';
-import { galSect, GAL_STOPS } from './galata.js';
+import { galSect, GAL_STOPS, galType } from './galata.js';
 import { galWorld, galFrame, galWater } from './path.js';
 import { GR } from './real_galata.js';
+import { placeEminonu, eminSkip, eminFree } from './eminonu.js'; // (step 35R-galata-2c: Eminönü's square)
 import { TOWN_SHOPS } from './textures.js';
 import { xingPosts } from './crossing.js';
 import { GB } from './geom.js';
@@ -169,7 +170,7 @@ export class World {
     this.path = path; this.M = M; this.riverMat = riverMat; this.heapCache = new Map(); // (M.shore, M.surf: the coast's water along its wall, and its surf)
     this.group = new THREE.Group(); scene.add(this.group);
     this.chunks = new Map(); this.origin = { x: 0, z: 0 }; this.reveal = [];
-    this.ahead = 760; this.behind = 40; this.trReady = true;
+    this.ahead = 760; this.behind = 40; this.trReady = true; this.eminWait = false; // (eminWait: step 35R-galata-2, main.js galLazy)
     this.fishVer = 0; // (step 35a: counts the chunks with painted fishermen coming and going: fishers.js gathers them anew)
     this._dolC = null; this._dolF = ch => { // (step 35b: a chunk's dolmuş, its near mesh within DOL_NEAR of the camera, else its far one)
       const m = ch.dol; if (!m) return;
@@ -196,6 +197,7 @@ export class World {
         for (let c = Math.max(0, c0); c <= c1; c++) if (!this.chunks.has(c)) { next = c; break; }
         if (next < 0) return 0;
         if (!this.trReady && this.needsTR(next)) return 1; // (Turkey's assets and programs aren't in yet: main.js trLazy)
+        if (this.eminWait && this.needsEmin(next)) return 1; // (step 35R-galata-2: Eminönü's square's paintings aren't in yet: main.js galLazy)
         if (next * CH - s < 320) budgetMs = Math.max(budgetMs, 12); // falling behind: catch up
         this.job = { c: next, it: this.gen(next) };
       }
@@ -207,6 +209,8 @@ export class World {
       if (performance.now() - t0 > budgetMs) return 1;
     }
   }
+  /** (step 35R-galata-2) whether chunk c holds Eminönü's square (the real Galata zone's l 1090 … 1470: its pavilion, kiosk, wall, shelters) */
+  needsEmin(c) { for (let s = c * CH; s <= c * CH + CH; s += CH) { const l = galL(s); if (l >= 1090 && l <= 1470) return true; } return false; }
   /** whether chunk c holds any of Turkey (or of a border tunnel's surroundings: their ground variants are Turkey's programs) */
   needsTR(c) {
     for (const s of [c * CH, c * CH + CH]) { if (regionWeight(s, 'tr') > 0) return true; const b = borderNear(s); if (b && Math.abs(s - b.s) < 2 * T_RIDGE + 2 * CH) return true; }
@@ -246,6 +250,8 @@ export class World {
       cap: new GB({ uv: true, ao: true, lit: true }), // (…and its own atlas's cells: the caves, the dry grass, the bare crowns, its sign)
       pgrass: new GB({ uv: true, ao: true }), // (Paşabağ's tall grass, W6, in a texture and a material of its own)
       chain: new GB({ uv: true, ao: true, lit: true }), // (the chain stores' bays and signs, step 32: their own atlas, the atlas's program)
+      galf: new GB({ uv: true, ao: true, lit: true }), // (step 35R-galata-2: Galata's own painted fronts, their own texture pair, the atlas's program)
+      emin: new GB({ uv: true, ao: true, lit: true }), // (step 35R-galata-2c: Eminönü's square's paintings, their own sheet: eminonu.js)
       fish: new GB({ ao: true, idx: true }) }; // (the Galata Bridge's fishermen, step 33: smooth figures, indexed, in the props' colour material)
     G.chainList = []; // (…and where they stand: { s, side, c, n }, for the tools: __dbg.world's chunks' .chains)
     G.fishers = []; // (step 35a: the painted fishermen, 8 numbers each: his feet (chunk-local), his facing (x, z), his scale, the sheet, the pose: fishers.js)
@@ -428,6 +434,7 @@ export class World {
     yield* this.placeGalBlocks(G, s0, s1, road, ox, oz);
     yield* this.placeGalSquares(G, c, s0, s1, matAt, road, rwAt);
     yield* this.placeGalQuay(G, s0, s1, matAt, road, ox, oz);
+    yield* placeEminonu(this, G, s0, s1, road, rwAt, ox, oz, this.path); // (step 35R-galata-2c)
     yield;
     yield* this.placeTown(G, c, s0, s1, matAt, road, rwAt);
     yield* this.placeUchisar(G, c, s0, s1, matAt, onGround, road, rwAt, H, ox, oz);
@@ -451,6 +458,12 @@ export class World {
     if (!G.fishers.length) { const m = add(G.fish.build(), this.M.color, true, true); if (m) m.customDepthMaterial = PROP_DEPTH; } // (the fishermen, step 33: only on the Galata Bridge; their rods and lines cast no shadow)
     let dol = null; // (step 35b: the dolmuş's painted model, its own texture pair; its draw range set each frame by World.dolLod)
     if (G.dolList && this.M.atlasDol) { const g = P.dolmusGB(G); dol = g && add(g.build(), this.M.atlasDol, true, true); if (dol) { dol.customDepthMaterial = this.M.atlasDolDepth; dol.userData.lod = g.lod; dol.geometry.setDrawRange(0, g.lod.n0); } }
+    // (step 35R-galata-2: Galata's painted fronts, flush on their walls: the walls cast the shadows; their shops' rooms behind the glass. Drawn
+    // before the rest (three sorts opaque draws by their material before their depth, and the walls' came first: each front's pixels were
+    // shaded twice, the wall's and then the painting's, +1.0 ms on a phone along Kemeraltı); now the walls behind them fail the depth test)
+    if (G.galf.count && this.M.atlasG) add(G.galf.build(), (G.galf.rooms && this.M.atlasGI) || this.M.atlasG, false, true, -1);
+    if (G.emin.count && this.M.atlasEm) { const m = add(G.emin.build(), this.M.atlasEm, true, true); if (m) m.customDepthMaterial = this.M.atlasEmDepth; } // (step 35R-galata-2c)
+    if (G.galf.count || G.emin.count) yield; // (step 35R-galata-2: Galata's chunks build two meshes more: a step of their own, on a slow phone)
     if (G.chain.count) { const T = G.chain.tr, m = add(G.chain.build(), T ? this.M.atlasCTI || this.M.atlasCT : this.M.atlasCI || this.M.atlasC, true, true); if (m) m.customDepthMaterial = T ? this.M.atlasCTDepth : this.M.atlasCDepth; } // (the chain stores, step 32: Japan's or Turkey's chain atlas; most chunks have none, and no mesh. Step 34: with the rooms behind their glass)
     add(G.tetra.build(), this.M.tetra, true, true); // (the tetrapods: their shadows from the plain depth material)
     add(G.bark.build(), this.M.bark, true, true, 0, 'leaf'); yield; // (the trees' bark: shown as far as their crowns; plain depth material too)
@@ -1655,9 +1668,14 @@ export class World {
     let n = 0;
     for (const b of B) {
       if (b.l < l0 || b.l >= l1 || !this.galOn(zs + b.l)) continue;
-      const P = b.p.map(([E, N]) => { galWorld(zs, E, N, q); return [q[0] - ox, q[1] - oz]; }), m = P.length, y0 = road(zs + b.l) - 0.3, y1 = y0 + 0.3 + 0.15 + b.h;
-      // (its plaster, or a church's and a mosque's stone, a ferry terminal's white)
-      const tint = b.k === 'church' || b.k === 'mosque' || b.k === 'tomb' ? C_STONE : b.k === 'pier' ? C_PIER : P_GALW[b.id % P_GALW.length], dark = [tint[0] * 0.8, tint[1] * 0.8, tint[2] * 0.82];
+      if (eminSkip(b)) continue; // (step 35R-galata-2c: the Hünkâr Kasrı and its ramp: eminonu.js)
+      // (step 35R-galata-2: its own painted front by its type (galata.js galType), its height the front's storeys; without the paintings as
+      // it was)
+      const ft = P_.GAL_F.on && this.M.atlasG ? galType(b) : null;
+      const P = b.p.map(([E, N]) => { galWorld(zs, E, N, q); return [q[0] - ox, q[1] - oz]; }), m = P.length, y0 = road(zs + b.l) - 0.3, y1 = y0 + 0.3 + 0.15 + (ft ? P_.galFrontH(ft, b.lv) : b.h);
+      // (its plaster, or a church's and a mosque's stone, a ferry terminal's white; with its painted front, the painting's wall)
+      const vt = ft ? P_.galTint(ft, hash2(b.id, 6343)) : null; // (its own tint over its type's painting: the street's kinds of building)
+      const tint = ft ? [P_.GAL_FT[ft].tint[0] * vt[0], P_.GAL_FT[ft].tint[1] * vt[1], P_.GAL_FT[ft].tint[2] * vt[2]] : b.k === 'church' || b.k === 'mosque' || b.k === 'tomb' ? C_STONE : b.k === 'pier' ? C_PIER : P_GALW[b.id % P_GALW.length], dark = [tint[0] * 0.8, tint[1] * 0.8, tint[2] * 0.82];
       // (the outline's winding, as seen from above in the world: the frame's x is the compass's mirror)
       let ar = 0, cx = 0, cz = 0; for (let i = 0; i < m; i++) { const [x0, z0] = P[i], [x1, z1] = P[(i + 1) % m]; ar += x0 * z1 - x1 * z0; cx += x0 / m; cz += z0 / m; }
       const out = ar > 0 ? 1 : -1; // (the walls' quads face out with the order kept, else reversed)
@@ -1677,13 +1695,16 @@ export class World {
       // its fronts towards the road: each edge's own frame (x along it, −z out)
       // (and the other long walls their windows: the corners and the backs over the lower ones seen from the road)
       // (a church's, a mosque's, a ferry terminal's and the bazaar's walls their windows, no shops; the shops' fronts the blocks' only)
-      if (b.k !== 'shed' && b.k !== 'site' && b.k !== 'tomb') for (let i = 0; i < m; i++) {
-        const fr = b.k === 'block' && b.f && b.f.includes(i) && (farWin > 40 || b.d < 40), a = P[i], e = P[(i + 1) % m], dx = e[0] - a[0], dz = e[1] - a[1], w = Math.hypot(dx, dz); if (w < (fr ? 2.5 : 4.5) || (!fr && b.d > farWin)) continue;
+      if (ft || (b.k !== 'shed' && b.k !== 'site' && b.k !== 'tomb')) for (let i = 0; i < m; i++) {
+        const fr = (ft || b.k === 'block') && b.f && b.f.includes(i) && (farWin > 40 || b.d < 40), a = P[i], e = P[(i + 1) % m], dx = e[0] - a[0], dz = e[1] - a[1], w = Math.hypot(dx, dz); if (w < (fr ? 2.5 : 4.5) || (!fr && b.d > farWin)) continue;
         const nx = (out > 0 ? dz : -dz) / w, nz = (out > 0 ? -dx : dx) / w; // (its outward normal)
         const M = new THREE.Matrix4().makeRotationY(Math.atan2(-nx, -nz)); M.setPosition((a[0] + e[0]) / 2, y0 + 0.3 + 0.15, (a[1] + e[1]) / 2);
         // (its x along the edge: the frame's x is (cos, −sin) of the turn; a front painted left to right, either way)
-        P_.galFacade(G, M, rng(b.id * 131 + i), w, b.k === 'block' ? Math.max(2, b.lv) : Math.max(2, Math.round((b.h - 1) / 3.6)), tint, fr);
+        if (ft) P_.galFront(G, M, w, ft, b.lv, fr, vt);
+        else P_.galFacade(G, M, rng(b.id * 131 + i), w, b.k === 'block' ? Math.max(2, b.lv) : Math.max(2, Math.round((b.h - 1) / 3.6)), tint, fr);
       }
+      // (Surp Krikor Lusavoriç's drum and conical dome over its roof)
+      if (ft === 'K') { const f = G.fish; f.setM(IDENT); P_.galKrikorDome(f, cx, y1, cz); }
       // (the Spice Bazaar's and a mosque's lead domes over their roofs: the bazaar's in a row along its long halls, a mosque's one great
       // dome and its minaret)
       if (b.k === 'tomb') { const f = G.fish; f.setM(IDENT); P_.galDome(f, cx, y1, cz, Math.min(5.5, Math.sqrt(Math.abs(ar) / 2) * 0.42)); }
@@ -1711,6 +1732,7 @@ export class World {
       if (sd > 0 && lj > 545 && lj < 612 && bays.some(([bl, bu]) => Math.abs(bl - lj) < 2.8 && Math.abs(bu - u) < 4.2)) return false;
       this.path.at(sj, Gs); const F = galFrame(zs), x = Gs.x + Gs.rx * u - F.x, z = Gs.z + Gs.rz * u - F.z, N = F.s * x + F.c * z, E = -F.c * x + F.s * z; // (the point in the zone's frame: the inverse of galWorld)
       for (const b of B) if (Math.abs(b.l - lj) < 90 && nearPoly(E, N, b.p, 3)) return false;
+      if (!eminFree(E, N)) return false; // (step 35R-galata-2c: clear of the kiosk)
       const Y = GR.yeni; if (Y && Math.abs(Y.l - lj) < 90) { const o = mid(Y.outer), k = mid(Y.court); let dx = o[0] - k[0], dy = o[1] - k[1]; const d = Math.hypot(dx, dy) || 1; dx /= d; dy /= d;
         const pz = (E - o[0] - dx) * dx + (N - o[1] - dy) * dy, px = (E - o[0] - dx) * -dy + (N - o[1] - dy) * dx; if (Math.abs(px) < 24.5 && pz > -43 && pz < 45) return false; }
       return true;

@@ -2366,6 +2366,83 @@ export function galFacade(G, M, r, w, lv, tint, shops = true) {
   c.box(x0 - 0.05, H - 0.1, -0.45, -x0 + 0.05, H + 0.3, 0.0, sill, null, { ny: mulC(tint, 0.7) }); // (the cornice)
 }
 
+// ---- (step 35R-galata-2) Galata's own fronts: Karaköy's, Eminönü's and Sirkeci's blocks in their own painted 19th-century fronts (assets/
+// real/galata/galfronts1.*: Grok Imagine elevations of Commons photos of the real buildings, painted.js loadGalFronts), by each block's type
+// (galata.js galType), in a texture pair of their own drawn by the atlas's program (G.galf: main.js M.atlasG, its shops' rooms M.atlasGI,
+// the Turkish town's rooms borrowed). Without the paintings, galFacade as it was
+/** each type's ground bay (g) and upper bay (u: a storey each), its upper storeys where the building is known (nu: Karaköy Palas's five
+ *  over its arcade, Surp Pırgiç's one tall arched storey; the one-storey ferry terminals, fish restaurants and the church's wall none), its
+ *  plain walls' colour (the painting's own wall, measured from its master) */
+export const GAL_FT = {
+  P: { g: 'gfr_palas_g', u: 'gfr_palas_u', nu: 5, wall: '#c4a77a' }, N: { g: 'gfr_nord_g', u: 'gfr_nord_u', wall: '#bfb5a2' },
+  T: { g: 'gfr_ptt_g', u: 'gfr_stone_u', wall: '#b1a99c' }, S: { g: 'gfr_surp_g', u: 'gfr_surp_u', nu: 1, wall: '#a1917c' },
+  K: { g: 'gfr_krikor', nu: 0, wall: '#484a4b' }, B: { g: 'gfr_sben_g', u: 'gfr_stone_u', wall: '#a3a49f' },
+  L: { g: 'gfr_liman_g', u: 'gfr_liman_u', wall: '#d8d7d0' }, I: { g: 'gfr_ito_g', u: 'gfr_ito_u', wall: '#b9beb7' },
+  F: { g: 'gfr_ferry_g', nu: 0, wall: '#23272c' }, s: { g: 'gfr_stone_g', u: 'gfr_stone_u', wall: '#b1a99c' },
+  m: { g: 'gfr_modern_g', u: 'gfr_modern_u', wall: '#a9877a' }, p: { g: 'gfr_pastel_g', u: 'gfr_pastel_u', wall: '#ada693' },
+  f: { g: 'gfr_fish_g', nu: 0, wall: '#9e724f' }, o: { g: 'gfr_ito_g', u: 'gfr_ito_u', wall: '#b9beb7' }, h: { g: 'gfr_emhan_g', u: 'gfr_emhan_u', wall: '#aa9d8f' },
+};
+for (const k in GAL_FT) GAL_FT[k].tint = C(GAL_FT[k].wall);
+/** the fronts' paintings: on once they are in (main.js setGalFronts), with each cell's size in metres and kind (shop: its room behind the
+ *  glass; upper: windows lit at dusk; wall: nothing lit) */
+export const GAL_F = { on: false, m: {}, kind: {} };
+export function setGalFronts(J) {
+  const has = c => !!(J && J.m[c] && J.kind[c] && A.has(c)); // (a sheet without every cell the types take is refused: the town's bays then)
+  GAL_F.on = !!J && Object.values(GAL_FT).every(T => has(T.g) && (!T.u || has(T.u))); GAL_F.m = GAL_F.on ? J.m : {}; GAL_F.kind = GAL_F.on ? J.kind : {};
+  if (J && !GAL_F.on) console.warn("Galata's painted fronts incomplete, keeping the town's bays");
+}
+/** the storeys over the ground bay of type t on a block of lv storeys */
+const galNU = (T, lv) => (T.nu !== undefined ? T.nu : T.u ? Math.max(0, lv - 1) : 0);
+/** a block's height with its painted front: its ground bay, then its storeys */
+export function galFrontH(t, lv) { const T = GAL_FT[t], m = GAL_F.m; return m[T.g][1] + (T.u ? galNU(T, lv) * m[T.u][1] : 0); }
+const GAL_CROP = { u0: 0.5, u1: 0.5, v0: 0.5, v1: 0.5, w: 1, h: 1, px: 0, py: 0 };
+/** a row of bays of the cell along a front w wide (its own frame: x from −w/2 to w/2, −z out to the road) from y0: as many bays as fit
+ *  at the painting's width, stretched to fit (a front under 0.8 of a bay shows the bay's middle at 0.8 of its width, not all of it
+ *  squeezed); its light: a shop's (the codes 5…8: its room, its lamp over the pavement), a window's at dusk (24…255) or none */
+function galRow(G, M, t, w, cell, y0, lamps, vt = W1) {
+  const mw = GAL_F.m[cell][0], mh = GAL_F.m[cell][1], kind = GAL_F.kind[cell], nb = Math.max(1, Math.round(w / mw)), bw = w / nb, cl = uv(cell);
+  // (the cell itself; cropped, the one reused crop object in its shape: the props' builders see one kind of cell)
+  let U_ = cl; if (bw / mw < 0.8) { const du = ((cl.u1 - cl.u0) * (1 - bw / mw / 0.8)) / 2; U_ = GAL_CROP; U_.u0 = cl.u0 + du; U_.u1 = cl.u1 - du; U_.v0 = cl.v0; U_.v1 = cl.v1; U_.w = cl.w; U_.h = cl.h; }
+  for (let i = 0; i < nb; i++) {
+    const xa = -w / 2 + i * bw, xb = xa + bw;
+    t.litV = kind === 'shop' ? 5 + roomCode(t, xa, y0 + 1.7) : kind === 'upper' ? homeLit(t, xa + bw / 2 + y0, y0) : 0;
+    t.quad([xb, y0, -0.025], [xa, y0, -0.025], [xa, y0 + mh, -0.025], [xb, y0 + mh, -0.025], vt, U_); t.litV = 0;
+    if (kind === 'shop') { t.rooms = true; if (lamps) lampAt(G, M, xa + bw / 2, 1.9, -0.8, 0.7); }
+  }
+  return mh;
+}
+/** a block's face of type t (galata.js galType), w wide, lv storeys: on a front towards the road its ground bays (shops with their rooms,
+ *  the ferry terminals' halls, the church's wall) and its storeys' bays over them; on its other walls only the storeys' (their ground floor
+ *  the plain wall); the cornice under the roof in the painting's wall colour. vt: the building's own tint (galTint) */
+export function galFront(G, M, w, t, lv, front, vt = W1) {
+  const g = G.galf, c = G.color, T = GAL_FT[t]; g.setM(M); c.setM(M);
+  const gh = GAL_F.m[T.g][1], nu = galNU(T, lv), H = galFrontH(t, lv);
+  if (front) galRow(G, M, g, w, T.g, 0, true, vt);
+  if (T.u) for (let f = 0; f < nu; f++) galRow(G, M, g, w, T.u, gh + f * GAL_F.m[T.u][1], false, vt);
+  const cor = [T.tint[0] * vt[0] * 1.04, T.tint[1] * vt[1] * 1.04, T.tint[2] * vt[2] * 1.04];
+  c.box(-w / 2 - 0.05, H - 0.1, -0.4, w / 2 + 0.05, H + 0.3, 0.0, cor, null, { ny: mulC(cor, 0.67) }); // (the cornice)
+}
+/** a building's own tint over its type's painting (h: a hash of it, 0…1): the street's kinds of building (lower-case types: the 51 grey stone
+ *  hans share one painting) a little lighter or darker, warmer or cooler, as each one's stone and its soot; the landmarks as painted */
+export function galTint(t, h) {
+  if (t < 'a') return W1;
+  const v = 0.93 + 0.11 * h, k = 0.035 * (((h * 7.31) % 1) - 0.5) * 2; // (its value, ±7 %; its warmth, ±3.5 %)
+  return [v * (1 + k), v, v * (1 - k)];
+}
+/** Surp Krikor Lusavoriç's drum and its conical dome over its roof (step 35R-galata-2: Armenian, as the church's photos have it: a round
+ *  drum of the church's dark stone with a band of arched windows, a slate-grey cone, a cross), in the indexed GB f at (x, y, z) */
+export function galKrikorDome(f, x, y, z) {
+  const ST = C('#5b5d5e'), SH = C('#45474a'), CN = C('#3a4048'), WN = C('#22262c');
+  latheI(f, [[y, 3.3, 3.3, z, ST], [y + 0.6, 3.3, 3.3, z, ST], [y + 0.7, 2.9, 2.9, z, SH], [y + 3.6, 2.9, 2.9, z, ST], [y + 3.75, 3.15, 3.15, z, SH], [y + 4.0, 3.15, 3.15, z, SH], [y + 4.05, 3.0, 3.0, z, CN], [y + 7.8, 0.12, 0.12, z, CN], [y + 7.9, 0.0, 0.0, z, CN]], 16, x);
+  for (let k = 0; k < 8; k++) { // (its eight arched windows, dark: each a pane just out from the drum, facing out)
+    const a = (k / 8) * Math.PI * 2 + 0.2, wx = Math.cos(a), wz = Math.sin(a), R = 2.92, h0 = y + 1.4, h1 = y + 3.0, hw = 0.3, n = [wx, 0, wz];
+    const P = (s, h) => [x + wx * R - wz * s, h, z + wz * R + wx * s];
+    gridI(f, [[P(-hw, h0), P(hw, h0)], [P(-hw, h1), P(hw, h1)]], [[n, n], [n, n]], () => WN, false); // (rows up, along +(n × up): facing out, as boxI's)
+  }
+  latheI(f, [[y + 7.85, 0.06, 0.06, z, WN], [y + 9.0, 0.06, 0.06, z, WN]], 4, x);
+  latheI(f, [[y + 8.55, 0.0, 0.0, z, WN], [y + 8.56, 0.4, 0.06, z, WN], [y + 8.62, 0.4, 0.06, z, WN], [y + 8.63, 0.0, 0.0, z, WN]], 4, x);
+}
+
 /** a lead dome (step 35R: the Spice Bazaar's, a small mosque's) in the indexed GB f: its drum's foot at (x, y, z), its radius r */
 export function galDome(f, x, y, z, r) {
   const rows = [[y, r * 1.02, r * 1.02, z, YC_ST], [y + r * 0.25, r * 1.02, r * 1.02, z, YC_ST]];

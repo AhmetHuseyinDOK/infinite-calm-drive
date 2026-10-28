@@ -135,8 +135,12 @@ export function setStartZone(key) {
 }
 export const startZone = () => ZONES[START];
 const zkey = i => ZONES[(((i + START) % ZONES.length) + ZONES.length) % ZONES.length];
+/** (step 35R-galata-2) the real Galata zone's hand-over to the Turkish town: short and late, so its real street (its blocks and their
+ *  fronts, the T1's masts and tracks) runs on to Sirkeci, Liman Han and the ferry terminal by it (l 1450, the blend's middle), and the town
+ *  comes in over the zone's last GAL_TRANS metres (TRANS: its last 260, from Eminönü's tram stop on) */
+export const GAL_TRANS = 100;
 /** the blend's length from zone a into the next zone b */
-const transOf = (a, b) => (REGION[a] !== REGION[b] ? B_TRANS : TRANS);
+const transOf = (a, b) => (REGION[a] !== REGION[b] ? B_TRANS : a === 'galata' && b === 'town' ? GAL_TRANS : TRANS);
 
 export function zoneMix(s) {
   const z = Math.floor(s / ZONE_LEN), l = s - z * ZONE_LEN, a = zkey(z), b = zkey(z + 1), tr = transOf(a, b);

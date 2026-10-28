@@ -2,6 +2,78 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-29 · 01:10 — The Galata Bridge, second pass: its own fronts, its missing landmarks, Eminönü's square, an articulated T1
+- **Karaköy, Eminönü and Sirkeci in their own fronts, not the Turkish town's** (the user, on the zone: "I think you already know what to
+  fix so continue"). Each block along the road wears a painted elevation of its kind of building, matched to its OpenStreetMap
+  building. The paintings are Grok Imagine repaints of Commons photos of the real buildings.
+  - The landmarks stand on their own buildings:
+    - Karaköy Palas's arcade under five storeys;
+    - Nordstern Han's banded stone and red awnings;
+    - the PTT with its yellow band;
+    - Surp Pırgiç's arched shopfronts under its tall arched storey;
+    - Surp Krikor Lusavoriç under a drum and conical dome;
+    - Saint-Benoît's arched and round windows;
+    - the İTO's off-white offices;
+    - Liman Han's turquoise tiles over red arches;
+    - the ferry terminals in black cladding under the ŞEHİR HATLARI band.
+  - The rest take their kind's painting: Karaköy's grey stone hans, rose-stone offices and pastel apartments, the fish market's
+    restaurants, Eminönü's hans, Reşadiye's offices. Each building gets its own shade of its painting.
+  - Each building is as tall as its front's storeys, its windows light at dusk, and its shops have rooms behind the glass (the Turkish
+    town's for now).
+- **The missing landmarks**: Hagia Sophia, the Blue Mosque, the Beyazıt Tower, the Haliç Metro Bridge with the Atatürk Bridge, and Kız
+  Kulesi before Üsküdar, at their real places and heights, by the hour. They are within 2° and 0.15° of the real view from the bridge.
+- **Eminönü's square**: the Hünkâr Kasrı on Yeni Cami's south-east side, its ramp gallery, the tomb garden's wall, the Nimet Abla kiosk,
+  and two İETT shelters by Liman Han.
+- **The T1 bends round Eminönü**: each car's three sections ride the track by their own ends.
+- **The route's end reads as Sirkeci**: the hand-over to the town is the zone's last 100 m (it was 260), so the real street holds to
+  l 1450. The town's mosque on the horizon waits until the camera leaves the zone.
+- **No slower on a phone**:
+  - the world's geometry builders keep one shape now, with their flags declared up front. Set later in different orders, they had slowed
+    every chunk built after Galata's fronts by up to 2.3× on a phone, the town's too;
+  - the fronts are drawn before the walls behind them, so each pixel is shaded once (−1.0 ms on a phone along Kemeraltı);
+  - at a start in Turkey, the second skyline cards and the square's paintings load after the start. The square's chunks wait for them,
+    and their objects' ids come from a generator of their own, so seeded captures don't move. A phone's start fetches +153 KB, not +301.
+- Seeded captures: every other start and Audit 2's places are identical to live. Without the new files the zone keeps the shipped look,
+  with no errors.
+- How:
+  - `galata.js`: `galType`.
+  - `props.js`: `GAL_FT`, `galFront`, `galRow`, `galTint`, `galKrikorDome`, `setGalFronts`.
+  - `geom.js`: GB's flags.
+  - `painted.js`: `loadGalFronts`.
+  - `main.js`:
+    - the sheets as textures straight from the bitmaps;
+    - `M.atlasG` / `M.atlasGI` on existing programs;
+    - `galLazy` and the lazy load;
+    - the band's view;
+    - test switches `st.galf`, `st.rcards` and `st.rring`.
+  - `chunks.js`: `G.galf` drawn first with no shadow; `placeGalBlocks` by type; `needsEmin`.
+  - `realsky.js`: cards2 as a draw of its own (`addSheet`).
+  - `tram.js`: the sections along the track.
+  - `path.js`: `GAL_TRANS`.
+  - `eminonu.js` (new).
+  - +23 KB of code (+9 KB gzipped).
+- Assets (`assets/real/galata/`):
+  - `galfronts1.json`, `galfronts1a_hi/lo.webp`, `galfronts1e_hi/lo.webp`;
+  - `cards2.json`, `cards2_hi/lo.webp`;
+  - `eminonu1.json`, `eminonu1a_hi/lo.webp`, `eminonu1e_hi/lo.webp`;
+  - `CREDITS2.md` and `CREDITS3.md` (18 Commons photos and their licences).
+- Programs: unchanged (83 at a Galata start). Nothing compiles mid-drive, nor when cards2 and the square arrive. Turkey's lazy load goes
+  63 → 82, as live.
+- Cost: the desktop machine was down, so these are this shared box's Vega, interleaved.
+  - **Drives:**
+    - desktop: 18.36 / 18.31 → 18.37 / 18.38 ms (alike);
+    - phone tier, noisy: 9.65 / 9.49 → 10.42 / 9.93 in one set and 10.41 / 9.71 → 9.54 / 10.38 in another.
+  - **Flat out at 4× throttle on a phone:**
+    - world-build spikes: 25 / 26 / 23 → 18 / 13 / 38;
+    - worst step: 61.5 / 30.0 / 152.7 → 53.8 / 43.1 / 70.0 ms.
+  - **Start-up:** a Galata start on a 3 Mbps phone 12.48 / 11.54 → 12.86 / 12.60 s; +631 KB on a desktop.
+- Left over:
+  - Surp Krikor's repaint from a recent photo (the church is pale today);
+  - Galata's own rooms (bank hall, post office, ticket hall);
+  - the 1500 checkpoint is still the town (a longer zone needs per-zone lengths);
+  - Yeni Cami built in one step (~50 ms at 4× throttle, as before);
+  - re-time on the desktop when it is back.
+
 ## 2026-10-28 · 19:20 — The player's car as the paintings' car
 - **The car is the paintings' rounded mint crossover now, not the boxy kei van** (the user: "i want high quality but with anime
   style"; the design the user chose: the paintings' car). It is a Suzuki-Hustler-like kei car as `ref/city.png` draws it:

@@ -1,0 +1,123 @@
+{
+ "files": {
+  "hi": "cards2_hi.webp",
+  "lo": "cards2_lo.webp"
+ },
+ "bytes": {
+  "hi": 204424,
+  "lo": 110158
+ },
+ "size": {
+  "hi": [
+   2048,
+   2032
+  ],
+  "lo": [
+   1024,
+   1016
+  ]
+ },
+ "cards": [
+  {
+   "id": "ayasofya",
+   "E": 131.4,
+   "N": -1930.3,
+   "y0": 31.3,
+   "w": 315.7,
+   "h": 69.2,
+   "ax": 0.5308,
+   "l": [
+    0,
+    1500
+   ],
+   "src": "Hagia Sophia: its dome's crown ~94 m ASL (ground ~38 m + 55.6 m). Painted (Grok Imagine) from the photo '20131205 Istanbul 270' by Mark Ahsmann, Wikimedia Commons, CC BY-SA 3.0",
+   "uv": [
+    0.0,
+    0.0,
+    0.60156,
+    0.13287
+   ]
+  },
+  {
+   "id": "sultanahmet",
+   "E": -149.5,
+   "N": -2273.8,
+   "y0": 28.3,
+   "w": 176.4,
+   "h": 71.8,
+   "ax": 0.5894,
+   "l": [
+    0,
+    1500
+   ],
+   "src": "The Blue Mosque: its minarets' tips ~100 m ASL (ground ~36 m + 64 m). Painted (Grok Imagine) from the photo '20131205 Istanbul 270' by Mark Ahsmann, Wikimedia Commons, CC BY-SA 3.0",
+   "uv": [
+    0.0,
+    0.13583,
+    0.5625,
+    0.36663
+   ]
+  },
+  {
+   "id": "beyazit",
+   "E": -1137.3,
+   "N": -1458.6,
+   "y0": 69.8,
+   "w": 203.4,
+   "h": 78.4,
+   "ax": 0.8565,
+   "l": [
+    0,
+    1100
+   ],
+   "src": "The Beyazıt Tower: its tip ~148 m ASL (ground ~63 m + 85 m). Painted (Grok Imagine) from the photo 'Eminönü iskele - panoramio' by Aziz Akbiyik, Wikimedia Commons, CC BY-SA 3.0",
+   "uv": [
+    0.0,
+    0.36959,
+    0.55469,
+    0.58514
+   ]
+  },
+  {
+   "id": "halic",
+   "E": -988.5,
+   "N": -363.4,
+   "y0": 0.0,
+   "w": 304.6,
+   "h": 65.2,
+   "ax": 0.2607,
+   "l": [
+    0,
+    1060
+   ],
+   "src": "The Golden Horn Metro Bridge (pylons ~65 m ASL) with the Atatürk Bridge behind it. Painted (Grok Imagine) from the photo 'Golden Horn Metro Bridge 8458' by Dosseman, Wikimedia Commons, CC BY-SA 4.0",
+   "uv": [
+    0.0,
+    0.58809,
+    0.86719,
+    0.7751
+   ]
+  },
+  {
+   "id": "kizkulesi",
+   "E": 2157.5,
+   "N": -537.5,
+   "y0": 0.0,
+   "w": 222.7,
+   "h": 54.7,
+   "ax": 0.5669,
+   "l": [
+    1100,
+    1700
+   ],
+   "src": "Kız Kulesi (its cone's top ~25 m ASL) before Üsküdar's and Harem's shore. Painted (Grok Imagine) from the photo 'Kız Kulesi, Mädchenturm - panoramio (1)' by qwesy qwesy, Wikimedia Commons, CC BY 3.0",
+   "uv": [
+    0.0,
+    0.77805,
+    0.88281,
+    0.99656
+   ]
+  }
+ ],
+ "encode": "WebP q60, alpha_quality 90, method 6, from the lossless master (~/cdtest/g36/masters/cards2.png, cards2.py)"
+}

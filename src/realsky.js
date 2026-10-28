@@ -13,12 +13,20 @@ import { TOD } from './sky.js';
 import { GR } from './real_galata.js';
 
 /** Loads the cards: assets/real/galata/cards1.json and its sheet ('hi' 2048 wide, 'lo' half), checked whole; null (never rejects) when
- *  anything is missing, broken or too slow: the bridge then keeps the painted band's old city (main.js) */
-export async function loadRealSky(tier, timeoutMs = 15000) {
+ *  anything is missing, broken or too slow: the bridge then keeps the painted band's old city (main.js). (Step 35R-galata-2: and the second
+ *  set, cards2: Hagia Sophia, the Blue Mosque, the Beyazıt Tower, the Haliç Metro Bridge with the Atatürk Bridge, Kız Kulesi before Üsküdar;
+ *  in .more when it is in, else the first set alone) */
+export async function loadRealSky(tier, timeoutMs = 15000, more = true) {
+  const [a, b] = await Promise.all([loadCards(tier, 'cards1', timeoutMs), more ? loadCards(tier, 'cards2', timeoutMs) : null]);
+  if (!a) { if (b) b.img.close(); return null; }
+  a.more = b ? [b] : []; return a;
+}
+/** (step 35R-galata-2) one more sheet of cards (cards2), loaded after the start at a Galata start (realSky.addSheet) */
+export async function loadCards(tier, name, timeoutMs = 15000) {
   const base = ASSETS + 'real/galata/';
   return orNull((async () => {
-    const r = await fetch(base + 'cards1.json');
-    if (!r.ok) throw new Error('cards1.json ' + r.status);
+    const r = await fetch(base + name + '.json');
+    if (!r.ok) throw new Error(name + '.json ' + r.status);
     const J = await r.json(), file = J.files && J.files[tier] ? tier : 'hi', sz = J.size && J.size[file];
     const cards = (J.cards || []).filter(c => c.uv && c.uv[2] > c.uv[0] && c.uv[3] > c.uv[1] && c.w > 0 && c.h > 0);
     if (!sz || !cards.length) throw new Error('no cards listed');
@@ -29,7 +37,7 @@ export async function loadRealSky(tier, timeoutMs = 15000) {
     const img = await createImageBitmap(blob, { premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
     if (img.width !== sz[0] || img.height !== sz[1]) { img.close(); throw new Error(J.files[file] + ' has the wrong size'); }
     return { img, cards, tier: file };
-  })(), timeoutMs, "the Galata Bridge's real skyline unavailable, keeping the painted band's:");
+  })(), timeoutMs, name === 'cards1' ? "the Galata Bridge's real skyline unavailable, keeping the painted band's:" : "the Galata Bridge's second skyline cards unavailable, keeping the first:");
 }
 
 const RING_R = 2400, D2 = Math.PI / 180;
@@ -37,16 +45,22 @@ const _p = [0, 0], _bn = new THREE.Color(), _bc = new THREE.Vector3(), NOON_SUN 
 /** sk: loadRealSky's; post: the grade's; fog: the scene's fog colour. update(camera, s, origin) each frame: returns how much of the far
  *  horizon it holds (0 … 1: the procedural rings give way) */
 export function makeRealSky(sk, post, fog, aniso = 1) {
-  const tex = new THREE.Texture(sk.img); tex.colorSpace = THREE.NoColorSpace; tex.flipY = false; tex.generateMipmaps = true;
-  tex.minFilter = THREE.LinearMipmapLinearFilter; tex.magFilter = THREE.LinearFilter; tex.anisotropy = aniso; tex.needsUpdate = true;
-  const C = sk.cards, n = C.length, pos = new Float32Array(n * 12), uv = new Float32Array(n * 8), idx = [];
-  for (let i = 0; i < n; i++) {
-    const [u0, v0, u1, v1] = C[i].uv; // (v from the sheet's top, as the image bitmap is uploaded: unflipped)
-    uv.set([u0, v1, u1, v1, u1, v0, u0, v0], i * 8);
-    idx.push(i * 4, i * 4 + 1, i * 4 + 2, i * 4, i * 4 + 2, i * 4 + 3);
-  }
-  const geo = new THREE.BufferGeometry(), pa = new THREE.BufferAttribute(pos, 3); pa.setUsage(THREE.DynamicDrawUsage);
-  geo.setAttribute('position', pa); geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); geo.setIndex(idx);
+  // (each sheet's cards in a mesh of their own, one draw each: the same shader, so the same program (step 35R-galata-2: cards2's five))
+  const mkSheet = q => {
+    const tex = new THREE.Texture(q.img); tex.colorSpace = THREE.NoColorSpace; tex.flipY = false; tex.generateMipmaps = true;
+    tex.minFilter = THREE.LinearMipmapLinearFilter; tex.magFilter = THREE.LinearFilter; tex.anisotropy = aniso; tex.needsUpdate = true;
+    const C = q.cards, n = C.length, pos = new Float32Array(n * 12), uv = new Float32Array(n * 8), idx = [];
+    for (let i = 0; i < n; i++) {
+      const [u0, v0, u1, v1] = C[i].uv; // (v from the sheet's top, as the image bitmap is uploaded: unflipped)
+      uv.set([u0, v1, u1, v1, u1, v0, u0, v0], i * 8);
+      idx.push(i * 4, i * 4 + 1, i * 4 + 2, i * 4, i * 4 + 2, i * 4 + 3);
+    }
+    const geo = new THREE.BufferGeometry(), pa = new THREE.BufferAttribute(pos, 3); pa.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('position', pa); geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); geo.setIndex(idx);
+    return { tex, C, n, pos, pa, geo };
+  };
+  const sheets = [sk, ...(sk.more || [])].map(mkSheet);
+  let C = sheets.flatMap(q => q.C), n = C.length; const tex = sheets[0].tex;
   // (the painting by day; the band's tones by the hour under a clear sky (its shade, middle and light by the painting's lightness,
   // keeping some of its own colour); under grey skies its colours relit; a light haze with distance; the light pixels' windows at night)
   const shared = { uFogC: { value: fog }, uA: { value: 1 }, uLightC: { value: new THREE.Color(1, 1, 1) }, uPaint: { value: 1 }, uTone: { value: 0 }, uBS: { value: new THREE.Vector3() },
@@ -66,9 +80,9 @@ export function makeRealSky(sk, post, fog, aniso = 1) {
       float box = step(abs(wf.x), 0.26) * step(abs(wf.y), 0.22);
       return c + mix(vec3(1.25, 0.8, 0.36), vec3(0.85, 0.8, 0.68), step(0.15, h)) * (0.45 + 2.0 * h) * box * uWin;
     }`;
-  const mat = new THREE.ShaderMaterial({
+  const uHz = { value: 0.00035 }, cardMat = map => new THREE.ShaderMaterial({
     fog: false, side: THREE.DoubleSide,
-    uniforms: { map: { value: tex }, uHz: { value: 0.00035 }, ...shared },
+    uniforms: { map: { value: map }, uHz, ...shared },
     vertexShader: /* glsl */`varying vec2 vUv; varying float vD; void main(){ vUv = uv; vec4 mv = modelViewMatrix * vec4(position, 1.0); vD = -mv.z; gl_Position = projectionMatrix * mv; }`,
     fragmentShader: UNGRADE + TONE + /* glsl */`
       uniform sampler2D map; uniform float uHz; varying vec2 vUv; varying float vD;
@@ -80,7 +94,8 @@ export function makeRealSky(sk, post, fog, aniso = 1) {
         gl_FragColor = vec4(mix(c, uFogC, max(h * 0.85, uHaze)), 1.0);
       }`,
   });
-  const mesh = new THREE.Mesh(geo, mat); mesh.frustumCulled = false; mesh.renderOrder = 2;
+  const cmats = sheets.map(q => cardMat(q.tex)), mat = cmats[0];
+  const meshes = sheets.map((q, k) => { const m = new THREE.Mesh(q.geo, cmats[k]); m.frustumCulled = false; m.renderOrder = 2; return m; });
   // the far skyline all round from open elevation (GR.hz: the horizon's angle over the eye every 0.5° of compass bearing, from the
   // bridge): a ring RING_R out round the camera (no parallax: the far shores), its compass turned to the zone's, its top at the real
   // skyline's angle; painted as a far city in haze (blocks of light and shade, a few window rows and minarets' needles), lighter at its
@@ -137,26 +152,35 @@ export function makeRealSky(sk, post, fog, aniso = 1) {
       }`,
   });
   const ring = new THREE.Mesh(rg, rm); ring.frustumCulled = false; ring.renderOrder = 998;
-  const group = new THREE.Group(); group.add(mesh, ring); group.visible = false;
-  const u = shared, fade = new Float32Array(n), at = new Float32Array(n * 2); // (at: each card's place in the world, for the tools)
+  const group = new THREE.Group(); group.add(...meshes, ring); group.visible = false;
+  const u = shared; let fade = new Float32Array(n), at = new Float32Array(n * 2); // (at: each card's place in the world, for the tools)
   return {
-    group, tex, mats: [mat, rm], cards: C, at,
+    group, tex, texes: sheets.map(q => q.tex), mats: [...cmats, rm], cards: C, at,
+    /** (step 35R-galata-2) one more sheet of cards (loadCards: cards2 after the start), its mesh on the same program (nothing compiles);
+     *  returns its texture, to upload */
+    addSheet(q) {
+      const S = mkSheet(q), mt = cardMat(S.tex), m = new THREE.Mesh(S.geo, mt); m.frustumCulled = false; m.renderOrder = 2;
+      sheets.push(S); cmats.push(mt); this.mats.push(mt); this.texes.push(S.tex); group.add(m); group.remove(ring); group.add(ring); // (the ring stays the group's last child)
+      C = sheets.flatMap(s => s.C); n = C.length; fade = new Float32Array(n); at = new Float32Array(n * 2); this.cards = C; this.at = at;
+      return S.tex;
+    },
     /** each frame: the camera; s, its road position; origin, the world's render origin. Returns its share of the far horizon */
     update(camera, s, origin) {
       const l = galL(s), w = Math.max(zoneWeight(s, 'galata'), zoneWeight(s + 300, 'galata'));
       group.visible = l === l && w > 0.02; if (!group.visible) return 0;
       u.uA.value = Math.min(1, w * 1.6);
       const zs = s - l, F = galFrame(zs), cx = camera.position.x + origin.x, cz = camera.position.z + origin.z;
-      for (let i = 0; i < n; i++) {
-        const c = C[i], lo = c.l[0], hi = c.l[1], f = Math.min(1, Math.max(0, Math.min((l - lo) / 25, (hi - l) / 25)));
+      for (let i = 0, q = 0, j = 0; i < n; i++, j++) {
+        if (j === sheets[q].n) { sheets[q].pa.needsUpdate = true; q++; j = 0; } // (the next sheet's cards)
+        const pos = sheets[q].pos, c = C[i], lo = c.l[0], hi = c.l[1], f = Math.min(1, Math.max(0, Math.min((l - lo) / 25, (hi - l) / 25)));
         fade[i] = f; galWorld(zs, c.E, c.N, _p); at[i * 2] = _p[0]; at[i * 2 + 1] = _p[1];
         const x = _p[0], z = _p[1], dx = cx - x, dz = cz - z, d = Math.hypot(dx, dz) || 1, rx = dz / d, rz = -dx / d; // (its right, facing the camera)
         const k = f > 0.5 ? 1 : 0, wl = c.w * c.ax * k, wr = c.w * (1 - c.ax) * k, y0 = c.y0, y1 = c.y0 + c.h * k, X = x - origin.x, Z = z - origin.z;
-        const o = i * 12; // (its four corners, written in place: no array a frame)
+        const o = j * 12; // (its four corners, written in place: no array a frame)
         pos[o] = X - rx * wl; pos[o + 1] = y0; pos[o + 2] = Z - rz * wl; pos[o + 3] = X + rx * wr; pos[o + 4] = y0; pos[o + 5] = Z + rz * wr;
         pos[o + 6] = X + rx * wr; pos[o + 7] = y1; pos[o + 8] = Z + rz * wr; pos[o + 9] = X - rx * wl; pos[o + 10] = y1; pos[o + 11] = Z - rz * wl;
       }
-      pa.needsUpdate = true;
+      sheets[sheets.length - 1].pa.needsUpdate = true;
       // (the ring round the camera, its compass turned to the zone's: a bearing b along the game's heading h0 − b)
       ring.position.set(camera.position.x, 0, camera.position.z); ring.rotation.set(0, Math.atan2(F.s, F.c), 0);
       // the light, the tones and the haze as the painted band's (painted.js makePaintedBand)

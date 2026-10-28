@@ -43,3 +43,28 @@ const _s = {};
 export function galTrack(l, rw, k) { galSect(l, rw, _s); return k ? _s.tf : _s.tn; }
 /** the T1's stops (m into the zone): Karaköy's, by the bridge's end, and Eminönü's, along Reşadiye Caddesi (OSM's platforms) */
 export const GAL_STOPS = [[520, 581], [1197, 1275]];
+
+// ---- Galata's own fronts (step 35R-galata-2: assets/real/galata/galfronts1.*, painted.js loadGalFronts): each block's front by its type,
+// as the real street's (~/cdtest/g36: galfronts1_map.json, its OSM way's building matched to GR.blk on its l and id): the landmarks on
+// their own buildings (P Karaköy Palas, N Nordstern Han, T the Karaköy PTT, S Surp Pırgiç, K Surp Krikor Lusavoriç, B Saint-Benoît,
+// L Liman Han, I the İTO, F Eminönü's ferry terminals), the rest by the street's kinds of building (s Karaköy's grey stone hans, m its
+// mid-century rose-stone offices, p its narrow pastel apartments round the square, f the fish market's restaurants, o Reşadiye's
+// off-white offices, h Eminönü's late-Ottoman hans; '-' keeps its look: the mosques, the bazaar, the tomb, the building sites)
+const GAL_TT = new Map('-382.440.s,-186.682.s,-173.34.s,-154.363.s,-140.487.s,-104.332.-,-79.17.s,-17.154.s,-6.246.s,11.556.s,56.402.s,218.561.s,232.143.K,234.415.s,359.335.s,415.589.s,507.906.s,631.41.s,649.326.s,719.217.m,735.104.m,783.588.s,930.546.-,983.966.m,1022.275.m,1081.648.m,1100.914.m,1187.89.m,1211.545.m,1232.500.m,1348.534.s,1388.348.m,1409.877.m,1480.76.s,1484.477.m,1558.147.m,1613.229.s,1698.157.-,1741.96.s,1769.143.-,1781.955.s,1868.730.s,2026.678.B,2029.739.s,2079.297.s,2279.512.s,2329.694.s,2339.626.s,2529.548.s,2598.198.S,2631.121.s,2707.268.s,2757.21.s,2794.230.s,2823.162.s,2927.295.s,3004.764.s,3021.751.s,3111.750.s,3230.222.s,3334.218.s,3383.387.s,3426.835.s,3626.736.s,3633.356.s,3649.112.s,3792.600.s,3823.806.p,3913.476.p,3947.180.s,4027.202.p,4039.647.s,4086.993.p,4109.914.p,4153.113.p,4167.740.P,4269.712.s,4275.987.p,4278.222.p,4393.601.p,4464.700.p,4560.818.p,4635.170.p,4820.352.p,4867.955.p,5016.841.p,5149.332.N,5352.79.-,5354.450.s,5428.357.T,5476.693.T,5479.275.p,5507.850.-,5540.15.f,5546.853.f,5615.885.f,5621.485.f,5631.42.f,5729.292.f,5780.40.f,5878.859.f,5907.155.f,6068.877.f,10419.509.-,11228.108.-,11944.205.h,12005.217.h,12531.496.h,12645.477.h,12800.643.h,12850.853.F,13054.94.-,13390.192.I,13675.10.F,14207.672.h,14315.855.L,14405.686.h,14616.124.o,14631.613.h,14764.955.F,14809.230.h,14907.373.h,14932.330.h,15088.229.F,15103.182.h,15136.863.o,15192.538.h'.split(',').map(e => { const [l, id, t] = e.split('.'); return [+l * 1000 + +id, t]; }));
+/** a block's front type (GR.blk entry b): its own as matched, else by the rule the map's generic types follow (the fish market's
+ *  one- and two-storey sheds and stalls; in Karaköy the 8-storey and taller offices and Kemeraltı's left side at 60–160 m mid-century
+ *  rose stone, the small blocks round the square pastel, the rest grey stone; in Eminönü the tall ones offices, the rest hans); null:
+ *  as it was (a church, a mosque, the bazaar, the tomb, a site, a shed off the fish market) */
+export function galType(b) {
+  const t = GAL_TT.get(Math.round(b.l * 10) * 1000 + b.id);
+  if (t !== undefined) return t === '-' ? null : t;
+  if (b.k !== 'block' && !(b.k === 'shed' && b.l > 535 && b.l < 615)) return null;
+  if (b.l > 535 && b.l < 615 && (b.lv <= 2 || b.k === 'shed')) return 'f';
+  if (b.l < 1040) {
+    if (b.lv >= 8) return 'm';
+    let a = 0; const p = b.p, n = p.length; for (let i = 0; i < n; i++) { const q = p[i], r = p[(i + 1) % n]; a += q[0] * r[1] - r[0] * q[1]; }
+    if (b.l > 380 && b.l < 580 && Math.abs(a) / 2 < 250) return 'p';
+    return 's';
+  }
+  return b.lv >= 8 ? 'o' : 'h';
+}

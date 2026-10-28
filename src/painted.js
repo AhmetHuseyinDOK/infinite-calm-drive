@@ -358,6 +358,40 @@ export async function loadTownAtlas(tier, timeoutMs = 15000) {
   })(), timeoutMs, "the town's painted shops and windows unavailable, keeping procedural ones:");
 }
 
+/** (step 35R-galata-2) Loads Galata's own painted fronts (assets/real/galata/galfronts1.*, made by ~/cdtest/g36/scripts/packfronts2.py from
+ *  Grok Imagine elevations of Commons photos of the real buildings: Karaköy Palas, Nordstern Han, the Karaköy PTT, Surp Pırgiç, Surp Krikor
+ *  Lusavoriç, Saint-Benoît, Liman Han, the İTO, Eminönü's ferry terminals, and the street's kinds of building): an albedo sheet of bays and
+ *  its emissive sheet at half scale in the same layout, each decoded flipped (GL's v up, as the atlases' cells: textures.js Atlas), and the
+ *  index (each tile's px, its size in metres and its kind; the shops' panes). Drawn straight from these two textures (no canvas: main.js
+ *  galFrontTex), their cells listed in the atlases' one namespace. 'hi' (100 px/m) or 'lo' (50: phones, the embed). Null (never rejects) on
+ *  anything missing, broken, truncated or too slow: Galata then keeps the town's painted bays (props.js galFacade) */
+export async function loadGalFronts(tier, timeoutMs = 15000) {
+  const base = ASSETS + 'real/galata/';
+  return orNull((async () => {
+    const r = await fetch(base + 'galfronts1.json');
+    if (!r.ok) throw new Error('galfronts1.json ' + r.status);
+    const J = await r.json(), file = J.files && J.files[tier] ? tier : 'hi', F = J.files && J.files[file], B = (J.bytes && J.bytes[file]) || {}, S = J.size && J.size[file];
+    const tiles = (J.tiles && J.tiles[file]) || [], m = J.m || {}, kinds = J.cells || {};
+    if (!F || !F.a || !F.e || !S || !S.a || !S.e || !tiles.length) throw new Error('no tiles listed');
+    if (S.e[0] * 2 !== S.a[0] || S.e[1] * 2 !== S.a[1]) throw new Error('the glow is not at half the albedo\'s size');
+    if (tiles.some(t => !(t.w > 0 && t.h > 0 && t.x >= 0 && t.y >= 0 && t.x + t.w <= S.a[0] && t.y + t.h <= S.a[1] && m[t.name] && m[t.name][0] > 0 && m[t.name][1] > 0 && kinds[t.name]))) throw new Error('a tile lies outside the sheet or is unlisted');
+    const sheet = async k => {
+      const ri = await fetch(base + F[k]);
+      if (!ri.ok) throw new Error(F[k] + ' ' + ri.status);
+      const blob = await ri.blob(); // (checked whole: a truncated image decodes without complaint)
+      if (B[k] && blob.size !== B[k]) throw new Error(F[k] + ' is ' + blob.size + ' bytes, not ' + B[k]);
+      const img = await createImageBitmap(blob, { imageOrientation: 'flipY', premultiplyAlpha: 'none' });
+      if (img.width !== S[k][0] || img.height !== S[k][1]) { img.close(); throw new Error(F[k] + ' has the wrong size'); }
+      return img;
+    };
+    const a = await sheet('a'); let e;
+    try { e = await sheet('e'); } catch (err) { a.close(); throw err; }
+    const kind = {}; for (const t of tiles) kind[t.name] = kinds[t.name].kind;
+    const glass = {}; for (const [n, g] of Object.entries(J.glass || {})) if (kind[n] === 'shop' && (g.panes || []).length) glass[n] = { panes: g.panes, holes: g.holes || [] };
+    return { a, e, tiles, W: S.a[0], H: S.a[1], m, kind, glass, tier: file };
+  })(), timeoutMs, "Galata's painted fronts unavailable, keeping the town's bays:");
+}
+
 /** (step 32) Loads a region's chain stores' painted bays (assets/chains/chains1<region>.*, made by ~/cdtest/s32/scripts/packchains.py
  *  from Grok Imagine edits of the game's own painted bays): Japan's konbini ('jp': a window with the magazine rack behind the glass, a
  *  window onto the coffee machine and the bento, the automatic sliding doors, all lit a cool white) or the Turkish town's discount

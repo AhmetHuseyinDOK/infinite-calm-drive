@@ -141,9 +141,14 @@ function paintTram(tier) {
 // ---- its body
 const W1 = [1, 1, 1], BELLOWS = C('#3b3f45'), UNDER = C('#1e2024'), PANT = C('#5a5f66'), ROOFBOX = C('#2a6fb8'), INSUL = C('#8a4a2c');
 /** the train's geometry: two cars nose to nose (its own frame: x along it, its head at +x; y over the rails; z across, +z its right),
- *  dest: the head face's ('K' / 'B') */
+ *  dest: the head face's ('K' / 'B'). (Step 35R-galata-2: a car's three sections each a geometry of its own, centred on its own span
+ *  (SPAN), so each follows the track by its own ends round Eminönü's tight bend: the rear cab with its nose, the middle section with both
+ *  joints' bellows, the front cab; the coupler's half on its end's cab) */
+const X1 = -CAR / 2 + SEC[0], X2 = X1 + JNT, X3 = X2 + SEC[1], X4 = X3 + JNT;
+/** each section's span along its car (car-local x: the rear cab, the middle section, the front cab), where it rides on the track */
+const SPAN = [[-CAR / 2, X1], [X2, X3], [X4, CAR / 2]];
 function buildTram(cells, dest, which = 1) {
-  const g = new GB({ uv: true, ao: true, lit: true }), I4 = new THREE.Matrix4(); g.setM(I4);
+  let g = new GB({ uv: true, ao: true, lit: true }); const I4 = new THREE.Matrix4(); g.setM(I4);
   const plain = cells.plain, pu = (plain.u0 + plain.u1) / 2, pv = (plain.v0 + plain.v1) / 2, PU = { u0: pu, u1: pu, v0: pv, v1: pv };
   const P6 = { nz: PU, pz: PU, nx: PU, px: PU, py: PU, ny: PU };
   /** the cross-section's normals at its points (smooth, the loft's: x × the section's own slope) */
@@ -214,18 +219,20 @@ function buildTram(cells, dest, which = 1) {
   const box = (x0, y0, z0, x1, y1, z1, col) => g.box(x0, y0, z0, x1, y1, z1, col, P6);
   /** a rod (its uv set to the plain texel) */
   const rod = (p, q, r0, r1, col) => { const o = g.n; g.rod(p, q, r0, r1, 4, col); for (let i = o; i < g.n; i++) { g.U[i * 2] = pu; g.U[i * 2 + 1] = pv; } };
-  /** one car centred at cx; its faces: rear (at −x) and front (at +x) */
-  const car = (cx, rear, front) => {
+  /** one car centred at cx; its faces: rear (at −x) and front (at +x); only its section `part` (0: the rear cab, 1: the middle, 2: the
+   *  front cab) */
+  const car = (cx, rear, front, part) => {
     const xa = cx - CAR / 2, x1 = xa + SEC[0], x2 = x1 + JNT, x3 = x2 + SEC[1], x4 = x3 + JNT, xb = x4 + SEC[2];
     const cab = cells.side_cab, mid = cells.side_mid, fk = NOSE / SEC[0];
-    body(xa + NOSE, x1, cab, 1 - fk, 0); nose(xa + NOSE, -1, cab, 1 - fk, 1, cells['face_' + rear], rear === 'D' ? 0 : 12);
-    body(x2, x3, mid, 0, 1);
-    body(x4, xb - NOSE, cab, 0, 1 - fk); nose(xb - NOSE, 1, cab, 1 - fk, 1, cells['face_' + front], front === 'D' ? 0 : 12);
-    endCap(x1, 1); endCap(x2, -1); endCap(x3, 1); endCap(x4, -1);
-    bellows(x1, x2); bellows(x3, x4);
+    if (part === 0) { body(xa + NOSE, x1, cab, 1 - fk, 0); nose(xa + NOSE, -1, cab, 1 - fk, 1, cells['face_' + rear], rear === 'D' ? 0 : 12); endCap(x1, 1); }
+    if (part === 2) { body(x4, xb - NOSE, cab, 0, 1 - fk); nose(xb - NOSE, 1, cab, 1 - fk, 1, cells['face_' + front], front === 'D' ? 0 : 12); endCap(x4, -1); }
     // under it: the bogies' dark shadow behind the skirts; on its roof: the equipment under its blue fairings
-    for (const [p, q] of [[xa + 1.6, x1 - 0.3], [x2 + 0.3, x3 - 0.3], [x4 + 0.3, xb - 1.6]]) box(p, 0.04, -1.08, q, 0.27, 1.08, UNDER);
-    for (const [p, q] of [[xa + 3.2, x1 - 2.0], [x4 + 2.0, xb - 3.2]]) { box(p, 3.33, -0.62, q, 3.62, 0.62, ROOFBOX); box(p + 0.1, 3.62, -0.5, q - 0.1, 3.66, 0.5, ROOFBOX); }
+    if (part === 0) { box(xa + 1.6, 0.04, -1.08, x1 - 0.3, 0.27, 1.08, UNDER); box(xa + 3.2, 3.33, -0.62, x1 - 2.0, 3.62, 0.62, ROOFBOX); box(xa + 3.3, 3.62, -0.5, x1 - 2.1, 3.66, 0.5, ROOFBOX); }
+    if (part === 2) { box(x4 + 0.3, 0.04, -1.08, xb - 1.6, 0.27, 1.08, UNDER); box(x4 + 2.0, 3.33, -0.62, xb - 3.2, 3.62, 0.62, ROOFBOX); box(x4 + 2.1, 3.62, -0.5, xb - 3.3, 3.66, 0.5, ROOFBOX); }
+    if (part !== 1) return;
+    body(x2, x3, mid, 0, 1); endCap(x2, -1); endCap(x3, 1);
+    bellows(x1, x2); bellows(x3, x4);
+    box(x2 + 0.3, 0.04, -1.08, x3 - 0.3, 0.27, 1.08, UNDER);
     // the pantograph over the middle section: its frame on insulators, the lower arm, the knee, the upper arm, the head pressed up
     // against the contact wire (its two collector strips, their horns)
     const xp = (x2 + x3) / 2;
@@ -240,10 +247,16 @@ function buildTram(cells, dest, which = 1) {
     }
     box(head[0] - 0.16, PANTO - 0.12, -0.08, head[0] + 0.16, PANTO - 0.04, 0.08, PANT);
   };
-  // (step 35R: each car its own body, centred, so each follows the real tracks' bends by its own bogies; the coupler's half on each)
-  if (which === 0) { car(0, 'T', 'D'); box(CAR / 2 - 0.1, 0.42, -0.14, (CAR + GAPC) / 2, 0.6, 0.14, UNDER); }
-  else { car(0, 'D', dest); box(-(CAR + GAPC) / 2, 0.42, -0.14, -CAR / 2 + 0.1, 0.6, 0.14, UNDER); }
-  return g.build();
+  // (step 35R: each car its own body, centred, so each follows the real tracks' bends by its own bogies; the coupler's half on each.
+  // Step 35R-galata-2: each section its own geometry, centred on its span)
+  const out = [];
+  for (let k = 0; k < 3; k++) {
+    if (k) { g = new GB({ uv: true, ao: true, lit: true }); g.setM(I4); }
+    if (which === 0) { car(0, 'T', 'D', k); if (k === 2) box(CAR / 2 - 0.1, 0.42, -0.14, (CAR + GAPC) / 2, 0.6, 0.14, UNDER); }
+    else { car(0, 'D', dest, k); if (k === 0) box(-(CAR + GAPC) / 2, 0.42, -0.14, -CAR / 2 + 0.1, 0.6, 0.14, UNDER); }
+    const geo = g.build(); geo.translate(-(SPAN[k][0] + SPAN[k][1]) / 2, 0, 0); out.push(geo);
+  }
+  return out;
 }
 
 // ---- its comings and goings
@@ -251,7 +264,10 @@ function buildTram(cells, dest, which = 1) {
 const V_OUR = 13.0, V_TOW = 9.0, ACC = 0.9, DEC = 1.1; // its speeds (m/s: ~47 km/h passing the car's 40, ~32 meeting it); starting, braking
 // its run through the zone (m into it): along Kemeraltı Caddesi, over the bridge, round Eminönü's bend to the T1's Eminönü stop on
 // Reşadiye Caddesi (galata.js GAL_STOPS: its front at the platform's end), where ours waits until we have gone by
-const RUN_A = 200, RUN_B = 1272, BOG = CAR / 2 - 3.2; // (BOG: the bogies' distance from a car's middle)
+const RUN_A = 200, RUN_B = 1272;
+/** (step 35R-galata-2) the sections' ends from the tram's middle along the track (the head car's middle (CAR + GAPC) / 2 ahead): its rear
+ *  cab's, its middle section's, its front cab's; the second car's are these going back */
+const MF = [...SPAN.flat().map(x => (CAR + GAPC) / 2 + x)], PF_ = new Float32Array(18), PB_ = new Float32Array(18);
 const _f = {};
 /** the start of the Galata zone the drive is in or about to enter (NaN: none near) */
 function galZone(s) {
@@ -266,8 +282,8 @@ export async function makeTram(M, renderer, tier, next = null) {
   const wait = () => (next ? next() : null);
   const { A, cells } = paintTram(tier); await wait();
   // (one body a car: the far track's tram heads for Kabataş; the near track's is its copy, its head face's display reading Bağcılar)
-  const geoK = buildTram(cells, 'K'), geoK0 = buildTram(cells, 'K', 0), geoB = geoK.clone(), uv = geoB.attributes.uv.array, fK = cells.face_K, fB = cells.face_B; await wait();
-  for (let i = 0; i < uv.length; i += 2) if (uv[i] > fK.u0 - 1e-5 && uv[i] < fK.u1 + 1e-5 && uv[i + 1] > fK.v0 - 1e-5 && uv[i + 1] < fK.v1 + 1e-5) { uv[i] += fB.u0 - fK.u0; uv[i + 1] += fB.v0 - fK.v0; }
+  const geoK = buildTram(cells, 'K'), geoK0 = buildTram(cells, 'K', 0), geoB = geoK.map(q => q.clone()), fK = cells.face_K, fB = cells.face_B; await wait();
+  for (const q of geoB) { const uv = q.attributes.uv.array; for (let i = 0; i < uv.length; i += 2) if (uv[i] > fK.u0 - 1e-5 && uv[i] < fK.u1 + 1e-5 && uv[i + 1] > fK.v0 - 1e-5 && uv[i + 1] < fK.v1 + 1e-5) { uv[i] += fB.u0 - fK.u0; uv[i + 1] += fB.v0 - fK.v0; } }
   const tex = A.textures(renderer); renderer.initTexture(tex.map); await wait(); renderer.initTexture(tex.emissive);
   // (the atlas's material on the tram's own texture pair, and its own shadow twin: step 32's makeAtlasChain)
   const mat = M.atlas.clone(); mat.map = tex.map; mat.emissiveMap = tex.emissive; mat.onBeforeCompile = M.atlas.onBeforeCompile; mat.customProgramCacheKey = M.atlas.customProgramCacheKey;
@@ -275,22 +291,39 @@ export async function makeTram(M, renderer, tier, next = null) {
   const group = new THREE.Group();
   const mk = (geo, geo0, track, dir, seed, wait) => {
     const car = g => { const m = new THREE.Mesh(g, mat); m.castShadow = m.receiveShadow = true; m.customDepthMaterial = depth; m.visible = false; group.add(m); return m; };
-    return { mesh: car(geo), mesh0: car(geo0), k: track, dir, on: false, s: 0, v: 0, zs: 0, wait, r: rng(seed) };
+    return { mesh: geo.map(car), mesh0: geo0.map(car), k: track, dir, on: false, s: 0, v: 0, zs: 0, wait, r: rng(seed) };
   };
   // the near track's (our way, to the T1's Bağcılar end: it passes us) and the far one's (towards Karaköy and Kabataş: it meets us)
   const T = [mk(geoB, geoK0, 0, 1, 743, 25), mk(geoK, geoK0, 1, -1, 751, 8)];
   /** a point of track k at road position s (out: [x, z, y]: the world's, less the origin) */
   const _p = [0, 0, 0], _q = [0, 0, 0];
-  function trackAt(path, s, k, origin, out) { path.at(s, _f); const u = galTrack(galL(s), zparam(s, 'rw'), k); out[0] = _f.x + _f.rx * u - origin.x; out[1] = _f.z + _f.rz * u - origin.z; out[2] = _f.y; return out; }
-  /** each car on the track by its two bogies (its middle between them, turned along the line through them) */
-  function placeCar(m, path, sc, k, dir, origin, show) {
-    trackAt(path, sc - BOG, k, origin, _p); trackAt(path, sc + BOG, k, origin, _q);
-    m.position.set((_p[0] + _q[0]) / 2, (_p[2] + _q[2]) / 2 - 0.06, (_p[1] + _q[1]) / 2);
-    m.rotation.set(0, Math.atan2(_q[0] - _p[0], _q[1] - _p[1]) - (dir * Math.PI) / 2, 0); m.visible = show;
+  // (step 35R-galata-2: l from its zone's start: past the zone's end, its last stretch (galata.js clamps it), never NaN)
+  function trackAt(path, s, k, origin, out, zs) { path.at(s, _f); const u = galTrack(s - zs, zparam(s, 'rw'), k); out[0] = _f.x + _f.rx * u - origin.x; out[1] = _f.z + _f.rz * u - origin.z; out[2] = _f.y; return out; }
+  /** (step 35R-galata-2) the track's points at the sections' ends, measured along the track itself from the tram's middle (road s0) going
+   *  sd (+1: its way, −1: back): MF from the middle, the head car's sections' ends going its way and the second car's going back (the cars
+   *  are mirror images about the coupling); stepping the road two metres at a time (the track's own length differs from the road's round
+   *  Eminönü's bend: its inside), into out ([x, z, y] a point) */
+  function march(path, s0, k, origin, sd, out, zs) {
+    trackAt(path, s0, k, origin, _p, zs); let acc = 0, s = s0, j = 0;
+    for (let i = 0; i < 40 && j < MF.length; i++) { // (2 m of road a step: on the tightest bend the chord strays under 2 cm from the arc)
+      trackAt(path, s + 2 * sd, k, origin, _q, zs); const seg = Math.hypot(_q[0] - _p[0], _q[1] - _p[1]) || 1e-6;
+      while (j < MF.length && acc + seg >= MF[j]) { const f = (MF[j] - acc) / seg, o = j * 3; out[o] = _p[0] + (_q[0] - _p[0]) * f; out[o + 1] = _p[1] + (_q[1] - _p[1]) * f; out[o + 2] = _p[2] + (_q[2] - _p[2]) * f; j++; }
+      acc += seg; s += 2 * sd; _p[0] = _q[0]; _p[1] = _q[1]; _p[2] = _q[2];
+    }
+    for (; j < MF.length; j++) { const o = j * 3; out[o] = _p[0]; out[o + 1] = _p[1]; out[o + 2] = _p[2]; } // (never: 80 m of road is more than 30 of track)
+  }
+  /** a section between two of those points (a at its rear, b at its front, the way it travels): its middle between them, turned along the
+   *  chord through them (local +x the way it travels) */
+  function placeSec(m, A, a, B, b, show) {
+    const ax = A[a * 3], az = A[a * 3 + 1], bx = B[b * 3], bz = B[b * 3 + 1];
+    m.position.set((ax + bx) / 2, (A[a * 3 + 2] + B[b * 3 + 2]) / 2 - 0.06, (az + bz) / 2);
+    m.rotation.set(0, Math.atan2(bx - ax, bz - az) - Math.PI / 2, 0); m.visible = show;
   }
   function place(t, path, origin, show) {
-    const d = (CAR + GAPC) / 2; // (the head car, carrying the display, leads)
-    placeCar(t.mesh, path, t.s + t.dir * d, t.k, t.dir, origin, show); placeCar(t.mesh0, path, t.s - t.dir * d, t.k, t.dir, origin, show);
+    march(path, t.s, t.k, origin, t.dir, PF_, t.zs); march(path, t.s, t.k, origin, -t.dir, PB_, t.zs);
+    // (the head car, carrying the display, leads: its rear cab, middle and front cab ahead of the coupling; the second car's behind it)
+    placeSec(t.mesh[0], PF_, 0, PF_, 1, show); placeSec(t.mesh[1], PF_, 2, PF_, 3, show); placeSec(t.mesh[2], PF_, 4, PF_, 5, show);
+    placeSec(t.mesh0[0], PB_, 5, PB_, 4, show); placeSec(t.mesh0[1], PB_, 3, PB_, 2, show); placeSec(t.mesh0[2], PB_, 1, PB_, 0, show);
   }
   function step(t, dt, camS, zs, speed) {
     if (!t.on) {
@@ -323,7 +356,7 @@ export async function makeTram(M, renderer, tier, next = null) {
     update(dt, path, s, cam, origin, speed, show = 1) {
       path.at(s, _f);
       const camS = s + (cam.x + origin.x - _f.x) * _f.fx + (cam.z + origin.z - _f.z) * _f.fz, zs = galZone(camS);
-      for (const t of T) { if (step(t, dt, camS, zs, speed)) place(t, path, origin, show > 0); else t.mesh.visible = t.mesh0.visible = false; }
+      for (const t of T) { if (step(t, dt, camS, zs, speed)) place(t, path, origin, show > 0); else for (let i = 0; i < 3; i++) t.mesh[i].visible = t.mesh0[i].visible = false; }
     },
   };
 }

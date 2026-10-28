@@ -1,0 +1,1071 @@
+{
+ "files": {
+  "hi": {
+   "a": "galfronts1a_hi.webp",
+   "e": "galfronts1e_hi.webp"
+  },
+  "lo": {
+   "a": "galfronts1a_lo.webp",
+   "e": "galfronts1e_lo.webp"
+  }
+ },
+ "bytes": {
+  "hi": {
+   "a": 290148,
+   "e": 34908
+  },
+  "lo": {
+   "a": 105158,
+   "e": 13232
+  }
+ },
+ "size": {
+  "hi": {
+   "a": [
+    2048,
+    3432
+   ],
+   "e": [
+    1024,
+    1716
+   ]
+  },
+  "lo": {
+   "a": [
+    1024,
+    1716
+   ],
+   "e": [
+    512,
+    858
+   ]
+  }
+ },
+ "tiles": {
+  "hi": [
+   {
+    "name": "gfr_palas_g",
+    "x": 0,
+    "y": 0,
+    "w": 560,
+    "h": 1160
+   },
+   {
+    "name": "gfr_palas_u",
+    "x": 0,
+    "y": 2720,
+    "w": 540,
+    "h": 380
+   },
+   {
+    "name": "gfr_nord_g",
+    "x": 1412,
+    "y": 0,
+    "w": 360,
+    "h": 640
+   },
+   {
+    "name": "gfr_nord_u",
+    "x": 1188,
+    "y": 2276,
+    "w": 360,
+    "h": 440
+   },
+   {
+    "name": "gfr_ptt_g",
+    "x": 564,
+    "y": 1004,
+    "w": 472,
+    "h": 620
+   },
+   {
+    "name": "gfr_stone_g",
+    "x": 1464,
+    "y": 1288,
+    "w": 360,
+    "h": 500
+   },
+   {
+    "name": "gfr_stone_u",
+    "x": 544,
+    "y": 2720,
+    "w": 360,
+    "h": 380
+   },
+   {
+    "name": "gfr_sben_g",
+    "x": 1412,
+    "y": 644,
+    "w": 360,
+    "h": 640
+   },
+   {
+    "name": "gfr_surp_g",
+    "x": 0,
+    "y": 2212,
+    "w": 480,
+    "h": 460
+   },
+   {
+    "name": "gfr_surp_u",
+    "x": 988,
+    "y": 0,
+    "w": 420,
+    "h": 720
+   },
+   {
+    "name": "gfr_krikor",
+    "x": 564,
+    "y": 0,
+    "w": 420,
+    "h": 1000
+   },
+   {
+    "name": "gfr_liman_g",
+    "x": 0,
+    "y": 1164,
+    "w": 460,
+    "h": 540
+   },
+   {
+    "name": "gfr_liman_u",
+    "x": 1552,
+    "y": 2700,
+    "w": 420,
+    "h": 380
+   },
+   {
+    "name": "gfr_ito_u",
+    "x": 908,
+    "y": 3084,
+    "w": 400,
+    "h": 340
+   },
+   {
+    "name": "gfr_ito_g",
+    "x": 644,
+    "y": 1832,
+    "w": 540,
+    "h": 460
+   },
+   {
+    "name": "gfr_ferry_g",
+    "x": 0,
+    "y": 1708,
+    "w": 640,
+    "h": 500
+   },
+   {
+    "name": "gfr_emhan_g",
+    "x": 1464,
+    "y": 1792,
+    "w": 440,
+    "h": 480
+   },
+   {
+    "name": "gfr_pastel_g",
+    "x": 1552,
+    "y": 2276,
+    "w": 448,
+    "h": 420
+   },
+   {
+    "name": "gfr_pastel_u",
+    "x": 1312,
+    "y": 3084,
+    "w": 448,
+    "h": 320
+   },
+   {
+    "name": "gfr_emhan_u",
+    "x": 908,
+    "y": 2720,
+    "w": 360,
+    "h": 360
+   },
+   {
+    "name": "gfr_modern_g",
+    "x": 1040,
+    "y": 1288,
+    "w": 420,
+    "h": 540
+   },
+   {
+    "name": "gfr_modern_u",
+    "x": 0,
+    "y": 3104,
+    "w": 328,
+    "h": 320
+   },
+   {
+    "name": "gfr_fish_g",
+    "x": 484,
+    "y": 2296,
+    "w": 420,
+    "h": 420
+   }
+  ],
+  "lo": [
+   {
+    "name": "gfr_palas_g",
+    "x": 0,
+    "y": 0,
+    "w": 280,
+    "h": 580
+   },
+   {
+    "name": "gfr_palas_u",
+    "x": 0,
+    "y": 1360,
+    "w": 270,
+    "h": 190
+   },
+   {
+    "name": "gfr_nord_g",
+    "x": 706,
+    "y": 0,
+    "w": 180,
+    "h": 320
+   },
+   {
+    "name": "gfr_nord_u",
+    "x": 594,
+    "y": 1138,
+    "w": 180,
+    "h": 220
+   },
+   {
+    "name": "gfr_ptt_g",
+    "x": 282,
+    "y": 502,
+    "w": 236,
+    "h": 310
+   },
+   {
+    "name": "gfr_stone_g",
+    "x": 732,
+    "y": 644,
+    "w": 180,
+    "h": 250
+   },
+   {
+    "name": "gfr_stone_u",
+    "x": 272,
+    "y": 1360,
+    "w": 180,
+    "h": 190
+   },
+   {
+    "name": "gfr_sben_g",
+    "x": 706,
+    "y": 322,
+    "w": 180,
+    "h": 320
+   },
+   {
+    "name": "gfr_surp_g",
+    "x": 0,
+    "y": 1106,
+    "w": 240,
+    "h": 230
+   },
+   {
+    "name": "gfr_surp_u",
+    "x": 494,
+    "y": 0,
+    "w": 210,
+    "h": 360
+   },
+   {
+    "name": "gfr_krikor",
+    "x": 282,
+    "y": 0,
+    "w": 210,
+    "h": 500
+   },
+   {
+    "name": "gfr_liman_g",
+    "x": 0,
+    "y": 582,
+    "w": 230,
+    "h": 270
+   },
+   {
+    "name": "gfr_liman_u",
+    "x": 776,
+    "y": 1350,
+    "w": 210,
+    "h": 190
+   },
+   {
+    "name": "gfr_ito_u",
+    "x": 454,
+    "y": 1542,
+    "w": 200,
+    "h": 170
+   },
+   {
+    "name": "gfr_ito_g",
+    "x": 322,
+    "y": 916,
+    "w": 270,
+    "h": 230
+   },
+   {
+    "name": "gfr_ferry_g",
+    "x": 0,
+    "y": 854,
+    "w": 320,
+    "h": 250
+   },
+   {
+    "name": "gfr_emhan_g",
+    "x": 732,
+    "y": 896,
+    "w": 220,
+    "h": 240
+   },
+   {
+    "name": "gfr_pastel_g",
+    "x": 776,
+    "y": 1138,
+    "w": 224,
+    "h": 210
+   },
+   {
+    "name": "gfr_pastel_u",
+    "x": 656,
+    "y": 1542,
+    "w": 224,
+    "h": 160
+   },
+   {
+    "name": "gfr_emhan_u",
+    "x": 454,
+    "y": 1360,
+    "w": 180,
+    "h": 180
+   },
+   {
+    "name": "gfr_modern_g",
+    "x": 520,
+    "y": 644,
+    "w": 210,
+    "h": 270
+   },
+   {
+    "name": "gfr_modern_u",
+    "x": 0,
+    "y": 1552,
+    "w": 164,
+    "h": 160
+   },
+   {
+    "name": "gfr_fish_g",
+    "x": 242,
+    "y": 1148,
+    "w": 210,
+    "h": 210
+   }
+  ]
+ },
+ "mask": {
+  "files": {
+   "hi": "galglass1_hi.png",
+   "lo": "galglass1_lo.png"
+  },
+  "bytes": {
+   "hi": 17149,
+   "lo": 7591
+  },
+  "size": {
+   "hi": [
+    2048,
+    3432
+   ],
+   "lo": [
+    1024,
+    1716
+   ]
+  },
+  "tiles": [
+   {
+    "name": "gfr_palas_g",
+    "x": 0.0,
+    "y": 0.0,
+    "w": 0.273438,
+    "h": 0.337995,
+    "box": [
+     0.11,
+     0.11,
+     0.89,
+     0.88
+    ]
+   },
+   {
+    "name": "gfr_nord_g",
+    "x": 0.689453,
+    "y": 0.0,
+    "w": 0.175781,
+    "h": 0.18648,
+    "box": [
+     0.24,
+     0.08,
+     0.79,
+     0.52
+    ]
+   },
+   {
+    "name": "gfr_ptt_g",
+    "x": 0.275391,
+    "y": 0.292541,
+    "w": 0.230469,
+    "h": 0.180653,
+    "box": [
+     0.09,
+     0.01,
+     0.89,
+     0.72
+    ]
+   },
+   {
+    "name": "gfr_stone_g",
+    "x": 0.714844,
+    "y": 0.375291,
+    "w": 0.175781,
+    "h": 0.145688,
+    "box": [
+     0.14,
+     0.04,
+     0.85,
+     0.91
+    ]
+   },
+   {
+    "name": "gfr_surp_g",
+    "x": 0.0,
+    "y": 0.644522,
+    "w": 0.234375,
+    "h": 0.134033,
+    "box": [
+     0.16,
+     0.09,
+     0.89,
+     0.77
+    ]
+   },
+   {
+    "name": "gfr_liman_g",
+    "x": 0.0,
+    "y": 0.339161,
+    "w": 0.224609,
+    "h": 0.157343,
+    "box": [
+     0.14,
+     0.05,
+     0.86,
+     0.71
+    ]
+   },
+   {
+    "name": "gfr_ito_g",
+    "x": 0.314453,
+    "y": 0.5338,
+    "w": 0.263672,
+    "h": 0.134033,
+    "box": [
+     0.28,
+     0,
+     0.71,
+     0.64
+    ]
+   },
+   {
+    "name": "gfr_ferry_g",
+    "x": 0.0,
+    "y": 0.497669,
+    "w": 0.3125,
+    "h": 0.145688,
+    "box": [
+     0.19,
+     0.01,
+     0.82,
+     0.53
+    ]
+   },
+   {
+    "name": "gfr_emhan_g",
+    "x": 0.714844,
+    "y": 0.522145,
+    "w": 0.214844,
+    "h": 0.13986,
+    "box": [
+     0.19,
+     0.18,
+     0.82,
+     0.65
+    ]
+   },
+   {
+    "name": "gfr_pastel_g",
+    "x": 0.757812,
+    "y": 0.66317,
+    "w": 0.21875,
+    "h": 0.122378,
+    "box": [
+     0.16,
+     0,
+     0.84,
+     0.5
+    ]
+   },
+   {
+    "name": "gfr_modern_g",
+    "x": 0.507812,
+    "y": 0.375291,
+    "w": 0.205078,
+    "h": 0.157343,
+    "box": [
+     0.17,
+     0.15,
+     0.83,
+     0.63
+    ]
+   },
+   {
+    "name": "gfr_fish_g",
+    "x": 0.236328,
+    "y": 0.668998,
+    "w": 0.205078,
+    "h": 0.122378,
+    "box": [
+     0.01,
+     0.02,
+     0.91,
+     0.61
+    ]
+   }
+  ]
+ },
+ "tilesF": [
+  {
+   "name": "gfr_palas_g",
+   "x": 0.0,
+   "y": 0.0,
+   "w": 0.273438,
+   "h": 0.337995
+  },
+  {
+   "name": "gfr_palas_u",
+   "x": 0.0,
+   "y": 0.792541,
+   "w": 0.263672,
+   "h": 0.110723
+  },
+  {
+   "name": "gfr_nord_g",
+   "x": 0.689453,
+   "y": 0.0,
+   "w": 0.175781,
+   "h": 0.18648
+  },
+  {
+   "name": "gfr_nord_u",
+   "x": 0.580078,
+   "y": 0.66317,
+   "w": 0.175781,
+   "h": 0.128205
+  },
+  {
+   "name": "gfr_ptt_g",
+   "x": 0.275391,
+   "y": 0.292541,
+   "w": 0.230469,
+   "h": 0.180653
+  },
+  {
+   "name": "gfr_stone_g",
+   "x": 0.714844,
+   "y": 0.375291,
+   "w": 0.175781,
+   "h": 0.145688
+  },
+  {
+   "name": "gfr_stone_u",
+   "x": 0.265625,
+   "y": 0.792541,
+   "w": 0.175781,
+   "h": 0.110723
+  },
+  {
+   "name": "gfr_sben_g",
+   "x": 0.689453,
+   "y": 0.187646,
+   "w": 0.175781,
+   "h": 0.18648
+  },
+  {
+   "name": "gfr_surp_g",
+   "x": 0.0,
+   "y": 0.644522,
+   "w": 0.234375,
+   "h": 0.134033
+  },
+  {
+   "name": "gfr_surp_u",
+   "x": 0.482422,
+   "y": 0.0,
+   "w": 0.205078,
+   "h": 0.20979
+  },
+  {
+   "name": "gfr_krikor",
+   "x": 0.275391,
+   "y": 0.0,
+   "w": 0.205078,
+   "h": 0.291375
+  },
+  {
+   "name": "gfr_liman_g",
+   "x": 0.0,
+   "y": 0.339161,
+   "w": 0.224609,
+   "h": 0.157343
+  },
+  {
+   "name": "gfr_liman_u",
+   "x": 0.757812,
+   "y": 0.786713,
+   "w": 0.205078,
+   "h": 0.110723
+  },
+  {
+   "name": "gfr_ito_u",
+   "x": 0.443359,
+   "y": 0.898601,
+   "w": 0.195312,
+   "h": 0.099068
+  },
+  {
+   "name": "gfr_ito_g",
+   "x": 0.314453,
+   "y": 0.5338,
+   "w": 0.263672,
+   "h": 0.134033
+  },
+  {
+   "name": "gfr_ferry_g",
+   "x": 0.0,
+   "y": 0.497669,
+   "w": 0.3125,
+   "h": 0.145688
+  },
+  {
+   "name": "gfr_emhan_g",
+   "x": 0.714844,
+   "y": 0.522145,
+   "w": 0.214844,
+   "h": 0.13986
+  },
+  {
+   "name": "gfr_pastel_g",
+   "x": 0.757812,
+   "y": 0.66317,
+   "w": 0.21875,
+   "h": 0.122378
+  },
+  {
+   "name": "gfr_pastel_u",
+   "x": 0.640625,
+   "y": 0.898601,
+   "w": 0.21875,
+   "h": 0.09324
+  },
+  {
+   "name": "gfr_emhan_u",
+   "x": 0.443359,
+   "y": 0.792541,
+   "w": 0.175781,
+   "h": 0.104895
+  },
+  {
+   "name": "gfr_modern_g",
+   "x": 0.507812,
+   "y": 0.375291,
+   "w": 0.205078,
+   "h": 0.157343
+  },
+  {
+   "name": "gfr_modern_u",
+   "x": 0.0,
+   "y": 0.904429,
+   "w": 0.160156,
+   "h": 0.09324
+  },
+  {
+   "name": "gfr_fish_g",
+   "x": 0.236328,
+   "y": 0.668998,
+   "w": 0.205078,
+   "h": 0.122378
+  }
+ ],
+ "m": {
+  "gfr_palas_g": [
+   5.6,
+   11.6
+  ],
+  "gfr_palas_u": [
+   5.4,
+   3.8
+  ],
+  "gfr_nord_g": [
+   3.6,
+   6.4
+  ],
+  "gfr_nord_u": [
+   3.6,
+   4.4
+  ],
+  "gfr_ptt_g": [
+   4.72,
+   6.2
+  ],
+  "gfr_stone_g": [
+   3.6,
+   5.0
+  ],
+  "gfr_stone_u": [
+   3.6,
+   3.8
+  ],
+  "gfr_sben_g": [
+   3.6,
+   6.4
+  ],
+  "gfr_surp_g": [
+   4.8,
+   4.6
+  ],
+  "gfr_surp_u": [
+   4.2,
+   7.2
+  ],
+  "gfr_krikor": [
+   4.2,
+   10.0
+  ],
+  "gfr_liman_g": [
+   4.6,
+   5.4
+  ],
+  "gfr_liman_u": [
+   4.2,
+   3.8
+  ],
+  "gfr_ito_u": [
+   4.0,
+   3.4
+  ],
+  "gfr_ito_g": [
+   5.4,
+   4.6
+  ],
+  "gfr_ferry_g": [
+   6.4,
+   5.0
+  ],
+  "gfr_emhan_g": [
+   4.4,
+   4.8
+  ],
+  "gfr_pastel_g": [
+   4.48,
+   4.2
+  ],
+  "gfr_pastel_u": [
+   4.48,
+   3.2
+  ],
+  "gfr_emhan_u": [
+   3.6,
+   3.6
+  ],
+  "gfr_modern_g": [
+   4.2,
+   5.4
+  ],
+  "gfr_modern_u": [
+   3.28,
+   3.2
+  ],
+  "gfr_fish_g": [
+   4.2,
+   4.2
+  ]
+ },
+ "cells": {
+  "gfr_palas_g": {
+   "kind": "shop"
+  },
+  "gfr_palas_u": {
+   "kind": "upper",
+   "lit": "warm"
+  },
+  "gfr_nord_g": {
+   "kind": "shop"
+  },
+  "gfr_nord_u": {
+   "kind": "upper",
+   "lit": "warm"
+  },
+  "gfr_ptt_g": {
+   "kind": "shop"
+  },
+  "gfr_stone_g": {
+   "kind": "shop"
+  },
+  "gfr_stone_u": {
+   "kind": "upper",
+   "lit": "cool"
+  },
+  "gfr_sben_g": {
+   "kind": "upper",
+   "lit": "cool"
+  },
+  "gfr_surp_g": {
+   "kind": "shop"
+  },
+  "gfr_surp_u": {
+   "kind": "upper",
+   "lit": "warm"
+  },
+  "gfr_krikor": {
+   "kind": "wall"
+  },
+  "gfr_liman_g": {
+   "kind": "shop"
+  },
+  "gfr_liman_u": {
+   "kind": "upper",
+   "lit": "warm"
+  },
+  "gfr_ito_u": {
+   "kind": "upper",
+   "lit": "cool"
+  },
+  "gfr_ito_g": {
+   "kind": "shop"
+  },
+  "gfr_ferry_g": {
+   "kind": "shop"
+  },
+  "gfr_emhan_g": {
+   "kind": "shop"
+  },
+  "gfr_pastel_g": {
+   "kind": "shop"
+  },
+  "gfr_pastel_u": {
+   "kind": "upper",
+   "lit": "warm"
+  },
+  "gfr_emhan_u": {
+   "kind": "upper",
+   "lit": "warm"
+  },
+  "gfr_modern_g": {
+   "kind": "shop"
+  },
+  "gfr_modern_u": {
+   "kind": "upper",
+   "lit": "cool"
+  },
+  "gfr_fish_g": {
+   "kind": "shop"
+  }
+ },
+ "glass": {
+  "gfr_palas_g": {
+   "panes": [
+    [
+     0.14,
+     0.43,
+     0.86,
+     0.86
+    ],
+    [
+     0.22,
+     0.15,
+     0.78,
+     0.4
+    ]
+   ],
+   "holes": []
+  },
+  "gfr_nord_g": {
+   "panes": [
+    [
+     0.27,
+     0.51,
+     0.76,
+     0.89
+    ]
+   ],
+   "holes": []
+  },
+  "gfr_ptt_g": {
+   "panes": [
+    [
+     0.12,
+     0.31,
+     0.86,
+     0.53
+    ],
+    [
+     0.37,
+     0.7,
+     0.66,
+     0.96
+    ]
+   ],
+   "holes": []
+  },
+  "gfr_stone_g": {
+   "panes": [
+    [
+     0.17,
+     0.12,
+     0.82,
+     0.93
+    ]
+   ],
+   "holes": []
+  },
+  "gfr_surp_g": {
+   "panes": [
+    [
+     0.19,
+     0.36,
+     0.86,
+     0.88
+    ],
+    [
+     0.32,
+     0.26,
+     0.74,
+     0.36
+    ]
+   ],
+   "holes": []
+  },
+  "gfr_liman_g": {
+   "panes": [
+    [
+     0.17,
+     0.58,
+     0.83,
+     0.92
+    ],
+    [
+     0.25,
+     0.32,
+     0.75,
+     0.47
+    ]
+   ],
+   "holes": []
+  },
+  "gfr_ito_g": {
+   "panes": [
+    [
+     0.31,
+     0.39,
+     0.68,
+     0.99
+    ]
+   ],
+   "holes": []
+  },
+  "gfr_ferry_g": {
+   "panes": [
+    [
+     0.22,
+     0.5,
+     0.43,
+     0.96
+    ],
+    [
+     0.58,
+     0.5,
+     0.79,
+     0.96
+    ]
+   ],
+   "holes": []
+  },
+  "gfr_emhan_g": {
+   "panes": [
+    [
+     0.22,
+     0.38,
+     0.79,
+     0.79
+    ]
+   ],
+   "holes": []
+  },
+  "gfr_pastel_g": {
+   "panes": [
+    [
+     0.19,
+     0.53,
+     0.81,
+     0.97
+    ]
+   ],
+   "holes": []
+  },
+  "gfr_modern_g": {
+   "panes": [
+    [
+     0.2,
+     0.4,
+     0.8,
+     0.82
+    ]
+   ],
+   "holes": []
+  },
+  "gfr_fish_g": {
+   "panes": [
+    [
+     0.25,
+     0.43,
+     0.65,
+     0.8
+    ],
+    [
+     0.7,
+     0.45,
+     0.88,
+     0.95
+    ],
+    [
+     0.04,
+     0.42,
+     0.18,
+     0.92
+    ]
+   ],
+   "holes": []
+  }
+ },
+ "ppm": {
+  "hi": 100,
+  "lo": 50
+ },
+ "emissiveScale": 0.5,
+ "note": "Galata's own painted fronts (g36): flat elevations of one bay each, Grok Imagine image_edit repaints of Wikimedia Commons photos of the real buildings (assets/real/galata/CREDITS.md). Two images per tier: 'a' the albedo tiles, 'e' their emissive tiles in the same layout at half scale (what glows at dusk: shops' lit interiors behind the glass, upper bays' windows warm or cool; walls nothing) - the game's Atlas keeps its emissive canvas at half the albedo's size. tiles: albedo px per tier (the emissive tile is the same rect / 2 in 'e'); tilesF: fractions, valid for both images of both tiers. m: each cell in metres. cells: kind (shop: glass panes and room; upper: windows; wall). glass: each shop cell's panes in fractions of the cell from its top-left (painted.js roomGlass); mask: the same as an alpha sheet laid out as the albedo (fractions), each shop tile's glass box from its bottom-left (loadRoomAtlas's mask format)",
+ "encode": "WebP q50 method 6 from the lossless masters (~/cdtest/g36/masters/galfronts1{a,e}_*.png, scripts/packfronts2.py); glass masks lossless PNG"
+}

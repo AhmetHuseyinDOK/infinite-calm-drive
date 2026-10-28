@@ -2207,8 +2207,18 @@ export function townCat(G, M, mirror = false) {
   const cl = uv('twCat'), h = 0.46, w = (h * cl.w) / cl.h, q = mirror ? { u0: cl.u1, u1: cl.u0, v0: cl.v0, v1: cl.v1 } : cl;
   a.quad([-0.02, 0, -w / 2], [-0.02, 0, w / 2], [-0.02, h, w / 2], [-0.02, h, -w / 2], W1, q);
 }
-/** a yellow dolmuş (a shared minibus, Ford Transit-like), parked: local x its length (its nose at +x), the road side −z */
-export function dolmus(G, M) {
+/** (step 35b) the dolmuş's painted model (painted.js loadDolmus: its GB templates nearA, farA, nearB, farB), once its material is made
+ *  (main.js: M.atlasDol), else null (the old one below) */
+export const DOLMUS = { T: null };
+export function setDolmus(T) { DOLMUS.T = T || null; }
+/** a dolmuş's light code (aLit, materials.js windowLights): its lamps and its saloon's warm light (its emissive map) come on at dusk, as the
+ *  tram's windows do; by day nothing of it glows */
+const DOL_LIT = 30;
+/** a dolmuş (a shared minibus, a Ford Transit), parked: local x its length (its nose at +x), the road side −z. k: which of its zone's
+ *  stops (the livery: the yellow one at even stops, the white one with its blue band at odd ones; no random numbers drawn). The painted
+ *  model (step 35b) is only listed here (G.dolList: its matrix and livery) and stamped when the chunk is assembled (dolmusGB) */
+export function dolmus(G, M, k = 0) {
+  if (DOLMUS.T) { (G.dolList || (G.dolList = [])).push(M, k % 2); return; }
   const c = G.color, Y = C('#f0c419'), Yd = C('#d8a812'), GL = C('#2a3036'), BL = C('#1d1f22');
   c.setM(M);
   c.box(-2.6, 0.38, -0.98, 2.15, 1.2, 0.98, Y, null, { ny: BL }); // the body
@@ -2222,6 +2232,19 @@ export function dolmus(G, M) {
   c.box(-2.63, 0.62, -0.26, -2.61, 0.74, 0.26, C('#f4f4ef')); // the plate
   for (const [x, z] of [[-1.7, -0.92], [-1.7, 0.92], [1.6, -0.92], [1.6, 0.92]]) c.rod([x, 0.36, z], [x, 0.36, z + (z > 0 ? 0.1 : -0.1)], 0.36, 0.36, 10, BL);
   c.box(-0.5, 2.32, -0.25, 0.5, 2.55, 0.25, Yd); // (its roof sign)
+}
+/** (step 35b) a chunk's painted dolmuş (G.dolList, from dolmus()) stamped into one indexed GB of its own (drawn with its texture pair,
+ *  M.atlasDol): every near mesh, then every far one, so one draw range picks either set (lod: the index ranges, and where the first one
+ *  stands for World.dolLod). Null when there is none */
+export function dolmusGB(G) {
+  const L = G.dolList, T = DOLMUS.T; if (!L || !T) return null;
+  const g = new GB({ uv: true, ao: true, lit: true, idx: true });
+  for (let i = 0; i < L.length; i += 2) g.stamp(L[i + 1] ? T.nearB : T.nearA, L[i]);
+  const n0 = g.ni;
+  for (let i = 0; i < L.length; i += 2) g.stamp(L[i + 1] ? T.farB : T.farA, L[i]);
+  g.Lt.fill(DOL_LIT, 0, g.n);
+  g.lod = { x: L[0].elements[12], z: L[0].elements[14], i0: 0, n0, n1: g.ni - n0 };
+  return g;
 }
 /** a dolmuş stop's sign: a blue plate on a post (DOLMUŞ DURAĞI) */
 export function durakSign(G, M) {

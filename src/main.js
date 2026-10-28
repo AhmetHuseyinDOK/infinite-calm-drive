@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { Path, zoneW, zoneWeight, zoneAt, zparam, ZINFO, setStartZone, startZone, zoneSets, trafficSide, seaWeight, regionWeight, viewMix, bandMix, bayQ, borderNear, nextBorderS, REGION, crossingS, crossingValid, XING, XOFF, riverNear, RIV, ROFF, groundOffsetMix, tunnelNear, T_HALF, T_RIDGE, ZONE_LEN } from './path.js';
 import { makeCrossingRig, makeTrain, xingPosts } from './crossing.js';
 import { buildAtlas, buildFoliage, buildPaintedAtlas, buildWorldAtlas, buildCapAtlas, buildPasAtlas, buildChainAtlas, albedoTexture, SHOP_GLASS, stickerHolesJ } from './textures.js';
-import { makeMaterials, makeAtlasW, makeAtlasRooms, makeAtlasWRooms, makeChainRooms, roomSet, makeAtlasChain, makeCapAtlas, makePasGrass, setWorldTex, U, groundMaterialFor, setGrazeFade, makeCloudMap, makeGhibliLeaf, FIELD, tetraMaterial, barkMaterial, tuffMaterial, PROP_DEPTH } from './materials.js';
-import { setAtlas, setFoliage, warmTrees, warmBare, warmTetrapods, setLeafDensity, GHIBLI, setHouses, setTrHouses, setChains, PROC_ROOMS, setFishers } from './props.js';
+import { GRAD_CAR, makeMaterials, makeAtlasW, makeAtlasRooms, makeAtlasWRooms, makeChainRooms, roomSet, makeAtlasChain, makeCapAtlas, makePasGrass, setWorldTex, U, groundMaterialFor, setGrazeFade, makeCloudMap, makeGhibliLeaf, FIELD, tetraMaterial, barkMaterial, tuffMaterial, PROP_DEPTH } from './materials.js';
+import { setAtlas, setFoliage, warmTrees, warmBare, warmTetrapods, setLeafDensity, GHIBLI, setHouses, setTrHouses, setChains, PROC_ROOMS, setFishers, setDolmus } from './props.js';
 import { loadTreeAtlas } from './ghibli.js';
 import { World, CH } from './chunks.js';
 import { makeSky, paintClouds, makeClouds, makeMountains, updateTOD, applyWeather, TOD, lightDirAt, KEYS, REGION_KEYS, sunBearing, moonSkyDir } from './sky.js';
@@ -23,7 +23,7 @@ import { makePost } from './post.js';
 import { makeAudio } from './audio.js';
 import { makeParticles } from './particles.js';
 import { clamp, lerp, sstep, setSeed, hash2 } from './util.js';
-import { loadCloudAtlas, makePaintedClouds, loadBandAtlas, makePaintedBand, updatePainted, loadFieldTexture, loadFrontAtlas, loadRoomAtlas, roomTexture, roomGlass, loadHouseAtlas, loadHousePatch, loadTrHouseAtlas, loadTownAtlas, loadChainAtlas, loadFisherAtlas, todTones, mixTones, paintSky, PAINT_TOD, BAND_R } from './painted.js';
+import { loadCloudAtlas, makePaintedClouds, loadBandAtlas, makePaintedBand, updatePainted, loadFieldTexture, loadFrontAtlas, loadRoomAtlas, roomTexture, roomGlass, loadHouseAtlas, loadHousePatch, loadTrHouseAtlas, loadTownAtlas, loadChainAtlas, loadFisherAtlas, loadDolmus, todTones, mixTones, paintSky, PAINT_TOD, BAND_R } from './painted.js';
 
 const QS = new URLSearchParams(location.search);
 // inside an X player card (or any iframe): lighter quality, compact UI, tap-only start
@@ -88,6 +88,8 @@ async function main() {
   const chainLoad = loadChainAtlas(HTIER, 'jp'), chainTrLoad = TR_START ? loadChainAtlas(HTIER, 'tr') : null, roomTrLoad = TR_START ? loadRoomAtlas(RTIER, 15000, 'rooms1tr') : null;
   // (step 35a) the Galata Bridge's fishermen as painted figures (painted.js loadFisherAtlas), on the same tiers: with Turkey's assets
   const fisherLoad = TR_START ? loadFisherAtlas(HTIER) : null;
+  // (step 35b) the Turkish town's dolmuş as a painted 3D model (painted.js loadDolmus: its geometry and its texture pair), on the same tiers
+  const dolLoad = TR_START ? loadDolmus(HTIER) : null;
   // the painted cumulus and the horizon band (painted.js; 32 px/° where the frame is tall enough, else 16 px/°): the
   // largest downloads, and needed last (they are awaited once the road is built and the light prepared, below), so they
   // start once the four above are in (or after 4 s, so a stalled one never holds them up for its whole 15 s timeout): on
@@ -546,6 +548,13 @@ async function main() {
   // chunks then take the painted figures, else the smooth ones: props.js setFishers); in Turkey's lazy load otherwise
   let fishers = null;
   if (TR_START) { const fa = await fisherLoad; if (fa) try { fishers = makeFishers(fa); scene.add(fishers.mesh, fishers.decal); renderer.initTexture(fishers.tex); } catch (e) { console.warn('fishers:', e); fishers = null; fa.img.close(); } setFishers(fishers ? fa.J : null); }
+  // (step 35b) the town's dolmuş as a painted 3D model: its texture pair uploaded and its material made (the atlas's program on its own
+  // texture pair: makeAtlasChain, with the car's soft ramp, GRAD_CAR, so its rounded body shades without bands), then the chunks stamp its
+  // templates (props.js setDolmus); should it fail, the old one. At a Turkish start made last of all (its ids draw random numbers), before
+  // the road is built; in Turkey's lazy load otherwise
+  const dolTex = img => { const t = new THREE.Texture(img); t.colorSpace = THREE.SRGBColorSpace; t.flipY = false; t.anisotropy = ANISO; t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter; t.needsUpdate = true; return t; };
+  const dolMat = (map, em, d) => { const ch = makeAtlasChain(M, { map, emissive: em }); ch.mat.gradientMap = GRAD_CAR; ch.mat.emissiveIntensity = M.atlas.emissiveIntensity; M.atlasDol = ch.mat; M.atlasDolDepth = ch.depth; setDolmus(d.T); };
+  if (TR_START) { const d = await dolLoad; if (d) try { const map = dolTex(d.map), em = dolTex(d.em); renderer.initTexture(map); renderer.initTexture(em); dolMat(map, em, d); } catch (e) { console.warn('dolmus:', e); M.atlasDol = null; setDolmus(null); } }
   world.trReady = TR_START; // (no chunk of Turkey's, or of a border's, is built before its assets are in: chunks.js)
   status('building the road…');
   await new Promise(r => setTimeout(r, 10));
@@ -569,9 +578,9 @@ async function main() {
     // triangle without normals too, or the coast's water and surf and the rivers compiled when they first came into view)
     const tri0 = new THREE.BufferGeometry(); tri0.setAttribute('position', tri.attributes.position);
     const bare = new Set([M.shore, M.surf, riverMat, ...(fishers ? [fishers.decalMat] : [])]);
-    const mats = [M.color, M.atlas, M.atlasW, ...(M.atlasI ? [M.atlasI] : []), ...(M.atlasC ? [M.atlasC] : []), ...(M.atlasCT ? [M.atlasCT] : []), ...[M.atlasCI, M.atlasCTI, M.atlasWI].filter(m => m), M.foliage, M.leaf, ...(M.bank ? [M.bank] : []), M.lamp, M.sig, M.sodium, M.decal, M.pool, M.shore, M.surf, riverMat, M.tetra, M.bark, ...(M.gleaf ? [M.gleaf] : []), ...(M.gblossom ? [M.gblossom] : []), ...(M.tuff ? [M.tuff, M.capAtlas] : []), ...(M.pasGrass ? [M.pasGrass] : []), ...(fishers ? [fishers.mat, fishers.decalMat] : [])];
+    const mats = [M.color, M.atlas, M.atlasW, ...(M.atlasI ? [M.atlasI] : []), ...(M.atlasC ? [M.atlasC] : []), ...(M.atlasCT ? [M.atlasCT] : []), ...[M.atlasCI, M.atlasCTI, M.atlasWI].filter(m => m), M.foliage, M.leaf, ...(M.bank ? [M.bank] : []), M.lamp, M.sig, M.sodium, M.decal, M.pool, M.shore, M.surf, riverMat, M.tetra, M.bark, ...(M.gleaf ? [M.gleaf] : []), ...(M.gblossom ? [M.gblossom] : []), ...(M.tuff ? [M.tuff, M.capAtlas] : []), ...(M.pasGrass ? [M.pasGrass] : []), ...(fishers ? [fishers.mat, fishers.decalMat] : []), ...(M.atlasDol ? [M.atlasDol] : [])];
     for (const zs of zoneSets()) if (TR_START || !trSet(zs)) mats.push(groundMaterialFor(zs)); // (each zone, each pair of neighbours, each border's: Turkey's later if not needed now)
-    for (const m of mats) { const o = new THREE.Mesh(bare.has(m) ? tri0 : tri, m); o.castShadow = o.receiveShadow = !bare.has(m); o.frustumCulled = false; if (m === M.gleaf) o.customDepthMaterial = M.gleafDepth; if (m === M.gblossom) o.customDepthMaterial = M.gblossomDepth; if (m === M.atlas || m === M.atlasI) o.customDepthMaterial = M.atlasDepth; if (m === M.atlasW || m === M.atlasWI) o.customDepthMaterial = M.atlasWDepth; if (m === M.atlasC || m === M.atlasCI) o.customDepthMaterial = M.atlasCDepth; if (m === M.atlasCT || m === M.atlasCTI) o.customDepthMaterial = M.atlasCTDepth; if (m === M.color) o.customDepthMaterial = PROP_DEPTH; if (fishers && m === fishers.mat) o.customDepthMaterial = fishers.depth; warm.add(o); }
+    for (const m of mats) { const o = new THREE.Mesh(bare.has(m) ? tri0 : tri, m); o.castShadow = o.receiveShadow = !bare.has(m); o.frustumCulled = false; if (m === M.gleaf) o.customDepthMaterial = M.gleafDepth; if (m === M.gblossom) o.customDepthMaterial = M.gblossomDepth; if (m === M.atlas || m === M.atlasI) o.customDepthMaterial = M.atlasDepth; if (m === M.atlasW || m === M.atlasWI) o.customDepthMaterial = M.atlasWDepth; if (m === M.atlasC || m === M.atlasCI) o.customDepthMaterial = M.atlasCDepth; if (m === M.atlasCT || m === M.atlasCTI) o.customDepthMaterial = M.atlasCTDepth; if (m === M.color) o.customDepthMaterial = PROP_DEPTH; if (fishers && m === fishers.mat) o.customDepthMaterial = fishers.depth; if (m === M.atlasDol) o.customDepthMaterial = M.atlasDolDepth; warm.add(o); }
     // (the props' shadow-pass twin too, W6: it used to compile only when a real props' mesh stood in the shadow box during the load, and a
     // start in Paşabağ's valley (no poles) met its first props in the city, 20 ms into the drive)
     warm.position.set(0, 0, 0); scene.add(warm);
@@ -685,7 +694,7 @@ async function main() {
   async function trLazy() {
     TRL.started = true; TRL.t0 = performance.now();
     const step = n => TRL.steps.push([n, Math.round(performance.now() - TRL.t0)]);
-    const [trAtlases, th, ta, ba, cta, rtr, fla] = await Promise.all([loadTrBands(), loadTrHouseAtlas(HTIER), loadTownAtlas(HTIER), loadBalloonAtlas(TIER), loadChainAtlas(HTIER, 'tr'), loadRoomAtlas(RTIER, 15000, 'rooms1tr'), loadFisherAtlas(HTIER)]); step('loaded');
+    const [trAtlases, th, ta, ba, cta, rtr, fla, dla] = await Promise.all([loadTrBands(), loadTrHouseAtlas(HTIER), loadTownAtlas(HTIER), loadBalloonAtlas(TIER), loadChainAtlas(HTIER, 'tr'), loadRoomAtlas(RTIER, 15000, 'rooms1tr'), loadFisherAtlas(HTIER), loadDolmus(HTIER)]); step('loaded');
     await nextFrame();
     const wa = buildWorldAtlas(atlas, HTIER, th, ta); if (wa.trHouses) setTrHouses(th.types, th.extras); if (th) th.img.close(); if (ta) ta.img.close(); step('atlas');
     await nextFrame();
@@ -731,6 +740,11 @@ async function main() {
         fw.dispose(); fw0.dispose(); scene.add(f.mesh, f.decal); fishers = f; setFishers(fla.J);
       } catch (e) { console.warn('fishers:', e); setFishers(null); }
       step('fishers');
+    }
+    if (dla) { // (step 35b: the town's dolmuş: its two textures a frame each, then its material (the atlas's program: nothing compiles))
+      try { await nextFrame(); const map = dolTex(dla.map); renderer.initTexture(map); await nextFrame(); const em = dolTex(dla.em); renderer.initTexture(em); dolMat(map, em, dla); }
+      catch (e) { console.warn('dolmus:', e); M.atlasDol = null; setDolmus(null); }
+      step('dolmus');
     }
     if (ba) { // (Cappadocia's balloons, W5: their texture a frame, their program compiled off the main thread)
       await nextFrame(); renderer.initTexture(ba.tex);
@@ -1306,6 +1320,7 @@ async function main() {
     if (M.atlasI) M.atlasI.emissiveIntensity = M.atlas.emissiveIntensity; U.uRmOn.value = st.rooms; // (and the shop rooms' variant's, step 31)
     if (M.atlasC) M.atlasC.emissiveIntensity = M.atlas.emissiveIntensity; if (M.atlasCT) M.atlasCT.emissiveIntensity = M.atlas.emissiveIntensity; // (and the chain stores', step 32)
     if (M.atlasCI) M.atlasCI.emissiveIntensity = M.atlas.emissiveIntensity; if (M.atlasCTI) M.atlasCTI.emissiveIntensity = M.atlas.emissiveIntensity; if (M.atlasWI) M.atlasWI.emissiveIntensity = M.atlas.emissiveIntensity; // (and the rooms' of the chains and the town, step 34)
+    if (M.atlasDol) M.atlasDol.emissiveIntensity = M.atlas.emissiveIntensity; // (and the town's dolmuş's lamps and saloon, step 35b)
     if (tram) { tram.mat.emissiveIntensity = M.atlas.emissiveIntensity; tram.update(dt, path, st.s, camera.position, world.origin, st.speed, st.tram); } // (the Galata Bridge's tram, step 33)
     if (fishers) { fishers.update(world, camera, st.fish, (0.16 + 0.22 * TOD.bright) * (1 - tunS)); // (the Galata Bridge's painted fishermen and their contact shadows, step 35a)
       if (fishers.mesh.visible) { const c = FISH_T.at(TOD.t).rgb('v'), k = paintSky(); U.uFishT.value.set(lerp(1, c[0], k), lerp(1, c[1], k), lerp(1, c[2], k));
@@ -1420,7 +1435,7 @@ async function main() {
       PLIGHT.uHeadDir.value.copy(glowV).sub(PLIGHT.uHeadPos.value).normalize(); PLIGHT.uHeadI.value = car.head.intensity / 60;
     }
     M.pool.visible = M.pool.opacity > 0.003; // the night light pools were drawn all day at zero opacity (~11 draw calls)
-    world.lod(st.s, DETAIL_FAR, nightK > 0.15, FAR_LEAF);
+    world.lod(st.s, DETAIL_FAR, nightK > 0.15, FAR_LEAF); world.dolLod(camera.position); // (and the town's dolmuş's near or far mesh, step 35b)
     U.uNight.value = nightK;
     post.bloom.strength = lerp(0.32, 0.55, nightK); post.bloom.threshold = lerp(1.35, 0.95, nightK); post.bloom.radius = lerp(0.55, 0.35, nightK);
     // bloom only where it shows (night lamps, sunsets, tunnels): by day at threshold 1.35 it cost ~7 ms for almost nothing
@@ -1500,7 +1515,7 @@ async function main() {
     if (started && frames > 150 && dt > 0.03) slowT += dt; else slowT = Math.max(0, slowT - dt * 0.5);
     if (slowT > 3 && !QS.has('q')) { slowT = 0; stepDown(); }
   }
-  window.__dbg = { renderer, st, scene, camera, world, TOD, KEYS, X, train, weather, U, birds, cine, post, car, sun, M, cells: atlas.cells, clouds, pclouds, band, get bandTr() { return bandTr; }, sky, mountains, shadowDir, CM, spray, grass, sea, get ferry() { return ferry; }, get tram() { return tram; }, get fishers() { return fishers; }, get balloons() { return balloons; }, TRL, get audio() { return audio; }, uch: { TF_DAY, TF_GOLD, TF_SUNSET, TF_NIGHT, UG_DAY, UCH }, pas: { TFP_DAY, TFP_GOLD, TFP_SUNSET, TFP_NIGHT, PG_DAY, PG_GOLD, PG_SUNSET, PG_NIGHT, PAS_Z, PAS_R, pasAz }, night: { NT, NTZ, NSKY_N, MOON_B, CF_N } };
+  window.__dbg = { renderer, st, scene, camera, world, TOD, KEYS, X, train, weather, U, birds, cine, post, car, sun, M, cells: atlas.cells, clouds, pclouds, band, get bandTr() { return bandTr; }, sky, mountains, shadowDir, CM, spray, grass, sea, get ferry() { return ferry; }, get tram() { return tram; }, get fishers() { return fishers; }, get dolmus() { return M.atlasDol || null; }, get balloons() { return balloons; }, TRL, get audio() { return audio; }, uch: { TF_DAY, TF_GOLD, TF_SUNSET, TF_NIGHT, UG_DAY, UCH }, pas: { TFP_DAY, TFP_GOLD, TFP_SUNSET, TFP_NIGHT, PG_DAY, PG_GOLD, PG_SUNSET, PG_NIGHT, PAS_Z, PAS_R, pasAz }, night: { NT, NTZ, NSKY_N, MOON_B, CF_N } };
   status('');
   $start.classList.add('ready');
   if (QS.has('auto')) begin();

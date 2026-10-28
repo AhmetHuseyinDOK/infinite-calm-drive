@@ -65,6 +65,8 @@ const TW_AWN = [[0, 2], [3, 4], [1, 2], [2, 0], [3, -1], [-1, 5], [4, 6]];
 /** the town's lay-bys (a dolmuş stop, its pavement stepping back): every TW_BAY m along the right-hand pavement, TW_BAY_L long
  *  and TW_BAY_D deep with 3 m tapers */
 const TW_BAY = 420, TW_BAY0 = 150, TW_BAY_L = 18, TW_BAY_D = 2.4;
+/** (step 35b) how near the camera a dolmuş shows its near mesh (m): beyond it the far one (~1.5k triangles, a few dozen pixels tall) */
+const DOL_NEAR = 60;
 /** the town's opening view (W4): 125–190 m into the town zone (where ?env=town starts: s = 140, the camera 133 m in), its
  *  concept painting's composition: on the left a peach block over a bakery (its red and white awning) and a pharmacy, tea
  *  tables, a simit cart and a cat on the pavement; on the right a pale block over a market (blue and white) and a tea house
@@ -153,7 +155,14 @@ export class World {
     this.chunks = new Map(); this.origin = { x: 0, z: 0 }; this.reveal = [];
     this.ahead = 760; this.behind = 40; this.trReady = true;
     this.fishVer = 0; // (step 35a: counts the chunks with painted fishermen coming and going: fishers.js gathers them anew)
+    this._dolC = null; this._dolF = ch => { // (step 35b: a chunk's dolmuş, its near mesh within DOL_NEAR of the camera, else its far one)
+      const m = ch.dol; if (!m) return;
+      const L = m.userData.lod, dx = ch.group.position.x + L.x - this._dolC.x, dz = ch.group.position.z + L.z - this._dolC.z;
+      if (dx * dx + dz * dz < DOL_NEAR * DOL_NEAR) m.geometry.setDrawRange(L.i0, L.n0); else m.geometry.setDrawRange(L.i0 + L.n0, L.n1);
+    };
   }
+  /** (step 35b) each frame: the dolmuş's mesh by the camera's distance (cam: its position in the scene) */
+  dolLod(cam) { this._dolC = cam; this.chunks.forEach(this._dolF); }
   setOrigin(x, z) {
     this.origin.x = x; this.origin.z = z;
     for (const ch of this.chunks.values()) ch.group.position.set(ch.ox - x, 0, ch.oz - z);
@@ -408,6 +417,8 @@ export class World {
     if (G.fishers.length) G.color.expandFrom(G.fish); // (step 35a: the painted fishermen's rods, lines and buckets drawn with the props, a draw less a chunk)
     { const m = add(G.color.build(), this.M.color, true, true); if (m) m.customDepthMaterial = PROP_DEPTH; } yield; // (wires cast no shadow)
     if (!G.fishers.length) { const m = add(G.fish.build(), this.M.color, true, true); if (m) m.customDepthMaterial = PROP_DEPTH; } // (the fishermen, step 33: only on the Galata Bridge; their rods and lines cast no shadow)
+    let dol = null; // (step 35b: the dolmuş's painted model, its own texture pair; its draw range set each frame by World.dolLod)
+    if (G.dolList && this.M.atlasDol) { const g = P.dolmusGB(G); dol = g && add(g.build(), this.M.atlasDol, true, true); if (dol) { dol.customDepthMaterial = this.M.atlasDolDepth; dol.userData.lod = g.lod; dol.geometry.setDrawRange(0, g.lod.n0); } }
     if (G.chain.count) { const T = G.chain.tr, m = add(G.chain.build(), T ? this.M.atlasCTI || this.M.atlasCT : this.M.atlasCI || this.M.atlasC, true, true); if (m) m.customDepthMaterial = T ? this.M.atlasCTDepth : this.M.atlasCDepth; } // (the chain stores, step 32: Japan's or Turkey's chain atlas; most chunks have none, and no mesh. Step 34: with the rooms behind their glass)
     add(G.tetra.build(), this.M.tetra, true, true); // (the tetrapods: their shadows from the plain depth material)
     add(G.bark.build(), this.M.bark, true, true, 0, 'leaf'); yield; // (the trees' bark: shown as far as their crowns; plain depth material too)
@@ -441,7 +452,7 @@ export class World {
     if (shore.puffs.length) add(surfGeometry(shore.puffs), this.M.surf, false, false, 2, 'small'); // (the surf over the tetrapods)
     for (const g of river) add(g, this.riverMat, false, true);
     grp.position.set(ox - this.origin.x, 0, oz - this.origin.z);
-    return { group: grp, ox, oz, s0, lamps: new Float32Array(G.lamps), chains: G.chainList.length ? G.chainList : null, fishers: G.fishers.length ? new Float32Array(G.fishers) : null };
+    return { group: grp, ox, oz, s0, lamps: new Float32Array(G.lamps), chains: G.chainList.length ? G.chainList : null, fishers: G.fishers.length ? new Float32Array(G.fishers) : null, dol };
   }
 
   // poles + overhead wires (country / coast / city share the rule so wires connect across zones)
@@ -1579,7 +1590,7 @@ export class World {
     // the lay-bys' dolmuş and their stop signs
     for (const q of this.townBayAt(s0, s1)) {
       const sm = q + TW_BAY_L / 2; if (sm < s0 || sm >= s1) continue;
-      const rw = rwAt(sm); P.dolmus(G, matAt(sm + 1, rw + 1.25, road(sm), 0, false));
+      const rw = rwAt(sm); P.dolmus(G, matAt(sm + 1, rw + 1.25, road(sm), 0, false), Math.round((zoneL(q) - TW_BAY0) / TW_BAY)); // (which of its zone's stops: its livery, step 35b)
       P.durakSign(G, matAt(q + 2, rw + TW_BAY_D + 0.35, road(q + 2) + 0.15)); items.push([q + 2, rwAt(q + 2) + TW_BAY_D + 0.35, 0.4]);
     }
     // (the opening view's blocks start TW_HERO_B into the zone: the town's, if that is in this chunk)

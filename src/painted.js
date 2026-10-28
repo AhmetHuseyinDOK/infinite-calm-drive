@@ -412,6 +412,46 @@ export async function loadFisherAtlas(tier, timeoutMs = 15000) {
   })(), timeoutMs, "the Galata Bridge's painted fishermen unavailable, keeping the smooth figures:");
 }
 
+/** (step 35b) Loads the Turkish town's dolmuş as a painted 3D model (assets/models/dolmus/dolmus1.*, made by ~/cdtest/s35b/scripts/dolhull.py
+ *  and pack.py from Grok Imagine elevations of a yellow Ford Transit minibus: its body the elevations' visual hull, the paintings projected
+ *  back onto it, its wheels, mirrors and wipers modelled): its geometry, one binary of two meshes (near, and far: ~1.5k triangles), each
+ *  u16 positions on the model's box, i8 normals, u16 uv, u16 indices; and its texture pair (sRGB as stored, no flip: v runs down), the
+ *  yellow livery and the white one with its blue band side by side over what glows at night (the lamps, the saloon's warm light).
+ *  'hi' (2048 × 1024) or 'lo' (half: phones, the embed). Resolves to its GB templates ({ nearA, farA, nearB, farB }: the B ones share
+ *  the A ones' arrays but their uv, moved to the sheet's right half) and its two images; null (never rejects) when anything is missing,
+ *  broken, truncated or too slow: the town then keeps the old dolmuş (props.js) */
+export async function loadDolmus(tier, timeoutMs = 15000) {
+  const base = ASSETS + 'models/dolmus/';
+  return orNull((async () => {
+    const r = await fetch(base + 'dolmus1.json');
+    if (!r.ok) throw new Error('dolmus1.json ' + r.status);
+    const J = await r.json(), file = J.files && J.files[tier] ? tier : 'hi', F = J.files && J.files[file], sz = J.size && J.size[file];
+    if (!F || !sz || !sz.map || !sz.em || !J.bytes || !J.bin || !(J.binBytes > 0) || !J.box || !J.meshes || J.meshes.length !== 2) throw new Error('nothing listed');
+    const get = async (name, bytes) => { // (each file checked whole: a truncated image decodes without complaint)
+      if (!(bytes > 0)) throw new Error(name + ': no size listed');
+      const q = await fetch(base + name); if (!q.ok) throw new Error(name + ' ' + q.status);
+      const b = await q.blob(); if (b.size !== bytes) throw new Error(name + ' is ' + b.size + ' bytes, not ' + bytes);
+      return b;
+    };
+    const [bin, mb, eb] = await Promise.all([get(J.bin, J.binBytes), get(F.map, J.bytes[F.map]), get(F.em, J.bytes[F.em])]);
+    const buf = await bin.arrayBuffer(), b0 = J.box[0], b1 = J.box[1], T = {};
+    for (const m of J.meshes) { // (decoded once: the templates every chunk with a dolmuş stamps, props.js dolmus)
+      const n = m.n, ni = m.tris * 3, end = buf.byteLength;
+      if (!(n > 0 && n < 65536 && ni > 0) || (m.name !== 'near' && m.name !== 'far') || m.pos % 2 || m.uv % 2 || m.idx % 2 || m.pos + n * 6 > end || m.nrm + n * 3 > end || m.uv + n * 4 > end || m.idx + ni * 2 > end) throw new Error('a mesh lies outside the binary');
+      const q = new Uint16Array(buf, m.pos, n * 3), P = new Float32Array(n * 3), uq = new Uint16Array(buf, m.uv, n * 2), U = new Float32Array(n * 2), UB = new Float32Array(n * 2), I = new Uint16Array(buf, m.idx, ni);
+      for (let i = 0; i < n * 3; i++) { const k = i % 3; P[i] = b0[k] + (q[i] / 65535) * (b1[k] - b0[k]); }
+      for (let i = 0; i < n * 2; i++) { U[i] = uq[i] / 65535; UB[i] = i % 2 ? U[i] : U[i] + 0.5; }
+      for (let i = 0; i < ni; i++) if (I[i] >= n) throw new Error('an index past its mesh');
+      const N = new Int8Array(buf, m.nrm, n * 3);
+      T[m.name + 'A'] = { n, P, N, U, C: null, I }; T[m.name + 'B'] = { n, P, N, U: UB, C: null, I };
+    }
+    if (!T.nearA || !T.farA) throw new Error('no near or far mesh');
+    const opt = { premultiplyAlpha: 'none', colorSpaceConversion: 'none' }, [map, em] = await Promise.all([createImageBitmap(mb, opt), createImageBitmap(eb, opt)]);
+    if (map.width !== sz.map[0] || map.height !== sz.map[1] || em.width !== sz.em[0] || em.height !== sz.em[1]) { map.close(); em.close(); throw new Error('a texture has the wrong size'); }
+    return { T, map, em, tier: file };
+  })(), timeoutMs, "the town's painted dolmuş unavailable, keeping the old one:");
+}
+
 /** Loads the painted meadow (assets/fields/, made by ~/cdtest/ft/scripts/field.py): a tileable top-down painting of the
  *  country paintings' grass, 'hi' or 'lo' (phones, the embed). Resolves to null (never rejects) when the index or the
  *  image is missing, broken, truncated or too slow: the countryside then keeps its procedural paddies. */

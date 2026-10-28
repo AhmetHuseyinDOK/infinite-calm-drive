@@ -2,6 +2,52 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-28 · 07:08 — The Turkish town's dolmuş as a painted 3D minibus
+- **The dolmuş is a Ford Transit now, not a yellow box** (the user: "the bus in turkey is bad"; "i want high quality but with anime
+  style"): a high-roof Transit minibus as an anime film paints one. Its body is shaped from Grok's side, front and rear paintings and
+  painted by them: tinted windows with passengers' silhouettes, door seams and handles, wrap-round headlamps, tail-lamp clusters, grey
+  bumpers, a route card behind the windscreen and Turkish plates. Its wheels, door mirrors and wipers are 3D, the mirrors painted from
+  the paintings' own mirrors.
+- **Clean from every side, up close:** the seams between the paintings run as smooth lines round the corners, the wheels sit in
+  closed wells, the rounded body shades softly (the car's soft terminator), and the windscreen carries a sky reflection.
+- **Two liveries:** yellow (as in the town's concept painting) at each pass's first and third stops, and a white city minibus with a
+  blue band at the second. Which one is picked by the stop, so the town's layout is unchanged.
+- **By the hour:** at dusk its headlamps and tail lamps come on and its saloon glows warm round the passengers. Beyond 60 m it switches
+  to a 1.5k-triangle version (the switch doesn't show).
+- Seeded captures on the desktop: the ten other starts and Audit 2's places are identical to live (the mountain start's 1.5k faint
+  px differ between live's own loads too). The town start differs only at the dolmuş. Without the new files the town start is
+  identical to live.
+- How:
+  - painted.js: loadDolmus (geometry binary, JSON index with byte sizes, WebP hi/lo; null on any failure: the old dolmuş).
+  - props.js: setDolmus, dolmus (the old builder stays as the fallback), dolmusGB (every near mesh, then every far one, in one GB).
+  - chunks.js: the dolmuş's own mesh per chunk (M.atlasDol and its shadow twin), World.dolLod (its draw range by the camera's
+    distance, DOL_NEAR 60 m); placeTown passes the stop's index.
+  - main.js: loaded with Turkey's assets; made last at a Turkish start and after the fishermen in Turkey's lazy load; the atlas's
+    program (makeAtlasChain) on its own texture pair with GRAD_CAR; __dbg.dolmus.
+  - Pipeline (~/cdtest/s35b): clean.py (mirrors, wipers and the side's headlamp inpainted out; the windscreen's reflection),
+    dolhull.py (the q1 visual hull with closed wheel wells and seams cut along smooth lines; wheels, mirrors, wipers; the far version,
+    the white livery, the night map, the binary), pack.py; lossless masters kept.
+  - +3.9 KB of code, +1.3 KB gzipped.
+- Assets: assets/models/dolmus/: dolmus1.bin (138 KB: 7,648 + 1,460 triangles), dolmus1_hi.webp (123 KB, both liveries),
+  dolmus1_lo.webp (47 KB), dolmus1e_hi/lo.webp (10 / 5 KB). First visit at a town start +270 KB desktop / +190 KB phone; a Japanese
+  start fetches them in Turkey's lazy load.
+- Programs: unchanged (83 / 82 at a Turkish start, 66 / 65 at a Japanese one). None compiled mid-drive or in the lazy load (no frame
+  over 12 ms).
+- Cost (the desktop machine, GTX 1660):
+  - Its draw: 0.05 ms a frame on desktops and 0.065 on the phone tier.
+  - Whole frame over town drives: desktop 3.31 / 3.27 / 3.25 → 3.24 / 3.28 / 3.22 ms, phone tier 4.26 / 4.20 / 4.27 → 3.96 / 4.12 /
+    3.98; at night 4.18 / 4.24 → 4.12 / 4.21.
+  - World build within 2% (desktop 118.8 / 117.1 → 122.5 / 119.0 ms per 20 town chunks); no world spikes on a phone at ×4.
+  - Start-up the same on desktops (town 2348 / 2360 / 2337 → 2363 / 2371 / 2344 ms). +0.7 s at a town start on a 3 Mbps phone
+    (8530 / 8520 → 9206 / 9219 ms: the 190 KB).
+  - 0 shader errors in all eleven zones and in the town by the hour and tier. No console errors at q=low, mid and high; the embed
+    starts on tap.
+- Left over:
+  - the kerb side shows the road side's painting mirrored;
+  - the roof is one flat colour, and the bumper top steps ~5 cm at the front corners;
+  - the geometry could be encoded smaller for slow phones;
+  - no IETT bus yet.
+
 ## 2026-10-28 · 04:46 — The Galata Bridge's fishermen as painted anime people
 - **The fishermen are paintings now, not mannequins** (the user: "that fisherman was bad"; "i want high quality but with anime
   style"): twelve men painted as anime characters, with faces, hands, caps and the folds of their clothes. Four hold their rods in

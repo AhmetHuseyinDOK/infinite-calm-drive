@@ -1,4 +1,5 @@
-// A small two-tone kei car (think Honda N-Box / Suzuki Hustler), toon-shaded. Faces +Z in its local frame.
+// A small two-tone kei car (think Honda N-Box / Suzuki Hustler), toon-shaded. Faces +Z in its local frame. (Step 35e: at load the
+// paintings' own car, a painted 3D body (paint(), painted.js loadCar), takes its place; this procedural one stays the fallback.)
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -21,6 +22,8 @@ function plateTexture() {
 const GLASS_CELLS = 4;
 const HALO_W = 0.37, HALO_H = 0.61; // the tail lamps' glow cards (m)
 const GLOW_K = 0.03, GLOW_B = 0.02; // (step 30: the red tinge on the road behind the car at night: its peak strength, and braking's extra)
+const WIPER_REST = 0.07; // (the painted car's rear wiper at rest: nearly level along the foot of the glass, as the city painting has it)
+const PL = { r: 1, g: 1.15, s: 1.6, h: 1, a: 0.85, rn: 0.45, gn: 0.6 }; // (step 35e) the painted lamps' glow against the procedural lamps' (their lens, light guide, stop, amber and head lamps; less at night)
 function glassTexture() {
   const W = 128, H = 128, c = document.createElement('canvas'); c.width = W * GLASS_CELLS; c.height = H;
   const g = c.getContext('2d');
@@ -271,14 +274,16 @@ export function makeCar() {
     add(new THREE.CylinderGeometry(0.045, 0.045, 0.206, 10), mHub, x, 0.29, z, 0, 0, Math.PI / 2);
   }
   unsprung = false;
+  const procedural = []; // (the procedural car's meshes: taken out when the painted car comes in, step 35e)
   for (const [mat, list] of parts) {
     const mesh = new THREE.Mesh(mergeGeometries(list), mat);
     mesh.castShadow = mat !== mGlass && mat !== mPlate && mat !== mStop && mat !== mLamp && mat !== mTailBar; mesh.receiveShadow = true;
-    inner.add(mesh);
+    inner.add(mesh); procedural.push(mesh);
   }
-  { const mesh = new THREE.Mesh(mergeGeometries(wheels), mPaint); mesh.castShadow = mesh.receiveShadow = true; car.add(mesh); }
+  { const mesh = new THREE.Mesh(mergeGeometries(wheels), mPaint); mesh.castShadow = mesh.receiveShadow = true; car.add(mesh); procedural.push(mesh); }
   // contact shadow: sky light can't reach the road under a car, so it always sits on a soft dark patch — without it the
   // car floats in overcast, rain and at night, when there is no sun shadow (one small quad, part of the car)
+  let ao = null;
   {
     const W = 48, H = 96, c = document.createElement('canvas'); c.width = W; c.height = H;
     const g = c.getContext('2d'), img = g.createImageData(W, H);
@@ -288,7 +293,7 @@ export function makeCar() {
       img.data[i4] = img.data[i4 + 1] = img.data[i4 + 2] = Math.round(255 * a * a * (3 - 2 * a)); img.data[i4 + 3] = 255;
     }
     g.putImageData(img, 0, 0);
-    const ao = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 4.1), new THREE.MeshBasicMaterial({ color: 0x000000, alphaMap: new THREE.CanvasTexture(c), transparent: true, opacity: 0.55, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }));
+    ao = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 4.1), new THREE.MeshBasicMaterial({ color: 0x000000, alphaMap: new THREE.CanvasTexture(c), transparent: true, opacity: 0.55, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }));
     ao.rotation.x = -Math.PI / 2; ao.position.y = 0.03; ao.renderOrder = 3; car.add(ao);
   }
   // on a wet road the tail lamps mirror in it: two soft red streaks on the asphalt behind the car, where the chase camera
@@ -346,16 +351,85 @@ export function makeCar() {
   })();
   { const q = [];
     for (const x of [-0.56, 0.56]) { const g = new THREE.PlaneGeometry(HALO_W, HALO_H); g.rotateY(Math.PI); g.translate(x, 0.95, -1.765); q.push(g); }
-    const m = new THREE.Mesh(mergeGeometries(q), haloMat); m.renderOrder = 3; inner.add(m); }
+    haloMat.mesh = new THREE.Mesh(mergeGeometries(q), haloMat); haloMat.mesh.renderOrder = 3; inner.add(haloMat.mesh); }
   // rear wiper (its own mesh so it can sweep when it rains)
   const wiperPivot = new THREE.Group(); wiperPivot.position.set(0.02, 1.19, -1.716); inner.add(wiperPivot);
   const wg = new THREE.BoxGeometry(0.52, 0.026, 0.02); wg.translate(0.27, 0, 0);
-  const wiper = new THREE.Mesh(paint(wg, mTrim), mPaint); wiper.rotation.z = 0.18; wiperPivot.add(wiper);
+  let wiper = new THREE.Mesh(paint(wg, mTrim), mPaint); wiper.rotation.z = 0.18; wiperPivot.add(wiper);
   let wiperT = 0;
   // headlights at night
   const head = new THREE.SpotLight(0xfff0d0, 0, 70, 0.55, 0.65, 1.2);
   head.position.set(0, 0.8, 1.6); head.target.position.set(0, 0, 18); inner.add(head, head.target);
   const S = { roll: 0, rv: 0, pitch: 0, pv: 0, y: 0, yv: 0, br: 0 }, soft = (x, cap) => cap * Math.tanh(x / cap); // body springs
+
+  // ---- (step 35e) the painted car: the city painting's mint kei crossover as a painted 3D body (painted.js loadCar), in place of the
+  // procedural one above (which stays the fallback). One material for the body, its wheels and its rear wiper: the paint's program (the
+  // painter's sun, the street lamps, the fill in the shade, the clear coat's sky) with the painting as its map, and its lamps lit from a
+  // mask sheet (emissiveMap: R the tail lamps' red lenses and the reflectors, G their light guides, B on the rear's part of the sheet the
+  // stop lamp and the amber indicators, elsewhere the head and fog lamps): their colours set each frame by the procedural lamps' strengths.
+  // Its wheels spin with the speed and the front ones steer with the car's sideways pull (in a lane change, round a bend); past ~25 km/h
+  // their faces are the painting's wheel spun (no strobing spokes)
+  const LAMP_U = { uLampR: { value: new THREE.Color() }, uLampG: { value: new THREE.Color() }, uLampS: { value: new THREE.Color() }, uLampA: { value: new THREE.Color() }, uLampH: { value: new THREE.Color() }, uLampU: { value: 0.65 }, uLampV: { value: 0.3 } };
+  // (its fill in the shade its own: the procedural car's (U.uCarFill) × the livery's own by the hour, main.js, as each painting's repaints
+  // have the painted car's shade at golden hour, sunset and night)
+  const fillP = { value: new THREE.Vector3() };
+  const PAINTED = { uniforms: { ...PAINT.uniforms, ...LAMP_U, uCarFill: fillP }, pars: PAINT.pars + '\nuniform vec3 uLampR, uLampG, uLampS, uLampA, uLampH; uniform float uLampU, uLampV;', apply: LAMPS.apply };
+  // (B: on the rear's part of the sheet (u past uLampU) the stop lamp above uLampV (v runs down) and the amber indicators below it; elsewhere
+  // the head and fog lamps)
+  const LAMP_EM = /* glsl */`
+#ifdef USE_EMISSIVEMAP
+{ vec3 ek = texture2D(emissiveMap, vEmissiveMapUv).rgb;
+  totalEmissiveRadiance = ek.r * uLampR + ek.g * uLampG + ek.b * (vEmissiveMapUv.x > uLampU ? (vEmissiveMapUv.y > uLampV ? uLampA : uLampS) : uLampH); }
+#endif`;
+  const RED = new THREE.Color(1, 0.0232, 0.0232), HEADC = new THREE.Color('#fff4dc'), TAIL_BR = new THREE.Color(1, 0.1, 0.07), AMBER = new THREE.Color(1, 0.5, 0.1); // (linear)
+  const P = { on: false, mat: null, wheels: [], piv: [], geo: null, geoBlur: null, blur: false, spin: 0, steer: 0, RT: 0.29, WB: 2.24, dims: null };
+  const paintCar = (d, map, em) => {
+    const J = d.J, M = d.M;
+    const mat = carLit(withGloss(new THREE.MeshToonMaterial({ color: '#ffffff', map, emissiveMap: em, emissive: '#ffffff', gradientMap: GRAD_CAR }), 0.85, 0.06, 'paintmap-l', PAINTED));
+    // (the clear coat by the painting's own tone: paint, glass, chrome and rims glossy; black plastic, the tyres and the wheel wells, which
+    // reflected the sky at a grazing angle (their insides read a pale grey), hardly at all)
+    { const ob = mat.onBeforeCompile; mat.onBeforeCompile = sh => { ob(sh); sh.fragmentShader = sh.fragmentShader.replace('#include <lights_fragment_end>', FILL).replace('#include <emissivemap_fragment>', LAMP_EM)
+      .replace('{ float gm = 0.850;', '{ float gm = 0.850 * smoothstep(0.012, 0.05, dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11)));'); }; }
+    const geo = (m, uvFrom = null) => { // (a mesh's arrays as a geometry)
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(m.P, 3)); g.setAttribute('normal', new THREE.BufferAttribute(m.N, 3));
+      g.setAttribute('uv', new THREE.BufferAttribute((uvFrom || m).U, 2)); g.setIndex(new THREE.BufferAttribute(m.I, 1)); g.computeBoundingSphere(); return g;
+    };
+    // everything built first (should anything throw, the procedural car stays whole), then swapped in
+    const bodyMesh = new THREE.Mesh(geo(M.body), mat); bodyMesh.castShadow = bodyMesh.receiveShadow = true;
+    const wgeo = geo(M.wheel), wgBlur = geo(M.wheel, M.wheelblur), piv = [], wheelsP = [];
+    for (let i = 0; i < 4; i++) { // (front left, front right, rear left, rear right; the template's painted face is on the car's right, −x: mirrored for the left)
+      const sd = i % 2 ? -1 : 1, p = new THREE.Group(), w = new THREE.Mesh(wgeo, mat);
+      p.position.set(sd * J.track, J.RT, J.axles[i < 2 ? 0 : 1]); if (sd > 0) w.scale.x = -1;
+      w.castShadow = w.receiveShadow = true; p.add(w); piv.push(p); wheelsP.push(w);
+    }
+    // the rear plate (the procedural plate's texture, over the painting's plain yellow one), the rear wiper, the ring lamps' glow cards and
+    // their streaks on a wet road, the contact shadow fitted to the new footprint
+    const pl = new THREE.Mesh(new THREE.PlaneGeometry(J.plate[3] * 0.98, J.plate[4] * 0.98), mPlate); pl.position.set(J.plate[0], J.plate[1], J.plate[2] - 0.003); pl.rotation.y = Math.PI;
+    const wp = new THREE.Mesh(geo(M.rwiper), mat); wp.rotation.z = WIPER_REST; wp.castShadow = true;
+    let haloTex, haloGeo;
+    { const W = 48, c = document.createElement('canvas'); c.width = c.height = W;
+      const g = c.getContext('2d'), img = g.createImageData(W, W), HW = 0.52, R0 = J.ring[0][3];
+      for (let y = 0; y < W; y++) for (let x = 0; x < W; x++) {
+        const dd = Math.hypot(((x + 0.5) / W - 0.5) * HW, ((y + 0.5) / W - 0.5) * HW) - R0;
+        const a = dd < 0 ? sst(-0.012, 0, dd) : Math.exp(-((dd / 0.06) ** 2)); // (none over the painted lamp: its cream ring shows)
+        const i4 = (y * W + x) * 4; img.data[i4] = img.data[i4 + 1] = img.data[i4 + 2] = Math.round(255 * a); img.data[i4 + 3] = 255;
+      }
+      g.putImageData(img, 0, 0); haloTex = new THREE.CanvasTexture(c);
+      const q = []; for (const r of J.ring) { const pg = new THREE.PlaneGeometry(HW, HW); pg.rotateY(Math.PI); pg.translate(r[0], r[1], r[2] - 0.03); q.push(pg); }
+      haloGeo = mergeGeometries(q); }
+    const sq = []; for (const r of J.ring) { const g = new THREE.PlaneGeometry(0.22, 1.5); g.rotateX(-Math.PI / 2); g.translate(r[0], 0.035, J.rearZ - 0.02 - 0.75); sq.push(g); }
+    const streakGeo = mergeGeometries(sq);
+    // the swap (the procedural meshes let go: never drawn, their geometry never uploaded)
+    for (const o of procedural) { o.parent.remove(o); o.geometry.dispose(); } procedural.length = 0;
+    inner.add(bodyMesh, pl); for (const p of piv) car.add(p);
+    wiperPivot.remove(wiper); wiper.geometry.dispose(); wiperPivot.position.set(J.rwiper[0], J.rwiper[1], J.rwiper[2]); wiperPivot.rotation.x = J.rwiper[3] || 0; wiper = wp; wiperPivot.add(wiper); // (tilted with the raked glass)
+    haloMat.map = haloTex; haloMat.mesh.geometry = haloGeo; streakMat.mesh.geometry = streakGeo;
+    ao.scale.set(J.W / 1.49, J.L / 3.4, 1); ao.position.z = J.rearZ + J.L / 2;
+    car.traverse(o => { o.userData.car = true; }); // (the car's own shadow map: main.js)
+    LAMP_U.uLampU.value = J.splitU; LAMP_U.uLampV.value = J.splitV;
+    Object.assign(P, { geo: wgeo, geoBlur: wgBlur, RT: J.RT, WB: J.axles[0] - J.axles[1], piv, wheels: wheelsP, mat, on: true, dims: { axles: J.axles, track: J.track, RT: J.RT, rearZ: J.rearZ } });
+  };
 
   return {
     group: car, lamps, lampCol, head,
@@ -388,10 +462,34 @@ export function makeCar() {
         wiperT += dt;
         const p = (wiperT % 2.6) / 2.6, sm = x => x * x * (3 - 2 * x);
         const a = p < 0.25 ? sm(p / 0.25) : p < 0.5 ? sm(1 - (p - 0.25) / 0.25) : 0;
-        wiper.rotation.z = 0.18 + a * 2.5;
+        wiper.rotation.z = (P.on ? WIPER_REST : 0.18) + a * (P.on ? 2.6 : 2.5);
         if (rain <= 0.15 && p >= 0.5) wiperT = 0;
       }
       head.intensity = night * 60; mLamp.emissiveIntensity = 0.15 + night * 2.6; // (the lamps glow when the headlights are on)
+      if (P.on) { // (step 35e) the painted car's lamps, by the procedural ones' strengths above; its wheels
+        // (the ring lamps as the paintings have them: by day a bright yellow-cream light guide round a red lens; at night the guide a warm
+        // orange ring round a darker lens (ref/tod: the repaints' lamps; the old 3-4x made a red blob in the bloom); braking: red, brighter)
+        const r = Math.min(1, S.br * 0.8), gn = 1 - PL.gn * night;
+        LAMP_U.uLampR.value.copy(RED).multiplyScalar(mTail.emissiveIntensity * PL.r * (1 - PL.rn * night));
+        LAMP_U.uLampG.value.setRGB(1, 0.72 + (0.5 - 0.72) * night, 0.22 + (0.2 - 0.22) * night).lerp(TAIL_BR, r).multiplyScalar(mTailBar.emissiveIntensity * PL.g * gn);
+        LAMP_U.uLampS.value.copy(RED).multiplyScalar(mStop.emissiveIntensity * PL.s);
+        LAMP_U.uLampA.value.copy(AMBER).multiplyScalar(PL.a * (1 + 1.2 * night));
+        LAMP_U.uLampH.value.copy(HEADC).multiplyScalar(mLamp.emissiveIntensity * PL.h);
+        P.spin = (P.spin + (speed / P.RT) * dt) % (Math.PI * 2);
+        const v = Math.max(speed, 0), tgt = m && v > 0.5 ? Math.max(-0.5, Math.min(0.5, Math.atan((P.WB * -m.lat) / Math.max(v * v, 4)))) : 0;
+        P.steer += (tgt - P.steer) * Math.min(1, dt * 5);
+        const blur = P.blur ? v > 6 : v > 7; // (with a little hysteresis)
+        for (let i = 0; i < 4; i++) { const w = P.wheels[i]; w.rotation.x = P.spin; if (blur !== P.blur) w.geometry = blur ? P.geoBlur : P.geo; if (i < 2) P.piv[i].rotation.y = P.steer; }
+        P.blur = blur;
+      }
     },
+    /** (step 35e) the painted car in place of the procedural one (painted.js loadCar: d; its two textures, uploaded): once, at load */
+    paint: paintCar,
+    get painted() { return P.on; },
+    /** (step 35e) the painted car's fill in its shade (main.js sets it each frame) */
+    fillP: fillP.value,
+    /** (step 35e) the painted car's wheels and tail (axles: front, rear z; m), or null */
+    get dims() { return P.dims || null; },
+    get paintMat() { return P.mat; }, get wheelMeshes() { return P.wheels; }, // (step 35e: __dbg, the harness)
   };
 }

@@ -492,6 +492,63 @@ export async function loadTrain(tier, timeoutMs = 15000) {
   })(), timeoutMs, "the crossing's painted train unavailable, keeping the old one:");
 }
 
+/** (step 35e) Loads the player's car as a painted 3D model (assets/models/car/car1.*, made by ~/cdtest/s35e/scripts/carhull.py and
+ *  pack.py from Grok Imagine elevations of the city painting's mint kei crossover: its body the elevations' visual hull with the paintings
+ *  projected back onto it, its wheels, mirrors, wipers and tailpipe modelled): its geometry, one binary of meshes (the body; one wheel and
+ *  its blurred face's uv, stamped four times; the rear wiper; ~77 KB for ~8k triangles), in the car's frame (x its left, y up, z its
+ *  nose); its texture pair (sRGB as stored, no flip: v runs down): one livery's painting (the city's mint 'mint', the coast's lighter
+ *  'coast', the cherry avenue's light blue 'blue', the country's mint with a white band 'band': only the one asked for is fetched) and
+ *  what glows, as masks (R the tail lamps' red lenses and reflectors, G their light guides, B on the rear's part of the sheet the stop
+ *  lamp and the amber indicators, elsewhere the head and fog lamps: car.js sets their colours each frame). 'hi' (2048 × 1024) or 'lo'
+ *  (half: phones, the embed). Resolves to { M (the meshes' arrays by name), J, map, em, tier, livery, fill (the livery's fill in the shade
+ *  by the hour, or null) }; null (never rejects) when anything is missing, broken, truncated or too slow: the car then stays the
+ *  procedural one (car.js) */
+export async function loadCar(tier, livery, timeoutMs = 15000) {
+  const base = ASSETS + 'models/car/';
+  return orNull((async () => {
+    const r = await fetch(base + 'car1.json');
+    if (!r.ok) throw new Error('car1.json ' + r.status);
+    const J = await r.json(), file = J.files && J.files[tier] ? tier : 'hi', F = J.files && J.files[file], sz = J.size && J.size[file];
+    const liv = F && F.map && F.map[livery] ? livery : 'mint';
+    if (J.v !== 2 || !F || !F.map || !F.map[liv] || !F.em || !sz || !sz.map || !sz.em || !J.bytes || !J.bin || !(J.binBytes > 0) || !J.meshes) throw new Error('nothing listed');
+    for (const k of ['RT', 'track', 'L', 'W', 'rearZ', 'splitU', 'splitV']) if (!(typeof J[k] === 'number' && isFinite(J[k]))) throw new Error(k + ' missing');
+    if (!J.axles || J.axles.length !== 2 || !J.ring || J.ring.length !== 2 || !J.plate || !J.stop || !J.rwiper) throw new Error('a place is missing');
+    const get = async (name, bytes) => { // (each file checked whole: a truncated image decodes without complaint)
+      if (!(bytes > 0)) throw new Error(name + ': no size listed');
+      const q = await fetch(base + name); if (!q.ok) throw new Error(name + ' ' + q.status);
+      const b = await q.blob(); if (b.size !== bytes) throw new Error(name + ' is ' + b.size + ' bytes, not ' + bytes);
+      return b;
+    };
+    const [bin, mb, eb] = await Promise.all([get(J.bin, J.binBytes), get(F.map[liv], J.bytes[F.map[liv]]), get(F.em, J.bytes[F.em])]);
+    // (each mesh: positions and uv as 12-bit integers on its box, each component's step from the vertex before as a zigzag varint; normals
+    // octahedral, two bytes; indices as varint steps; the wheel's blurred face shares the wheel's vertices, its own uv)
+    const buf = await bin.arrayBuffer(), end = buf.byteLength, vb = new Uint8Array(buf), M = {};
+    const stream = (off, len) => { let p = off; const e = off + len; if (!(off >= 0 && len > 0 && e <= end)) throw new Error('a stream lies outside the binary');
+      return () => { let v = 0, sh = 0, b; do { if (p >= e) throw new Error('a stream runs past its end'); b = vb[p++]; v |= (b & 127) << sh; sh += 7; } while (b & 128 && sh < 35); return (v >>> 1) ^ -(v & 1); }; };
+    for (const m of J.meshes) { // (decoded once)
+      const n = m.n, ni = m.tris * 3, b0 = m.box && m.box[0], b1 = m.box && m.box[1], q = m.q;
+      if (!(n > 0 && n < 65536 && ni > 0 && q > 0) || !b0 || !b1 || !(m.nrm >= 0 && m.nrm + n * 2 <= end)) throw new Error('a mesh lies outside the binary');
+      const P = new Float32Array(n * 3), U = new Float32Array(n * 2), N = new Float32Array(n * 3), I = new Uint16Array(ni);
+      { const rd = stream(m.pos, m.posBytes); let x = 0, y = 0, z = 0;
+        for (let i = 0; i < n; i++) { x += rd(); y += rd(); z += rd(); P[i * 3] = b0[0] + (x / q) * (b1[0] - b0[0]); P[i * 3 + 1] = b0[1] + (y / q) * (b1[1] - b0[1]); P[i * 3 + 2] = b0[2] + (z / q) * (b1[2] - b0[2]); } }
+      { const rd = stream(m.uv, m.uvBytes); let u = 0, v = 0; for (let i = 0; i < n; i++) { u += rd(); v += rd(); U[i * 2] = u / q; U[i * 2 + 1] = v / q; } }
+      { const nb = new Int8Array(buf, m.nrm, n * 2);
+        for (let i = 0; i < n; i++) {
+          let x = nb[i * 2] / 127, y = nb[i * 2 + 1] / 127; const z = 1 - Math.abs(x) - Math.abs(y);
+          if (z < 0) { const t = x; x = (1 - Math.abs(y)) * (t >= 0 ? 1 : -1); y = (1 - Math.abs(t)) * (y >= 0 ? 1 : -1); }
+          const l = Math.hypot(x, y, z); if (l > 0) { N[i * 3] = x / l; N[i * 3 + 1] = y / l; N[i * 3 + 2] = z / l; } else N[i * 3 + 1] = 1; // (a zero normal is NaN in the shader: step 33)
+        } }
+      { const rd = stream(m.idx, m.idxBytes); let k = 0; for (let i = 0; i < ni; i++) { k += rd(); if (k < 0 || k >= n) throw new Error('an index past its mesh'); I[i] = k; } }
+      M[m.name] = { n, P, N, U, I };
+    }
+    for (const k of ['body', 'wheel', 'wheelblur', 'rwiper']) if (!M[k]) throw new Error('no ' + k + ' mesh');
+    const opt = { premultiplyAlpha: 'none', colorSpaceConversion: 'none' }, [map, em] = await Promise.all([createImageBitmap(mb, opt), createImageBitmap(eb, opt)]);
+    if (map.width !== sz.map[0] || map.height !== sz.map[1] || em.width !== sz.em[0] || em.height !== sz.em[1]) { map.close(); em.close(); throw new Error('a texture has the wrong size'); }
+    const fl = J.fill && J.fill[liv], fill = fl && ['golden', 'sunset', 'night'].every(k => Array.isArray(fl[k]) && fl[k].length === 3 && fl[k].every(v => typeof v === 'number' && v >= 0 && v < 8)) ? fl : null;
+    return { M, J, map, em, tier: file, livery: liv, fill }; // (fill: the livery's fill in the shade by the hour, × the procedural car's; null: 1)
+  })(), timeoutMs, "the painted car unavailable, keeping the procedural one:");
+}
+
 /** Loads the painted meadow (assets/fields/, made by ~/cdtest/ft/scripts/field.py): a tileable top-down painting of the
  *  country paintings' grass, 'hi' or 'lo' (phones, the embed). Resolves to null (never rejects) when the index or the
  *  image is missing, broken, truncated or too slow: the countryside then keeps its procedural paddies. */

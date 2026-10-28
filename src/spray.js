@@ -44,13 +44,16 @@ export function makeSpray() {
   });
   const mesh = new THREE.Mesh(geo, mat); mesh.frustumCulled = false; mesh.renderOrder = 4; mesh.visible = false;
   let next = 0, accS = 0, accV = 0, wheel = 0, alive = false;
+  // where it comes from, in the car's frame (x its left, z its nose): the rear tyres (half the track; just behind the rear axle) and the
+  // exhaust (step 35e: main.js moves them to the painted car's wheels)
+  const at = { wx: 0.67, wz: -1.28, ex: -0.42, ey: 0.26, ez: -1.78 };
   function emit(kind, x, y, z, vx, vy, vz, life, s0, s1, a0) {
     const i = next; next = (next + 1) % N;
     P[i * 3] = x; P[i * 3 + 1] = y; P[i * 3 + 2] = z; V[i * 3] = vx; V[i * 3 + 1] = vy; V[i * 3 + 2] = vz;
     L[i * 4] = 0; L[i * 4 + 1] = life; L[i * 4 + 2] = s0; L[i * 4 + 3] = s1; AL[i] = a0; K[i] = kind; SD[i] = Math.random();
   }
   return {
-    mesh,
+    mesh, at,
     /** car: its group (position + yaw); spd: m/s; wet / snow: how wet / snowy the road is (0…1); cold: exhaust vapour (0…1);
      *  amb: the air's colour; sun: sunlight on it; tail: tail-light world position + strength; on: test switch */
     update(dt, car, spd, wet, snow, cold, amb, sun, tail, cam, on) {
@@ -60,7 +63,7 @@ export function makeSpray() {
       const sf = Math.min(1, Math.max(0, (spd - 2) / 14)), kind = snow > 0.3 ? 2 : 0, road = kind ? snow : wet;
       accS += 24 * road * sf * dt;
       while (accS >= 1) { // off a rear tyre: back, up and out, dragged along by the car's wake at first
-        accS -= 1; const side = (wheel ^= 1) ? 1 : -1, x = side * 0.67, z = -1.28 - Math.random() * 0.2, r1 = Math.random(), r2 = Math.random();
+        accS -= 1; const side = (wheel ^= 1) ? 1 : -1, x = side * at.wx, z = at.wz - Math.random() * 0.2, r1 = Math.random(), r2 = Math.random();
         const back = 1.6 + 1.6 * r1, up = kind ? 0.5 + 0.7 * r2 : 0.9 + 1.0 * r2, out = side * (0.3 + 0.6 * Math.random());
         emit(kind, g.x + x * cy + z * sy, g.y + 0.12, g.z - x * sy + z * cy, fx * 0.55 - sy * back + out * cy, up, fz * 0.55 - cy * back - out * sy,
           kind ? 0.45 + 0.3 * r1 : 0.55 + 0.35 * r1, 0.2 + 0.1 * r2, kind ? 0.7 + 0.35 * r2 : 0.8 + 0.4 * r2, (kind ? 0.5 : 0.5) * (0.5 + 0.5 * sf) * Math.min(1, road * 1.5));
@@ -68,7 +71,7 @@ export function makeSpray() {
       accV += (5 + 4 * sf) * cold * dt;
       while (accV >= 1) { // a puff from the exhaust (rear right)
         accV -= 1; const r1 = Math.random();
-        emit(1, g.x - 0.42 * cy - 1.78 * sy, g.y + 0.26, g.z + 0.42 * sy - 1.78 * cy, fx * 0.5 - sy * 0.8, 0.25 + 0.2 * r1, fz * 0.5 - cy * 0.8, 1.3 + 0.6 * r1, 0.14, 0.8 + 0.4 * Math.random(), 0.32 * Math.min(1, cold * 1.5));
+        emit(1, g.x + at.ex * cy + at.ez * sy, g.y + at.ey, g.z - at.ex * sy + at.ez * cy, fx * 0.5 - sy * 0.8, 0.25 + 0.2 * r1, fz * 0.5 - cy * 0.8, 1.3 + 0.6 * r1, 0.14, 0.8 + 0.4 * Math.random(), 0.32 * Math.min(1, cold * 1.5));
       }
       // move them, fade them, and pack the live ones for the GPU
       let n = 0;

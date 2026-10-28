@@ -2,6 +2,59 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-28 · 19:20 — The player's car as the paintings' car
+- **The car is the paintings' rounded mint crossover now, not the boxy kei van** (the user: "i want high quality but with anime
+  style"; the design the user chose: the paintings' car). It is a Suzuki-Hustler-like kei car as `ref/city.png` draws it:
+  - from behind: a curved hatch under a raked rear window with the seats behind it, big round ring tail lamps, a chrome emblem, the
+    yellow 12-34 plate, a stop lamp, amber indicators and reflectors, a body-coloured bumper over a navy valance and a chrome tailpipe;
+  - from ahead: round chrome-ringed headlamps, a chrome-framed grille, round fog lamps, and the driver and a passenger behind the glass;
+  - from the side: the white roof, black arch mouldings, the silver door garnish and alloy wheels.
+- **Its paint as each painting has it:** the city's mint, the cherry avenue's light blue, the coast's lighter mint and the country's
+  white hatch panel. The start zone picks one, and only that painting is fetched.
+- **Real 3D where it moves:** the wheels spin, and the front pair steers through lane changes and bends. Past ~25 km/h their faces are
+  the painted wheel spun, so the spokes don't strobe. The mirrors, wipers, lamp lenses and tailpipe are modelled, and the rear wiper
+  sweeps in the rain.
+- **From the chase camera, closer to the paintings.** ΔE of the car's box against each painting at noon: city 12.3 → 3.3, avenue
+  23.0 → 2.5, coast 7.8 → 2.9, country 17.7 → 4.4. It is better at golden hour, sunset and night too, except the city at night
+  (4.3 → 5.4) and the avenue at golden hour (5.0 → 6.8).
+- **By the hour:** the ring lamps glow cream by day and as a warm orange ring at night, and turn red when braking. The headlamps light
+  at night, the street lamps sweep over the paint, and each livery has its own fill in the shade.
+- Seeded captures of every start are identical to live outside the car and its shadow. At night the car's lamps reach the bloom and
+  its headlamps the road ahead, so the frame moves by 1–2 levels. Without the new files the old car drives, identical to live.
+- How:
+  - `painted.js`: `loadCar` (a compact geometry binary, one livery's WebP and a lamp-mask sheet, each checked by bytes; null on any
+    failure leaves the procedural car).
+  - `car.js`: `paint()` (the paint's program with the painting as its map, the lamps lit from the mask sheet, the wheels' spin and
+    steer, the plate, wiper, halos and streaks refitted).
+  - `main.js`: loaded at every start and swapped in before the warm-up; the livery's fill by the hour; the crossing's axles; a
+    `?livery=` test hook.
+  - `spray.js`: the tyre spray and exhaust come from the new wheels and tailpipe.
+  - The pipeline is in `~/cdtest/s35e` (`clean.py`, `carhull.py`, `pack.py`); the lossless masters are kept.
+  - +8.0 KB of code (+3.1 KB gzipped).
+- Assets (`assets/models/car/`):
+  - `car1.bin` (81 KB: 12-bit positions and uv as delta varints, octahedral normals);
+  - `car1.json`;
+  - four liveries' `car1_*_hi.webp` (77–84 KB) and `car1_*_lo.webp` (29–31 KB);
+  - `car1e_hi/lo.webp` (5 / 2 KB);
+  - `CREDITS.md`.
+- Programs: two fewer at every start (63 / 62 / 62 on a Japanese start, 83 at a Galata one): the painted car's one program replaces the
+  old car's three. Nothing compiles mid-drive.
+- The car: 14 → 11 meshes, 14,476 → 10,064 triangles.
+- Cost: the desktop machine was down, so these are this shared box's Vega, at load 9–20:
+  - the car's draws (L S S L): desktop 1.31 / 1.27 → 1.02 / 1.21 ms, phone tier 1.15 / 0.97 → 0.72 / 0.83;
+  - its shadow is unchanged (0.42 / 0.40 → 0.39 / 0.52);
+  - city drives (L S S L L S): desktop 21.62 / 21.97 / 21.29 → 20.76 / 22.03 / 22.10 ms, phone 13.64 / 12.81 / 14.08 → 13.35 / 12.96 /
+    13.76 (alike);
+  - start-up: +171 KB on a desktop and +120 KB on a phone (~+0.3 s at 3 Mbps in the step agent's clean pairs). The time to the start
+    button was lost in the box's load (live 4.4–15.4 s, staging 4.9–9.3 s).
+  - 0 shader errors in all eleven zones and at night on every tier; no console errors at q=low, mid and high; the embed starts on tap.
+- Left over:
+  - the kerb side is the road side's painting mirrored (the fuel lid shows on both sides);
+  - the coast at night (ΔE ~17);
+  - the country's two-tone shows only from behind;
+  - the front wipers don't sweep;
+  - re-time on the desktop when it is back.
+
 ## 2026-10-28 · 15:20 — The Galata Bridge as it really is: Karaköy → the bridge → Eminönü → Sirkeci
 - **The zone is the approved real route now, not the concept's 1.5 km of bridge** (the user: "the galata köprüsü … should be
   realistically accurate"; "we should actually have their exact coordinates"): `galata`, 1500 m southbound, keeping right. Kemeraltı

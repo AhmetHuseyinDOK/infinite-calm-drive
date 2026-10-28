@@ -24,7 +24,7 @@ import { makePost } from './post.js';
 import { makeAudio } from './audio.js';
 import { makeParticles } from './particles.js';
 import { clamp, lerp, sstep, setSeed, hash2 } from './util.js';
-import { loadCloudAtlas, makePaintedClouds, loadBandAtlas, makePaintedBand, updatePainted, loadFieldTexture, loadFrontAtlas, loadRoomAtlas, roomTexture, roomGlass, loadHouseAtlas, loadHousePatch, loadTrHouseAtlas, loadTownAtlas, loadChainAtlas, loadFisherAtlas, loadDolmus, loadTrain, todTones, mixTones, paintSky, PAINT_TOD, BAND_R } from './painted.js';
+import { loadCloudAtlas, makePaintedClouds, loadBandAtlas, makePaintedBand, updatePainted, loadFieldTexture, loadFrontAtlas, loadRoomAtlas, roomTexture, roomGlass, loadHouseAtlas, loadHousePatch, loadTrHouseAtlas, loadTownAtlas, loadChainAtlas, loadFisherAtlas, loadDolmus, loadTrain, loadCar, todTones, mixTones, paintSky, PAINT_TOD, BAND_R } from './painted.js';
 
 const QS = new URLSearchParams(location.search);
 // inside an X player card (or any iframe): lighter quality, compact UI, tap-only start
@@ -98,6 +98,10 @@ async function main() {
   // start's assets at a Japanese start (a train can cross soon after a city or country start); at a Turkish one in the background once the
   // drive comes within TR_NEAR of Japan (trainLazy, below)
   const JP_START = REGION[startZone()] === 'jp' || nextBorderS(S0) - S0 < TR_NEAR, trainLoad = JP_START ? loadTrain(HTIER) : null;
+  // (step 35e) the player's car as a painted 3D body (painted.js loadCar: its geometry and one livery's texture pair), on the same tiers, at
+  // every start: the livery the start zone's painting has (the cherry avenue's light blue, the country's white band, the coast's lighter mint; else the
+  // city's mint)
+  const carLoad = loadCar(HTIER, QS.get('livery') || { sakura: 'blue', country: 'band', coast: 'coast' }[startZone()] || 'mint'); // (?livery=: a test hook)
   // the painted cumulus and the horizon band (painted.js; 32 px/° where the frame is tall enough, else 16 px/°): the
   // largest downloads, and needed last (they are awaited once the road is built and the light prepared, below), so they
   // start once the four above are in (or after 4 s, so a stalled one never holds them up for its whole 15 s timeout): on
@@ -570,6 +574,16 @@ async function main() {
   // anything fail, the old train. At a Japanese start made last of all (its ids draw random numbers), before the road is built
   const paintTrain = (d, map, em) => { const ch = makeAtlasChain(M, { map, emissive: em }); ch.mat.gradientMap = trainRamp(); ch.mat.emissiveIntensity = M.atlas.emissiveIntensity; train.paint(d, ch.mat, ch.depth); M.train = ch.mat; };
   if (trainLoad) { const d = await trainLoad; if (d) try { const map = dolTex(d.map), em = dolTex(d.em); renderer.initTexture(map); renderer.initTexture(em); paintTrain(d, map, em); } catch (e) { console.warn('train:', e); M.train = null; } }
+  // (step 35e) the player's car painted: its texture pair uploaded (the lamps' sheet as data, not colour) and its procedural body swapped for
+  // it (car.js paint), made last of all (its ids draw random numbers), before the road is built and the light prepared (its program is
+  // compiled there); should anything fail, the procedural car
+  let carFill = null;
+  { const d = await carLoad; if (d) try { const map = dolTex(d.map), em = dolTex(d.em); em.colorSpace = THREE.NoColorSpace; renderer.initTexture(map); renderer.initTexture(em); car.paint(d, map, em); carFill = d.fill; } catch (e) { console.warn('car:', e); } }
+  if (car.dims) { const D = car.dims; Object.assign(spray.at, { wx: D.track, wz: D.axles[1] - 0.16, ez: D.rearZ - 0.08 }); } // (the spray off its tyres and its exhaust)
+  // (…and its fill by the hour: the procedural car's × its livery's, read against the paintings' evening repaints (car1.json fill: golden hour,
+  // sunset, night; 1 by day))
+  let CFP_T = null;
+  if (car.painted) { const F = carFill; CFP_T = todKeys({ f: F ? F.night : [1, 1, 1] }, { f: F ? F.sunset : [1, 1, 1] }, { f: [1, 1, 1] }, { f: F ? F.golden : [1, 1, 1] }); }
   // (a Turkish start's: loaded as the drive comes within TR_NEAR of Japan; its textures uploaded a frame apart, then swapped in while no
   // train runs)
   const trainLazy = { started: !!trainLoad, async run(d) {
@@ -953,7 +967,7 @@ async function main() {
   const LAMP_NIGHT = new THREE.Color(3.6, 2.8, 1.8); // (the street lamps' night colour: one object, not one per frame)
   /** the light j steps of 0.001 of the day ahead (the hour moving on if `run`, the car `ds` metres further on per step) */
   const lightAhead = (j, run, ds, out) => lightDirAt(st.tod + (run ? j * 0.001 : 0), out, TOD.head === null ? null : path.meanHeading(st.s + j * ds, SUN_W) + st.sunAdj);
-  const RAILS = [-2.5335, -1.4665, 1.4665, 2.5335], AXLES = [1.12, -1.12]; // rails of a crossing's two tracks (from sx); axles (from the car's centre)
+  const RAILS = [-2.5335, -1.4665, 1.4665, 2.5335], AXLES = car.dims ? [...car.dims.axles] : [1.12, -1.12]; // rails of a crossing's two tracks (from sx); axles (from the car's centre; step 35e: the painted car's)
   const JOINTS = [-24.5, 24.5]; // a river bridge's expansion joints (from its centre, chunks.js placeRiver)
   function frame(now) {
     requestAnimationFrame(frame);
@@ -1238,6 +1252,7 @@ async function main() {
     }
     { // …and the painter's fill in the car's shade (car.js CAR_FILL), by the time of day under a clear sky (grey skies: none)
       const c = CF_T.at(TOD.t).rgb('f'), k = paintSky() * st.carkey; U.uCarFill.value.set(c[0] * k, c[1] * k, c[2] * k);
+      if (CFP_T) { const q = CFP_T.at(TOD.t).rgb('f'); car.fillP.set(c[0] * k * q[0], c[1] * k * q[1], c[2] * k * q[2]); } // (step 35e: the painted car's livery)
       U.uCarDT.value.set(lerp(1, NT.carD[0], NP), lerp(1, NT.carD[1], NP), lerp(1, NT.carD[2], NP)); // (step 30)
     }
     { // aerial perspective has a direction: looking towards a low sun the haze glows with it (the sky dome's broad sun glow

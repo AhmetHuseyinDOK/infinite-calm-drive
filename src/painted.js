@@ -452,6 +452,46 @@ export async function loadDolmus(tier, timeoutMs = 15000) {
   })(), timeoutMs, "the town's painted dolmuş unavailable, keeping the old one:");
 }
 
+/** (step 35c) Loads Japan's crossing train as painted 3D cars (assets/models/train/train1.*, made by ~/cdtest/s35c/scripts/train.py and
+ *  pack.py from Grok Imagine elevations of a JR East E231-like commuter train: each car type's body lofted from the paintings' own
+ *  cross-section, its sides, cab face and inner ends painted by projection; bogies, pantograph, roof units, bellows and couplers
+ *  modelled): its geometry, one binary of parts (each u16 positions on the part's box, i8 normals, u16 uv, u16 indices; shared parts
+ *  stored once), the cars as lists of parts and matrices; its texture pair (sRGB as stored, no flip: v runs down; what glows: the
+ *  saloon's light, the display, the lamps). 'hi' (2048 × 1024) or 'lo' (half: phones, the embed). Resolves to { P (the parts' GB
+ *  templates by name), J, map, em, tier }; null (never rejects) when anything is missing, broken, truncated or too slow: the crossing
+ *  then keeps the old train (crossing.js) */
+export async function loadTrain(tier, timeoutMs = 15000) {
+  const base = ASSETS + 'models/train/';
+  return orNull((async () => {
+    const r = await fetch(base + 'train1.json');
+    if (!r.ok) throw new Error('train1.json ' + r.status);
+    const J = await r.json(), file = J.files && J.files[tier] ? tier : 'hi', F = J.files && J.files[file], sz = J.size && J.size[file];
+    if (!F || !sz || !sz.map || !sz.em || !J.bytes || !J.bin || !(J.binBytes > 0) || !J.parts || !J.cars || !J.cars.cab || !J.cars.mid || !J.lamps) throw new Error('nothing listed');
+    const get = async (name, bytes) => { // (each file checked whole: a truncated image decodes without complaint)
+      if (!(bytes > 0)) throw new Error(name + ': no size listed');
+      const q = await fetch(base + name); if (!q.ok) throw new Error(name + ' ' + q.status);
+      const b = await q.blob(); if (b.size !== bytes) throw new Error(name + ' is ' + b.size + ' bytes, not ' + bytes);
+      return b;
+    };
+    const [bin, mb, eb] = await Promise.all([get(J.bin, J.binBytes), get(F.map, J.bytes[F.map]), get(F.em, J.bytes[F.em])]);
+    const buf = await bin.arrayBuffer(), end = buf.byteLength, P = {};
+    for (const m of J.parts) { // (decoded once: the templates the train stamps, crossing.js)
+      const n = m.n, ni = m.tris * 3, b0 = m.box && m.box[0], b1 = m.box && m.box[1];
+      if (!(n > 0 && n < 65536 && ni > 0) || !b0 || !b1 || m.pos % 2 || m.uv % 2 || m.idx % 2 || m.pos + n * 6 > end || m.nrm + n * 3 > end || m.uv + n * 4 > end || m.idx + ni * 2 > end) throw new Error('a part lies outside the binary');
+      const q = new Uint16Array(buf, m.pos, n * 3), Pp = new Float32Array(n * 3), uq = new Uint16Array(buf, m.uv, n * 2), U = new Float32Array(n * 2), I = new Uint16Array(buf, m.idx, ni);
+      for (let i = 0; i < n * 3; i++) { const k = i % 3; Pp[i] = b0[k] + (q[i] / 65535) * (b1[k] - b0[k]); }
+      for (let i = 0; i < n * 2; i++) U[i] = uq[i] / 65535;
+      for (let i = 0; i < ni; i++) if (I[i] >= n) throw new Error('an index past its part');
+      P[m.name] = { n, P: Pp, N: new Int8Array(buf, m.nrm, n * 3), U, C: null, I, lit: m.lit };
+    }
+    for (const car of ['cab', 'mid']) for (const [name, e] of J.cars[car]) if (!P[name] || !e || e.length !== 12) throw new Error('car ' + car + ': part ' + name + ' missing');
+    if (!P[J.lamps.lead] || !P[J.lamps.trail]) throw new Error('no lamps');
+    const opt = { premultiplyAlpha: 'none', colorSpaceConversion: 'none' }, [map, em] = await Promise.all([createImageBitmap(mb, opt), createImageBitmap(eb, opt)]);
+    if (map.width !== sz.map[0] || map.height !== sz.map[1] || em.width !== sz.em[0] || em.height !== sz.em[1]) { map.close(); em.close(); throw new Error('a texture has the wrong size'); }
+    return { P, J, map, em, tier: file };
+  })(), timeoutMs, "the crossing's painted train unavailable, keeping the old one:");
+}
+
 /** Loads the painted meadow (assets/fields/, made by ~/cdtest/ft/scripts/field.py): a tileable top-down painting of the
  *  country paintings' grass, 'hi' or 'lo' (phones, the embed). Resolves to null (never rejects) when the index or the
  *  image is missing, broken, truncated or too slow: the countryside then keeps its procedural paddies. */

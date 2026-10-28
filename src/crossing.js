@@ -57,6 +57,8 @@ export function makeCrossingRig() {
 }
 
 // ------------------------------------------------------------------ the train
+/** (step 35c) the painted cars' light code for the saloon's glow (materials.js windowLights: a home window's code, on at dusk) */
+const TRAIN_LIT = 30;
 function trainTextures() {
   const W = 1024, H = 512;
   const mk = () => { const c = document.createElement('canvas'); c.width = W; c.height = H; return c; };
@@ -164,12 +166,36 @@ export function makeTrain() {
       g.rod([px, top + 0.9, -0.85], [px, top + 0.9, 0.85], 0.03, 0.03, 4, DARK);
     }
   }
-  const mesh = new THREE.Mesh(g.build(), mat); mesh.castShadow = true; mesh.receiveShadow = true; mesh.frustumCulled = false;
+  let mesh = new THREE.Mesh(g.build(), mat); mesh.castShadow = true; mesh.receiveShadow = true; mesh.frustumCulled = false;
   const group = new THREE.Group(); group.add(mesh); group.visible = false;
-  const st = { active: false, u: 0, dir: 1, speed: 16, sx: 0, ds: 2, cleared: false, length: total };
+  const st = { active: false, u: 0, dir: 1, speed: 16, sx: 0, ds: 2, cleared: false, length: total, painted: false };
   const f = {};
   return {
     group, st,
+    /** (step 35c) the painted cars in place of the boxes (painted.js loadTrain: T.P the parts' templates, T.J.cars each car's parts and
+     *  their matrices), drawn by pmat (the atlas's program on the train's own texture pair, main.js) and its shadow twin: one indexed mesh
+     *  of the three cars at the same pitch (the leading cab at +x, the trailing one turned round, the middle car between), so the
+     *  timing is the old one's. The lamps and the destination display are lit by day too (light code 0), the saloon from dusk */
+    paint(T, pmat, pdepth) {
+      const g2 = new GB({ uv: true, ao: true, lit: true, idx: true }), c = new THREE.Matrix4(), e = new THREE.Matrix4(), m = new THREE.Matrix4();
+      m.groundY = -0.25; // (contact shading toward the track's bed, under the rails' tops: the bogies and the skirts)
+      const stampAll = (name, el) => {
+        const t = T.P[name], n0 = g2.n;
+        e.set(el[0], el[3], el[6], el[9], el[1], el[4], el[7], el[10], el[2], el[5], el[8], el[11], 0, 0, 0, 1);
+        m.multiplyMatrices(c, e); g2.stamp(t, m); g2.Lt.fill(t.lit ? TRAIN_LIT : 0, n0, g2.n);
+      };
+      const ID = [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0];
+      for (let i = 0; i < N; i++) { // (car 0 trails, car N−1 leads: the group is turned so that +x is always the way it runs)
+        const cx = -total / 2 + CAR / 2 + i * (CAR + GAP), cab = i === 0 || i === N - 1;
+        c.makeRotationY(i === 0 ? Math.PI : 0).setPosition(cx, 0, 0);
+        for (const [name, el] of T.J.cars[cab ? 'cab' : 'mid']) stampAll(name, el);
+        if (cab) stampAll(i === 0 ? T.J.lamps.trail : T.J.lamps.lead, ID);
+      }
+      const pm = new THREE.Mesh(g2.build(), pmat); pm.castShadow = true; pm.receiveShadow = true; pm.frustumCulled = false; pm.customDepthMaterial = pdepth;
+      // (the old boxes' geometry and textures freed; their material kept, so its program, if a Turkish start compiled it, stays counted)
+      group.remove(mesh); mesh.geometry.dispose(); mat.map.dispose(); mat.emissiveMap.dispose();
+      mesh = pm; group.add(pm); st.painted = true;
+    },
     start(sx, dir, speed = 16) { Object.assign(st, { active: true, sx, dir, speed, u: -dir * 290, ds: dir > 0 ? -2 : 2, cleared: false }); group.visible = true; },
     update(dt, path, origin, night, roadHalf) {
       if (!st.active) return;
@@ -180,7 +206,7 @@ export function makeTrain() {
       path.at(st.sx, f);
       group.position.set(f.x + f.fx * st.ds + f.rx * st.u - origin.x, f.y + 0.34, f.z + f.fz * st.ds + f.rz * st.u - origin.z);
       group.rotation.y = f.h + (st.dir > 0 ? Math.PI : 0);
-      mat.emissiveIntensity = 0.3 + night * 1.1;
+      if (!st.painted) mat.emissiveIntensity = 0.3 + night * 1.1; // (the painted cars' follows the atlas's, main.js)
     },
   };
 }

@@ -205,6 +205,20 @@ export const GRAD_CAR = (() => {
   t.minFilter = t.magFilter = THREE.LinearFilter; t.generateMipmaps = false; t.needsUpdate = true;
   return t;
 })();
+// (step 35c) the crossing train's ramp: as soft as the car's (linear over 64 texels: its rounded roof and nose shade without bands), but the
+// sun wraps further round, as the props' ramp lets it (GRAD keeps a quarter of the sun on a face turned ~0.2 from it): the track crosses the
+// road, so the side the waiting car sees is always turned a little from the sun (it stands beside the road), and under the car's ramp that
+// whole side was one dark slab. Made when the train's material is (a texture's id draws random numbers: made with the module, it moved every
+// seeded capture's falling petals)
+let gradTrain = null;
+export function trainRamp() {
+  if (gradTrain) return gradTrain;
+  const N = 64, v = new Uint8Array(N);
+  for (let i = 0; i < N; i++) { const nl = ((i + 0.5) / N) * 2 - 1, t = Math.min(1, Math.max(0, (nl + 0.42) / 0.62)); v[i] = Math.round(255 * t * t * (3 - 2 * t)); }
+  const t = new THREE.DataTexture(v, N, 1, THREE.RedFormat);
+  t.minFilter = t.magFilter = THREE.LinearFilter; t.generateMipmaps = false; t.needsUpdate = true;
+  return (gradTrain = t);
+}
 
 // value noise from a 256² random texture: one (mip-mapped, so distant patterns don't sparkle) texture read instead of
 // four procedural hashes — the per-pixel noise was the single biggest GPU cost on the ground and the foliage

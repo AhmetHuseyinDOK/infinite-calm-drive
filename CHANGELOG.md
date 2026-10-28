@@ -2,6 +2,52 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-28 · 10:18 — Japan's crossing train as a painted 3D JR commuter train
+- **The crossing's train is a JR East E231 now, not three grey boxes** (the user: "the train is bad"; "i want high quality but with anime
+  style"): a three-car suburban train in the Shōnan colours as an anime film paints one: stainless sides with fine ribbing, the
+  orange-over-green stripe, four door pairs a car with the commuters' silhouettes behind the bluish glass, the cab's black-masked
+  windscreen, its destination display (各駅停車 東京), round headlamps over the tail-lamp clusters, a dark skirt and coupler.
+- **Built car by car, with depth:**
+  - each car type (the cab car, the middle car) has its own painting, so doors and windows repeat as on a real train;
+  - the body is the paintings' own cross-section (the wide body's tumblehome, the eaves' rounded corners, a low roof dome), with a
+    rounded nose;
+  - the bogies' side frames are the painted bogie in front of 3D wheels that read the same at any speed;
+  - the underframe's boxes and the air conditioners are painted from the elevations;
+  - a single-arm pantograph rises to the crossing's contact wire; bellows and couplers join the cars.
+- **By the hour:** the leading cab's headlamps, the trailing cab's tail lamps and the display are lit day and night; from dusk the
+  saloon glows warm round the commuters. The train has a soft lighting ramp of its own, so the side the waiting car sees (always a
+  little turned from the sun) isn't one dark slab.
+- Seeded captures on the desktop: every start and Audit 2's places are identical to live (the mountain start's faint pixels differ
+  between live's own loads too); the crossing with its train differs only at the train. Without the new files the old train runs,
+  identical to live.
+- How:
+  - painted.js: loadTrain (a geometry binary of shared parts, a JSON index with byte sizes, WebP hi/lo; null on any failure: the old
+    train).
+  - crossing.js: makeTrain's paint() stamps the three cars from the parts (the trailing cab turned round) into one indexed mesh in place
+    of the boxes; same interface, pitch and timing.
+  - materials.js: trainRamp (made with the train's material: a texture's id draws random numbers).
+  - main.js: loaded with the start's assets at a Japanese start (or a Turkish one within TR_NEAR of Japan) and made last; at other
+    Turkish starts loaded as the drive nears Japan and swapped in while no train runs; the atlas's program (makeAtlasChain) on its own
+    texture pair.
+  - Pipeline (~/cdtest/s35c): paint.py, train.py, pack.py; lossless masters kept.
+  - +3.8 KB of code, +1.1 KB gzipped.
+- Assets: assets/models/train/: train1.bin (91 KB, 32 KB gzipped; 4,244 triangles a cab car, 4,838 the middle car), train1_hi.webp
+  (103 KB), train1_lo.webp (38 KB), train1e_hi/lo.webp (9 / 4 KB).
+- Programs: one fewer at a Japanese start (65 / 64: the old train's own program isn't compiled any more). None compiled mid-drive with
+  a train passing, or in Turkey's lazy load (no frame over 12 ms).
+- Cost (the desktop machine, GTX 1660):
+  - Its draw while it passes: 0.034 / 0.036 → 0.055 / 0.057 ms on desktops, 0.033 / 0.034 → 0.055 / 0.054 on the phone tier.
+  - Whole frame over country drives (eight interleaved runs): desktop 3.13 / 3.01 / 3.14 / 3.00 → 3.00 / 3.16 / 3.21 / 3.12 ms, phone
+    tier 4.01 / 4.03 / 4.07 → 4.02 / 4.05 / 4.04. City drives desktop 3.28 / 3.35 / 3.33 → 3.38 / 3.25 / 3.27.
+  - Start-up the same on desktops (city 1676 / 1707 / 1750 → 1661 / 1677 / 1769 ms). +0.4 s at a city start on a 3 Mbps phone as
+    served locally (6845 / 6861 → 7289 / 7293 ms); less on Pages, which gzips the .bin to 32 KB.
+  - 0 shader errors in all eleven zones and at the crossings by the hour and tier. No console errors at q=low, mid and high; the
+    embed starts on tap.
+- Left over:
+  - the sides are the paintings' own ~77 px/m (a little soft from 2–4 m);
+  - one painted bogie for all six, flat-toned wheel faces;
+  - one livery.
+
 ## 2026-10-28 · 07:08 — The Turkish town's dolmuş as a painted 3D minibus
 - **The dolmuş is a Ford Transit now, not a yellow box** (the user: "the bus in turkey is bad"; "i want high quality but with anime
   style"): a high-roof Transit minibus as an anime film paints one. Its body is shaped from Grok's side, front and rear paintings and

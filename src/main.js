@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Path, zoneW, zoneWeight, zoneAt, zparam, ZINFO, setStartZone, startZone, zoneSets, trafficSide, seaWeight, regionWeight, viewMix, bandMix, bayQ, borderNear, nextBorderS, REGION, crossingS, crossingValid, XING, XOFF, riverNear, RIV, ROFF, groundOffsetMix, tunnelNear, T_HALF, T_RIDGE, ZONE_LEN } from './path.js';
 import { makeCrossingRig, makeTrain, xingPosts } from './crossing.js';
 import { buildAtlas, buildFoliage, buildPaintedAtlas, buildWorldAtlas, buildCapAtlas, buildPasAtlas, buildChainAtlas, albedoTexture, SHOP_GLASS, stickerHolesJ } from './textures.js';
-import { GRAD_CAR, makeMaterials, makeAtlasW, makeAtlasRooms, makeAtlasWRooms, makeChainRooms, roomSet, makeAtlasChain, makeCapAtlas, makePasGrass, setWorldTex, U, groundMaterialFor, setGrazeFade, makeCloudMap, makeGhibliLeaf, FIELD, tetraMaterial, barkMaterial, tuffMaterial, PROP_DEPTH } from './materials.js';
+import { GRAD_CAR, trainRamp, makeMaterials, makeAtlasW, makeAtlasRooms, makeAtlasWRooms, makeChainRooms, roomSet, makeAtlasChain, makeCapAtlas, makePasGrass, setWorldTex, U, groundMaterialFor, setGrazeFade, makeCloudMap, makeGhibliLeaf, FIELD, tetraMaterial, barkMaterial, tuffMaterial, PROP_DEPTH } from './materials.js';
 import { setAtlas, setFoliage, warmTrees, warmBare, warmTetrapods, setLeafDensity, GHIBLI, setHouses, setTrHouses, setChains, PROC_ROOMS, setFishers, setDolmus } from './props.js';
 import { loadTreeAtlas } from './ghibli.js';
 import { World, CH } from './chunks.js';
@@ -23,7 +23,7 @@ import { makePost } from './post.js';
 import { makeAudio } from './audio.js';
 import { makeParticles } from './particles.js';
 import { clamp, lerp, sstep, setSeed, hash2 } from './util.js';
-import { loadCloudAtlas, makePaintedClouds, loadBandAtlas, makePaintedBand, updatePainted, loadFieldTexture, loadFrontAtlas, loadRoomAtlas, roomTexture, roomGlass, loadHouseAtlas, loadHousePatch, loadTrHouseAtlas, loadTownAtlas, loadChainAtlas, loadFisherAtlas, loadDolmus, todTones, mixTones, paintSky, PAINT_TOD, BAND_R } from './painted.js';
+import { loadCloudAtlas, makePaintedClouds, loadBandAtlas, makePaintedBand, updatePainted, loadFieldTexture, loadFrontAtlas, loadRoomAtlas, roomTexture, roomGlass, loadHouseAtlas, loadHousePatch, loadTrHouseAtlas, loadTownAtlas, loadChainAtlas, loadFisherAtlas, loadDolmus, loadTrain, todTones, mixTones, paintSky, PAINT_TOD, BAND_R } from './painted.js';
 
 const QS = new URLSearchParams(location.search);
 // inside an X player card (or any iframe): lighter quality, compact UI, tap-only start
@@ -90,6 +90,10 @@ async function main() {
   const fisherLoad = TR_START ? loadFisherAtlas(HTIER) : null;
   // (step 35b) the Turkish town's dolmuş as a painted 3D model (painted.js loadDolmus: its geometry and its texture pair), on the same tiers
   const dolLoad = TR_START ? loadDolmus(HTIER) : null;
+  // (step 35c) Japan's crossing train as painted 3D cars (painted.js loadTrain: its parts and its texture pair), on the same tiers: with the
+  // start's assets at a Japanese start (a train can cross soon after a city or country start); at a Turkish one in the background once the
+  // drive comes within TR_NEAR of Japan (trainLazy, below)
+  const JP_START = REGION[startZone()] === 'jp' || nextBorderS(S0) - S0 < TR_NEAR, trainLoad = JP_START ? loadTrain(HTIER) : null;
   // the painted cumulus and the horizon band (painted.js; 32 px/° where the frame is tall enough, else 16 px/°): the
   // largest downloads, and needed last (they are awaited once the road is built and the light prepared, below), so they
   // start once the four above are in (or after 4 s, so a stalled one never holds them up for its whole 15 s timeout): on
@@ -555,6 +559,18 @@ async function main() {
   const dolTex = img => { const t = new THREE.Texture(img); t.colorSpace = THREE.SRGBColorSpace; t.flipY = false; t.anisotropy = ANISO; t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter; t.needsUpdate = true; return t; };
   const dolMat = (map, em, d) => { const ch = makeAtlasChain(M, { map, emissive: em }); ch.mat.gradientMap = GRAD_CAR; ch.mat.emissiveIntensity = M.atlas.emissiveIntensity; M.atlasDol = ch.mat; M.atlasDolDepth = ch.depth; setDolmus(d.T); };
   if (TR_START) { const d = await dolLoad; if (d) try { const map = dolTex(d.map), em = dolTex(d.em); renderer.initTexture(map); renderer.initTexture(em); dolMat(map, em, d); } catch (e) { console.warn('dolmus:', e); M.atlasDol = null; setDolmus(null); } }
+  // (step 35c) the crossing's train as painted cars: its texture pair uploaded, its material made (the atlas's program on its own texture
+  // pair, with a soft ramp of its own, materials.js trainRamp), its cars stamped into one mesh in place of the old boxes (crossing.js paint); should
+  // anything fail, the old train. At a Japanese start made last of all (its ids draw random numbers), before the road is built
+  const paintTrain = (d, map, em) => { const ch = makeAtlasChain(M, { map, emissive: em }); ch.mat.gradientMap = trainRamp(); ch.mat.emissiveIntensity = M.atlas.emissiveIntensity; train.paint(d, ch.mat, ch.depth); M.train = ch.mat; };
+  if (trainLoad) { const d = await trainLoad; if (d) try { const map = dolTex(d.map), em = dolTex(d.em); renderer.initTexture(map); renderer.initTexture(em); paintTrain(d, map, em); } catch (e) { console.warn('train:', e); M.train = null; } }
+  // (a Turkish start's: loaded as the drive comes within TR_NEAR of Japan; its textures uploaded a frame apart, then swapped in while no
+  // train runs)
+  const trainLazy = { started: !!trainLoad, async run(d) {
+    const map = dolTex(d.map), em = dolTex(d.em); renderer.initTexture(map); await nextFrame(); renderer.initTexture(em); await nextFrame();
+    while (train.st.active) await nextFrame();
+    paintTrain(d, map, em);
+  } };
   world.trReady = TR_START; // (no chunk of Turkey's, or of a border's, is built before its assets are in: chunks.js)
   status('building the road…');
   await new Promise(r => setTimeout(r, 10));
@@ -982,6 +998,11 @@ async function main() {
     // stream the world
     if (!TRL.started && nextBorderS(st.s) - st.s < TR_NEAR) trLazy().catch(e => { // (should anything fail: its procedural look)
       console.warn('Turkey:', e); try { setWorldTex(buildWorldAtlas(atlas, HTIER, null).textures(renderer)); if (!M.capAtlas) makeCapAtlas(M, buildCapAtlas(atlas, HTIER).textures(renderer)); } catch (e2) {} try { if (!M.pasGrass) { const pa = buildPasAtlas(atlas, HTIER); U.uPasSway.value.set(...pa.sway); makePasGrass(M, { map: albedoTexture(pa, renderer) }); } } catch (e2) {} world.trReady = true; TRL.done = true; });
+    // (step 35c) at a Turkish start, Japan's crossing train: loaded once the drive comes within TR_NEAR of the border into Japan, swapped in
+    // while none runs (the border's lookup is memoised: nothing allocated a frame)
+    if (!trainLazy.started) { const nb = nextBorderS(st.s), bd = nb - st.s < TR_NEAR ? borderNear(nb) : null;
+      if (bd && REGION[bd.b] === 'jp') { trainLazy.started = true; loadTrain(HTIER).then(d => d && trainLazy.run(d)).catch(e => { console.warn('train:', e); M.train = null; }); }
+    }
     const tw0 = performance.now(); world.update(st.s, started ? 3.5 : 14); const tw1 = performance.now();
     path.at(st.s, f);
     if (Math.abs(f.x - world.origin.x) > 900 || Math.abs(f.z - world.origin.z) > 900) {
@@ -1321,6 +1342,7 @@ async function main() {
     if (M.atlasC) M.atlasC.emissiveIntensity = M.atlas.emissiveIntensity; if (M.atlasCT) M.atlasCT.emissiveIntensity = M.atlas.emissiveIntensity; // (and the chain stores', step 32)
     if (M.atlasCI) M.atlasCI.emissiveIntensity = M.atlas.emissiveIntensity; if (M.atlasCTI) M.atlasCTI.emissiveIntensity = M.atlas.emissiveIntensity; if (M.atlasWI) M.atlasWI.emissiveIntensity = M.atlas.emissiveIntensity; // (and the rooms' of the chains and the town, step 34)
     if (M.atlasDol) M.atlasDol.emissiveIntensity = M.atlas.emissiveIntensity; // (and the town's dolmuş's lamps and saloon, step 35b)
+    if (M.train) M.train.emissiveIntensity = M.atlas.emissiveIntensity; // (and the crossing train's saloon, display and lamps, step 35c)
     if (tram) { tram.mat.emissiveIntensity = M.atlas.emissiveIntensity; tram.update(dt, path, st.s, camera.position, world.origin, st.speed, st.tram); } // (the Galata Bridge's tram, step 33)
     if (fishers) { fishers.update(world, camera, st.fish, (0.16 + 0.22 * TOD.bright) * (1 - tunS)); // (the Galata Bridge's painted fishermen and their contact shadows, step 35a)
       if (fishers.mesh.visible) { const c = FISH_T.at(TOD.t).rgb('v'), k = paintSky(); U.uFishT.value.set(lerp(1, c[0], k), lerp(1, c[1], k), lerp(1, c[2], k));
@@ -1515,7 +1537,7 @@ async function main() {
     if (started && frames > 150 && dt > 0.03) slowT += dt; else slowT = Math.max(0, slowT - dt * 0.5);
     if (slowT > 3 && !QS.has('q')) { slowT = 0; stepDown(); }
   }
-  window.__dbg = { renderer, st, scene, camera, world, TOD, KEYS, X, train, weather, U, birds, cine, post, car, sun, M, cells: atlas.cells, clouds, pclouds, band, get bandTr() { return bandTr; }, sky, mountains, shadowDir, CM, spray, grass, sea, get ferry() { return ferry; }, get tram() { return tram; }, get fishers() { return fishers; }, get dolmus() { return M.atlasDol || null; }, get balloons() { return balloons; }, TRL, get audio() { return audio; }, uch: { TF_DAY, TF_GOLD, TF_SUNSET, TF_NIGHT, UG_DAY, UCH }, pas: { TFP_DAY, TFP_GOLD, TFP_SUNSET, TFP_NIGHT, PG_DAY, PG_GOLD, PG_SUNSET, PG_NIGHT, PAS_Z, PAS_R, pasAz }, night: { NT, NTZ, NSKY_N, MOON_B, CF_N } };
+  window.__dbg = { renderer, st, scene, camera, world, TOD, KEYS, X, train, weather, U, birds, cine, post, car, sun, M, cells: atlas.cells, clouds, pclouds, band, get bandTr() { return bandTr; }, sky, mountains, shadowDir, CM, spray, grass, sea, get ferry() { return ferry; }, get tram() { return tram; }, get fishers() { return fishers; }, get dolmus() { return M.atlasDol || null; }, get trainPaint() { return M.train || null; }, get balloons() { return balloons; }, TRL, get audio() { return audio; }, uch: { TF_DAY, TF_GOLD, TF_SUNSET, TF_NIGHT, UG_DAY, UCH }, pas: { TFP_DAY, TFP_GOLD, TFP_SUNSET, TFP_NIGHT, PG_DAY, PG_GOLD, PG_SUNSET, PG_NIGHT, PAS_Z, PAS_R, pasAz }, night: { NT, NTZ, NSKY_N, MOON_B, CF_N } };
   status('');
   $start.classList.add('ready');
   if (QS.has('auto')) begin();

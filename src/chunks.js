@@ -152,6 +152,7 @@ export class World {
     this.group = new THREE.Group(); scene.add(this.group);
     this.chunks = new Map(); this.origin = { x: 0, z: 0 }; this.reveal = [];
     this.ahead = 760; this.behind = 40; this.trReady = true;
+    this.fishVer = 0; // (step 35a: counts the chunks with painted fishermen coming and going: fishers.js gathers them anew)
   }
   setOrigin(x, z) {
     this.origin.x = x; this.origin.z = z;
@@ -176,7 +177,7 @@ export class World {
       const res = this.job.it.next();
       if (res.done) { // stage the meshes: they are revealed one per frame so their GPU uploads don't all land at once
         const ch = res.value; ch.pending = ch.group.children.slice(); ch.group.clear();
-        this.chunks.set(this.job.c, ch); this.group.add(ch.group); this.reveal.push(ch); this.job = null;
+        this.chunks.set(this.job.c, ch); this.group.add(ch.group); this.reveal.push(ch); this.job = null; if (ch.fishers) this.fishVer++;
       }
       if (performance.now() - t0 > budgetMs) return 1;
     }
@@ -190,6 +191,7 @@ export class World {
     this.group.remove(ch.group); ch.group.traverse(o => { if (o.geometry) o.geometry.dispose(); });
     if (ch.pending) { for (const m of ch.pending) m.geometry && m.geometry.dispose(); ch.pending.length = 0; }
     const i = this.reveal.indexOf(ch); if (i >= 0) this.reveal.splice(i, 1);
+    if (ch.fishers) this.fishVer++;
   }
   /** Small details — signal lamps, road paint, lamp heads, light pools — are hidden in chunks more than `far` metres
    *  ahead (tree leaf cards beyond `farLeaf`), where they'd be a pixel or less and mostly fogged anyway. Each is a draw
@@ -221,6 +223,7 @@ export class World {
       chain: new GB({ uv: true, ao: true, lit: true }), // (the chain stores' bays and signs, step 32: their own atlas, the atlas's program)
       fish: new GB({ ao: true, idx: true }) }; // (the Galata Bridge's fishermen, step 33: smooth figures, indexed, in the props' colour material)
     G.chainList = []; // (…and where they stand: { s, side, c, n }, for the tools: __dbg.world's chunks' .chains)
+    G.fishers = []; // (step 35a: the painted fishermen, 8 numbers each: his feet (chunk-local), his facing (x, z), his scale, the sheet, the pose: fishers.js)
     const ground = new GroundB(), shore = { rows: [], puffs: [] }, river = [];
     G.lamps = []; // lights that can light the car: chunk-local x, y, z, power … (props.js lampAt)
     const f = {}, f2 = {};
@@ -402,8 +405,9 @@ export class World {
     { const b = borderNear(s0 + CH / 2); if (b && b.s + 2 * T_RIDGE + CH > s0 && b.s - 2 * T_RIDGE - CH < s1) { zset.clear(); zset.add(b.a); zset.add(b.b); zset.add('border'); } }
     add(ground.build(), groundMaterialFor([...zset]), false, true); yield;
     { const W = G.atlas.world, R = G.atlas.rooms && (W ? this.M.atlasWI : this.M.atlasI), m = add(G.atlas.build(), R || (W ? this.M.atlasW : this.M.atlas), true, true); if (m) m.customDepthMaterial = W ? this.M.atlasWDepth : this.M.atlasDepth; } yield; // (the painted cells' outlines in the shadow pass too; the world atlas's cells in its variant; painted shop bays in the rooms' variant, step 31; the Turkish town's shop bays in the world variant's, step 34)
+    if (G.fishers.length) G.color.expandFrom(G.fish); // (step 35a: the painted fishermen's rods, lines and buckets drawn with the props, a draw less a chunk)
     { const m = add(G.color.build(), this.M.color, true, true); if (m) m.customDepthMaterial = PROP_DEPTH; } yield; // (wires cast no shadow)
-    { const m = add(G.fish.build(), this.M.color, true, true); if (m) m.customDepthMaterial = PROP_DEPTH; } // (the fishermen, step 33: only on the Galata Bridge; their rods and lines cast no shadow)
+    if (!G.fishers.length) { const m = add(G.fish.build(), this.M.color, true, true); if (m) m.customDepthMaterial = PROP_DEPTH; } // (the fishermen, step 33: only on the Galata Bridge; their rods and lines cast no shadow)
     if (G.chain.count) { const T = G.chain.tr, m = add(G.chain.build(), T ? this.M.atlasCTI || this.M.atlasCT : this.M.atlasCI || this.M.atlasC, true, true); if (m) m.customDepthMaterial = T ? this.M.atlasCTDepth : this.M.atlasCDepth; } // (the chain stores, step 32: Japan's or Turkey's chain atlas; most chunks have none, and no mesh. Step 34: with the rooms behind their glass)
     add(G.tetra.build(), this.M.tetra, true, true); // (the tetrapods: their shadows from the plain depth material)
     add(G.bark.build(), this.M.bark, true, true, 0, 'leaf'); yield; // (the trees' bark: shown as far as their crowns; plain depth material too)
@@ -437,7 +441,7 @@ export class World {
     if (shore.puffs.length) add(surfGeometry(shore.puffs), this.M.surf, false, false, 2, 'small'); // (the surf over the tetrapods)
     for (const g of river) add(g, this.riverMat, false, true);
     grp.position.set(ox - this.origin.x, 0, oz - this.origin.z);
-    return { group: grp, ox, oz, s0, lamps: new Float32Array(G.lamps), chains: G.chainList.length ? G.chainList : null };
+    return { group: grp, ox, oz, s0, lamps: new Float32Array(G.lamps), chains: G.chainList.length ? G.chainList : null, fishers: G.fishers.length ? new Float32Array(G.fishers) : null };
   }
 
   // poles + overhead wires (country / coast / city share the rule so wires connect across zones)

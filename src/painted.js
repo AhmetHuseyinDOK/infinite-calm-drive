@@ -383,6 +383,35 @@ export async function loadChainAtlas(tier, region, timeoutMs = 15000) {
   })(), timeoutMs, `the ${region === 'jp' ? 'konbini' : "markets'"} chain fronts unavailable, keeping the old ones:`);
 }
 
+/** (step 35a) Loads the Galata Bridge's fishermen as painted figures (assets/people/fishers1.*, made by ~/cdtest/s35/scripts/pack.py from
+ *  Grok Imagine turnaround sheets: twelve men, four holding the rod in both hands, four leaning on the railing, four on camping stools;
+ *  each sheet's five views round his back half, cut on their magenta, the hold pose's rod cut away above his hands): the atlas (its colours
+ *  premultiplied by their alpha, sRGB as stored: its texture (fishers.js) decodes nothing, the shader does) and its index (each sheet's pose and its
+ *  five views' cells, mirrored or not, the hold pose's hand point H and rod direction D; each cell's place, its feet's and px a metre).
+ *  'hi' (230 px a metre) or 'lo' (half: phones, the embed). Null (never rejects) when anything is missing, broken, truncated or too slow:
+ *  the fishermen then keep their smooth figures (props.js, step 33) */
+export async function loadFisherAtlas(tier, timeoutMs = 15000) {
+  const base = ASSETS + 'people/';
+  return orNull((async () => {
+    const r = await fetch(base + 'fishers1.json');
+    if (!r.ok) throw new Error('fishers1.json ' + r.status);
+    const J = await r.json(), file = J.files && J.files[tier] ? tier : 'hi', sz = J.size && J.size[file], hi = J.size && J.size.hi;
+    const cells = J.cells || [], sheets = J.sheets || [];
+    if (!sz || !hi || !(J.ppm > 0) || !cells.length || !sheets.length) throw new Error('nothing listed');
+    if (String(J.views) !== '90,135,180,-135,-90') throw new Error('views listed as ' + J.views + ', not the five the shader picks from'); // (materials.js FISH_CARD)
+    if (cells.some(c => !(c.w > 0 && c.h > 0 && c.x >= 0 && c.y >= 0 && c.x + c.w <= hi[0] && c.y + c.h <= hi[1]))) throw new Error('a cell lies outside the sheet');
+    if (sheets.some(S => !['hold', 'lean', 'sit'].includes(S.pose) || !S.views || S.views.length !== 5 || S.views.some(v => !cells[v[0]]) || (S.pose === 'hold' && !(S.H && S.D)))) throw new Error('a sheet is incomplete');
+    for (const pose of ['hold', 'lean', 'sit']) if (!sheets.some(S => S.pose === pose)) throw new Error('no ' + pose + ' sheet');
+    const ri = await fetch(base + J.files[file]);
+    if (!ri.ok) throw new Error(J.files[file] + ' ' + ri.status);
+    const blob = await ri.blob(); // (checked whole: a truncated image decodes without complaint)
+    if (J.bytes && J.bytes[file] && blob.size !== J.bytes[file]) throw new Error(J.files[file] + ' is ' + blob.size + ' bytes, not ' + J.bytes[file]);
+    const img = await createImageBitmap(blob, { premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
+    if (img.width !== sz[0] || img.height !== sz[1]) { img.close(); throw new Error(J.files[file] + ' has the wrong size'); }
+    return { img, J, tier: file, scale: sz[0] / hi[0], size: sz }; // (its texture made with the rest of them: fishers.js)
+  })(), timeoutMs, "the Galata Bridge's painted fishermen unavailable, keeping the smooth figures:");
+}
+
 /** Loads the painted meadow (assets/fields/, made by ~/cdtest/ft/scripts/field.py): a tileable top-down painting of the
  *  country paintings' grass, 'hi' or 'lo' (phones, the embed). Resolves to null (never rejects) when the index or the
  *  image is missing, broken, truncated or too slow: the countryside then keeps its procedural paddies. */

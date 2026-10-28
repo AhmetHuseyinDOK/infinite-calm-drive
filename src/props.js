@@ -2,7 +2,7 @@
 // G.lamp, G.pool, G.wire) using the matrix M that places the prop. Prop-local convention: origin at the base,
 // x runs along the road, the front faces −Z (towards the road), depth goes to +Z.
 import * as THREE from 'three';
-import { C, mulC, mixC, rng } from './util.js';
+import { C, mulC, mixC, rng, hash2 } from './util.js';
 import { GB, BILL_OCT, BILL_HEX } from './geom.js';
 import { TS_CAP, TS_PAD, TOWN_SHOPS, TOWN_AWNINGS, CHAINS_J, CHAINS_T } from './textures.js';
 
@@ -1803,6 +1803,7 @@ export function fisherman(G, M, r, drop, yaw = 0, h = 0.5) {
   const c = G.fish || G.color;
   const jk = r.pick(JACKETS), tr = r.pick(TROUSERS), sk = r.pick(SKIN), sit = r() < 0.22, hat = r() < 0.65 ? r.pick(CAPS) : null, s = r.range(0.94, 1.06);
   const L = r.range(4, 5.2), el0 = r.range(0.6, 0.87), sw = r.range(-0.35, 0.35), bucket = r() < 0.45 ? r.pick(BUCKETS) : null;
+  if (FISHERS.sheets) { paintedFisher(G, c, M, drop, yaw, h, sit, s, L, el0, sw, bucket); return; } // (step 35a: a painted figure, his things in 3D)
   const pose = sit ? 'sit' : h < 0.42 ? 'stand' : h < 0.66 ? 'one' : 'lean', P = POSES[pose], h2 = (h * 7.31) % 1, h3 = (h * 53.7) % 1;
   // (square to the rail when leaning on it or sitting at it, else turned a little as drawn)
   _fr.makeRotationY(yaw * (pose === 'lean' || pose === 'sit' ? 0.2 : 1)); _fm.multiplyMatrices(M, _fr).scale(_fs.set(s, s, s)); _fm.groundY = M.groundY;
@@ -1845,6 +1846,63 @@ export function fisherman(G, M, r, drop, yaw = 0, h = 0.5) {
   const bx = pose === 'lean' || h2 >= 0.5 ? -0.42 : 0.42; // (his bucket and things at his feet, on one side of him: not under a propped rod)
   if (bucket) latheI(c, [[0.0, 0.112, 0.112, 0.06, bucket], [0.27, 0.142, 0.142, 0.06, bucket], [0.29, 0.148, 0.148, 0.06, bucket], [0.29, 0.13, 0.13, 0.06, WATER], [0.25, 0.0, 0.0, 0.06, WATER]], 7, bx); // (its water a little below the rim)
   if (h3 > 0.62 && h3 < 0.82) ellI(c, -bx * 0.95, 0.1, 0.12, 0.13, 0.11, 0.09, 6, 4, () => BAG); // (a white plastic bag)
+  else if (h3 > 0.9) boxI(c, -bx - 0.16, 0.0, -0.04, -bx + 0.16, 0.17, 0.16, TACKLE[Math.floor(h2 * 3)]); // (a tackle box)
+}
+// ---- the fishermen as painted figures (step 35a: fishers.js). A fisherman is a card of the people atlas (main.js setFishers: its sheets,
+// each one man in one pose) drawn by fishers.js from the chunk's list (G.fishers: his feet, chunk-local; his facing; his scale; the
+// sheet; the pose), and his things in 3D in the fishermen's mesh (G.fish, the props' colour material): his rod (from his painted hands
+// in the hold pose, where the sheet's five views agree they are (H, D: ~/cdtest/s35/scripts/pack.py); else propped on the handrail
+// beside him, its butt on the walkway, its reel under it), its line down to the water, a bucket with its bail, a white bag or a
+// tackle box. Built from the old builder's random numbers (drawn first, as before: everything after him keeps its place)
+export const FISHERS = { sheets: null, byPose: null, last: -1 };
+/** the people atlas's sheets (painted.js loadFisherAtlas's index) once its painted figures are ready, else null (the smooth figures) */
+export function setFishers(J) {
+  if (!J) { FISHERS.sheets = FISHERS.byPose = null; return; }
+  FISHERS.sheets = J.sheets; FISHERS.byPose = { hold: [], lean: [], sit: [] }; FISHERS.last = -1;
+  J.sheets.forEach((S, i) => FISHERS.byPose[S.pose].push(i));
+}
+const F_POSE = { hold: 0, lean: 1, sit: 2 }, REEL = C('#3a3d42'), CORK = C('#a8835a'), BAIL = C('#8d9196');
+/** a bucket's wire bail over its rim (by the side it stands on), and a plastic bag's lathe: a soft sack, knotted at the top */
+const BAIL_P = [-0.44, 0.44].map(x => [0, 1, 2, 3, 4].map(i => { const a = (Math.PI * i) / 4; return [x + Math.cos(a) * 0.15, 0.27 + Math.sin(a) * 0.13, 0.06]; })), BAIL_R = [0.004, 0.004, 0.004, 0.004, 0.004];
+const BAG_L = [[0.0, 0.09, 0.07, 0.12, C('#d9d6cf')], [0.05, 0.15, 0.11, 0.12, C('#ece9e2')], [0.15, 0.135, 0.1, 0.12, C('#f2f0ea')], [0.23, 0.06, 0.045, 0.12, C('#e6e3dc')], [0.27, 0.022, 0.02, 0.12, C('#dcd9d2')], [0.3, 0.0, 0.0, 0.12, C('#dcd9d2')]];
+function paintedFisher(G, c, M, drop, yaw, h, sit, s, L, el0, sw, bucket) {
+  const pose = sit ? 'sit' : h < 0.58 ? 'hold' : 'lean', list = FISHERS.byPose[pose], h2 = (h * 7.31) % 1, h3 = (h * 53.7) % 1;
+  // (which man: by a well-mixed hash of where he stands, never the one just placed beside him)
+  const hm = hash2(Math.floor(h * 4294967295) | 0, 9173);
+  let k = Math.floor(hm * list.length) % list.length; if (list[k] === FISHERS.last && list.length > 1) k = (k + 1 + Math.floor(h3 * (list.length - 1))) % list.length;
+  const si = list[k], S = FISHERS.sheets[si]; FISHERS.last = si;
+  const sc = pose === 'lean' ? 1 : s; // (leaning: his forearms on the handrail as painted, at the painting's own size)
+  _fr.makeRotationY(yaw * (pose === 'hold' ? 1 : 0.2)); _fm.multiplyMatrices(M, _fr).scale(_fs.set(sc, sc, sc)); _fm.groundY = M.groundY;
+  const e = _fm.elements, fl = Math.hypot(e[8], e[10]) || 1;
+  (G.fishers || (G.fishers = [])).push(e[12], e[13], e[14], e[8] / fl, e[10] / fl, sc, si, F_POSE[pose]);
+  c.setM(_fm);
+  // his rod: held, from where his painted hands hold it along its painted line; or propped on the handrail beside him
+  let d, bt; const side = h2 >= 0.5 ? 1 : -1;
+  if (pose === 'hold') { bt = S.H; d = S.D; }
+  else {
+    const R = [side * (pose === 'sit' ? 0.52 : 0.46), 1.205, 0.47], e2 = 1.0 + ((el0 - 0.6) / 0.27) * 0.25, a = sw * 0.4;
+    d = [Math.cos(e2) * Math.sin(a), Math.sin(e2), Math.cos(e2) * Math.cos(a)];
+    const t = (R[1] - 0.03) / d[1]; bt = [R[0] - d[0] * t, R[1] - d[1] * t, R[2] - d[2] * t];
+  }
+  const at = k2 => [bt[0] + d[0] * k2, bt[1] + d[1] * k2, bt[2] + d[2] * k2];
+  { const k2 = 0.82 * L, m = at(k2), hz = Math.hypot(d[0], d[2]) || 1, e3 = Math.atan2(d[1], hz) - 0.28;
+    const tip = [m[0] + (d[0] / hz) * Math.cos(e3) * 0.18 * L, m[1] + Math.sin(e3) * 0.18 * L, m[2] + (d[2] / hz) * Math.cos(e3) * 0.18 * L];
+    c.noShadow = true;
+    if (pose === 'hold') tubeI(c, [bt, m, tip], [0.011, 0.007, 0.0035], 5, ROD);
+    else { // (its cork grip and its reel, which the painted hands hold in the hold pose)
+      tubeI(c, [bt, at(0.38)], [0.016, 0.015], 6, CORK); tubeI(c, [at(0.38), m, tip], [0.012, 0.007, 0.0035], 5, ROD);
+      const q = at(0.5), dn = [-d[0] * d[1], 1 - d[1] * d[1], -d[2] * d[1]], dl = Math.hypot(dn[0], dn[1], dn[2]) || 1; // (under the rod: its foot, then the spool)
+      tubeI(c, [q, [q[0] - (dn[0] / dl) * 0.05, q[1] - (dn[1] / dl) * 0.05, q[2] - (dn[2] / dl) * 0.05]], [0.006, 0.006], 4, REEL);
+      ellI(c, q[0] - (dn[0] / dl) * 0.07, q[1] - (dn[1] / dl) * 0.07, q[2] - (dn[2] / dl) * 0.07, 0.026, 0.026, 0.022, 6, 3, () => REEL);
+    }
+    tubeI(c, [tip, [tip[0], -drop / sc, tip[2] + 0.3]], [0.003, 0.003], 3, LINE); c.noShadow = false; }
+  // his bucket and things at his feet, on one side of him (not under a propped rod)
+  const bx = (pose === 'hold' ? h2 >= 0.5 : side > 0) ? -0.44 : 0.44;
+  if (bucket) {
+    latheI(c, [[0.0, 0.112, 0.112, 0.06, bucket], [0.26, 0.14, 0.14, 0.06, bucket], [0.29, 0.148, 0.148, 0.06, mulC(bucket, 0.85)], [0.27, 0.134, 0.134, 0.06, mulC(bucket, 0.6)], [0.25, 0.0, 0.0, 0.06, WATER]], 10, bx);
+    tubeI(c, BAIL_P[bx > 0 ? 1 : 0], BAIL_R, 3, BAIL); // (its wire bail, standing up)
+  }
+  if (h3 > 0.62 && h3 < 0.82) latheI(c, BAG_L, 7, -bx * 0.95); // (a white plastic bag, knotted at the top)
   else if (h3 > 0.9) boxI(c, -bx - 0.16, 0.0, -0.04, -bx + 0.16, 0.17, 0.16, TACKLE[Math.floor(h2 * 3)]); // (a tackle box)
 }
 /** one of the bridge's control towers by its lifting span, as the concept and the real bridge have them (its own frame: −z to

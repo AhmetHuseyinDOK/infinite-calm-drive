@@ -2,6 +2,50 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-28 · 04:46 — The Galata Bridge's fishermen as painted anime people
+- **The fishermen are paintings now, not mannequins** (the user: "that fisherman was bad"; "i want high quality but with anime
+  style"): twelve men painted as anime characters, with faces, hands, caps and the folds of their clothes. Four hold their rods in
+  both hands, four lean their forearms on the railing, four sit on camping stools (one with a tulip glass of tea, one with prayer
+  beads).
+- **They turn as you pass:** each shows the painted view nearest to where the camera stands round him (his side, his back
+  three-quarter, his back), cross-fading as the car goes by; a parked camera sees one clean view. The rod holders' views are all
+  painted, so a rod hand is never mirrored.
+- **Their things stay 3D:** rods rising from the painted hands along the painted rod, lines to the water, propped rods with cork grips
+  and reels, buckets with bails, knotted bags and tackle boxes. Each casts his own figure's shadow and has a soft contact shadow.
+- **By the hour:** as painted by day; a thin gold or rose rim on the edges facing a low sun at golden hour and sunset; dark figures
+  against the lit city at night.
+- They stand where they stood: the old builder's random numbers are drawn in order, so the boats keep their places. Seeded captures on
+  the desktop: every other zone's start and Audit 2's places are identical to live (the Bosphorus start in two of three staging
+  loads, the third showing the foliage atlas's known load noise). The Galata start differs only in the fishermen. Without the people
+  files the Galata start is identical to live.
+- How:
+  - fishers.js (new): one instanced card per fisherman (one draw) and one for the contact shadows; the views table as a float texture.
+  - materials.js: makeFisherMaterials (the view picked, blended and turned in the vertex shader; a shadow twin turned to the light;
+    the rim); U.uFishT, U.uFishRim.
+  - props.js: paintedFisher, setFishers (step 33's smooth figures stay as the fallback).
+  - chunks.js: chunk.fishers, World.fishVer; the fishermen's 3D things are drawn with the chunk's props (geom.js GB.expandFrom).
+  - painted.js: loadFisherAtlas.
+  - main.js: made last at a Turkish start, and in Turkey's lazy load after the tram; FISH_T, FISH_RIM; test switch st.fish.
+  - +15.5 KB of code, +5.4 KB gzipped.
+- Assets: assets/people/fishers1.json, fishers1_hi.webp (351 KB), fishers1_lo.webp (148 KB): Grok Imagine turnarounds anchored on the
+  Galata concept, cut by ~/cdtest/s35/scripts/cut.py, packed premultiplied at q50 from lossless masters (~/cdtest/s35/masters).
+  First visit at a Galata start +367 KB desktop / +169 KB phone; a Japanese start loads them only in Turkey's lazy load.
+- Programs: 83 / 82 at a Turkish start (+3, compiled at load and in the lazy load); 66 / 65 at a Japanese one. None compiled
+  mid-drive or after Turkey's lazy load (no frame over 12 ms).
+- Cost (the desktop machine, GTX 1660):
+  - The fishermen's draws with their props: desktop 0.79 / 0.75 → 0.67 / 0.68 ms, phone tier 0.99 / 1.00 → 0.93 / 0.92 (13 draws a
+    frame → 2).
+  - Whole frame over Galata drives: desktop 3.47 / 3.07 / 3.13 → 3.06 / 3.04 / 3.07 ms; phone tier 3.17 / 3.16 / 3.15 → 3.68 /
+    3.19 / 3.15 (one outlier); golden hour 3.00 / 3.27 → 2.94 / 2.91, night 3.52 / 3.72 → 3.53 / 3.60.
+  - World build over the bridge's chunks −10–12% (desktop 56.2 / 55.1 → 47.4 / 50.6 ms per 20 chunks); no world spikes on a phone
+    at ×4 (live had one).
+  - Start-up the same on desktops (Galata 2272 / 2290 / 2335 → 2237 / 2295 / 2261 ms); +0.3 s on a 3 Mbps phone at a Galata start
+    (8376 / 8033 → 8461 / 8465 ms).
+  - 0 shader errors in all eleven zones, and at Galata at golden hour, sunset and night on the phone tier and at q=low. No console
+    errors at q=low, mid and high; the embed starts on tap.
+- Left over: the outline changes at the middle of a view change; the seated and leaning men's far side is their painted side
+  mirrored; they don't move.
+
 ## 2026-10-28 · 01:18 — Rooms behind every shop window: the Turkish town, the chain stores and the shopping street's other shops
 - **The Turkish town's shops have rooms behind their glass** (the user's rule: "the shops on turkey as well they should have interior
   3d this is a general rule"):

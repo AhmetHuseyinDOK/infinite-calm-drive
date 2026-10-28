@@ -236,6 +236,22 @@ export class GB {
     }
     this.n += T.n;
   }
+  /** appends the indexed GB src's triangles as plain vertices (each corner's attributes copied as they are: src was built placed, with
+   *  the same attributes as this one), so they share this one's draw (step 35a: the painted fishermen's rods, lines and buckets) */
+  expandFrom(src) {
+    const m = src.ni; if (!m) return;
+    if (this.n + m > this.cap) this.grow(this.n + m);
+    const I = src.I, o = this.n, bb = this.bb, sb = src.bb;
+    for (let k = 0; k < m; k++) {
+      const v = I[k], i3 = v * 3, j = (o + k) * 3;
+      this.P[j] = src.P[i3]; this.P[j + 1] = src.P[i3 + 1]; this.P[j + 2] = src.P[i3 + 2];
+      this.N[j] = src.N[i3]; this.N[j + 1] = src.N[i3 + 1]; this.N[j + 2] = src.N[i3 + 2];
+      if (this.hasColor) { this.Cl[j] = src.Cl[i3]; this.Cl[j + 1] = src.Cl[i3 + 1]; this.Cl[j + 2] = src.Cl[i3 + 2]; }
+      if (this.hasAO) this.A[o + k] = src.A[v];
+    }
+    for (let i = 0; i < 3; i++) { if (sb[i] < bb[i]) bb[i] = sb[i]; if (sb[i + 3] > bb[i + 3]) bb[i + 3] = sb[i + 3]; }
+    this.n += m;
+  }
   build() {
     if (!this.n) return null;
     const g = new THREE.BufferGeometry(), n = this.n, bb = this.bb;

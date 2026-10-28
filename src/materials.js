@@ -179,6 +179,8 @@ export const U = {
   uCarFill: { value: new THREE.Vector3() },       // …and the painter's fill in its shade (car.js CAR_FILL; main.js, by the time of day)
   uCarDT: { value: new THREE.Vector3(1, 1, 1) },  // (step 30) …and its sunlit (moonlit) paint × this: the night repaints' pale moonlit roof (1 by day)
   uWind: { value: 1 },
+  uFishT: { value: new THREE.Vector3(1, 1, 1) }, // (step 35a) the painted fishermen's colours × this, by the hour (fishers.js, main.js; 1 by day)
+  uFishRim: { value: new THREE.Vector4(0, 0, 0, 0) }, // (step 35a) …and the rim of light on their edges towards a low sun beyond them: its colour (linear light), on (a)
   uNoiseTex: { value: makeNoiseTex() },
   uCloudTex: { value: null },                  // the drifting cloud shadows, painted each frame (makeCloudMap)
   uCloudOrg: { value: new THREE.Vector2() },   // world xz at the centre of that map (rebased coordinates)
@@ -1802,4 +1804,149 @@ reflectedLight.indirectDiffuse = hemisphereLights[0].skyColor * BRDF_Lambert(dif
   d.onBeforeCompile = sh => billboard(sh, true, blossom ? BL_SHADOW : 0);
   d.customProgramCacheKey = () => (blossom ? 'gblossom-depth-v1' : 'gleaf-depth-v1');
   return { mat: m, depth: d };
+}
+
+// ------------------------------------------------------------------ the Galata Bridge's painted fishermen (step 35a: fishers.js)
+// Each fisherman is one instance of a card: a painted figure from the people atlas (painted.js loadFisherAtlas: Grok turnaround
+// sheets, one man in one pose each, five views round his back half: his left side, back three-quarter, back, the others), turned to
+// the camera round its upright axis in the vertex shader. Which view it shows comes from where the camera stands round him (phi:
+// 0 his front, + his left), the nearest of the five, the two nearest cross-faded round the half-way angle between them so a passing
+// car sees no jump. The instance (aA: his feet, the sheet; aB: his facing, his scale, the pose) and the table of views (uFTab: per
+// sheet and view two texels: the feet's place in the atlas (px) and its px a metre, signed where it is mirrored; the card's reach
+// round the feet (m)) are all it needs: no work on the CPU per frame. Its normal points up, leaning FISH_N towards the eye; its
+// colours are the painting's (premultiplied in the atlas, filtered in sRGB, decoded here), × U.uFishT, its tint by the hour, and a
+// rim of light (U.uFishRim) on his edges towards a low sun beyond him (main.js). Its shadow twin turns the same card to the light
+// and shows the view from the light's side (when the sun stands in front of him, the view from behind, mirrored: a silhouette is the
+// same from either side), so each figure casts his own shape; the card's shadow lookup stands a little towards the sun, so a figure
+// isn't shaded by his own shadow card
+// (the views' blend: as wide as FISH_BLEND frames' turn of the camera round him (uFishPrev: its place a frame ago), at most FISH_BLEND_MAX
+// degrees each side of the half-way angle: a parked camera never sees two views at once, a passing one sees them cross-fade)
+export const FISH_BLEND = 5, FISH_BLEND_MAX = 9;
+const FISH_N = 0.45; // (how far his card's normal leans from up towards the eye)
+const FISH_PARS_V = /* glsl */`
+attribute vec4 aA, aB;
+uniform highp sampler2D uFTab;
+uniform vec2 uFSize;
+uniform vec3 uFishPrev;
+varying vec2 vUvB; flat varying vec4 vBoxA, vBoxB; flat varying float vMix;
+flat varying vec3 vRim;
+`;
+const FISH_PARS_F = /* glsl */`
+uniform vec2 uFSize;
+varying vec2 vUvB; flat varying vec4 vBoxA, vBoxB; flat varying float vMix;
+flat varying vec3 vRim;
+float fBox(vec2 u, vec4 b) { return step(b.x, u.x) * step(u.x, b.z) * step(b.y, u.y) * step(u.y, b.w); }
+// the figure's texel (premultiplied: its colour un-premultiplied, still sRGB); between two views their premultiplied blend by vMix (the
+// paint cross-fades, the outline changes where the blended alpha crosses the cut); its alpha raised as the mips thin it (a far figure
+// keeps its legs and arms)
+vec4 fishTexel(sampler2D t) {
+  vec2 dx = dFdx(vMapUv), dy = dFdy(vMapUv), dxb = dFdx(vUvB), dyb = dFdy(vUvB);
+  vec2 dp = max(abs(dx), abs(dy)) * uFSize; float lod = log2(max(max(dp.x, dp.y), 1e-4));
+  vec4 a = textureGrad(t, vMapUv, dx, dy) * fBox(vMapUv, vBoxA);
+  if (vMix > 0.0) a = mix(a, textureGrad(t, vUvB, dxb, dyb) * fBox(vUvB, vBoxB), vMix);
+  a.rgb /= max(a.a, 0.004);
+  a.a *= 1.0 + max(lod, 0.0) * 0.35;
+  return a;
+}
+`;
+/** the card's vertex work (the main pass: before its normal, which leans towards the eye; the shadow twin: begin_vertex): its corner
+ *  (position.xy, 0 … 1) placed round the feet, turned to the eye (the light's side in the shadow pass: depth), the two views' texture
+ *  coordinates, their blend, the rim's offset */
+const FISH_CARD = (depth) => /* glsl */`
+vec3 fCard; vec2 fTo;
+{
+  vec3 fP = aA.xyz;
+  ${depth ? `fTo = vec2(viewMatrix[0][2], viewMatrix[2][2]); // (the light's side: the shadow camera's back, level)`
+    : 'fTo = cameraPosition.xz - (modelMatrix * vec4(fP, 1.0)).xz;'}
+  fTo /= max(length(fTo), 1e-5);
+  vec2 fF = aB.xy;
+  float fPhi = degrees(atan(dot(fTo, vec2(fF.y, -fF.x)), dot(fTo, fF))); // (0 his front, + his left, ±180 his back)
+  float fMir = 0.0;
+  ${depth ? 'if (abs(fPhi) < 90.0) { fPhi -= sign(fPhi) * 180.0; fMir = 1.0; } // (the sun in front of him: his outline from behind, mirrored)' : ''}
+  fPhi += fPhi < 0.0 ? 360.0 : 0.0;
+  float fT = clamp((fPhi - 90.0) / 45.0, 0.0, 4.0), fI = min(floor(fT), 3.0);
+  ${depth ? 'float fB = 0.0; // (the light turns slowly: no blend)' : `vec2 fTo0 = uFishPrev.xz - (modelMatrix * vec4(fP, 1.0)).xz; fTo0 /= max(length(fTo0), 1e-5);
+  float fB = min(abs(degrees(atan(fTo0.x * fTo.y - fTo0.y * fTo.x, dot(fTo0, fTo)))) * ${FISH_BLEND.toFixed(1)}, ${FISH_BLEND_MAX.toFixed(1)}) / 45.0;`}
+  float fW = fB > 0.002 ? smoothstep(0.5 - fB, 0.5 + fB, fT - fI) : step(0.5, fT - fI);
+  int fs = int(aA.w + 0.5) * 5, ia = fs + int(fI), ib = ia + 1;
+  if (fW >= 1.0) { ia = ib; fW = 0.0; }
+  vec4 tA = texelFetch(uFTab, ivec2(2 * ia, 0), 0), eA = texelFetch(uFTab, ivec2(2 * ia + 1, 0), 0);
+  vec4 tB = texelFetch(uFTab, ivec2(2 * ib, 0), 0), eB = texelFetch(uFTab, ivec2(2 * ib + 1, 0), 0);
+  if (fMir > 0.5) { tA.z = -tA.z; tB.z = -tB.z; eA.xy = -eA.yx; eB.xy = -eB.yx; }
+  vec4 fE = fW > 0.0 ? vec4(min(eA.x, eB.x), max(eA.y, eB.y), min(eA.z, eB.z), max(eA.w, eB.w)) : eA;
+  float fx = mix(fE.x, fE.y, position.x), fy = mix(fE.z, fE.w, position.y), fs2 = aB.z;
+  vec2 fR = vec2(fTo.y, -fTo.x); // (the card's right, level)
+  fCard = fP + vec3(fR.x * fx * fs2, fy * fs2, fR.y * fx * fs2);
+  vMapUv = (tA.xy + vec2(tA.z * fx, -tA.w * fy)) / uFSize;
+  vUvB = (tB.xy + vec2(tB.z * fx, -tB.w * fy)) / uFSize;
+  vBoxA = (vec4(tA.x + min(tA.z * eA.x, tA.z * eA.y), tA.y - tA.w * eA.w, tA.x + max(tA.z * eA.x, tA.z * eA.y), tA.y - tA.w * eA.z)) / uFSize.xyxy;
+  vBoxB = (vec4(tB.x + min(tB.z * eB.x, tB.z * eB.y), tB.y - tB.w * eB.w, tB.x + max(tB.z * eB.x, tB.z * eB.y), tB.y - tB.w * eB.z)) / uFSize.xyxy;
+  vMix = fW;
+  ${depth ? '' : `// (the rim: the edges of him towards the sun (along the card, and a little from above), when it stands beyond him from the eye)
+  { vec2 sh = uSunDir.xz; float shl = length(sh); vec2 shn = sh / max(shl, 1e-4);
+    vec2 ro = normalize(vec2(dot(fR, shn) * shl, max(uSunDir.y, 0.0) + 0.2));
+    vRim = vec3(vec2(tA.z * ro.x, -tA.w * ro.y) * 0.015 / uFSize, shl > 1e-3 ? smoothstep(-0.2, 0.7, -dot(fTo, shn)) : 0.0); }`}
+}`;
+/** The fishermen's materials: { mat, depth, decal } (fishers.js). tex: the atlas (premultiplied, sRGB values, no decode: filtered as
+ *  stored); tab: the views' table (a float DataTexture); size: the atlas's px. One program each, compiled at load (a Turkish start)
+ *  or in Turkey's lazy load (main.js) */
+export function makeFisherMaterials(tex, tab, size) {
+  const FU = { uFTab: { value: tab }, uFSize: { value: new THREE.Vector2(size[0], size[1]) }, uFishPrev: { value: new THREE.Vector3(0, -1e4, 0) } };
+  // (cut out at alpha 0.5: alpha to coverage would cross-fade the outlines too, but some drivers dither it over the pixels (this box's
+  // AMD: a screen door on the legs mid-change), so the outlines change at the blend's middle while the paint cross-fades)
+  const m = new THREE.MeshToonMaterial({ map: tex, gradientMap: GRAD_CAR, alphaTest: 0.5 });
+  m.shadowSide = THREE.DoubleSide; // (the shadow card faces the light: three would otherwise draw its back faces only)
+  m.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, FU); sh.uniforms.uFishT = U.uFishT; sh.uniforms.uFishRim = U.uFishRim; sh.uniforms.uSunDir = U.uSunDir;
+    worldShade(sh);
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform vec3 uSunDir;' + FISH_PARS_V)
+      // (its normal up, leaning FISH_N towards the eye: the side of him we see is in the shade when we look into a low sun, lit when it
+      // stands behind us; at noon the sky above lights him)
+      .replace('#include <beginnormal_vertex>', FISH_CARD(false) + `\nvec3 objectNormal = normalize(vec3(fTo.x * ${FISH_N.toFixed(2)}, 1.0, fTo.y * ${FISH_N.toFixed(2)}));`)
+      .replace('#include <begin_vertex>\nvWP = (modelMatrix * vec4(position, 1.0)).xyz;', 'vec3 transformed = fCard;\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz;')
+      // (the shadow is looked up 0.45 m towards the sun: a figure's own shadow card, through his axis, never shades him)
+      .replace('#include <shadowmap_vertex>', `#if defined( USE_SHADOWMAP )
+{ vec2 sd = uSunDir.xz; float sl = length(sd); if (sl > 1e-3) worldPosition.xz += sd / sl * 0.45 * aB.z; }
+#endif
+#include <shadowmap_vertex>`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec3 uFishT; uniform vec4 uFishRim;').replace('#include <uv_pars_fragment>', '#include <uv_pars_fragment>' + FISH_PARS_F)
+      .replace('#include <map_fragment>', `float fRim = 0.0;
+{ vec4 fTx = fishTexel(map); diffuseColor.rgb *= sRGBTransferEOTF(vec4(fTx.rgb, 1.0)).rgb * uFishT; diffuseColor.a *= fTx.a;
+  if (uFishRim.a > 0.0 && vRim.z > 0.01) { vec2 dx = dFdx(vMapUv), dy = dFdy(vMapUv); // (the figure's edge towards the sun: the alpha there falls off)
+    fRim = clamp((textureGrad(map, vMapUv, dx, dy).a - textureGrad(map, vMapUv + vRim.xy, dx, dy).a) * 1.5, 0.0, 1.0) * vRim.z * uFishRim.a; } }`)
+      .replace('#include <opaque_fragment>', 'outgoingLight += uFishRim.rgb * fRim;\n#include <opaque_fragment>');
+  };
+  m.customProgramCacheKey = () => 'fishers-v1';
+  const d = new THREE.MeshDepthMaterial();
+  d.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, FU);
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>' + FISH_PARS_V).replace('#include <begin_vertex>', FISH_CARD(true) + '\nvec3 transformed = fCard;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <uv_pars_fragment>', '#include <uv_pars_fragment>' + FISH_PARS_F).replace('#include <map_fragment>', 'diffuseColor.a *= fishTexel(map).a;');
+  };
+  d.customProgramCacheKey = () => 'fishers-depth-v1';
+  // the contact shadow under each: a soft ellipse on the walkway (blue-grey, as the paintings' shade), faded by the fog
+  const decal = new THREE.ShaderMaterial({
+    uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uK: { value: 0.4 } }]),
+    vertexShader: /* glsl */`
+attribute vec4 aA, aB;
+varying vec2 vC; varying float vFd;
+void main() {
+  vec2 c = position.xy * 2.0 - 1.0; vC = c;
+  vec2 f = aB.xy, l = vec2(f.y, -f.x); float s = aB.z, r = aB.w > 1.5 ? 0.5 : 0.38; // (aB.w: the pose, 2 seated: the stool and his feet)
+  vec3 p = aA.xyz + vec3(l.x * c.x * r * s + f.x * (c.y * 0.42 + 0.08) * s, 0.02, l.y * c.x * r * s + f.y * (c.y * 0.42 + 0.08) * s);
+  vec4 mv = modelViewMatrix * vec4(p, 1.0); vFd = -mv.z; gl_Position = projectionMatrix * mv;
+}`,
+    fragmentShader: /* glsl */`
+uniform float uK, fogNear;
+varying vec2 vC; varying float vFd;
+void main() {
+  float r2 = dot(vC, vC); if (r2 >= 1.0) discard;
+  float a = uK * (1.0 - r2) * (1.0 - r2) * exp(-fogNear * fogNear * vFd * vFd);
+  gl_FragColor = vec4(0.05, 0.07, 0.14, a);
+}`,
+    transparent: true, depthWrite: false, fog: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2,
+  });
+  return { mat: m, depth: d, decal, FU };
 }

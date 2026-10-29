@@ -643,6 +643,35 @@ export async function loadCar(tier, livery, timeoutMs = 15000) {
   })(), timeoutMs, "the painted car unavailable, keeping the procedural one:");
 }
 
+/** (step 35g) Loads the street furniture's painted atlas (assets/furniture/furn1.*, made by ~/cdtest/s35g/scripts/pack.py: Grok Imagine
+ *  elevations of a Japanese drinks vending machine in three liveries (each repainted from a layout drawn at the model's proportions), a
+ *  mamachari in three frames, a simit cart's long side and end, keyed off their magenta and packed with the small cells drawn in code: wood,
+ *  a tea glass, the cart's spoked wheel, the country bus stop's sign, timetable, shelter wall, roof and fascia): its texture pair (sRGB as
+ *  stored, no flip: v runs down; the albedo's alpha cuts the bicycles, the wheel, the valance; what glows at night: the machines' windows,
+ *  buttons and displays) and its index (cells in hi px, the models' measured geometry: furniture.js). 'hi' (1024²) or 'lo' (half: phones,
+ *  the embed). Null (never rejects) when anything is missing, broken, truncated or too slow: the furniture then keeps its old builders */
+export async function loadFurniture(tier, timeoutMs = 15000) {
+  const base = ASSETS + 'furniture/';
+  return orNull((async () => {
+    const r = await fetch(base + 'furn1.json');
+    if (!r.ok) throw new Error('furn1.json ' + r.status);
+    const J = await r.json(), file = J.files && J.files[tier] ? tier : 'hi', F = J.files && J.files[file], sz = J.size && J.size[file];
+    if (J.v !== 1 || !F || !F.map || !F.em || !sz || !sz.map || !sz.em || !J.bytes || !J.cells || !J.geo || !J.geo.vend || !J.geo.bike || !Array.isArray(J.hiSize)) throw new Error('nothing listed');
+    const [W, H] = J.hiSize;
+    for (const c of Object.values(J.cells)) if (!(Array.isArray(c) && c.length === 4 && c[0] >= 0 && c[1] >= 0 && c[2] > 0 && c[3] > 0 && c[0] + c[2] <= W && c[1] + c[3] <= H)) throw new Error('a cell lies outside the sheet');
+    const get = async (name, bytes) => { // (each file checked whole: a truncated image decodes without complaint)
+      if (!(bytes > 0)) throw new Error(name + ': no size listed');
+      const q = await fetch(base + name); if (!q.ok) throw new Error(name + ' ' + q.status);
+      const b = await q.blob(); if (b.size !== bytes) throw new Error(name + ' is ' + b.size + ' bytes, not ' + bytes);
+      return b;
+    };
+    const [mb, eb] = await Promise.all([get(F.map, J.bytes[F.map]), get(F.em, J.bytes[F.em])]);
+    const opt = { premultiplyAlpha: 'none', colorSpaceConversion: 'none' }, [map, em] = await Promise.all([createImageBitmap(mb, opt), createImageBitmap(eb, opt)]);
+    if (map.width !== sz.map[0] || map.height !== sz.map[1] || em.width !== sz.em[0] || em.height !== sz.em[1]) { map.close(); em.close(); throw new Error('a texture has the wrong size'); }
+    return { J, map, em, tier: file };
+  })(), timeoutMs, "the street furniture's paintings unavailable, keeping the old furniture:");
+}
+
 /** Loads the painted meadow (assets/fields/, made by ~/cdtest/ft/scripts/field.py): a tileable top-down painting of the
  *  country paintings' grass, 'hi' or 'lo' (phones, the embed). Resolves to null (never rejects) when the index or the
  *  image is missing, broken, truncated or too slow: the countryside then keeps its procedural paddies. */

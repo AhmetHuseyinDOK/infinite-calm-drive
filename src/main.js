@@ -4,6 +4,7 @@ import { makeCrossingRig, makeTrain, xingPosts } from './crossing.js';
 import { buildAtlas, buildFoliage, buildPaintedAtlas, buildWorldAtlas, buildCapAtlas, buildPasAtlas, buildChainAtlas, albedoTexture, SHOP_GLASS, stickerHolesJ } from './textures.js';
 import { GRAD_CAR, trainRamp, makeMaterials, makeAtlasW, makeAtlasRooms, makeAtlasWRooms, makeChainRooms, roomSet, makeAtlasChain, makeCapAtlas, makePasGrass, setWorldTex, U, groundMaterialFor, setGrazeFade, makeCloudMap, makeGhibliLeaf, FIELD, tetraMaterial, barkMaterial, tuffMaterial, PROP_DEPTH } from './materials.js';
 import { setAtlas, setFoliage, warmTrees, warmBare, warmTetrapods, setLeafDensity, GHIBLI, setHouses, setTrHouses, setChains, PROC_ROOMS, setFishers, setDolmus, setGalFronts } from './props.js';
+import { setFurniture, furnTris } from './furniture.js';
 import { loadTreeAtlas } from './ghibli.js';
 import { World, CH } from './chunks.js';
 import { loadRealSky, makeRealSky, loadCards } from './realsky.js';
@@ -25,7 +26,7 @@ import { makePost } from './post.js';
 import { makeAudio } from './audio.js';
 import { makeParticles } from './particles.js';
 import { clamp, lerp, sstep, setSeed, hash2 } from './util.js';
-import { loadCloudAtlas, makePaintedClouds, loadBandAtlas, makePaintedBand, updatePainted, loadFieldTexture, loadFrontAtlas, loadRoomAtlas, roomTexture, roomGlass, loadHouseAtlas, loadHousePatch, loadTrHouseAtlas, loadTownAtlas, loadChainAtlas, loadFisherAtlas, loadPeopleAtlas, loadDolmus, loadTrain, loadCar, loadTram, loadGalFronts, todTones, mixTones, paintSky, PAINT_TOD, BAND_R } from './painted.js';
+import { loadCloudAtlas, makePaintedClouds, loadBandAtlas, makePaintedBand, updatePainted, loadFieldTexture, loadFrontAtlas, loadRoomAtlas, roomTexture, roomGlass, loadHouseAtlas, loadHousePatch, loadTrHouseAtlas, loadTownAtlas, loadChainAtlas, loadFisherAtlas, loadPeopleAtlas, loadDolmus, loadTrain, loadCar, loadTram, loadGalFronts, loadFurniture, todTones, mixTones, paintSky, PAINT_TOD, BAND_R } from './painted.js';
 
 const QS = new URLSearchParams(location.search);
 // inside an X player card (or any iframe): lighter quality, compact UI, tap-only start
@@ -97,6 +98,9 @@ async function main() {
   const chainLoad = loadChainAtlas(HTIER, 'jp'), chainTrLoad = TR_START ? loadChainAtlas(HTIER, 'tr') : null, roomTrLoad = TR_START ? loadRoomAtlas(RTIER, 15000, 'rooms1tr') : null;
   // (step 35a) the Galata Bridge's fishermen as painted figures (painted.js loadFisherAtlas), on the same tiers: with Turkey's assets
   const fisherLoad = TR_START ? loadFisherAtlas(HTIER) : null;
+  // (step 35g) the street furniture's painted atlas (painted.js loadFurniture: the vending machines, bicycles, the simit cart, tea tables and
+  // the country bus stop), on the same tiers, at every start (no chunk is built before it is in or has failed)
+  const furnLoad = loadFurniture(HTIER);
   // (step 35b) the Turkish town's dolmuş as a painted 3D model (painted.js loadDolmus: its geometry and its texture pair), on the same tiers
   const dolLoad = TR_START ? loadDolmus(HTIER) : null;
   // (step 35d) the Galata T1 tram's painted livery (painted.js loadTram: its texture pair; its body stays tram.js's loft), on the same tiers
@@ -648,6 +652,14 @@ async function main() {
   // the road is built (its chunks then take the painted fronts, else the town's bays: props.js galFacade); in Turkey's lazy load otherwise
   if (TR_START) { const ga = await galLoad; if (ga) try { const map = galTex(ga.a), em = galTex(ga.e); renderer.initTexture(map); renderer.initTexture(em); galFronts(ga, map, em); if (galSheet) galRooms(galSheet.rt, ga, galSheet.tx()); } catch (e) { console.warn('galata fronts:', e); M.atlasG = M.atlasGI = null; setGalFronts(null); } }
   galSheetDone();
+  // (step 35g) the street furniture: its texture pair uploaded and its material made (the atlas's program on its own pair: makeAtlasChain,
+  // nothing new compiles), its ids from quietIds (no random numbers drawn: every start's seeded captures keep their particles), then its
+  // models are built (furniture.js setFurniture) and the chunks stamp them in place of the old furniture; should anything fail, the old
+  // (its bitmaps closed once uploaded, as Galata's sheets: ~5 MB less held on desktops)
+  { const d = await furnLoad; if (d) try { setFurniture(d.J, quality !== 'high'); quietIds(() => {
+    const tex = img => { const t = dolTex(img); t.onUpdate = () => { t.onUpdate = null; img.close(); }; return t; }, map = tex(d.map), em = tex(d.em); renderer.initTexture(map); renderer.initTexture(em);
+    const ch = makeAtlasChain(M, { map, emissive: em }); ch.mat.emissiveIntensity = M.atlas.emissiveIntensity; M.atlasF = ch.mat; M.atlasFDepth = ch.depth; }); }
+    catch (e) { console.warn('furniture:', e); M.atlasF = null; setFurniture(null); d.map.close(); d.em.close(); } }
   // (…and its fill by the hour: the procedural car's × its livery's, read against the paintings' evening repaints (car1.json fill: golden hour,
   // sunset, night; 1 by day))
   let CFP_T = null;
@@ -1511,6 +1523,7 @@ async function main() {
     if (M.atlasC) M.atlasC.emissiveIntensity = M.atlas.emissiveIntensity; if (M.atlasCT) M.atlasCT.emissiveIntensity = M.atlas.emissiveIntensity; // (and the chain stores', step 32)
     if (M.atlasCI) M.atlasCI.emissiveIntensity = M.atlas.emissiveIntensity; if (M.atlasCTI) M.atlasCTI.emissiveIntensity = M.atlas.emissiveIntensity; if (M.atlasWI) M.atlasWI.emissiveIntensity = M.atlas.emissiveIntensity; // (and the rooms' of the chains and the town, step 34)
     if (M.atlasDol) M.atlasDol.emissiveIntensity = M.atlas.emissiveIntensity; // (and the town's dolmuş's lamps and saloon, step 35b)
+    if (M.atlasF) M.atlasF.emissiveIntensity = M.atlas.emissiveIntensity; // (and the street furniture's: the vending machines' windows, step 35g)
     if (M.atlasEm) M.atlasEm.emissiveIntensity = M.atlas.emissiveIntensity; // (and Eminönü's square's lit kiosk and poster, step 35R-galata-2c)
     if (M.atlasG) { M.atlasG.emissiveIntensity = M.atlas.emissiveIntensity; if (M.atlasGI) M.atlasGI.emissiveIntensity = M.atlas.emissiveIntensity; } // (and Galata's own fronts', step 35R-galata-2)
     if (M.train) M.train.emissiveIntensity = M.atlas.emissiveIntensity; // (and the crossing train's saloon, display and lamps, step 35c)
@@ -1713,7 +1726,7 @@ async function main() {
     if (started && frames > 150 && dt > 0.03) slowT += dt; else slowT = Math.max(0, slowT - dt * 0.5);
     if (slowT > 3 && !QS.has('q')) { slowT = 0; stepDown(); }
   }
-  window.__dbg = { renderer, st, scene, camera, world, TOD, KEYS, X, train, weather, U, birds, cine, post, car, sun, M, cells: atlas.cells, clouds, pclouds, band, get bandTr() { return bandTr; }, sky, mountains, shadowDir, CM, spray, grass, sea, get ferry() { return ferry; }, get tram() { return tram; }, get fishers() { return fishers; }, people, get dolmus() { return M.atlasDol || null; }, get trainPaint() { return M.train || null; }, get balloons() { return balloons; }, get realSky() { return realSky; }, TRL, get audio() { return audio; }, uch: { TF_DAY, TF_GOLD, TF_SUNSET, TF_NIGHT, UG_DAY, UCH }, pas: { TFP_DAY, TFP_GOLD, TFP_SUNSET, TFP_NIGHT, PG_DAY, PG_GOLD, PG_SUNSET, PG_NIGHT, PAS_Z, PAS_R, pasAz }, night: { NT, NTZ, NSKY_N, MOON_B, CF_N } };
+  window.__dbg = { renderer, st, scene, camera, world, TOD, KEYS, X, train, weather, U, birds, cine, post, car, sun, M, cells: atlas.cells, clouds, pclouds, band, get bandTr() { return bandTr; }, sky, mountains, shadowDir, CM, spray, grass, sea, get ferry() { return ferry; }, get tram() { return tram; }, get fishers() { return fishers; }, people, get dolmus() { return M.atlasDol || null; }, get furn() { return M.atlasF || null; }, furnTris, get trainPaint() { return M.train || null; }, get balloons() { return balloons; }, get realSky() { return realSky; }, TRL, get audio() { return audio; }, uch: { TF_DAY, TF_GOLD, TF_SUNSET, TF_NIGHT, UG_DAY, UCH }, pas: { TFP_DAY, TFP_GOLD, TFP_SUNSET, TFP_NIGHT, PG_DAY, PG_GOLD, PG_SUNSET, PG_NIGHT, PAS_Z, PAS_R, pasAz }, night: { NT, NTZ, NSKY_N, MOON_B, CF_N } };
   status('');
   $start.classList.add('ready');
   if (QS.has('auto')) begin();

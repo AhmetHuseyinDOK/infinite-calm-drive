@@ -46,6 +46,11 @@ const P_GALW = P.GAL_WALLS, C_ASPH = [0.2, 0.2, 0.21], C_BAY = [0.78, 0.78, 0.76
 const lampAtW = (G, p) => { if (G.lamps) G.lamps.push(p[0], p[1], p[2], 0.7); };
 const IDENT = new THREE.Matrix4(), _sc = new THREE.Matrix4(), W1G = [1, 1, 1];
 const mod = (a, n) => ((a % n) + n) % n;
+// (step 35g) meshes the old furniture never made (the painted furniture's own mesh; the bus stop's lamp and its pool where nothing else in
+// the chunk had one) take three's ids from a generator of their own: their ids would draw from Math.random, and every seeded capture's
+// birds, petals and fireflies built after them would move (as main.js quietIds)
+let quietSeed = 0x35a7e11d;
+const quietly = f => { const R0 = Math.random; Math.random = () => { quietSeed = (Math.imul(quietSeed, 1664525) + 1013904223) >>> 0; return quietSeed / 4294967296; }; try { return f(); } finally { Math.random = R0; } };
 /** true within m metres of a level crossing (keeps the track corridor clear) */
 const nearX = (s, m) => { const c = crossingNear(s); return !!c && Math.abs(s - c.s) < m; };
 /** the city's openings, on a 150 m grid (k · 150): a signalised crossing with side streets at every 4th (s = 600, 1200 …,
@@ -282,8 +287,11 @@ export class World {
       chain: new GB({ uv: true, ao: true, lit: true }), // (the chain stores' bays and signs, step 32: their own atlas, the atlas's program)
       galf: new GB({ uv: true, ao: true, lit: true }), // (step 35R-galata-2: Galata's own painted fronts, their own texture pair, the atlas's program)
       emin: new GB({ uv: true, ao: true, lit: true }), // (step 35R-galata-2c: Eminönü's square's paintings, their own sheet: eminonu.js)
-      fish: new GB({ ao: true, idx: true }) }; // (the Galata Bridge's fishermen, step 33: smooth figures, indexed, in the props' colour material)
+      fish: new GB({ ao: true, idx: true }), // (the Galata Bridge's fishermen, step 33: smooth figures, indexed, in the props' colour material)
+      furn: new GB({ uv: true, ao: true, lit: true, idx: true }) }; // (step 35g: the street furniture's painted models, indexed, their own atlas, the atlas's program)
     G.chainList = []; // (…and where they stand: { s, side, c, n }, for the tools: __dbg.world's chunks' .chains)
+    G.furnLamp = G.furnPool = 0; // (step 35g: the vertices the painted bus stop added to the chunk's lamps and pools)
+    G.furnList = []; // (step 35g: the painted furniture, 4 numbers each: its kind (0 a vending machine, 1 a bicycle, 2 a simit cart, 3 a tea table, 4 a bus stop), where (chunk-local x, y, z), for the tools)
     G.fishers = []; // (step 35a: the painted fishermen, 8 numbers each: his feet (chunk-local), his facing (x, z), his scale, the sheet, the pose: fishers.js)
     G.people = []; // (step 35f: painted people, 8 numbers each: feet (chunk-local), facing (x, z), scale, sheet, cast (0 Paşabağ's tourists, 1 Istanbul's): fishers.js)
     G.spots = []; // (step 35f: …and what they keep clear of: the squares' trees, [s, u, r] each)
@@ -498,6 +506,7 @@ export class World {
     if (G.emin.count && this.M.atlasEm) { const m = add(G.emin.build(), this.M.atlasEm, true, true); if (m) m.customDepthMaterial = this.M.atlasEmDepth; } // (step 35R-galata-2c)
     if (G.galf.count || G.emin.count) yield; // (step 35R-galata-2: Galata's chunks build two meshes more: a step of their own, on a slow phone)
     if (G.chain.count) { const T = G.chain.tr, m = add(G.chain.build(), T ? this.M.atlasCTI || this.M.atlasCT : this.M.atlasCI || this.M.atlasC, true, true); if (m) m.customDepthMaterial = T ? this.M.atlasCTDepth : this.M.atlasCDepth; } // (the chain stores, step 32: Japan's or Turkey's chain atlas; most chunks have none, and no mesh. Step 34: with the rooms behind their glass)
+    if (G.furn.count && this.M.atlasF) quietly(() => { const m = add(G.furn.build(), this.M.atlasF, true, true, 0, 'small'); if (m) m.customDepthMaterial = this.M.atlasFDepth; }); // (step 35g: the street furniture: its own atlas, the atlas's program; most chunks have none, and no mesh. Shown as far as the small things, World.lod: past ~380 m a machine is ~4 px)
     add(G.tetra.build(), this.M.tetra, true, true); // (the tetrapods: their shadows from the plain depth material)
     add(G.bark.build(), this.M.bark, true, true, 0, 'leaf'); yield; // (the trees' bark: shown as far as their crowns; plain depth material too)
     if (this.M.tuff) add(G.tuff.build(), this.M.tuff, true, true); // (Cappadocia's fairy chimneys, W5: plain depth material)
@@ -511,11 +520,11 @@ export class World {
     // received shadows changed its colours by under 1% for ~0.4 ms on desktop)
     if (this.M.gblossom) { const m = add(G.gblossom.build(), this.M.gblossom, true, false, 0, 'leaf'); if (m) m.customDepthMaterial = this.M.gblossomDepth; } // (its own shadow twin: a sparser dapple)
     yield;
-    add(G.lamp.build(), this.M.lamp, false, false, 0, 'light');
+    { const f = () => add(G.lamp.build(), this.M.lamp, false, false, 0, 'light'); if (G.lamp.count && G.lamp.count === G.furnLamp) quietly(f); else f(); } // (step 35g: a lamp only the bus stop's: quietly)
     add(G.sig.build(), this.M.sig, false, false, 0, 'small');
     add(G.sodium.build(), this.M.sodium, false, false);
     add(G.decal.build(), this.M.decal, false, true, 1, 'small');
-    add(G.pool.build(), this.M.pool, false, false, 2, 'light');
+    { const f = () => add(G.pool.build(), this.M.pool, false, false, 2, 'light'); if (G.pool.count && G.pool.count === G.furnPool) quietly(f); else f(); }
     if (shore.rows.length > 1) { // the water along the sea wall: a strip of rows across it (SHORE_D), drawn just before the sea
       const R = shore.rows, nc = SHORE_D.length, n = R.length * nc, pos = new Float32Array(n * 3), su = new Float32Array(n * 2), hf = new Float32Array(n * 2), idx = [];
       R.forEach((row, i) => {
@@ -530,7 +539,7 @@ export class World {
     if (shore.puffs.length) add(surfGeometry(shore.puffs), this.M.surf, false, false, 2, 'small'); // (the surf over the tetrapods)
     for (const g of river) add(g, this.riverMat, false, true);
     grp.position.set(ox - this.origin.x, 0, oz - this.origin.z);
-    return { group: grp, ox, oz, s0, lamps: new Float32Array(G.lamps), chains: G.chainList.length ? G.chainList : null, fishers: G.fishers.length ? new Float32Array(G.fishers) : null, people: G.people.length ? new Float32Array(G.people) : null, dol };
+    return { group: grp, ox, oz, s0, lamps: new Float32Array(G.lamps), chains: G.chainList.length ? G.chainList : null, fishers: G.fishers.length ? new Float32Array(G.fishers) : null, people: G.people.length ? new Float32Array(G.people) : null, dol, furn: G.furnList.length ? G.furnList : null };
   }
 
   // poles + overhead wires (country / coast / city share the rule so wires connect across zones)

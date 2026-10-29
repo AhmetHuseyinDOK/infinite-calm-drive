@@ -2,6 +2,53 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-29 · 11:55 — Street furniture as anime film props: vending machines, bicycles, the simit cart, tea tables, the bus stop
+- **The vending machines are painted machines now, not boxes with a sticker** (the user: "i want high quality but with anime style").
+  - Grok Imagine painted a Japanese drinks machine's front from a layout drawn at its real proportions: rows of bottles and cans with
+    price tags and push buttons, the sky in the glass, an advertising panel, the coin unit and the collection slot.
+  - It comes in three liveries (white with red bands, all blue, all white), picked by the same random number as before.
+  - It is built with depth: the window and the slot set into the cabinet, chamfered edges, a plinth and a capped top (78 triangles).
+  - At night the window, the buttons and the display glow.
+- **Mamachari bicycles, painted** (silver, cherry red, pastel mint): Grok's side view on a card cut round its outline. The tyres, the
+  handlebar, the wire basket, the saddle and the frame's tubes are in 3D (368 triangles, 216 on phones).
+- **The Turkish town's simit cart, as its concept paints it**: its red body, the glass case piled with sesame simit, and a red canopy
+  with a scalloped valance, from Grok paintings. Its spoked wheels, axle, stand and handles are in 3D.
+- **Tea tables and chairs in light wood**, with tulip glasses of tea and a sugar bowl as small painted cards.
+- **The country bus stop is a steel shelter**: a corrugated roof under the company's fascia, a back wall with a poster and the route map,
+  a slatted bench, the round バス停 sign with its timetable, and a strip light that comes on at night and pools on the ground.
+- Seeded captures: every start without furniture is identical to live (one Uçhisar capture taken under heavy load repeated at 0 px).
+  The city, country and town differ only at the furniture. Without the new files the old furniture comes back, identical to live.
+- How:
+  - `furniture.js` (new): the models, built once at load from the atlas's index (lighter on phones).
+  - `props.js`: the five builders draw the same random numbers as before and stamp the painted models; the old builders are the
+    fallback.
+  - `chunks.js`: one furniture mesh a chunk on `M.atlasF` (`makeAtlasChain`: no new program), hidden beyond ~380 m; its ids come from a
+    private generator.
+  - `painted.js`: `loadFurniture` (at every start).
+  - The pipeline is in `~/cdtest/s35g`, with its lossless masters kept.
+  - +17.4 KB of code (+6.4 KB gzipped).
+- Assets (`assets/furniture/`):
+  - `furn1.json`;
+  - `furn1_hi.webp` (97 KB) and `furn1_lo.webp` (40 KB);
+  - the night sheets (5 / 2 KB);
+  - `CREDITS.md`.
+- Programs: unchanged (63 / 62 in Japan, 83 / 82 in Turkey). Nothing compiles mid-drive. 0 shader errors in all eleven zones.
+- Cost (this shared box's Vega; the desktop machine was down):
+  - City drives (L S S L):
+    - desktop 22.41 / 22.84 → 22.43 / 22.29 ms;
+    - phone tier 15.23 / 15.15 → 14.58 / 14.56.
+  - Town phone drives: 14.40 / 13.76 → 14.06 / 13.22.
+  - Flat out at 4× throttle on a phone in the city: world spikes 23 / 5 → 8 / 12, worst 41.8 / 25.8 → 36.0 / 34.1 ms.
+  - Start-up:
+    - desktop city 4629 / 4474 → 4138 / 5483 ms;
+    - a 3 Mbps phone 9094 / 9051 → 9182 / 9104 ms (+102 KB desktop, +61 KB phone).
+- Left over:
+  - the bike's far side mirrors its painting;
+  - the cart's end painting is squeezed to fit;
+  - the vending machines' sides are plain paint and they cast no light at night;
+  - the tea glasses read as an X from above;
+  - re-time on the desktop.
+
 ## 2026-10-29 · 07:10 — Painted people: Paşabağ's tourists and Istanbul's people at Galata
 - **Paşabağ's tourists are paintings now, not cylinders and boxes** (the user: "i want high quality but with anime style"; the rule: no
   box people, ever). Eight tourists are painted as anime characters by Grok Imagine on the Paşabağ concept:

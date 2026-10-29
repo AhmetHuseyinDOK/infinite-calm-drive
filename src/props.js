@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { C, mulC, mixC, rng, hash2 } from './util.js';
 import { GB, BILL_OCT, BILL_HEX } from './geom.js';
 import { TS_CAP, TS_PAD, TOWN_SHOPS, TOWN_AWNINGS, CHAINS_J, CHAINS_T } from './textures.js';
+import { FURN, stampF } from './furniture.js';
 
 const W1 = [1, 1, 1];
 export const PAL = {
@@ -138,7 +139,9 @@ export function oldLamp(G, M) {
 }
 
 export function vendingMachine(G, M, r) {
-  const v = Math.floor(r() * 3), body = [PAL.red, C('#2f6fd8'), PAL.white][v];
+  const v = Math.floor(r() * 3);
+  if (FURN.T) { stampF(G, FURN.T.vend[v], M, 0); return; } // (step 35g: the painted machine, red, blue or white, from the same random number)
+  const body = [PAL.red, C('#2f6fd8'), PAL.white][v];
   G.color.setM(M); G.color.box(-0.5, 0, 0.01, 0.5, 1.83, 0.75, body); G.color.box(-0.53, 1.83, -0.06, 0.53, 1.9, 0.78, mulC(body, 0.8));
   G.atlas.setM(M); fq(G.atlas, -0.5, 0.5, 0, 1.83, 0, 'vend' + v);
 }
@@ -146,7 +149,10 @@ export function acUnit(G, M, x, y, z) {
   G.color.setM(M); G.color.box(x - 0.4, y, z, x + 0.4, y + 0.56, z + 0.28, C('#e6e6e1'));
   G.atlas.setM(M); fq(G.atlas, x - 0.4, x + 0.4, y, y + 0.56, z - 0.003, 'ac');
 }
+// (step 35g) the painted bicycles' frames for the old colours (silver, red, blue, black, yellow, pink): silver, cherry red, pastel mint
+const BIKE_V = [0, 1, 2, 0, 2, 1];
 export function bicycle(G, M, r) {
+  if (FURN.T) { const k = Math.floor(r() * 6); stampF(G, FURN.T.bike[BIKE_V[k]], M, 1); return; } // (the same random number as the old pick below)
   const c = G.color; c.setM(M);
   const col = r.pick([C('#c8ccd2'), C('#c0392b'), C('#2c6fb7'), C('#2b2b2b'), C('#e8c84a'), C('#e98fb0')]);
   for (const wx of [-0.52, 0.52]) for (let i = 0; i < 12; i++) {
@@ -1316,6 +1322,15 @@ export function torii(G, M, span, h = 6.2) {
   c.box(-0.12, h * 0.78 + 0.35, -0.3, 0.12, h - 0.1, 0.3, PAL.vermilion);
 }
 export function busStop(G, M, r) {
+  if (FURN.T) { // (step 35g: the painted shelter and sign; the old one drew no random numbers)
+    stampF(G, FURN.T.stop, M, 4);
+    // …and the shelter's strip light under its roof, its pool on the ground at night (the lamps' own GBs: no draw more)
+    const nl = G.lamp.count, np = G.pool.count; // (counted: a chunk whose only lamp is this one makes its lamp's mesh quietly, chunks.js)
+    G.lamp.setM(M); G.lamp.box(-0.45, 2.27, 0.32, 0.45, 2.3, 0.38, W1); lampAt(G, M, 0, 2.25, 0.35, 0.6);
+    G.pool.setM(M); G.pool.quad([-2.2, 0.04, 1.4], [2.2, 0.04, 1.4], [2.2, 0.04, -1.8], [-2.2, 0.04, -1.8], W1, { u0: 0, u1: 1, v0: 0, v1: 1 });
+    G.furnLamp += G.lamp.count - nl; G.furnPool += G.pool.count - np;
+    return;
+  }
   const c = G.color; c.setM(M);
   for (const x of [-1.5, 1.5]) c.box(x - 0.05, 0, 0.6, x + 0.05, 2.4, 0.7, C('#7d8a96'));
   c.box(-1.7, 2.4, -0.3, 1.7, 2.5, 0.9, C('#5c7590'));
@@ -2104,6 +2119,14 @@ const TEA = C('#8a2a12'), GLASS = C('#e8e4dc'), WOOD_T = C('#b98a5c'), WOOD_TD =
 /** a tea table on the pavement (çay masası): a small square wooden table, two to four wooden chairs round it, tulip glasses of
  *  tea on their saucers, now and then a sugar bowl */
 export function teaTable(G, M, r) {
+  if (FURN.T) { // (step 35g: the painted set, drawing the same random numbers as the old one below, in the same order)
+    const T = FURN.T; stampF(G, T.table, M, 3);
+    const n = 2 + Math.floor(r() * 3), a0 = r() * 1.6;
+    for (let i = 0; i < n; i++) { const t = a0 + (i / n) * Math.PI * 2; G.furn.stamp(T.chair, sub(M, Math.cos(t) * 0.62, 0, Math.sin(t) * 0.62, -t + Math.PI / 2)); }
+    for (let i = 0, ng = 1 + Math.floor(r() * 3); i < ng; i++) { const x = (r() - 0.5) * 0.4, z = (r() - 0.5) * 0.4; G.furn.stamp(T.glass, sub(M, x, 0.7, z, x * 37 + z * 11)); }
+    if (r() < 0.4) G.furn.stamp(T.sugar, sub(M, 0.12, 0.7, -0.1, 0.4));
+    return;
+  }
   const c = G.color; c.setM(M);
   c.box(-0.33, 0.66, -0.33, 0.33, 0.7, 0.33, WOOD_T);
   for (const [x, z] of [[-0.29, -0.29], [0.29, -0.29], [-0.29, 0.29], [0.29, 0.29]]) c.box(x - 0.025, 0, z - 0.025, x + 0.025, 0.66, z + 0.025, WOOD_TD);
@@ -2124,6 +2147,7 @@ export function teaTable(G, M, r) {
 /** a simit cart (simitçi): a red barrow on two wheels, its glass case stacked with simit (twSimit), a red canopy on four posts,
  *  its handles towards the road. Local x along the road */
 export function simitCart(G, M, r) {
+  if (FURN.T) { stampF(G, FURN.T.cart, M, 2); return; } // (step 35g: the painted cart; the old one drew no random numbers)
   const c = G.color, a = G.atlas, RED = C('#cf3328'), REDD = C('#a82820'); c.setM(M); a.setM(M); a.world = true;
   c.box(-0.65, 0.42, -0.32, 0.65, 0.92, 0.32, RED, null, { py: C('#e8e2d6') });
   c.box(-0.6, 0.3, -0.28, 0.6, 0.42, 0.28, REDD);

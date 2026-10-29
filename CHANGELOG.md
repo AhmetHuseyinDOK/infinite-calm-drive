@@ -2,6 +2,46 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-29 · 03:55 — The Galata T1 tram as a painted anime tram
+- **The T1's livery is painted now, not drawn flat** (the user: "i want high quality but with anime style"). Grok Imagine painted the
+  Flexity Swift's cab section, middle section and face in the Galata painting's style. Each was repainted from a layout drawn at the
+  game's own body proportions, so every window, door and stripe lands on the body:
+  - standing and seated passengers behind the glass, some holding the grab straps, with the sky and clouds reflected in it;
+  - the white body with its seams, the sky-blue roof line, the red stripe, the blue plug doors and the pale grey skirt;
+  - the face's raked windscreen with the driver's seat behind it, the wiper, round headlamps on the dark lamp band, the fleet number,
+    and the terminus in amber LED letters (KABATAŞ towards Karaköy, BAĞCILAR towards Eminönü).
+- **What a painting can't give, in 3D:** the roof fairings (their sides from the painting, chamfered), the bogies' wheels under the
+  skirt, pleated bellows, and a coupler with its drawbar, head and hose. The body, its three sections a car and its runs are as before.
+- **At night** the saloon glows warm round the passengers' silhouettes (Grok's night repaints of the sides); the inner faces stay dark.
+- **As light as before in the shade:** a softened version of the atlas's ramp keeps the white body white and shades the noses without
+  bands.
+- Seeded captures: every other start and Audit 2's places are identical to live. Without the new files the tram is the old one,
+  identical to live.
+- How:
+  - `painted.js`: `loadTram`;
+  - `tram.js`: `makeTram(…, P)`, `paintedCells`, `tramRamp`, `fairing`, `underP`, `coupler` (the canvas painting is the fallback);
+  - `main.js`: loaded with Turkey's assets, at a Turkish start or in `trLazy`;
+  - the pipeline is in `~/cdtest/s35d` (`layout.py`, `grok2.py`, `cut.py`, `pack.py`), with the lossless masters kept;
+  - +4.4 KB of code (+1.6 KB gzipped).
+- Assets (`assets/models/tram/`):
+  - `tram1.json`;
+  - `tram1_hi.webp` (98 KB) and `tram1_lo.webp` (33 KB);
+  - `tram1e_hi.webp` (11 KB) and `tram1e_lo.webp` (5 KB);
+  - `CREDITS.md`.
+- Programs: unchanged (83 at a Galata start, 82 on the phone tier). Nothing compiles mid-drive or in Turkey's lazy load (63 → 82).
+- Cost (this shared box's Vega; the desktop machine was down):
+  - The tram's draws (L S S L): desktop 0.223 / 0.190 → 0.192 / 0.214 ms, phone tier 0.094 / 0.079 → 0.082 / 0.095. Its shadow is
+    unchanged.
+  - Galata drives (L S S L): desktop 17.87 / 17.12 → 17.65 / 18.23 ms, phone tier 9.21 / 9.20 → 9.07 / 9.20 (alike).
+  - A Galata start on a 3 Mbps phone: 12.47 / 12.39 → 12.34 / 12.54 s, for +43 KB.
+  - 6,072 → 6,360 vertices a tram; GPU memory ~10.1 → 13.5 MB on desktops.
+- Left over:
+  - the roof continues the sides' painted roof line (there is no roof painting);
+  - one side of each section shows its painting mirrored;
+  - the windscreens keep their painted sky at night;
+  - no Citadis X04 yet;
+  - re-time on the desktop when it is back.
+
 ## 2026-10-29 · 01:10 — The Galata Bridge, second pass: its own fronts, its missing landmarks, Eminönü's square, an articulated T1
 - **Karaköy, Eminönü and Sirkeci in their own fronts, not the Turkish town's** (the user, on the zone: "I think you already know what to
   fix so continue"). Each block along the road wears a painted elevation of its kind of building, matched to its OpenStreetMap

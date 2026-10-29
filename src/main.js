@@ -25,7 +25,7 @@ import { makePost } from './post.js';
 import { makeAudio } from './audio.js';
 import { makeParticles } from './particles.js';
 import { clamp, lerp, sstep, setSeed, hash2 } from './util.js';
-import { loadCloudAtlas, makePaintedClouds, loadBandAtlas, makePaintedBand, updatePainted, loadFieldTexture, loadFrontAtlas, loadRoomAtlas, roomTexture, roomGlass, loadHouseAtlas, loadHousePatch, loadTrHouseAtlas, loadTownAtlas, loadChainAtlas, loadFisherAtlas, loadDolmus, loadTrain, loadCar, loadGalFronts, todTones, mixTones, paintSky, PAINT_TOD, BAND_R } from './painted.js';
+import { loadCloudAtlas, makePaintedClouds, loadBandAtlas, makePaintedBand, updatePainted, loadFieldTexture, loadFrontAtlas, loadRoomAtlas, roomTexture, roomGlass, loadHouseAtlas, loadHousePatch, loadTrHouseAtlas, loadTownAtlas, loadChainAtlas, loadFisherAtlas, loadDolmus, loadTrain, loadCar, loadTram, loadGalFronts, todTones, mixTones, paintSky, PAINT_TOD, BAND_R } from './painted.js';
 
 const QS = new URLSearchParams(location.search);
 // inside an X player card (or any iframe): lighter quality, compact UI, tap-only start
@@ -95,6 +95,8 @@ async function main() {
   const fisherLoad = TR_START ? loadFisherAtlas(HTIER) : null;
   // (step 35b) the Turkish town's dolmuş as a painted 3D model (painted.js loadDolmus: its geometry and its texture pair), on the same tiers
   const dolLoad = TR_START ? loadDolmus(HTIER) : null;
+  // (step 35d) the Galata T1 tram's painted livery (painted.js loadTram: its texture pair; its body stays tram.js's loft), on the same tiers
+  const tramLoad = TR_START ? loadTram(HTIER) : null;
   // (step 35R-galata-2) Galata's own painted fronts (painted.js loadGalFronts: their albedo and glow sheets), on the same tiers, with Turkey's
   const galLoad = TR_START ? loadGalFronts(HTIER) : null;
   // (step 35R-galata-2c: Eminönü's square's paintings, with Turkey's; step 35R-galata-2: after the start (galLazy), unless the start is within
@@ -538,7 +540,9 @@ async function main() {
   // (step 33) the T1 tram over the Galata Bridge (tram.js: its painted texture pair drawn here, the atlas's program): at a Turkish start,
   // made last of all (its ids draw random numbers); a Galata start finds one coming towards us on the far track
   let tram = null;
-  if (TR_START) try { tram = await makeTram(M, renderer, HTIER); scene.add(tram.group); if (zoneAt(st.s) === 'galata') tram.opening(path, st.s); } catch (e) { console.warn('tram:', e); tram = null; } // (should it fail: no tram)
+  /** (step 35d) the tram on its painted livery (P), or should that fail, on its canvas painting */
+  const mkTram = async (next, P) => { try { return await makeTram(M, renderer, HTIER, next, P); } catch (e) { if (!P) throw e; console.warn('tram livery:', e); return makeTram(M, renderer, HTIER, next, null); } };
+  if (TR_START) try { tram = await mkTram(null, await tramLoad); scene.add(tram.group); if (zoneAt(st.s) === 'galata') tram.opening(path, st.s); } catch (e) { console.warn('tram:', e); tram = null; } // (should it fail: no tram; step 35d: its painted livery, else its canvas painting)
   // (step 34) the rooms behind every other shop window that was still a painting, each region's from its own sheet (painted.js
   // loadRoomAtlas: null when it failed, and those windows keep their painted glass): Japan's konbini's (makeChainRooms: the street's room
   // program on the chain material, its stickers kept in front of the room), at a Turkish start the town's (makeAtlasWRooms: the world
@@ -796,7 +800,7 @@ async function main() {
     TRL.started = true; TRL.t0 = performance.now();
     const eml = loadEminonu(HTIER); // (step 35R-galata-2c)
     const step = n => TRL.steps.push([n, Math.round(performance.now() - TRL.t0)]);
-    const skl = loadRealSky1(), [trAtlases, th, ta, ba, cta, rtr, fla, dla, sk, gla] = await Promise.all([loadTrBands(), loadTrHouseAtlas(HTIER), loadTownAtlas(HTIER), loadBalloonAtlas(TIER), loadChainAtlas(HTIER, 'tr'), loadRoomAtlas(RTIER, 15000, 'rooms1tr'), loadFisherAtlas(HTIER), loadDolmus(HTIER), skl, loadGalFronts(HTIER)]); step('loaded');
+    const skl = loadRealSky1(), [trAtlases, th, ta, ba, cta, rtr, fla, dla, sk, gla, tla] = await Promise.all([loadTrBands(), loadTrHouseAtlas(HTIER), loadTownAtlas(HTIER), loadBalloonAtlas(TIER), loadChainAtlas(HTIER, 'tr'), loadRoomAtlas(RTIER, 15000, 'rooms1tr'), loadFisherAtlas(HTIER), loadDolmus(HTIER), skl, loadGalFronts(HTIER), loadTram(HTIER)]); step('loaded');
     await nextFrame();
     const wa = buildWorldAtlas(atlas, HTIER, th, ta); if (wa.trHouses) setTrHouses(th.types, th.extras); if (th) th.img.close(); if (ta) ta.img.close(); step('atlas');
     await nextFrame();
@@ -834,7 +838,7 @@ async function main() {
     step('band');
     await nextFrame();
     ferry = makeFerry(M, sea); scene.add(ferry.group, ferry.group2); step('ferry');
-    await nextFrame(); try { const tr = await makeTram(M, renderer, HTIER, nextFrame); scene.add(tr.group); tram = tr; } catch (e) { console.warn('tram:', e); } step('tram'); // (step 33: the Galata Bridge's tram, its work a frame at a time; should it fail, Turkey loads on without it)
+    await nextFrame(); try { const tr = await mkTram(nextFrame, tla); scene.add(tr.group); tram = tr; } catch (e) { console.warn('tram:', e); } step('tram'); // (step 33: the Galata Bridge's tram, its work a frame at a time; should it fail, Turkey loads on without it; step 35d: its painted livery when it loaded)
     if (fla) { // (step 35a: the painted fishermen: their texture a frame, their three programs compiled off the main thread, their shadow twin's
       // with the state three gives it in the shadow pass (the card's map, alpha test and both faces, and no fog: the shadow pass draws it in an
       // empty scene, and the scene's fog is part of a program's key): the same program; should it fail, the smooth figures)

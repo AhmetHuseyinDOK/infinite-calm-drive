@@ -526,6 +526,37 @@ export async function loadTrain(tier, timeoutMs = 15000) {
   })(), timeoutMs, "the crossing's painted train unavailable, keeping the old one:");
 }
 
+/** (step 35d) Loads the Galata T1 tram's painted livery (assets/models/tram/tram1.*, made by ~/cdtest/s35d/scripts/cut.py and pack.py from
+ *  Grok Imagine elevations of a Flexity Swift's cab section, middle section and face, each repainted from a layout drawn at the game's loft's
+ *  own proportions, so every window, door and stripe lands where the body is): one texture pair (sRGB as stored, no flip: v runs down) of
+ *  the two side cells (columns along the section, rows by the cross-section's arc length), three faces (the head's with each terminus on
+ *  its display, the tail's), the roof fairings', the under-skirt's and the bellows' cells, a plain patch; and what glows (the saloon's
+ *  windows round their passengers, the headlamps, the displays, the tail lamps). Its geometry stays tram.js's loft. 'hi' (2048 × 992) or
+ *  'lo' (half: phones, the embed). Resolves to { J (the cells in hi pixels, each profile point's v in a side cell), map, em, tier }; null
+ *  (never rejects) when anything is missing, broken, truncated or too slow: the tram then keeps its canvas painting (tram.js paintTram) */
+export async function loadTram(tier, timeoutMs = 15000) {
+  const base = ASSETS + 'models/tram/';
+  return orNull((async () => {
+    const r = await fetch(base + 'tram1.json');
+    if (!r.ok) throw new Error('tram1.json ' + r.status);
+    const J = await r.json(), file = J.files && J.files[tier] ? tier : 'hi', F = J.files && J.files[file], sz = J.size && J.size[file];
+    if (J.v !== 1 || !F || !F.map || !F.em || !sz || !sz.map || !sz.em || !J.bytes || !J.cells || !Array.isArray(J.vtab) || J.vtab.length !== 10 || !J.hiSize) throw new Error('nothing listed');
+    for (const n of ['side_cab', 'side_mid', 'face_K', 'face_B', 'face_T', 'box1', 'box2', 'bellows', 'plain', 'under_cab', 'under_mid']) {
+      const c = J.cells[n]; if (!Array.isArray(c) || c.length !== 4 || !c.every(v => typeof v === 'number' && v >= 0)) throw new Error('cell ' + n + ' missing');
+    }
+    const get = async (name, bytes) => { // (each file checked whole: a truncated image decodes without complaint)
+      if (!(bytes > 0)) throw new Error(name + ': no size listed');
+      const q = await fetch(base + name); if (!q.ok) throw new Error(name + ' ' + q.status);
+      const b = await q.blob(); if (b.size !== bytes) throw new Error(name + ' is ' + b.size + ' bytes, not ' + bytes);
+      return b;
+    };
+    const [mb, eb] = await Promise.all([get(F.map, J.bytes[F.map]), get(F.em, J.bytes[F.em])]);
+    const opt = { premultiplyAlpha: 'none', colorSpaceConversion: 'none' }, [map, em] = await Promise.all([createImageBitmap(mb, opt), createImageBitmap(eb, opt)]);
+    if (map.width !== sz.map[0] || map.height !== sz.map[1] || em.width !== sz.em[0] || em.height !== sz.em[1]) { map.close(); em.close(); throw new Error('a texture has the wrong size'); }
+    return { J, map, em, tier: file };
+  })(), timeoutMs, "the tram's painted livery unavailable, keeping its canvas painting:");
+}
+
 /** (step 35e) Loads the player's car as a painted 3D model (assets/models/car/car1.*, made by ~/cdtest/s35e/scripts/carhull.py and
  *  pack.py from Grok Imagine elevations of the city painting's mint kei crossover: its body the elevations' visual hull with the paintings
  *  projected back onto it, its wheels, mirrors, wipers and tailpipe modelled): its geometry, one binary of meshes (the body; one wheel and

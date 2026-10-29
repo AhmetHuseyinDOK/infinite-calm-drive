@@ -3,7 +3,7 @@ import { Path, zoneW, zoneWeight, zoneAt, zparam, ZINFO, setStartZone, startZone
 import { makeCrossingRig, makeTrain, xingPosts } from './crossing.js';
 import { buildAtlas, buildFoliage, buildPaintedAtlas, buildWorldAtlas, buildCapAtlas, buildPasAtlas, buildChainAtlas, albedoTexture, SHOP_GLASS, stickerHolesJ } from './textures.js';
 import { GRAD_CAR, trainRamp, makeMaterials, makeAtlasW, makeAtlasRooms, makeAtlasWRooms, makeChainRooms, roomSet, makeAtlasChain, makeCapAtlas, makePasGrass, setWorldTex, U, groundMaterialFor, setGrazeFade, makeCloudMap, makeGhibliLeaf, FIELD, tetraMaterial, barkMaterial, tuffMaterial, PROP_DEPTH } from './materials.js';
-import { setAtlas, setFoliage, warmTrees, warmBare, warmTetrapods, setLeafDensity, GHIBLI, setHouses, setTrHouses, setChains, PROC_ROOMS, setFishers, setDolmus, setGalFronts } from './props.js';
+import { setAtlas, setFoliage, warmTrees, warmBare, warmTetrapods, setLeafDensity, GHIBLI, setHouses, setTrHouses, setChains, PROC_ROOMS, setFishers, setDolmus, setGalFronts, setBoats, BOATS } from './props.js';
 import { setFurniture, furnTris } from './furniture.js';
 import { loadTreeAtlas } from './ghibli.js';
 import { World, CH } from './chunks.js';
@@ -26,7 +26,7 @@ import { makePost } from './post.js';
 import { makeAudio } from './audio.js';
 import { makeParticles } from './particles.js';
 import { clamp, lerp, sstep, setSeed, hash2 } from './util.js';
-import { loadCloudAtlas, makePaintedClouds, loadBandAtlas, makePaintedBand, updatePainted, loadFieldTexture, loadFrontAtlas, loadRoomAtlas, roomTexture, roomGlass, loadHouseAtlas, loadHousePatch, loadTrHouseAtlas, loadTownAtlas, loadChainAtlas, loadFisherAtlas, loadPeopleAtlas, loadDolmus, loadTrain, loadCar, loadTram, loadGalFronts, loadFurniture, todTones, mixTones, paintSky, PAINT_TOD, BAND_R } from './painted.js';
+import { loadCloudAtlas, makePaintedClouds, loadBandAtlas, makePaintedBand, updatePainted, loadFieldTexture, loadFrontAtlas, loadRoomAtlas, roomTexture, roomGlass, loadHouseAtlas, loadHousePatch, loadTrHouseAtlas, loadTownAtlas, loadChainAtlas, loadFisherAtlas, loadPeopleAtlas, loadDolmus, loadTrain, loadCar, loadTram, loadGalFronts, loadFurniture, loadBoats, todTones, mixTones, paintSky, PAINT_TOD, BAND_R } from './painted.js';
 
 const QS = new URLSearchParams(location.search);
 // inside an X player card (or any iframe): lighter quality, compact UI, tap-only start
@@ -122,6 +122,10 @@ async function main() {
   // start's assets at a Japanese start (a train can cross soon after a city or country start); at a Turkish one in the background once the
   // drive comes within TR_NEAR of Japan (trainLazy, below)
   const JP_START = REGION[startZone()] === 'jp' || nextBorderS(S0) - S0 < TR_NEAR, trainLoad = JP_START ? loadTrain(HTIER) : null;
+  // (step 35h) the boats as painted 3D models (painted.js loadBoats: their geometry and their region's texture pair), on the same tiers: Japan's
+  // (the coast's fishing boats) with the start's assets at a Japanese start, else with the train as the drive nears Japan (trainLazy's trigger);
+  // Turkey's (the kayık, the motor boat, the city ferry's bow, stern and decks) with Turkey's (a Turkish start's, else trLazy's)
+  const boatJLoad = JP_START ? loadBoats(HTIER, 'jp') : null, boatTLoad = TR_START ? loadBoats(HTIER, 'tr') : null;
   // (step 35e) the player's car as a painted 3D body (painted.js loadCar: its geometry and one livery's texture pair), on the same tiers, at
   // every start: the livery the start zone's painting has (the cherry avenue's light blue, the country's white band, the coast's lighter mint; else the
   // city's mint)
@@ -541,9 +545,30 @@ async function main() {
     for (const q of proc) row(q.name, ra.cells[PROC_ROOMS[q.name]]);
     makeAtlasRooms(M, roomSet(t, gl.tex, table, { half: [1.5, 1.8, ra.depth / 2], size: ra.size, f: ra.f, e: ra.e, warp: ra.warp }));
   } else if (ra) { ra.img.close(); if (ra.mask) ra.mask.img.close(); }
-  // the Bosphorus's city ferry (ferry.js: its painted side is a world atlas cell); where the concept has it at a Turkish start
+  // (three.js objects made after the start, or which mustn't move seeded captures, take their ids from a generator of their own: galLazy, step
+  // 35f's people, step 35h's boats)
+  let lazyId = 0x2545f491;
+  const quietIds = f => { const R0 = Math.random; Math.random = () => { lazyId = (Math.imul(lazyId, 1664525) + 1013904223) >>> 0; return lazyId / 4294967296; }; try { return f(); } finally { Math.random = R0; } };
+  // (step 35h) the boats' materials: the atlas's program on their region's own texture pair (makeAtlasChain: nothing new compiles), the small
+  // boats' with the car's soft ramp (GRAD_CAR: their rounded hulls shade without bands), the ferry's bow and stern with the atlas's own (as its
+  // sides, the world atlas's), their shadow twins; their ids from quietIds (no random numbers drawn: they may be made before the ferry), their
+  // bitmaps closed once uploaded; then the chunks stamp the painted boats in place of the old ones (props.js setBoats). Should anything fail,
+  // the old boats (and the old painted ferry)
+  const boatMats = (d, region) => quietIds(() => {
+    const tex = img => { const t = new THREE.Texture(img); t.colorSpace = THREE.SRGBColorSpace; t.flipY = false; t.anisotropy = ANISO; t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter;
+      t.magFilter = THREE.LinearFilter; t.needsUpdate = true; t.onUpdate = () => { t.onUpdate = null; img.close(); }; return t; };
+    const map = tex(d.map), em = tex(d.em); renderer.initTexture(map); renderer.initTexture(em);
+    const ch = makeAtlasChain(M, { map, emissive: em }); ch.mat.gradientMap = GRAD_CAR; ch.mat.emissiveIntensity = M.atlas.emissiveIntensity;
+    const key = region === 'jp' ? 'atlasBJ' : 'atlasBT'; M[key] = ch.mat; M[key + 'Depth'] = ch.depth;
+    if (region === 'tr') { const f = makeAtlasChain(M, { map, emissive: em }); f.mat.emissiveIntensity = M.atlas.emissiveIntensity; M.atlasBF = f.mat; }
+  });
+  const boatsIn = async (load, region) => { const d = load && await load; if (!d) return;
+    try { boatMats(d, region); setBoats(region, d); } catch (e) { console.warn('boats:', e); if (region === 'jp') M.atlasBJ = null; else M.atlasBT = M.atlasBF = null; setBoats(region, null); } };
+  await boatsIn(boatJLoad, 'jp');
+  if (TR_START) await boatsIn(boatTLoad, 'tr');
+  // the Bosphorus's city ferry (ferry.js: its painted side is a world atlas cell; step 35h: its 3D hull round it); where the concept has it at a Turkish start
   let ferry = null;
-  if (TR_START) { ferry = makeFerry(M, sea); scene.add(ferry.group, ferry.group2); const z0 = zoneAt(st.s); if (z0 === 'bosphorus' || z0 === 'galata') ferry.opening(path, st.s, z0); }
+  if (TR_START) { ferry = makeFerry(M, sea, BOATS.tr); scene.add(ferry.group, ferry.group2); const z0 = zoneAt(st.s); if (z0 === 'bosphorus' || z0 === 'galata') ferry.opening(path, st.s, z0); }
   // (Cappadocia's fairy chimneys' soft tuff, W5: one of Turkey's programs, made and compiled with them: here at a Turkish start, before
   // the road is built, else in Turkey's lazy load, trLazy. Made after the particles and the ferry: its ids draw random numbers, which
   // made earlier would move every falling leaf of a seeded capture)
@@ -617,10 +642,6 @@ async function main() {
   };
   { const rj = await roomJpLoad; if (rj) jpRooms(rj); }
   if (TR_START) { const rt = await roomTrLoad; if (rt) trRooms(rt, watlas); }
-  // (three.js objects made after the start, or which mustn't move seeded captures, take their ids from a generator of their own: galLazy, step
-  // 35f's people)
-  let lazyId = 0x2545f491;
-  const quietIds = f => { const R0 = Math.random; Math.random = () => { lazyId = (Math.imul(lazyId, 1664525) + 1013904223) >>> 0; return lazyId / 4294967296; }; try { return f(); } finally { Math.random = R0; } };
   // (step 35a) the Galata Bridge's fishermen as painted figures (fishers.js: one instanced card each, its view picked on the GPU, and the
   // soft contact shadows under them): at a Turkish start made last of all (their ids draw random numbers), before the road is built (its
   // chunks then take the painted figures, else the smooth ones: props.js setFishers); in Turkey's lazy load otherwise
@@ -854,7 +875,7 @@ async function main() {
     const eml = loadEminonu(HTIER); // (step 35R-galata-2c)
     const step = n => TRL.steps.push([n, Math.round(performance.now() - TRL.t0)]);
     const pla = [loadPeopleAtlas(HTIER, PEOPLE.tour.file, PEOPLE.tour.ids), loadPeopleAtlas(HTIER, PEOPLE.ist.file, PEOPLE.ist.ids)]; // (step 35f: the painted people's casts)
-    const skl = loadRealSky1(), [trAtlases, th, ta, ba, cta, rtr, fla, dla, sk, gla, tla] = await Promise.all([loadTrBands(), loadTrHouseAtlas(HTIER), loadTownAtlas(HTIER), loadBalloonAtlas(TIER), loadChainAtlas(HTIER, 'tr'), loadRoomAtlas(RTIER, 15000, 'rooms1tr'), loadFisherAtlas(HTIER), loadDolmus(HTIER), skl, loadGalFronts(HTIER), loadTram(HTIER)]); step('loaded');
+    const skl = loadRealSky1(), btl = loadBoats(HTIER, 'tr'), [trAtlases, th, ta, ba, cta, rtr, fla, dla, sk, gla, tla] = await Promise.all([loadTrBands(), loadTrHouseAtlas(HTIER), loadTownAtlas(HTIER), loadBalloonAtlas(TIER), loadChainAtlas(HTIER, 'tr'), loadRoomAtlas(RTIER, 15000, 'rooms1tr'), loadFisherAtlas(HTIER), loadDolmus(HTIER), skl, loadGalFronts(HTIER), loadTram(HTIER)]); step('loaded');
     await nextFrame();
     const wa = buildWorldAtlas(atlas, HTIER, th, ta); if (wa.trHouses) setTrHouses(th.types, th.extras); if (th) th.img.close(); if (ta) ta.img.close(); step('atlas');
     await nextFrame();
@@ -890,8 +911,9 @@ async function main() {
     for (const a of trAtlases) if (a) { renderer.initTexture(a.tex); await nextFrame(); } // (a texture a frame: each a few tens of ms on a phone)
     bandTr = makeTrBand(trAtlases); if (band) band.alias = trAlias(trAtlases);
     step('band');
+    await nextFrame(); await boatsIn(btl, 'tr'); step('boats'); // (step 35h: Turkey's painted boats: their texture pair and materials, a step of its own)
     await nextFrame();
-    ferry = makeFerry(M, sea); scene.add(ferry.group, ferry.group2); step('ferry');
+    ferry = makeFerry(M, sea, BOATS.tr); scene.add(ferry.group, ferry.group2); step('ferry');
     await nextFrame(); try { const tr = await mkTram(nextFrame, tla); scene.add(tr.group); tram = tr; } catch (e) { console.warn('tram:', e); } step('tram'); // (step 33: the Galata Bridge's tram, its work a frame at a time; should it fail, Turkey loads on without it; step 35d: its painted livery when it loaded)
     if (fla) { // (step 35a: the painted fishermen: their texture a frame, their three programs compiled off the main thread, their shadow twin's
       // with the state three gives it in the shadow pass (the card's map, alpha test and both faces, and no fog: the shadow pass draws it in an
@@ -1174,7 +1196,8 @@ async function main() {
     // (step 35c) at a Turkish start, Japan's crossing train: loaded once the drive comes within TR_NEAR of the border into Japan, swapped in
     // while none runs (the border's lookup is memoised: nothing allocated a frame)
     if (!trainLazy.started) { const nb = nextBorderS(st.s), bd = nb - st.s < TR_NEAR ? borderNear(nb) : null;
-      if (bd && REGION[bd.b] === 'jp') { trainLazy.started = true; loadTrain(HTIER).then(d => d && trainLazy.run(d)).catch(e => { console.warn('train:', e); M.train = null; }); }
+      if (bd && REGION[bd.b] === 'jp') { trainLazy.started = true; loadTrain(HTIER).then(d => d && trainLazy.run(d)).catch(e => { console.warn('train:', e); M.train = null; });
+        if (!M.atlasBJ) boatsIn(loadBoats(HTIER, 'jp'), 'jp'); } // (step 35h: the coast's painted boats, two zones beyond the border)
     }
     const tw0 = performance.now(); world.update(st.s, started ? 3.5 : 14); const tw1 = performance.now();
     path.at(st.s, f);
@@ -1523,6 +1546,8 @@ async function main() {
     if (M.atlasC) M.atlasC.emissiveIntensity = M.atlas.emissiveIntensity; if (M.atlasCT) M.atlasCT.emissiveIntensity = M.atlas.emissiveIntensity; // (and the chain stores', step 32)
     if (M.atlasCI) M.atlasCI.emissiveIntensity = M.atlas.emissiveIntensity; if (M.atlasCTI) M.atlasCTI.emissiveIntensity = M.atlas.emissiveIntensity; if (M.atlasWI) M.atlasWI.emissiveIntensity = M.atlas.emissiveIntensity; // (and the rooms' of the chains and the town, step 34)
     if (M.atlasDol) M.atlasDol.emissiveIntensity = M.atlas.emissiveIntensity; // (and the town's dolmuş's lamps and saloon, step 35b)
+    if (M.atlasBJ) M.atlasBJ.emissiveIntensity = M.atlas.emissiveIntensity; // (and the boats' windows and lights, step 35h)
+    if (M.atlasBT) { M.atlasBT.emissiveIntensity = M.atlas.emissiveIntensity; if (M.atlasBF) M.atlasBF.emissiveIntensity = M.atlas.emissiveIntensity; }
     if (M.atlasF) M.atlasF.emissiveIntensity = M.atlas.emissiveIntensity; // (and the street furniture's: the vending machines' windows, step 35g)
     if (M.atlasEm) M.atlasEm.emissiveIntensity = M.atlas.emissiveIntensity; // (and Eminönü's square's lit kiosk and poster, step 35R-galata-2c)
     if (M.atlasG) { M.atlasG.emissiveIntensity = M.atlas.emissiveIntensity; if (M.atlasGI) M.atlasGI.emissiveIntensity = M.atlas.emissiveIntensity; } // (and Galata's own fronts', step 35R-galata-2)
@@ -1726,7 +1751,7 @@ async function main() {
     if (started && frames > 150 && dt > 0.03) slowT += dt; else slowT = Math.max(0, slowT - dt * 0.5);
     if (slowT > 3 && !QS.has('q')) { slowT = 0; stepDown(); }
   }
-  window.__dbg = { renderer, st, scene, camera, world, TOD, KEYS, X, train, weather, U, birds, cine, post, car, sun, M, cells: atlas.cells, clouds, pclouds, band, get bandTr() { return bandTr; }, sky, mountains, shadowDir, CM, spray, grass, sea, get ferry() { return ferry; }, get tram() { return tram; }, get fishers() { return fishers; }, people, get dolmus() { return M.atlasDol || null; }, get furn() { return M.atlasF || null; }, furnTris, get trainPaint() { return M.train || null; }, get balloons() { return balloons; }, get realSky() { return realSky; }, TRL, get audio() { return audio; }, uch: { TF_DAY, TF_GOLD, TF_SUNSET, TF_NIGHT, UG_DAY, UCH }, pas: { TFP_DAY, TFP_GOLD, TFP_SUNSET, TFP_NIGHT, PG_DAY, PG_GOLD, PG_SUNSET, PG_NIGHT, PAS_Z, PAS_R, pasAz }, night: { NT, NTZ, NSKY_N, MOON_B, CF_N } };
+  window.__dbg = { renderer, st, scene, camera, world, TOD, KEYS, X, train, weather, U, birds, cine, post, car, sun, M, cells: atlas.cells, clouds, pclouds, band, get bandTr() { return bandTr; }, sky, mountains, shadowDir, CM, spray, grass, sea, get ferry() { return ferry; }, get tram() { return tram; }, get fishers() { return fishers; }, people, get dolmus() { return M.atlasDol || null; }, get furn() { return M.atlasF || null; }, furnTris, get boats() { return { jp: !!BOATS.jp, tr: !!BOATS.tr }; }, get trainPaint() { return M.train || null; }, get balloons() { return balloons; }, get realSky() { return realSky; }, TRL, get audio() { return audio; }, uch: { TF_DAY, TF_GOLD, TF_SUNSET, TF_NIGHT, UG_DAY, UCH }, pas: { TFP_DAY, TFP_GOLD, TFP_SUNSET, TFP_NIGHT, PG_DAY, PG_GOLD, PG_SUNSET, PG_NIGHT, PAS_Z, PAS_R, pasAz }, night: { NT, NTZ, NSKY_N, MOON_B, CF_N } };
   status('');
   $start.classList.add('ready');
   if (QS.has('auto')) begin();

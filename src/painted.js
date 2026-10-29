@@ -672,6 +672,63 @@ export async function loadFurniture(tier, timeoutMs = 15000) {
   })(), timeoutMs, "the street furniture's paintings unavailable, keeping the old furniture:");
 }
 
+/** (step 35h) Loads a region's boats as painted 3D models (assets/boats/boats1<region>.*, made by ~/cdtest/s35h/scripts (fb.py, kayik.py,
+ *  motor.py, ferry.py + ferry2.py: designed hulls; layouts drawn from them repainted by Grok Imagine; bake.py, pack.py, packweb.py): Japan's
+ *  ('jp': the coast's fishing boat, two liveries) or Turkey's ('tr': the kayık (three liveries), the small motor boat (two), the city ferry's
+ *  bow, stern, decks and masts; and the ferry's sides, whose uv are fractions of the world atlas's trFerry cell: its painting stays there).
+ *  Each mesh: positions and uv as 12-bit integers on its box (zigzag delta varints), octahedral normals, varint index steps (step 35e's
+ *  encoding); each livery past the first a uv shift of vertex ranges (liv: [[name, [[v0, v1, du, dv], ...]], ...]). Its texture pair (sRGB as
+ *  stored, no flip: v runs down; what glows: windows and lamps) 'hi' (1024 wide) or 'lo' (half). Resolves to { T (templates by name: an
+ *  array of liveries, each { n, P, N, U, C: null, I }; the ferry's sides as T.ferrySide[0] with U in cell fractions, v up), J, map, em,
+ *  tier }; null (never rejects) when anything is missing, broken, truncated or too slow: the old boats (and the old painted ferry) stay */
+export async function loadBoats(tier, region, timeoutMs = 15000) {
+  const base = ASSETS + 'boats/', name = 'boats1' + region;
+  return orNull((async () => {
+    const r = await fetch(base + name + '.json');
+    if (!r.ok) throw new Error(name + '.json ' + r.status);
+    const J = await r.json(), file = J.files && J.files[tier] ? tier : 'hi', F = J.files && J.files[file], sz = J.size && J.size[file];
+    if (J.v !== 1 || !F || !F.map || !F.em || !sz || !sz.map || !sz.em || !J.bytes || !J.bin || !(J.binBytes > 0) || !Array.isArray(J.meshes)) throw new Error('nothing listed');
+    const get = async (n, bytes) => { // (each file checked whole: a truncated image decodes without complaint)
+      if (!(bytes > 0)) throw new Error(n + ': no size listed');
+      const q = await fetch(base + n); if (!q.ok) throw new Error(n + ' ' + q.status);
+      const b = await q.blob(); if (b.size !== bytes) throw new Error(n + ' is ' + b.size + ' bytes, not ' + bytes);
+      return b;
+    };
+    const [bin, mb, eb] = await Promise.all([get(J.bin, J.binBytes), get(F.map, J.bytes[F.map]), get(F.em, J.bytes[F.em])]);
+    const buf = await bin.arrayBuffer(), end = buf.byteLength, vb = new Uint8Array(buf), T = {};
+    const stream = (off, len) => { let p = off; const e = off + len; if (!(off >= 0 && len > 0 && e <= end)) throw new Error('a stream lies outside the binary');
+      return () => { let v = 0, sh = 0, b; do { if (p >= e) throw new Error('a stream runs past its end'); b = vb[p++]; v |= (b & 127) << sh; sh += 7; } while (b & 128 && sh < 35); return (v >>> 1) ^ -(v & 1); }; };
+    for (const m of J.meshes) { // (decoded once: the templates the chunks and the ferry stamp)
+      const n = m.n, ni = m.tris * 3, b0 = m.box && m.box[0], b1 = m.box && m.box[1], q = m.q;
+      if (!(n > 0 && n < 65536 && ni > 0 && q > 0) || !b0 || !b1 || !(m.nrm >= 0 && m.nrm + n * 2 <= end) || typeof m.name !== 'string') throw new Error('a mesh lies outside the binary');
+      const P = new Float32Array(n * 3), U = new Float32Array(n * 2), N = new Int8Array(n * 3), I = new Uint16Array(ni);
+      { const rd = stream(m.pos, m.posBytes); let x = 0, y = 0, z = 0;
+        for (let i = 0; i < n; i++) { x += rd(); y += rd(); z += rd(); P[i * 3] = b0[0] + (x / q) * (b1[0] - b0[0]); P[i * 3 + 1] = b0[1] + (y / q) * (b1[1] - b0[1]); P[i * 3 + 2] = b0[2] + (z / q) * (b1[2] - b0[2]); } }
+      { const rd = stream(m.uv, m.uvBytes); let u = 0, v = 0; for (let i = 0; i < n; i++) { u += rd(); v += rd(); U[i * 2] = u / q; U[i * 2 + 1] = v / q; } }
+      { const nb = new Int8Array(buf, m.nrm, n * 2); // (octahedral; stored as GB's normals: int8 × 127)
+        for (let i = 0; i < n; i++) {
+          let x = nb[i * 2] / 127, y = nb[i * 2 + 1] / 127; const z = 1 - Math.abs(x) - Math.abs(y);
+          if (z < 0) { const t = x; x = (1 - Math.abs(y)) * (t >= 0 ? 1 : -1); y = (1 - Math.abs(t)) * (y >= 0 ? 1 : -1); }
+          const l = Math.hypot(x, y, z);
+          if (l > 0) { N[i * 3] = Math.round((x / l) * 127); N[i * 3 + 1] = Math.round((y / l) * 127); N[i * 3 + 2] = Math.round((z / l) * 127); } else N[i * 3 + 1] = 127; // (never a zero normal: NaN in the shader, step 33)
+        } }
+      { const rd = stream(m.idx, m.idxBytes); let k = 0; for (let i = 0; i < ni; i++) { k += rd(); if (k < 0 || k >= n) throw new Error('an index past its mesh'); I[i] = k; } }
+      const L = [{ n, P, N, U, C: null, I }];
+      for (const [lv, rngs] of m.liv || []) { // (a livery: livery A's uv, its regions' ranges shifted onto their copies in the sheet)
+        if (typeof lv !== 'string' || !Array.isArray(rngs)) throw new Error('a livery is broken');
+        const U2 = U.slice();
+        for (const [v0, v1, du, dv] of rngs) { if (!(v0 >= 0 && v1 <= n && v0 < v1)) throw new Error('a livery range lies outside its mesh'); for (let i = v0; i < v1; i++) { U2[i * 2] += du; U2[i * 2 + 1] += dv; } }
+        L.push({ n, P, N, U: U2, C: null, I });
+      }
+      T[m.name] = L;
+    }
+    if (region === 'jp' ? !T.fishing : !(T.kayik && T.motor && T.ferry && T.ferrySide)) throw new Error('a boat is missing');
+    const opt = { premultiplyAlpha: 'none', colorSpaceConversion: 'none' }, [map, em] = await Promise.all([createImageBitmap(mb, opt), createImageBitmap(eb, opt)]);
+    if (map.width !== sz.map[0] || map.height !== sz.map[1] || em.width !== sz.em[0] || em.height !== sz.em[1]) { map.close(); em.close(); throw new Error('a texture has the wrong size'); }
+    return { T, J, map, em, tier: file };
+  })(), timeoutMs, region === 'jp' ? "the coast's painted fishing boats unavailable, keeping the old ones:" : "Turkey's painted boats and ferry unavailable, keeping the old ones:");
+}
+
 /** Loads the painted meadow (assets/fields/, made by ~/cdtest/ft/scripts/field.py): a tileable top-down painting of the
  *  country paintings' grass, 'hi' or 'lo' (phones, the embed). Resolves to null (never rejects) when the index or the
  *  image is missing, broken, truncated or too slow: the countryside then keeps its procedural paddies. */

@@ -2,6 +2,82 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-30 · 00:04 — Boats and the city ferry as anime film props: the coast's fishing boats, Istanbul's kayıks and motor boats, a 3D vapur
+- **The coast's fishing boats are painted boats now, not boxes** (the user: "i want high quality but with anime style"; the brief's rule: no
+  box boats). A Japanese coastal fishing boat, 7.6 m long, as `ref/coast.png` and the brief's reference paint it:
+  - a salmon-red planked hull under a white gunwale with a darker boot-top; a white wheelhouse with sky in its windows, a lifebuoy and a
+    porthole, under a cream roof with a rail;
+  - a mast with a radar dome, its lights and the Japanese flag; a coiled rope, a yellow fish crate and glass floats in a net box on deck.
+  - It comes in two liveries (salmon-red; white with a navy boot-top), picked by the same random number as before.
+  - The painting's two boats on the bay keep their painted size; the others along the coast are full size. They keep their white bow wave
+    and wake.
+  - At night the wheelhouse glows and the boats show a white masthead light and red and green side lights.
+- **Istanbul's small boats, painted:**
+  - a wooden kayık, double-ended, with a tall stem post, a turquoise band, a varnished rubbing strake and a red boot-top. Inside: a pale blue
+    hull, floorboards, three thwarts, the engine box and its exhaust, a net heaped aft, a lamp pole, the rudder and tiller. Three liveries:
+    white with a turquoise band, royal blue, white with a red band;
+  - a fishing-tour motor boat, after a photo of one off Istanbul: a red hull under a white band with tyre fenders, a white cabin with a raked
+    windscreen, a canvas awning on steel poles over blue stools, a bow rail and the Turkish flag. Two liveries: red, navy;
+  - both on the Bosphorus and the Golden Horn, in place of the old boxes.
+- **Karaköy's fish-market quay has its boats**: six moored along the fish market's waterfront and two at the car park's quay, on the real
+  shore (the zone's OpenStreetMap water). Without their files the quay stays empty: never box boats.
+- **The city ferry is a 3D vapur round its painting**: its side keeps the world atlas's painting (no new download for it), on a hull with a
+  raked, flared bow, a round cruiser stern, its decks, bridge and funnel. Its bow and stern are new paintings: riveted plating, anchors with
+  rust streaks, portholes, the aft promenades' railings and life rings, the banded funnel. Its masts, staffs and flag are 3D. From ahead or
+  astern it was a flat card between boxes. Its wake, speed and comings and goings are as before; its windows still light at dusk.
+- How each was made: the model first (designed in code at its true proportions), then flat layouts of its side, top, bow and stern drawn
+  from it and repainted by Grok Imagine, then projected back onto the model. Each face takes the painting that faces it best where it is the
+  visible surface in that view. So the paintings and the geometry line up by construction.
+- Seeded captures: every start without boats is identical to live (city, sakura, country, snow, Uçhisar, Paşabağ; the mountain and the
+  town differ by 17 and 7 faint pixels, as live does against itself), and so are Audit 2's city, avenue and country places at golden hour,
+  sunset and night. The coast differs only at its boats; the Bosphorus and Galata only at their ferries and boats.
+- Without the new files the old boats and the painted ferry card come back, identical to live: the coast, the Bosphorus, Galata at night,
+  and Galata at noon (4 of 4 runs on the desktop; on the shared box two of nine lost the old city's skyline cards to their load timeout
+  under the box's load, which they reach at ~1.4 s on the desktop and 6–10 s there).
+- How:
+  - `painted.js`: `loadBoats(tier, region)` (step 35e's compact binary; each livery a uv shift of vertex ranges).
+  - `props.js`: `BOATS`, `setBoats`, `stampBoat`, `mooredBoat`; `boat` and `fishingBoat` draw the same random numbers as before, then stamp
+    the painted model; the old builders are the fallback.
+  - `chunks.js`: one boat mesh a chunk on its region's sheet (`M.atlasBJ`, `M.atlasBT`), its ids from the private generator; `GAL_MOOR`.
+  - `ferry.js`: `paintedFerry3D`, `makeFerry(M, sea, B)` (the same number of meshes as before; the old painted card is the fallback).
+  - `main.js`: Japan's boats with the start's assets at a Japanese start (else as the drive nears Japan, with the train); Turkey's with
+    Turkey's (a Turkish start, else `trLazy`); their materials on the atlas's program (`makeAtlasChain`), made in `quietIds`.
+  - The pipeline is in `~/cdtest/s35h` (`boatlib.py`, `fb.py`, `kayik.py`, `motor.py`, `ferry.py`, `ferry2.py`, `cut.py`, `bake.py`,
+    `pack.py`, `packweb.py`; `make.sh` rebuilds it all from the paintings), with its lossless masters kept.
+  - +6.3 KB of code (+2.2 KB gzipped).
+- Assets (`assets/boats/`):
+  - `boats1jp.json`, `boats1jp.bin` (18 KB), `boats1jp_hi.webp` (44 KB) and `boats1jp_lo.webp` (15 KB), the glow `boats1jpe_hi/lo.webp`
+    (2 / 1 KB);
+  - `boats1tr.json`, `boats1tr.bin` (83 KB, 60 KB gzipped), `boats1tr_hi.webp` (104 KB) and `boats1tr_lo.webp` (35 KB), the glow
+    `boats1tre_hi/lo.webp` (4 / 2 KB);
+  - `CREDITS.md`.
+- Triangles: the fishing boat 1,464; the kayık 1,093; the motor boat 1,178; the ferry 5,585 (3,351 bow, stern, decks and masts + 2,234 sides).
+- Programs: unchanged (63 / 62 at a Japanese start, 83 / 82 at a Turkish one). Nothing compiles mid-drive (the coast in rain, the Bosphorus
+  and Galata at night) or in Turkey's lazy load (63 → 82, 62 → 81 on phones, as live). 0 shader errors in the six Japanese zones, Galata and
+  the Bosphorus, and at night on the phone tier by the boats; no console errors at q=low, mid and high; the embed starts on tap.
+- Cost (the desktop machine, GTX 1660; interleaved, live → staging):
+  - Whole frame over drives (L S S L L S), alike:
+    - the coast: desktop 3.49 / 3.39 / 3.31 → 3.38 / 3.38 / 3.29 ms, phone tier 3.80 / 3.79 / 4.23 → 3.89 / 3.87 / 3.85;
+    - the Bosphorus: desktop 2.90 / 3.03 / 2.90 → 2.85 / 2.88 / 2.90, phone tier 3.81 / 3.81 / 3.81 → 3.79 / 3.78 / 3.80;
+    - Galata: desktop 2.88 / 2.75 / 2.83 → 2.84 / 2.86 / 2.98, phone tier 3.60 / 3.61 / 3.50 → 3.47 / 3.61 / 3.59.
+  - The boats' own draws (timed per draw over drives): 0.25 ms a frame in the coast (one draw for each chunk with a boat, ~9), 0.09–0.11 on the
+    Bosphorus (the small boats and the ferry's bow, stern and decks), 0.01 at Galata; their shadows 0.01 at most. The ferry's 3D sides on the
+    world atlas +0.04 ms on desktops. The frame totals timed that way: the coast +0.02 desktop / +0.19 phone tier, the Bosphorus +0.13 / +0.07,
+    Galata −0.19 / +0.09 ms.
+  - World build: the coast +6 % on desktops (60.9 → 64.5 ms per 20 chunks) and +5 % on the phone tier (54.1 → 56.8): each painted boat is a
+    1.5k-triangle model where the box was ~100. The Bosphorus and Galata alike on desktops (Galata's phone tier +6 %, with a wide spread).
+  - Flat out on a phone at 4× throttle: no world-build spikes in the coast or at Galata; the worst step 7.8 / 8.4 → 7.3 / 8.7 ms in the coast
+    and 10.0 / 11.4 → 9.7 / 9.5 at Galata; frames over the profiler's threshold 6 / 5 → 8 / 8 and 3 / 4 → 5 / 6.
+  - Start-up: the same on desktops (the coast 1730 / 1696 → 1704 / 1696 ms, +70 KB); on a 3 Mbps phone the coast +0.2 s (7956 / 7957 →
+    8184 / 8155 ms, +41 KB) and the Bosphorus +0.3 s (11340 / 11219 → 11645 / 11549 ms, +126 KB).
+- Left over:
+  - the ferry's decks are flat colours (seen only at grazing angles from the road and the bridge);
+  - the blue kayık keeps the white one's weathering as chipped paint;
+  - the boats don't bob;
+  - a lighter far version of the fishing boat (most of them stand 45–220 m off) would win back the coast's world build and most of its
+    0.25 ms of boats' draws;
+  - no balık-ekmek boats at Eminönü yet.
+
 ## 2026-10-29 · 19:30 — Galata rolled back to the version before "Galata as the real place"
 - **The user, on that pass: "i dont wanna say this but it became eve more slop, maybe our techinque is wrong", then "i think we can
   rollback galata and lets try your way".** The game is again exactly the 3639de6 build: `src/` is identical to it and the rebuilt

@@ -1406,21 +1406,50 @@ export function lighthouse(G, M) {
   c.cyl(0, 17, 0, 1.9, 1.9, 0.25, 14, PAL.black); c.cyl(0, 18.6, 0, 1.0, 0.25, 1.2, 12, PAL.red);
   G.lamp.setM(M); G.lamp.cyl(0, 17.25, 0, 0.95, 0.95, 1.35, 12, W1);
 }
+/** (step 35h) the boats as painted 3D models: per region its templates (painted.js loadBoats: each model an array of its liveries), stamped
+ *  by the chunks into a mesh of their own (chunks.js G.boat, on its region's sheet: M.atlasBJ, M.atlasBT) */
+export const BOATS = { jp: null, tr: null };
+export function setBoats(region, d) { BOATS[region] = d ? d.T : null; }
+const BOAT_LIT = 30; // (their windows and lamps come on at dusk: the atlas's home-window code, as the dolmuş's)
+const _bm = new THREE.Matrix4(), _bt = new THREE.Matrix4(), _bs = new THREE.Matrix4();
+/** stamps a boat (a template's livery lv) under M, its waterline dy over M's y, at scale k, into the chunk's boat mesh */
+function stampBoat(G, region, name, lv, M, k = 1, dy = 0) {
+  const L = BOATS[region][name], T = L[lv % L.length], g = G.boat;
+  _bm.copy(M).multiply(_bt.makeTranslation(0, dy, 0)).multiply(_bs.makeScale(k, k, k)); _bm.groundY = (M.groundY ?? 0) + dy;
+  g.tr = region === 'tr'; const o = g.n; g.stamp(T, _bm); g.Lt.fill(BOAT_LIT, o, g.n);
+}
+/** (step 35h) a boat moored at Karaköy's fish-market quay (chunks.js GAL_MOOR; no random numbers drawn): M its waterline (the sea) */
+export function mooredBoat(G, M, name, lv) { if (BOATS.tr) stampBoat(G, 'tr', name, lv, M); }
+/** the Bosphorus's and the Golden Horn's small boats (step 35h): a Turkish wooden kayık (white with a turquoise band, royal blue, or white
+ *  with a red band) or a small motor boat of the fishing tours (red, or navy) as painted 3D models; without them the old one. M's y is the
+ *  sea less 0.25, as before. One random number, as before */
 export function boat(G, M, r) {
+  const v = r();
+  if (BOATS.tr) { const motor = v < 0.34; stampBoat(G, 'tr', motor ? 'motor' : 'kayik', Math.floor(v * 97), M, 1, 0.25); return; }
   const c = G.color; c.setM(M);
-  const hull = r.pick([C('#f4f4f0'), C('#3b6ea5'), C('#d0d8e0')]);
+  const hull = [C('#f4f4f0'), C('#3b6ea5'), C('#d0d8e0')][Math.floor(v * 3)];
   c.box(-2.4, 0, -0.9, 2.0, 0.9, 0.9, hull);
   tri(c, [2.0, 0, -0.9], [3.4, 0.9, 0], [2.0, 0.9, -0.9], hull); tri(c, [2.0, 0, 0.9], [2.0, 0.9, 0.9], [3.4, 0.9, 0], hull);
   c.box(-2.4, 0.86, -0.95, 3.0, 1.0, 0.95, PAL.red);
   c.box(-1.6, 0.9, -0.6, -0.1, 2.1, 0.6, PAL.white); c.box(-1.55, 1.5, -0.62, -0.15, 1.85, 0.62, C('#2a3346'));
   c.rod([0.6, 0.9, 0], [0.6, 4.0, 0], 0.05, 0.04, 5, PAL.metal);
 }
-/** the coast painting's small fishing boats out on the bay (step 27): a salmon-red hull (or a white one with a red boot-top) under a
- *  white gunwale, a white wheelhouse with a band of dark windows under a cream roof, a mast, a white bow wave. k: its scale (1: ~5 m
- *  long). One random number, as boat()'s */
-export function fishingBoat(G, M, r, k = 1) {
+/** the coast painting's small fishing boats out on the bay (step 27; step 35h: a painted 3D model, 7.6 m long at ks = 1, its salmon-red
+ *  livery or its white one with a navy boot-top, lit at dusk, its masthead and side lights): a white bow wave and wake on the sea. k: the
+ *  old builder's scale (1: ~5 m long), ks: the painted model's. One random number, as before */
+export function fishingBoat(G, M, r, k = 1, ks = 1) {
+  const i = Math.floor(r() * 3);
+  if (BOATS.jp) {
+    stampBoat(G, 'jp', 'fishing', i === 1 ? 1 : 0, M, ks, 0.25);
+    const c = G.color, W = C('#f4f1ea'), x = v => v * ks, y = 0.27; c.setM(M); c.noShadow = true; // (its bow wave and wake: white water lying on the sea)
+    for (const z of [-1, 1]) {
+      c.quad([x(3.25), y, 0], [x(1.0), y, z * x(1.55)], [x(0.8), y, z * x(1.12)], [x(2.95), y, 0], W);
+      c.quad([x(-3.62), y, z * x(0.86)], [x(-5.4), y, z * x(1.2)], [x(-5.7), y, z * x(0.72)], [x(-3.62), y, z * x(0.42)], W);
+    }
+    c.noShadow = false; return;
+  }
   const c = G.color; c.setM(M);
-  const i = Math.floor(r() * 3), HULL = [C('#c56b55'), C('#f1eee6'), C('#b8574a')][i], BOOT = i === 1 ? C('#c0473d') : HULL;
+  const HULL = [C('#c56b55'), C('#f1eee6'), C('#b8574a')][i], BOOT = i === 1 ? C('#c0473d') : HULL;
   const WHITE = C('#f4f1ea'), CREAM = C('#e7dcc6'), DARK = C('#2b3443'), x = v => v * k;
   c.box(x(-2.2), 0, x(-0.75), x(1.6), 0.25 + x(0.2), x(0.75), BOOT); // (the boot-top at the waterline: the sea plane is at local 0.25)
   c.box(x(-2.2), 0.25 + x(0.2), x(-0.75), x(1.6), 0.25 + x(0.6), x(0.75), HULL);

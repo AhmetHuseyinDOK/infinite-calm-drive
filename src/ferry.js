@@ -36,13 +36,27 @@ function paintedFerry(G, info) {
   c.cyl(-1.8, 5.8, 0, 1.5, 1.4, 3.9, 10, [0.85, 0.6, 0.12]); c.cyl(-1.8, 9.7, 0, 1.4, 1.38, 0.4, 10, [0.06, 0.06, 0.07]);
 }
 
-/** M: the materials (M.color, and M.atlasW for its painted side and flag: the world atlas's cells); sea: makeSea's (its uniforms) */
-export function makeFerry(M, sea) {
-  const G = { color: new GB({ ao: true }), atlas: new GB({ uv: true, ao: true, lit: true }) };
+/** (step 35h) the ferry as a 3D hull round its painting (painted.js loadBoats 'tr': its sides and flag as one mesh whose uv are fractions of
+ *  the world atlas's trFerry cell (v up), pulled inside the painting's opaque outline, so its painting stays where it was; its bow, stern,
+ *  decks, masts and staffs on Turkey's boats sheet (their own Grok paintings, anchored on its side). Its waterline the painting's, its bow
+ *  (+x) 26 m from its middle, as the card's. B: the templates (props.js BOATS.tr) */
+function paintedFerry3D(G, B) {
+  const cl = P.atlasCell('trFerry'), S = B.ferrySide[0], E = B.ferry[0], U = new Float32Array(S.n * 2);
+  for (let i = 0; i < S.n; i++) { U[i * 2] = cl.u0 + (cl.u1 - cl.u0) * S.U[i * 2]; U[i * 2 + 1] = cl.v0 + (cl.v1 - cl.v0) * S.U[i * 2 + 1]; }
+  G.side.stamp({ n: S.n, P: S.P, N: S.N, U, C: null, I: S.I }, I4); G.side.Lt.fill(40, 0, G.side.n); // (its windows light up early in the dusk, as the card's)
+  G.ends.stamp(E, I4); G.ends.Lt.fill(40, 0, G.ends.n);
+}
+
+/** M: the materials (M.color, and M.atlasW for its painted side and flag: the world atlas's cells; step 35h: M.atlasBF for its bow, stern,
+ *  decks and masts); sea: makeSea's (its uniforms); B: Turkey's painted boats' templates (props.js BOATS.tr) or null (the painted card) */
+export function makeFerry(M, sea, B = null) {
+  const G = { color: new GB({ ao: true }), atlas: new GB({ uv: true, ao: true, lit: true }), side: new GB({ uv: true, ao: true, lit: true, idx: true }), ends: new GB({ uv: true, ao: true, lit: true, idx: true }) };
   const info = P.TR_HOUSES.extras && P.TR_HOUSES.extras.trFerry;
-  if (info) paintedFerry(G, info); else P.ferry(G, new THREE.Matrix4(), rng(61)); // (without its painting: the box ferry)
+  if (B && B.ferry && B.ferrySide && info && M.atlasBF) paintedFerry3D(G, B); // (step 35h; its side painting is the world atlas's: only with it)
+  else if (info) paintedFerry(G, info); else P.ferry(G, new THREE.Matrix4(), rng(61)); // (without its painting: the box ferry)
   const group = new THREE.Group(); group.visible = false;
-  for (const [g, m] of [[G.color, M.color], [G.atlas, M.atlasW]]) { const geo = g.build(); if (geo) { const o = new THREE.Mesh(geo, m); o.frustumCulled = true; group.add(o); } }
+  // (two meshes either way, as before: three's ids draw random numbers, and a Turkish start's seeded capture keeps its particles)
+  for (const [g, m] of [[G.color, M.color], [G.atlas, M.atlasW], [G.side, M.atlasW], [G.ends, M.atlasBF]]) { if (!g.count) continue; const geo = g.build(); if (geo) { const o = new THREE.Mesh(geo, m); o.frustumCulled = true; group.add(o); } }
   // (its position in absolute world coordinates, its heading ψ (its bow towards (sin ψ, cos ψ), as the road's), its pause
   // before the next one comes into view; its wake's uniform)
   const st = { x: 0, z: 0, psi: 0, on: false, wait: 0, r: rng(613), g: group, w: sea.u.uFerry, gal: false, zs: NaN };

@@ -41,6 +41,11 @@ const nearPoly = (E, N, P, m) => { let inn = false, d2 = Infinity; for (let i = 
   return inn || d2 < m * m; };
 const mid = P => { let x = 0, y = 0; for (const p of P) { x += p[0] / P.length; y += p[1] / P.length; } return [x, y]; };
 const GAL_DOL = [[588, 15, 0], [598.5, 20.4, 1], [570, 36.9, 0]]; // (Karaköy's car park: where its dolmuşes stand, l, u, livery)
+/** (step 35h) the boats moored at Karaköy's fish-market quay, along the real shore (the zone's water raster: each one's footprint seated in the
+ *  water 0.3 m clear of the quay, ~/cdtest/s35h/tools/moor.mjs): six along the fish market's waterfront, two at the car park's quay. [l, u, its
+ *  heading in the road's frame (degrees: 0 along the road, 90 to its right), the model, its livery] */
+const GAL_MOOR = [[613.24, 48.65, 43.7, 'kayik', 0], [617.86, 55.97, 223.7, 'kayik', 1], [623.66, 62.07, 43.7, 'motor', 0], [630.21, 67.37, 223.7, 'kayik', 2],
+  [638.01, 71.36, 43.7, 'kayik', 0], [645.54, 75.65, 223.7, 'kayik', 1], [607.4, 28.5, 90, 'kayik', 2], [608.5, 37.5, 270, 'kayik', 0]];
 const P_GALW = P.GAL_WALLS, C_ASPH = [0.2, 0.2, 0.21], C_BAY = [0.78, 0.78, 0.76]; // (Karaköy's car park: its asphalt and its bays' lines)
 /** a light at a chunk-local point (props.js lampAt's list: lights that can light the car) */
 const lampAtW = (G, p) => { if (G.lamps) G.lamps.push(p[0], p[1], p[2], 0.7); };
@@ -288,7 +293,8 @@ export class World {
       galf: new GB({ uv: true, ao: true, lit: true }), // (step 35R-galata-2: Galata's own painted fronts, their own texture pair, the atlas's program)
       emin: new GB({ uv: true, ao: true, lit: true }), // (step 35R-galata-2c: Eminönü's square's paintings, their own sheet: eminonu.js)
       fish: new GB({ ao: true, idx: true }), // (the Galata Bridge's fishermen, step 33: smooth figures, indexed, in the props' colour material)
-      furn: new GB({ uv: true, ao: true, lit: true, idx: true }) }; // (step 35g: the street furniture's painted models, indexed, their own atlas, the atlas's program)
+      furn: new GB({ uv: true, ao: true, lit: true, idx: true }), // (step 35g: the street furniture's painted models, indexed, their own atlas, the atlas's program)
+      boat: new GB({ uv: true, ao: true, lit: true, idx: true }) }; // (step 35h: the boats' painted models, indexed, their region's sheet, the atlas's program)
     G.chainList = []; // (…and where they stand: { s, side, c, n }, for the tools: __dbg.world's chunks' .chains)
     G.furnLamp = G.furnPool = 0; // (step 35g: the vertices the painted bus stop added to the chunk's lamps and pools)
     G.furnList = []; // (step 35g: the painted furniture, 4 numbers each: its kind (0 a vending machine, 1 a bicycle, 2 a simit cart, 3 a tea table, 4 a bus stop), where (chunk-local x, y, z), for the tools)
@@ -507,6 +513,8 @@ export class World {
     if (G.galf.count || G.emin.count) yield; // (step 35R-galata-2: Galata's chunks build two meshes more: a step of their own, on a slow phone)
     if (G.chain.count) { const T = G.chain.tr, m = add(G.chain.build(), T ? this.M.atlasCTI || this.M.atlasCT : this.M.atlasCI || this.M.atlasC, true, true); if (m) m.customDepthMaterial = T ? this.M.atlasCTDepth : this.M.atlasCDepth; } // (the chain stores, step 32: Japan's or Turkey's chain atlas; most chunks have none, and no mesh. Step 34: with the rooms behind their glass)
     if (G.furn.count && this.M.atlasF) quietly(() => { const m = add(G.furn.build(), this.M.atlasF, true, true, 0, 'small'); if (m) m.customDepthMaterial = this.M.atlasFDepth; }); // (step 35g: the street furniture: its own atlas, the atlas's program; most chunks have none, and no mesh. Shown as far as the small things, World.lod: past ~380 m a machine is ~4 px)
+    if (G.boat.count) { const T = G.boat.tr, mat = T ? this.M.atlasBT : this.M.atlasBJ; // (step 35h: the boats: their region's sheet, the atlas's program; ids from the private generator. Not 'small': the bay's boats stand 45–220 m off and must not pop in)
+      if (mat) quietly(() => { const m = add(G.boat.build(), mat, true, true); if (m) m.customDepthMaterial = T ? this.M.atlasBTDepth : this.M.atlasBJDepth; }); }
     add(G.tetra.build(), this.M.tetra, true, true); // (the tetrapods: their shadows from the plain depth material)
     add(G.bark.build(), this.M.bark, true, true, 0, 'leaf'); yield; // (the trees' bark: shown as far as their crowns; plain depth material too)
     if (this.M.tuff) add(G.tuff.build(), this.M.tuff, true, true); // (Cappadocia's fairy chimneys, W5: plain depth material)
@@ -1400,7 +1408,7 @@ export class World {
       for (const [az, d, k] of BOATS) {
         const t = (az * Math.PI) / 180, px = a[0] + d * (Math.cos(t) * Fx + Math.sin(t) * Rx), pz = a[2] + d * (Math.cos(t) * Fz + Math.sin(t) * Rz);
         const m = new THREE.Matrix4().makeRotationY(Math.atan2(-Rz, Rx) + (az < -23 ? 0.15 : -0.2)); m.setPosition(px, SEA - 0.25, pz); m.groundY = SEA - 0.25;
-        P.fishingBoat(G, m, rng(Math.floor(az * 100)), k);
+        P.fishingBoat(G, m, rng(Math.floor(az * 100)), k, (k * 5.0) / 7.6); // (step 35h: the painted model at the painted size)
       }
     }
     const lh = Math.floor((s0 + CH / 2) / 1500) * 1500 + 700;
@@ -1814,6 +1822,14 @@ export class World {
       let bi = -1, bd = 1e9; bays.forEach(([l, u], i) => { const d = Math.hypot(l - tl, u - tu); if (d < bd) { bd = d; bi = i; } });
       if (bi < 0 || bd > 4) continue; const [l, u] = bays[bi]; if (l < l0 || l >= l1 || !this.galOn(zs + l)) continue;
       P.dolmus(G, matAt(zs + l, u, road(zs + lm) - 0.035, Math.PI / 2, false), k);
+    }
+    // (step 35h: on the water by the quay, the fish market's boats moored: kayıks and a motor boat; only the painted models: before they have
+    // loaded, or should they fail, the quay stays empty (no box boats). No random numbers drawn)
+    if (P.BOATS.tr) for (const [l, u, a, ty, lv] of GAL_MOOR) {
+      if (l < l0 || l >= l1 || !this.galOn(zs + l)) continue;
+      this.path.at(zs + l, _gp); const t = (a * Math.PI) / 180, dl = Math.cos(t), du = Math.sin(t), dx = _gp.fx * dl + _gp.rx * du, dz = _gp.fz * dl + _gp.rz * du;
+      const m = new THREE.Matrix4().makeRotationY(Math.atan2(-dz, dx)); m.setPosition(_gp.x + _gp.rx * u - ox, SEA, _gp.z + _gp.rz * u - oz); m.groundY = SEA;
+      P.mooredBoat(G, m, ty, lv);
     }
     yield;
   }

@@ -9,19 +9,21 @@
 // lines, buckets, bags and tackle boxes stay 3D (props.js paintedFisher, drawn with the chunk's props: the hold pose's rod leaves his
 // painted hands where the five views agree they are). The instances come from the bridge's chunks (chunks.js: each chunk's fishers,
 // chunk-local), gathered here only when a chunk comes or goes (World.fishVer): per frame the meshes only follow the world's origin
-// and the camera's place a frame ago is handed to the shader
+// and the camera's place a frame ago is handed to the shader. (Step 35f: a cast of painted people, Paşabağ's tourists or Istanbul's people
+// in the Galata zone, is the same: its own atlas and table on the same three programs, eight views all round each person instead of five
+// round the back half, gathered from the chunks' people lists (chunk.people) by its cast)
 import * as THREE from 'three';
 import { makeFisherMaterials } from './materials.js';
 
 const CAP = 224; // (a Galata pass has ~100 fishermen in 1.4 km; the chunks kept round the car hold ~60)
 
-/** the views' table: per sheet and view (five each: phi 90, 135, 180, −135, −90) two texels: the feet's place in the atlas (px of this
- *  tier), its px a metre signed by the mirror, its px a metre; the card's reach round the feet (m: left, right, below, above). A float
- *  DataTexture read with texelFetch in the vertex shader */
+/** the views' table: per sheet and view (the index's views: the fishermen's five, phi 90, 135, 180, −135, −90; a cast of people's eight,
+ *  phi 0, 45, …, −45, step 35f) two texels: the feet's place in the atlas (px of this tier), its px a metre signed by the mirror, its px a
+ *  metre; the card's reach round the feet (m: left, right, below, above). A float DataTexture read with texelFetch in the vertex shader */
 function fishTable(J, k) {
-  const S = J.sheets, n = S.length * 5, d = new Float32Array(n * 2 * 4);
+  const S = J.sheets, nv = J.views.length, n = S.length * nv, d = new Float32Array(n * 2 * 4);
   S.forEach((sh, si) => sh.views.forEach(([ci, mir], j) => {
-    const c = J.cells[ci], ppm = J.ppm, o = (si * 5 + j) * 8;
+    const c = J.cells[ci], ppm = J.ppm, o = (si * nv + j) * 8;
     const xl = -c.ax / ppm, xr = (c.w - c.ax) / ppm, yb = -(c.h - c.fy) / ppm, yt = c.fy / ppm;
     d[o] = (c.x + c.ax) * k; d[o + 1] = (c.y + c.fy) * k; d[o + 2] = (mir ? -ppm : ppm) * k; d[o + 3] = ppm * k;
     d[o + 4] = mir ? -xr : xl; d[o + 5] = mir ? -xl : xr; d[o + 6] = yb; d[o + 7] = yt;
@@ -38,14 +40,17 @@ function quad(normals) {
   g.setIndex([0, 1, 2, 0, 2, 3]);
   return g;
 }
-/** fa: the atlas (painted.js loadFisherAtlas). Returns { mesh, decal, mat, depth, decalMat, update(world, show, k) } */
-export function makeFishers(fa) {
+/** fa: the atlas (painted.js loadFisherAtlas, or loadPeopleAtlas: a cast of people, step 35f). Returns { mesh, decal, mat, depth, decalMat,
+ *  update(world, cam, show, k) }. o (step 35f, a cast of people on the fishermen's programs): o.cast, the cast's number in the chunks'
+ *  lists of people (chunk.people: 8 numbers each, the last its cast); o.ring, o.T, o.rim (materials.js makeFisherMaterials); o.cap */
+export function makeFishers(fa, o = {}) {
   // (the atlas as stored: premultiplied sRGB, rows from the top as the index counts them, filtered as it is; made here, with the rest)
   const tex = new THREE.Texture(fa.img);
   tex.colorSpace = THREE.NoColorSpace; tex.flipY = false; tex.premultiplyAlpha = false;
   tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter; tex.magFilter = THREE.LinearFilter; tex.needsUpdate = true;
-  const tab = fishTable(fa.J, fa.scale), M = makeFisherMaterials(tex, tab, fa.size);
-  const A = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 4), 4), B = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 4), 4);
+  const tab = fishTable(fa.J, fa.scale), M = makeFisherMaterials(tex, tab, fa.size, o);
+  const people = o.cast !== undefined, cast = people ? o.cast : -1, cap = o.cap || CAP, nS = fa.J.sheets.length;
+  const A = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4), B = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4);
   A.setUsage(THREE.DynamicDrawUsage); B.setUsage(THREE.DynamicDrawUsage);
   const g = quad(true), g2 = quad(false), sph = new THREE.Sphere(new THREE.Vector3(), 1);
   for (const q of [g, g2]) { q.setAttribute('aA', A); q.setAttribute('aB', B); q.instanceCount = 0; q.boundingSphere = sph; }
@@ -55,18 +60,21 @@ export function makeFishers(fa) {
   const decal = new THREE.Mesh(g2, M.decal); decal.renderOrder = 1; // (after the walkway's markings)
   mesh.visible = decal.visible = false;
   let ver = -1; const anchor = { x: 0, z: 0 }, prev = { x: 0, y: -1e4, z: 0 }; // (the camera a frame ago, absolute: the views' blend)
-  /** gathers the chunks' fishermen (positions from the anchor: the world's origin now) */
+  /** gathers the chunks' fishermen, or the cast's people (positions from the anchor: the world's origin now) */
   function sync(world) {
     ver = world.fishVer; anchor.x = world.origin.x; anchor.z = world.origin.z;
     const a = A.array, b = B.array; let n = 0, cx = 0, cy = 0, cz = 0;
     for (const ch of world.chunks.values()) {
-      const F = ch.fishers; if (!F) continue;
+      const F = people ? ch.people : ch.fishers; if (!F) continue;
       const dx = ch.ox - anchor.x, dz = ch.oz - anchor.z;
-      for (let i = 0; i + 7 < F.length && n < CAP; i += 8, n++) {
-        const o = n * 4;
-        a[o] = F[i] + dx; a[o + 1] = F[i + 1]; a[o + 2] = F[i + 2] + dz; a[o + 3] = F[i + 6];
-        b[o] = F[i + 3]; b[o + 1] = F[i + 4]; b[o + 2] = F[i + 5]; b[o + 3] = F[i + 7];
-        cx += a[o]; cy += a[o + 1]; cz += a[o + 2];
+      for (let i = 0; i + 7 < F.length && n < cap; i += 8) {
+        if (people && F[i + 7] !== cast) continue;
+        const o4 = n * 4;
+        // (a person's sheet: its slot in the cast (chunks.js picks them knowing the cast's size; should the sheet hold fewer, they wrap);
+        // standing: the contact shadow's standing size)
+        a[o4] = F[i] + dx; a[o4 + 1] = F[i + 1]; a[o4 + 2] = F[i + 2] + dz; a[o4 + 3] = people ? F[i + 6] % nS : F[i + 6];
+        b[o4] = F[i + 3]; b[o4 + 1] = F[i + 4]; b[o4 + 2] = F[i + 5]; b[o4 + 3] = people ? 0 : F[i + 7];
+        cx += a[o4]; cy += a[o4 + 1]; cz += a[o4 + 2]; n++;
       }
     }
     g.instanceCount = g2.instanceCount = n;

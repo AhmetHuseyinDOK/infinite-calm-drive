@@ -446,6 +446,35 @@ export async function loadFisherAtlas(tier, timeoutMs = 15000) {
   })(), timeoutMs, "the Galata Bridge's painted fishermen unavailable, keeping the smooth figures:");
 }
 
+/** (step 35f) Loads a cast of painted people (assets/people/<name>.*, made by ~/cdtest/s35f/scripts/pack_people.py from Grok Imagine
+ *  turnaround sheets, one person in one pose each, five views cut on their magenta): Paşabağ's tourists ('people1t', anchored on its concept
+ *  painting) or Istanbul's people in the Galata zone ('people1i', on the Galata Bridge's). As loadFisherAtlas: the atlas (premultiplied,
+ *  sRGB as stored) and its index, each sheet's EIGHT views round the person (phi 0, 45, 90, 135, 180, −135, −90, −45: painted, or the
+ *  painted opposite mirrored) on the fishermen's programs (materials.js makeFisherMaterials, ring [0, 8]); ids: the sheets' ids in their
+ *  order (the chunks pick people by their place in it). 'hi' (200 px a metre) or 'lo' (half: phones, the embed). Null (never rejects) when
+ *  anything is missing, broken, truncated or too slow: then nobody stands there (never the old box figures) */
+export async function loadPeopleAtlas(tier, name, ids, timeoutMs = 15000) {
+  const base = ASSETS + 'people/';
+  return orNull((async () => {
+    const r = await fetch(base + name + '.json');
+    if (!r.ok) throw new Error(name + '.json ' + r.status);
+    const J = await r.json(), file = J.files && J.files[tier] ? tier : 'hi', sz = J.size && J.size[file], hi = J.size && J.size.hi;
+    const cells = J.cells || [], sheets = J.sheets || [];
+    if (!sz || !hi || !(J.ppm > 0) || !cells.length || !sheets.length) throw new Error('nothing listed');
+    if (String(J.views) !== '0,45,90,135,180,-135,-90,-45') throw new Error('views listed as ' + J.views + ', not the eight the shader picks from'); // (materials.js FISH_CARD, ring [0, 8])
+    if (String(sheets.map(S => S.id)) !== String(ids)) throw new Error('sheets listed as ' + sheets.map(S => S.id) + ', not ' + ids);
+    if (cells.some(c => !(c.w > 0 && c.h > 0 && c.x >= 0 && c.y >= 0 && c.x + c.w <= hi[0] && c.y + c.h <= hi[1]))) throw new Error('a cell lies outside the sheet');
+    if (sheets.some(S => !S.views || S.views.length !== 8 || S.views.some(v => !cells[v[0]]))) throw new Error('a sheet is incomplete');
+    const ri = await fetch(base + J.files[file]);
+    if (!ri.ok) throw new Error(J.files[file] + ' ' + ri.status);
+    const blob = await ri.blob(); // (checked whole: a truncated image decodes without complaint)
+    if (!(J.bytes && J.bytes[file] > 0) || blob.size !== J.bytes[file]) throw new Error(J.files[file] + ' is ' + blob.size + ' bytes, not ' + (J.bytes && J.bytes[file]));
+    const img = await createImageBitmap(blob, { premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
+    if (img.width !== sz[0] || img.height !== sz[1]) { img.close(); throw new Error(J.files[file] + ' has the wrong size'); }
+    return { img, J, tier: file, scale: sz[0] / hi[0], size: sz }; // (its texture made with the rest of them: fishers.js)
+  })(), timeoutMs, `the painted people (${name}) unavailable, leaving their places empty:`);
+}
+
 /** (step 35b) Loads the Turkish town's dolmuş as a painted 3D model (assets/models/dolmus/dolmus1.*, made by ~/cdtest/s35b/scripts/dolhull.py
  *  and pack.py from Grok Imagine elevations of a yellow Ford Transit minibus: its body the elevations' visual hull, the paintings projected
  *  back onto it, its wheels, mirrors and wipers modelled): its geometry, one binary of two meshes (near, and far: ~1.5k triangles), each

@@ -2,6 +2,56 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-29 · 07:10 — Painted people: Paşabağ's tourists and Istanbul's people at Galata
+- **Paşabağ's tourists are paintings now, not cylinders and boxes** (the user: "i want high quality but with anime style"; the rule: no
+  box people, ever). Eight tourists are painted as anime characters by Grok Imagine on the Paşabağ concept:
+  - a young woman in a straw hat with her backpack, a man with his camera and sunglasses;
+  - an older woman in a cardigan, a young man with a big red backpack;
+  - a young woman on her phone, a man in a bucket hat, a girl with braids, an older man in a safari hat.
+  They stand where the old figures stood, no two neighbours on one sheet.
+- **Istanbul's people in the Galata zone, where people are.** Forty-six figures from twelve locals and visitors: a simit seller with his
+  tray, commuters, an old man with his prayer beads, a mother and her little girl, students, a visitor taking a photo, a tea seller with
+  tulip glasses. They wait under the T1's shelters at Karaköy and Eminönü and at the İETT shelters, stand on Karaköy's paving, round
+  Eminönü's square and at the Nimet Abla kiosk, and stroll at the bridge's railings among the fishermen. Few, calm, none on the road.
+- **They turn as you pass:** eight views round each person (five painted, three mirrored), picked and cross-faded on the GPU as the
+  fishermen are, with their own shadows and soft contact shadows. Their tones change by the hour: Istanbul's take the fishermen's,
+  Paşabağ's its repaints' (peach-gold at golden hour, rose-mauve at sunset, moonlit blue-grey at night).
+- **No mannequins either:** with the people's sheets missing nobody stands there. The fishermen's fallback (step 33's smooth figures) is
+  gone too, for the same rule. A search found no other box or primitive people.
+- Seeded captures: every zone without people (city, cherry avenue, coast, country, mountain, snow, Bosphorus, Uçhisar) and Audit 2's
+  places are identical to live; the town differs by 1–4 px, as live against live. Without the new files the Galata start is identical
+  to live.
+- How:
+  - `fishers.js`: `makeFishers(fa, o)` (a cast of people on the fishermen's programs, any number of views).
+  - `materials.js`: the views as a ring (`uFRing`), per-cast tint and rim; the same three programs.
+  - `painted.js`: `loadPeopleAtlas`.
+  - `props.js`: `tourist()` records the painted tourist (the old random numbers drawn as before); step 33's figure builders removed.
+  - `chunks.js`: `chunk.people`; `placeGalPeople()` from `GAL_PEOPLE` (46 fixed places, no random numbers; at most 40 near the car).
+  - `main.js`: the start zone's cast loads with the start, the other after it (`galLazy`, in `quietIds`); test switch `st.people`.
+  - The pipeline is in `~/cdtest/s35f`, with its lossless masters kept; the alpha is stored in 16 levels (−38% bytes).
+  - +1.3 KB of code.
+- Assets (`assets/people/`):
+  - `people1t.json`, `people1t_hi.webp` (173 KB) and `people1t_lo.webp` (71 KB);
+  - `people1i.json`, `people1i_hi.webp` (210 KB) and `people1i_lo.webp` (88 KB).
+- Programs: unchanged (83 at a Galata start, 82 at Paşabağ, 63 in the city). Nothing compiles mid-drive or in Turkey's lazy load
+  (63 → 82). 0 shader errors in all eleven zones.
+- Cost (this shared box's Vega; the desktop machine was down):
+  - Paşabağ drives (L S S L): desktop 20.70 / 19.55 → 20.04 / 20.19 ms, phone tier 8.94 / 9.45 → 9.67 / 9.38.
+  - Galata phone drives: 9.50 / 9.38 → 8.92 / 8.80.
+  - Flat out at 4× throttle on a phone in Paşabağ (5 pairs):
+    - world spikes 13 / 10 / 13 / 15 / 12 → 29 / 16 / 25 / 12 / 25;
+    - worst step median 62.8 → 63.5 ms (one staging outlier of 165 ms).
+    Re-check on the desktop.
+  - A 3 Mbps phone start:
+    - Paşabağ 12.62 / 13.05 → 13.54 / 12.99 s (+78 KB);
+    - Galata 12.36 / 12.95 → 14.30 / 13.00 s (+98 KB).
+- Left over:
+  - three of each person's eight views are mirrors (a bag swaps hands);
+  - no walk cycle;
+  - Eminönü is calmer than in life;
+  - Paşabağ's extra world-build spikes on a phone;
+  - re-time on the desktop.
+
 ## 2026-10-29 · 03:55 — The Galata T1 tram as a painted anime tram
 - **The T1's livery is painted now, not drawn flat** (the user: "i want high quality but with anime style"). Grok Imagine painted the
   Flexity Swift's cab section, middle section and face in the Galata painting's style. Each was repainted from a layout drawn at the

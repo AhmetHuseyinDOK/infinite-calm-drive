@@ -119,6 +119,36 @@ const PAS_HERO_P = [[172, 24.0, 'chim', 19.5, 'mush', 6, 9171], [178, -21, 'chim
   [170, -8.4, 'rock', 0.8], [183, -10.5, 'rock', 0.6], [190, -8.9, 'rock', 1.0], [176, -13.2, 'rock', 1.3],
   [150, -6.4, 'bush', 1.2, 0.9], [165, 7.5, 'bush', 0.4, 0.8],
   [199, 4.0, 'people', 9]];
+/** (step 35f) Paşabağ's tourists' cast: its sheets (assets/people/people1t.json: t1 … t8), and the step between a group's members round them
+ *  (coprime with it: neighbours never share a sheet) */
+const TOUR_N = 8, TOUR_STEP = 3;
+/** (step 35f) Istanbul's people in the real Galata zone, where people are along the route (OpenStreetMap's places; Street View, Commons):
+ *  [l (m into the zone), where across, offset (m), facing (degrees from the road's ahead, + to the right), the Istanbul cast's sheet (0 … 11:
+ *  i1 a simit seller, his tray on his head; i2 a commuter on her phone; i3 a commuter, his backpack on; i4 an old man, his prayer beads behind
+ *  his back; i5 a mother with her shopping; i6 her little girl; i7 a father; i8, i9 students; i10 a visitor taking a photo; i11 her friend,
+ *  his coffee in his hands; i12 a tea seller with his tray)]. Where across: 'L' in a T1 stop's shelter (from our left kerb, out across its
+ *  platform), 'W' on the bridge's west walkway (from our right kerb; its railing at 5.85), 'E' on the east walkway (from the deck's left
+ *  edge), 'A' u itself (Karaköy's and Eminönü's squares, the İETT shelters, the kiosk). Facings so the camera mostly meets their painted
+ *  views. Few, calm (at most ~40 in the chunks round the car), none on the road */
+const GAL_PEOPLE = [
+  // Karaköy's T1 stop (its shelter 523–545 m: under its roof, waiting, looking up the line for the tram or at the track)
+  [519, 'L', 2.4, 165, 6], [527.5, 'L', 1.15, 180, 2], [530.4, 'L', 0.95, -125, 1], [535.6, 'L', 1.2, 20, 7], [536.7, 'L', 1.1, 200, 8], [541.8, 'L', 1.25, 175, 3],
+  // Karaköy's square (beyond our pavement: the quay's paving)
+  [462, 'A', 12.5, -80, 0], [488.2, 'A', 13.6, -115, 4], [488.9, 'A', 14.4, -105, 5], [517, 'A', 12.8, -60, 11], [541, 'A', 15.5, -95, 3], [556, 'A', 11.6, -130, 6],
+  // the bridge's west walkway: strolling, and stopping at the railing among the fishermen (not by the lifting span's towers)
+  [610, 'W', 2.9, 180, 0], [655, 'W', 5.1, 90, 9], [655.8, 'W', 5.05, 70, 10], [712, 'W', 3.6, 15, 3], [812, 'W', 5.1, 100, 1], [895, 'W', 3.3, 5, 4], [895.8, 'W', 2.8, 10, 5],
+  [935, 'W', 4.6, 120, 11], [980, 'W', 2.6, 185, 8], [1010, 'W', 5.1, 85, 7],
+  // the east walkway across the deck
+  [700, 'E', 1.0, -90, 2], [880, 'E', 1.1, -95, 6],
+  // Eminönü's T1 stop (its shelter 1200–1272 m)
+  [1205.5, 'L', 1.0, 180, 8], [1214, 'L', 1.2, -140, 2], [1222.5, 'L', 0.9, 170, 4], [1236, 'L', 1.1, 190, 6], [1251, 'L', 1.0, -120, 3],
+  // Eminönü's square, and two at the Nimet Abla kiosk's counter (its front towards the road, 61.5 m off it)
+  [1128, 'A', 14, -95, 1], [1140, 'A', 16, -100, 3], [1152, 'A', 24, 200, 11], [1166, 'A', 17.5, -70, 0], [1190, 'A', 21, 160, 10], [1190.7, 'A', 21.6, 170, 9],
+  [1197, 'A', 13.5, 195, 2], [1214, 'A', 18, -110, 8], [1226, 'A', 15, -80, 6], [1226.7, 'A', 15.6, -90, 5], [1221.0, 'A', 59.6, 90, 4], [1222.6, 'A', 59.4, 85, 2],
+  // the İETT shelters of the Eminönü İskele stops on Reşadiye Caddesi: ours (its bench 6.8–7.2 m), the far one's
+  [1420.6, 'A', 6.35, 185, 2], [1422.6, 'A', 6.3, -90, 8], [1426.4, 'A', 6.2, 180, 6], [1410.6, 'A', -32.9, 95, 7], [1413.2, 'A', -32.7, 80, 1],
+];
+const GAL_PEOPLE_L = [Math.min(...GAL_PEOPLE.map(e => e[0])) - 1, Math.max(...GAL_PEOPLE.map(e => e[0])) + 8], _gp = {}, _gp2 = {};
 /** true within m metres of a river (keeps houses, poles and trees out of the channel) */
 const nearR = (s, m) => { const r = riverNear(s); return !!r && Math.abs(s - r.s) < m; };
 
@@ -171,7 +201,7 @@ export class World {
     this.group = new THREE.Group(); scene.add(this.group);
     this.chunks = new Map(); this.origin = { x: 0, z: 0 }; this.reveal = [];
     this.ahead = 760; this.behind = 40; this.trReady = true; this.eminWait = false; // (eminWait: step 35R-galata-2, main.js galLazy)
-    this.fishVer = 0; // (step 35a: counts the chunks with painted fishermen coming and going: fishers.js gathers them anew)
+    this.fishVer = 0; // (step 35a: counts the chunks with painted fishermen (step 35f: or people) coming and going: fishers.js gathers them anew)
     this._dolC = null; this._dolF = ch => { // (step 35b: a chunk's dolmuş, its near mesh within DOL_NEAR of the camera, else its far one)
       const m = ch.dol; if (!m) return;
       const L = m.userData.lod, dx = ch.group.position.x + L.x - this._dolC.x, dz = ch.group.position.z + L.z - this._dolC.z;
@@ -204,7 +234,7 @@ export class World {
       const res = this.job.it.next();
       if (res.done) { // stage the meshes: they are revealed one per frame so their GPU uploads don't all land at once
         const ch = res.value; ch.pending = ch.group.children.slice(); ch.group.clear();
-        this.chunks.set(this.job.c, ch); this.group.add(ch.group); this.reveal.push(ch); this.job = null; if (ch.fishers) this.fishVer++;
+        this.chunks.set(this.job.c, ch); this.group.add(ch.group); this.reveal.push(ch); this.job = null; if (ch.fishers || ch.people) this.fishVer++;
       }
       if (performance.now() - t0 > budgetMs) return 1;
     }
@@ -220,7 +250,7 @@ export class World {
     this.group.remove(ch.group); ch.group.traverse(o => { if (o.geometry) o.geometry.dispose(); });
     if (ch.pending) { for (const m of ch.pending) m.geometry && m.geometry.dispose(); ch.pending.length = 0; }
     const i = this.reveal.indexOf(ch); if (i >= 0) this.reveal.splice(i, 1);
-    if (ch.fishers) this.fishVer++;
+    if (ch.fishers || ch.people) this.fishVer++;
   }
   /** Small details — signal lamps, road paint, lamp heads, light pools — are hidden in chunks more than `far` metres
    *  ahead (tree leaf cards beyond `farLeaf`), where they'd be a pixel or less and mostly fogged anyway. Each is a draw
@@ -255,6 +285,8 @@ export class World {
       fish: new GB({ ao: true, idx: true }) }; // (the Galata Bridge's fishermen, step 33: smooth figures, indexed, in the props' colour material)
     G.chainList = []; // (…and where they stand: { s, side, c, n }, for the tools: __dbg.world's chunks' .chains)
     G.fishers = []; // (step 35a: the painted fishermen, 8 numbers each: his feet (chunk-local), his facing (x, z), his scale, the sheet, the pose: fishers.js)
+    G.people = []; // (step 35f: painted people, 8 numbers each: feet (chunk-local), facing (x, z), scale, sheet, cast (0 Paşabağ's tourists, 1 Istanbul's): fishers.js)
+    G.spots = []; // (step 35f: …and what they keep clear of: the squares' trees, [s, u, r] each)
     const ground = new GroundB(), shore = { rows: [], puffs: [] }, river = [];
     G.lamps = []; // lights that can light the car: chunk-local x, y, z, power … (props.js lampAt)
     const f = {}, f2 = {};
@@ -435,6 +467,7 @@ export class World {
     yield* this.placeGalSquares(G, c, s0, s1, matAt, road, rwAt);
     yield* this.placeGalQuay(G, s0, s1, matAt, road, ox, oz);
     yield* placeEminonu(this, G, s0, s1, road, rwAt, ox, oz, this.path); // (step 35R-galata-2c)
+    this.placeGalPeople(G, s0, s1, road, rwAt, H, ox, oz); // (step 35f: Istanbul's people)
     yield;
     yield* this.placeTown(G, c, s0, s1, matAt, road, rwAt);
     yield* this.placeUchisar(G, c, s0, s1, matAt, onGround, road, rwAt, H, ox, oz);
@@ -497,7 +530,7 @@ export class World {
     if (shore.puffs.length) add(surfGeometry(shore.puffs), this.M.surf, false, false, 2, 'small'); // (the surf over the tetrapods)
     for (const g of river) add(g, this.riverMat, false, true);
     grp.position.set(ox - this.origin.x, 0, oz - this.origin.z);
-    return { group: grp, ox, oz, s0, lamps: new Float32Array(G.lamps), chains: G.chainList.length ? G.chainList : null, fishers: G.fishers.length ? new Float32Array(G.fishers) : null, dol };
+    return { group: grp, ox, oz, s0, lamps: new Float32Array(G.lamps), chains: G.chainList.length ? G.chainList : null, fishers: G.fishers.length ? new Float32Array(G.fishers) : null, people: G.people.length ? new Float32Array(G.people) : null, dol };
   }
 
   // poles + overhead wires (country / coast / city share the rule so wires connect across zones)
@@ -1744,7 +1777,7 @@ export class World {
         const a = sd > 0 ? rw + g.pr + 4 + k * 12 + tr() * 6 : -g.p1 + 4 + k * 12 + tr() * 6, u = sd * a, sj = s + (tr() - 0.5) * 8, lj = sj - zs;
         // (Eminönü's right, round the tomb's garden: its plane trees thicker)
         const tp = (sd > 0 && lj > 1150 && lj < 1235 ? 0.42 : 0.26) * (lite ? 0.5 : 1), isT = tr() <= tp;
-        if (isT && free(sj, u, lj, sd)) P.tree(G, matAt(sj, u, road(sj) - 0.06, tr() * 6, false), 'broad', tr, tr.range(1.0, 1.35));
+        if (isT && free(sj, u, lj, sd)) { P.tree(G, matAt(sj, u, road(sj) - 0.06, tr() * 6, false), 'broad', tr, tr.range(1.0, 1.35)); G.spots.push(sj, u, 1.6); } // (step 35f: nobody stands in it)
       }
     }
     yield;
@@ -1774,6 +1807,42 @@ export class World {
       P.dolmus(G, matAt(zs + l, u, road(zs + lm) - 0.035, Math.PI / 2, false), k);
     }
     yield;
+  }
+  /** Istanbul's people in the real Galata zone (step 35f): painted figures of the Istanbul cast (fishers.js, main.js: drawn once its sheet is
+   *  in; without it nobody stands there), each in the chunk its place falls in, from a fixed list (GAL_PEOPLE: no random numbers drawn, so
+   *  nothing else moves): not on the water, nor in a building or a tree, nor on a fisherman; their feet on the ground (the bridge's walkways
+   *  0.18 m over the road) */
+  placeGalPeople(G, s0, s1, road, rwAt, H, ox, oz) {
+    if (zoneW(s0).galata < 0.25 && zoneW(s1).galata < 0.25) return;
+    const zs = s0 - galL(s0), l0 = s0 - zs, l1 = s1 - zs; if (l1 < GAL_PEOPLE_L[0] || l0 > GAL_PEOPLE_L[1]) return;
+    const F = G.fishers, T = G.spots, D2R = Math.PI / 180;
+    for (const [l, ref, du, a, k] of GAL_PEOPLE) {
+      let s = zs + l; if (l < l0 || l >= l1 || !this.galOn(s)) continue;
+      const rw = rwAt(s), dk = this.galDeck(s), u = ref === 'L' ? -rw - 0.4 - du : ref === 'W' ? rw + du : ref === 'E' ? -(GAL_L - du) : du;
+      if (dk ? ref !== 'W' && ref !== 'E' && ref !== 'L' : galWater(s, u, l)) continue; // (on the bridge only its walkways and the tram's strip; off it not on the water)
+      // (at the walkway's railing: clear of its lamps (every 30 m) and of the fishermen here, stepping along it if one stands there)
+      if (ref === 'W' && du > 4.5) {
+        for (let t = 0; t < 4; t++) {
+          this.path.at(s, _gp); const x = _gp.x + _gp.rx * u - ox, z = _gp.z + _gp.rz * u - oz; let hit = Math.abs(s - Math.round(s / 30) * 30) < 1.3;
+          for (let i = 0; i + 7 < F.length && !hit; i += 8) hit = Math.hypot(F[i] - x, F[i + 2] - z) < 1.1;
+          if (!hit) break; s += 1.4;
+        }
+        if (s >= s1) continue;
+      }
+      // (on the squares: not in a building (OpenStreetMap's outlines, a metre clear), nor on Yeni Cami's terrace, nor in a tree)
+      if (ref === 'A') {
+        this.path.at(s, _gp2); const Fr = galFrame(zs), x = _gp2.x + _gp2.rx * u - Fr.x, z = _gp2.z + _gp2.rz * u - Fr.z, N = Fr.s * x + Fr.c * z, E = -Fr.c * x + Fr.s * z;
+        let bad = false;
+        for (const b of GR.blk) if (Math.abs(b.l - l) < 90 && nearPoly(E, N, b.p, 1.0)) { bad = true; break; }
+        const Y = GR.yeni; if (!bad && Y && Math.abs(Y.l - l) < 90) { const o = mid(Y.outer), kq = mid(Y.court); let dx = o[0] - kq[0], dy = o[1] - kq[1]; const d = Math.hypot(dx, dy) || 1; dx /= d; dy /= d;
+          const pz = (E - o[0] - dx) * dx + (N - o[1] - dy) * dy, px = (E - o[0] - dx) * -dy + (N - o[1] - dy) * dx; if (Math.abs(px) < 24.5 && pz > -43 && pz < 45) bad = true; }
+        for (let i = 0; i + 2 < T.length && !bad; i += 3) bad = Math.hypot(T[i] - s, T[i + 1] - u) < T[i + 2];
+        if (bad) continue;
+      }
+      this.path.at(s, _gp);
+      const y = dk ? road(s) + 0.18 : H(s, u), ca = Math.cos(a * D2R), sa = Math.sin(a * D2R);
+      G.people.push(_gp.x + _gp.rx * u - ox, y, _gp.z + _gp.rz * u - oz, _gp.fx * ca + _gp.rx * sa, _gp.fz * ca + _gp.rz * sa, 0.97 + 0.06 * hash2(Math.round(l * 10), 7477), k, 1);
+    }
   }
   /** Kemeraltı Caddesi's median fence (step 35R, as the real one: Street View): black iron, posts every 2.6 m with ball finials, a top
    *  rail and a foot rail, bars between them (both faces), from s0 to s1 at u(s), its foot y0 over the road; where ok */
@@ -2140,12 +2209,14 @@ export class World {
     P.pasChimney(G, matAt(s, u, y, q.range(-0.4, 0.4), true), q, { h, kind, heads, side, caves, lod });
   }
   /** a little group of n tourists at the roadside, standing about at (s, u) in a loose row out across the shoulder and the verge,
-   *  most of them turned back down the road (towards the car), as the concept's group (props.js tourist) */
+   *  most of them turned back down the road (towards the car), as the concept's group (props.js tourist: step 35f, painted figures of the
+   *  tourists' cast, each on a sheet of its own: TOUR_N sheets, the group's members TOUR_STEP apart round them, so no two side by side
+   *  share one; the first by a hash of where the group stands) */
   tourists(G, s, u, n, q, matAt, H) {
-    const sd = Math.sign(u) || 1;
+    const sd = Math.sign(u) || 1, k0 = Math.floor(hash2(Math.round(s * 4), 7463) * TOUR_N) % TOUR_N;
     for (let i = 0; i < n; i++) {
       const si = s + q.range(-0.6, 0.6) + (i % 2) * 0.5, ui = u + sd * (i * q.range(0.5, 0.65) + q.range(-0.1, 0.1));
-      P.tourist(G, matAt(si, ui, H(si, ui), (sd > 0 ? 1 : -1) * Math.PI / 2 + q.range(-0.6, 0.6), true), q);
+      P.tourist(G, matAt(si, ui, H(si, ui), (sd > 0 ? 1 : -1) * Math.PI / 2 + q.range(-0.6, 0.6), true), q, (k0 + i * TOUR_STEP) % TOUR_N);
     }
   }
   *placeCountry(G, r, s0, s1, matAt, onGround, road, rwAt, H) {

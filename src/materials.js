@@ -181,6 +181,8 @@ export const U = {
   uWind: { value: 1 },
   uFishT: { value: new THREE.Vector3(1, 1, 1) }, // (step 35a) the painted fishermen's colours × this, by the hour (fishers.js, main.js; 1 by day)
   uFishRim: { value: new THREE.Vector4(0, 0, 0, 0) }, // (step 35a) …and the rim of light on their edges towards a low sun beyond them: its colour (linear light), on (a)
+  uTourT: { value: new THREE.Vector3(1, 1, 1) }, // (step 35f) Paşabağ's painted tourists' colours × this, by the hour (as uFishT: Cappadocia's light)
+  uTourRim: { value: new THREE.Vector4(0, 0, 0, 0) }, // (step 35f) …and their rim of light
   uNoiseTex: { value: makeNoiseTex() },
   uCloudTex: { value: null },                  // the drifting cloud shadows, painted each frame (makeCloudMap)
   uCloudOrg: { value: new THREE.Vector2() },   // world xz at the centre of that map (rebased coordinates)
@@ -1844,7 +1846,7 @@ const FISH_N = 0.45; // (how far his card's normal leans from up towards the eye
 const FISH_PARS_V = /* glsl */`
 attribute vec4 aA, aB;
 uniform highp sampler2D uFTab;
-uniform vec2 uFSize;
+uniform vec2 uFSize, uFRing;
 uniform vec3 uFishPrev;
 varying vec2 vUvB; flat varying vec4 vBoxA, vBoxB; flat varying float vMix;
 flat varying vec3 vRim;
@@ -1879,14 +1881,16 @@ vec3 fCard; vec2 fTo;
   fTo /= max(length(fTo), 1e-5);
   vec2 fF = aB.xy;
   float fPhi = degrees(atan(dot(fTo, vec2(fF.y, -fF.x)), dot(fTo, fF))); // (0 his front, + his left, ±180 his back)
-  float fMir = 0.0;
-  ${depth ? 'if (abs(fPhi) < 90.0) { fPhi -= sign(fPhi) * 180.0; fMir = 1.0; } // (the sun in front of him: his outline from behind, mirrored)' : ''}
+  float fMir = 0.0, fN = uFRing.y; // (the views: fN of them 45° apart from uFRing.x: the fishermen's five round their back half, clamped;
+  // a cast of people's eight all round them (step 35f), wrapping)
+  ${depth ? 'if (fN < 7.5 && abs(fPhi) < 90.0) { fPhi -= sign(fPhi) * 180.0; fMir = 1.0; } // (the sun in front of him: his outline from behind, mirrored)' : ''}
   fPhi += fPhi < 0.0 ? 360.0 : 0.0;
-  float fT = clamp((fPhi - 90.0) / 45.0, 0.0, 4.0), fI = min(floor(fT), 3.0);
+  float fT = (fPhi - uFRing.x) / 45.0, fI;
+  if (fN > 7.5) { fT = mod(fT, 8.0); fI = floor(fT); } else { fT = clamp(fT, 0.0, fN - 1.0); fI = min(floor(fT), fN - 2.0); }
   ${depth ? 'float fB = 0.0; // (the light turns slowly: no blend)' : `vec2 fTo0 = uFishPrev.xz - (modelMatrix * vec4(fP, 1.0)).xz; fTo0 /= max(length(fTo0), 1e-5);
   float fB = min(abs(degrees(atan(fTo0.x * fTo.y - fTo0.y * fTo.x, dot(fTo0, fTo)))) * ${FISH_BLEND.toFixed(1)}, ${FISH_BLEND_MAX.toFixed(1)}) / 45.0;`}
   float fW = fB > 0.002 ? smoothstep(0.5 - fB, 0.5 + fB, fT - fI) : step(0.5, fT - fI);
-  int fs = int(aA.w + 0.5) * 5, ia = fs + int(fI), ib = ia + 1;
+  int fn = int(fN + 0.5), fs = int(aA.w + 0.5) * fn, ia = fs + int(fI), ib = fs + (int(fI) + 1) % fn;
   if (fW >= 1.0) { ia = ib; fW = 0.0; }
   vec4 tA = texelFetch(uFTab, ivec2(2 * ia, 0), 0), eA = texelFetch(uFTab, ivec2(2 * ia + 1, 0), 0);
   vec4 tB = texelFetch(uFTab, ivec2(2 * ib, 0), 0), eB = texelFetch(uFTab, ivec2(2 * ib + 1, 0), 0);
@@ -1907,15 +1911,17 @@ vec3 fCard; vec2 fTo;
 }`;
 /** The fishermen's materials: { mat, depth, decal } (fishers.js). tex: the atlas (premultiplied, sRGB values, no decode: filtered as
  *  stored); tab: the views' table (a float DataTexture); size: the atlas's px. One program each, compiled at load (a Turkish start)
- *  or in Turkey's lazy load (main.js) */
-export function makeFisherMaterials(tex, tab, size) {
-  const FU = { uFTab: { value: tab }, uFSize: { value: new THREE.Vector2(size[0], size[1]) }, uFishPrev: { value: new THREE.Vector3(0, -1e4, 0) } };
+ *  or in Turkey's lazy load (main.js). (Step 35f: a cast of painted people is the same three programs on its own atlas: o.ring, its
+ *  views' first azimuth and count (the fishermen's [90, 5], people's [0, 8]); o.T, o.rim: its tint and rim uniforms by the hour) */
+export function makeFisherMaterials(tex, tab, size, o = {}) {
+  const ring = o.ring || [90, 5], T = o.T || U.uFishT, RIM = o.rim || U.uFishRim;
+  const FU = { uFTab: { value: tab }, uFSize: { value: new THREE.Vector2(size[0], size[1]) }, uFRing: { value: new THREE.Vector2(ring[0], ring[1]) }, uFishPrev: { value: new THREE.Vector3(0, -1e4, 0) } };
   // (cut out at alpha 0.5: alpha to coverage would cross-fade the outlines too, but some drivers dither it over the pixels (this box's
   // AMD: a screen door on the legs mid-change), so the outlines change at the blend's middle while the paint cross-fades)
   const m = new THREE.MeshToonMaterial({ map: tex, gradientMap: GRAD_CAR, alphaTest: 0.5 });
   m.shadowSide = THREE.DoubleSide; // (the shadow card faces the light: three would otherwise draw its back faces only)
   m.onBeforeCompile = sh => {
-    Object.assign(sh.uniforms, FU); sh.uniforms.uFishT = U.uFishT; sh.uniforms.uFishRim = U.uFishRim; sh.uniforms.uSunDir = U.uSunDir;
+    Object.assign(sh.uniforms, FU); sh.uniforms.uFishT = T; sh.uniforms.uFishRim = RIM; sh.uniforms.uSunDir = U.uSunDir;
     worldShade(sh);
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nuniform vec3 uSunDir;' + FISH_PARS_V)
@@ -1936,14 +1942,14 @@ export function makeFisherMaterials(tex, tab, size) {
     fRim = clamp((textureGrad(map, vMapUv, dx, dy).a - textureGrad(map, vMapUv + vRim.xy, dx, dy).a) * 1.5, 0.0, 1.0) * vRim.z * uFishRim.a; } }`)
       .replace('#include <opaque_fragment>', 'outgoingLight += uFishRim.rgb * fRim;\n#include <opaque_fragment>');
   };
-  m.customProgramCacheKey = () => 'fishers-v1';
+  m.customProgramCacheKey = () => 'fishers-v2';
   const d = new THREE.MeshDepthMaterial();
   d.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, FU);
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>' + FISH_PARS_V).replace('#include <begin_vertex>', FISH_CARD(true) + '\nvec3 transformed = fCard;');
     sh.fragmentShader = sh.fragmentShader.replace('#include <uv_pars_fragment>', '#include <uv_pars_fragment>' + FISH_PARS_F).replace('#include <map_fragment>', 'diffuseColor.a *= fishTexel(map).a;');
   };
-  d.customProgramCacheKey = () => 'fishers-depth-v1';
+  d.customProgramCacheKey = () => 'fishers-depth-v2';
   // the contact shadow under each: a soft ellipse on the walkway (blue-grey, as the paintings' shade), faded by the fog
   const decal = new THREE.ShaderMaterial({
     uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uK: { value: 0.4 } }]),

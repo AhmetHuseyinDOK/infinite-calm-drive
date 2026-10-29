@@ -1661,22 +1661,12 @@ export function galMast(G, M, mz, tz, lamps = 2) {
     lampAt(G, M, 0, 9.8, lz, 1.1);
   }
 }
-const JACKETS = ['#2f3d5a', '#5b5f3d', '#676c73', '#77482f', '#8a2f2a', '#3d5a6e', '#45474b', '#b9a47c', '#2d4a3a'].map(C);
-const TROUSERS = ['#2b2e36', '#3a3d45', '#4a4238', '#22252b', '#5a5d64'].map(C), SKIN = ['#c99a7a', '#b58463', '#d6a98a'].map(C);
-const CAPS = ['#22252b', '#8a2f2a', '#e6e2d8', '#2f3d5a', '#5b5f3d'].map(C), BUCKETS = ['#2f6fb0', '#e4e4de', '#c9402e', '#e8b93a'].map(C);
-// ---- the fishermen as smooth figures (step 33: they were boxes and five- to seven-sided prisms, "from minecraft"). Each is a pose's
-// body (legs, shoes, the jacket over the hips: smooth lathes and tubes) and a head (neck, head, hair, a cap or not), templates built
-// once and stamped where he stands (GB.stamp: indexed, their vertices shared, so a figure is ~430 vertices, fewer than the old
-// prisms' 500), their vertices tagged with the part they belong to (FP: the colour's red byte) and recoloured per figure; his arms
-// (shoulder, elbow, wrist onto the rod or the railing), his hands, the rod (bending a little at its tip), its line, his bucket,
-// stool, bag or tackle box are built per figure. All in the fishermen's own indexed mesh (chunks.js G.fish), drawn with the props'
-// colour material (the same program)
-/** the parts: the jacket, the trousers, the skin, the shoes, the hair, the cap */
-const FP = { jk: 0, tr: 1, sk: 2, sh: 3, hr: 4, cp: 5 }, fpc = p => [p / 255, 0, 0];
-// (by a hash of where he stands, never a random number: his hair, his shoes, a bag or a tackle box)
-const HAIRS = ['#221d1a', '#2f2620', '#3b2e24', '#5e5953', '#8f8a84'].map(C), SHOES = ['#202125', '#3e3229', '#d9d7d0', '#33363d'].map(C);
-const ROD = C('#2a2724'), LINE = C('#d8d8d0'), STOOL = ['#3d5a6e', '#5b5f3d', '#4a3f36'].map(C), STEEL = C('#8d9196');
-const BAG = C('#ece9e2'), TACKLE = ['#3e5e48', '#5c6168', '#a4372e'].map(C), WATER = C('#2c4250');
+const BUCKETS = ['#2f6fb0', '#e4e4de', '#c9402e', '#e8b93a'].map(C);
+// ---- smooth shapes for the fishermen's things (step 33's: their figures were these too, until step 35a painted them; step 35f removed the
+// smooth figures, the fallback, altogether): indexed grids, ellipsoids, tubes, lathes and boxes in the fishermen's own indexed mesh
+// (chunks.js G.fish), drawn with the props' colour material (the same program)
+const ROD = C('#2a2724'), LINE = C('#d8d8d0');
+const TACKLE = ['#3e5e48', '#5c6168', '#a4372e'].map(C), WATER = C('#2c4250');
 /** a smooth grid surface into the indexed GB c: its points G[i][j] ([x, y, z]: rows i along it, columns j round it, front faces
  *  outward when j turns from +x towards +z as i rises), their normals N (or the grid's own slopes: wrap, a closed ring whose last
  *  column repeats its first), each vertex's colour col(i, j) */
@@ -1743,66 +1733,7 @@ function boxI(c, x0, y0, z0, x1, y1, z1, col) {
   f([x1, y0, z0], [x1, y0, z1], [x1, y1, z0], [x1, y1, z1], [1, 0, 0]); f([x0, y0, z0], [x0, y1, z0], [x0, y0, z1], [x0, y1, z1], [-1, 0, 0]);
   f([x0, y0, z1], [x0, y1, z1], [x1, y0, z1], [x1, y1, z1], [0, 0, 1]); f([x0, y0, z0], [x1, y0, z0], [x0, y1, z0], [x1, y1, z0], [0, 0, -1]);
 }
-/** the poses (his own frame: +z to the water, the walkway's railing's handrail ~1.18 m up and ~0.47 m in front of him): the hips'
- *  middle, the jacket's lean forward from them (radians), a knee and an ankle (the right leg's mirrored), the head's own tilt */
-const POSES = {
-  stand: { hip: [0, 0.86, 0], lean: 0.14, knee: [0.1, 0.47, 0.035], ankle: [0.11, 0.085, 0.0], tilt: 0.3 },  // (both hands on the rod)
-  one: { hip: [0, 0.86, 0], lean: 0.08, knee: [0.1, 0.47, 0.02], ankle: [0.115, 0.085, -0.01], tilt: 0.35 },  // (one hand on it)
-  lean: { hip: [0, 0.87, -0.1], lean: 0.5, knee: [0.1, 0.47, -0.04], ankle: [0.12, 0.085, -0.03], tilt: 0.05 }, // (his forearms on the rail)
-  sit: { hip: [0, 0.47, -0.16], lean: 0.12, knee: [0.12, 0.5, 0.25], ankle: [0.13, 0.085, 0.3], tilt: 0.3 },  // (on a stool)
-};
-/** a pose's point p (in the jacket's frame: y up from the hips' height) leaned forward round the hips */
-const leanPt = (P, p) => { const c = Math.cos(P.lean), s = Math.sin(P.lean); return [p[0], P.hip[1] + p[1] * c - p[2] * s, P.hip[2] + p[2] * c + p[1] * s]; };
-const FIG = {}; // (the templates, built at the first fisherman: per pose and build, and per head)
-function figBody(pose, fat) {
-  const key = pose + fat; if (FIG[key]) return FIG[key];
-  const P = POSES[pose], c = new GB({ idx: true }), JK = fpc(FP.jk), TR = fpc(FP.tr), SH = fpc(FP.sh), k = fat ? 1.1 : 1;
-  for (const sx of [-1, 1]) { // the legs (hip, knee, ankle), the shoes
-    const h = [sx * 0.085, P.hip[1] - 0.03, P.hip[2]], kn = [sx * P.knee[0], P.knee[1], P.knee[2]], an = [sx * P.ankle[0], P.ankle[1], P.ankle[2]];
-    tubeI(c, [h, kn, an], [0.085, 0.064, 0.05], 6, TR);
-    ellI(c, an[0], 0.045, an[2] + 0.045, 0.052, 0.046, 0.115, 5, 4, () => SH);
-  }
-  // the jacket from the hips to the collar (its hem just over the hips; the trousers' seat under it), leaned forward round the hips
-  const L = [[-0.08, 0.125, 0.098, 0, TR], [0.0, 0.152, 0.11, 0, TR], [0.02, 0.172 * k, 0.126 * k, 0, JK], [0.17, 0.163 * k, 0.12 * k, 0, JK], [0.36, 0.186 * k, 0.132 * k, 0.012, JK],
-    [0.49, 0.2 * k, 0.126 * k, 0, JK], [0.56, 0.152 * k, 0.104 * k, -0.008, JK], [0.61, 0.064, 0.058, 0, JK]];
-  const G = L.map(([y, rx, rz, zc]) => { const row = []; for (let j = 0; j <= 8; j++) { const th = (j / 8) * Math.PI * 2; row.push(leanPt(P, [rx * Math.cos(th), y, zc + rz * Math.sin(th)])); } return row; });
-  gridI(c, G, null, i => L[i][4]);
-  return (FIG[key] = c.toArrays());
-}
-function figHead(kind) {
-  const key = 'h' + kind; if (FIG[key]) return FIG[key];
-  const c = new GB({ idx: true }), SK = fpc(FP.sk), HR = fpc(FP.hr), CP = fpc(FP.cp);
-  tubeI(c, [[0, -0.03, 0], [0, 0.09, 0.012]], [0.052, 0.047], 6, SK); // the neck (from inside the collar)
-  // the head: its hair over the top and down the back to the nape, the face and the ears' sides skin
-  ellI(c, 0, 0.155, 0.016, 0.085, 0.108, 0.098, 8, 6, (ny, nz) => (ny > 0.32 || (nz < -0.18 && ny > -0.55) ? HR : SK));
-  if (kind === 1) { // a cap: its crown over the head's top, its peak out over the forehead (both faces)
-    ellI(c, 0, 0.163, 0.012, 0.093, 0.108, 0.105, 8, 3, () => CP, 1.68);
-    const B = [], y0 = 0.15;
-    for (let k = 0; k <= 4; k++) { const a = -1.15 + (2.3 * k) / 4, sa = Math.sin(a), ca = Math.cos(a); B.push([[0.093 * sa, y0, 0.012 + 0.103 * ca], [0.105 * sa, y0 - 0.014, 0.012 + 0.103 * ca + 0.075 * ca]]); }
-    const top = [B.map(q => q[0]), B.map(q => q[1])], bot = [B.map(q => q[1]), B.map(q => q[0])];
-    gridI(c, top, top.map(r => r.map(() => [0, 1, 0.15])), () => CP, false); gridI(c, bot, bot.map(r => r.map(() => [0, -1, 0])), () => CP, false);
-  } else if (kind === 2) ellI(c, 0, 0.158, 0.014, 0.094, 0.118, 0.106, 8, 3, () => CP, 1.62); // a knitted cap pulled down over the ears
-  return (FIG[key] = c.toArrays());
-}
-const _fm = new THREE.Matrix4(), _fh = new THREE.Matrix4(), _fr = new THREE.Matrix4(), _fs = new THREE.Vector3();
-/** stamps template T under matrix m into c and gives each vertex its part's colour from pal */
-function stampFig(c, T, m, pal) {
-  const o = c.n; c.stamp(T, m);
-  const Cl = c.Cl; for (let i = o * 3; i < c.n * 3; i += 3) { const k = pal[Cl[i]]; Cl[i] = k[0] * 255 + 0.5; Cl[i + 1] = k[1] * 255 + 0.5; Cl[i + 2] = k[2] * 255 + 0.5; }
-}
-/** an arm from the shoulder S to the hand H: the elbow between them bent towards `pole` (a two-bone reach; straight if H is out
- *  of reach); the sleeve to the wrist, the hand (skin) round H */
-function arm(c, S, H, pole, jk, sk, E = null) {
-  if (!E) {
-    const dx = H[0] - S[0], dy = H[1] - S[1], dz = H[2] - S[2], d = Math.hypot(dx, dy, dz), l1 = 0.29, l2 = 0.27, dd = Math.min(d, l1 + l2 - 1e-3);
-    const ux = dx / d, uy = dy / d, uz = dz / d, a = (l1 * l1 - l2 * l2 + dd * dd) / (2 * dd), h = Math.sqrt(Math.max(0, l1 * l1 - a * a));
-    const pd = pole[0] * ux + pole[1] * uy + pole[2] * uz; let px = pole[0] - pd * ux, py = pole[1] - pd * uy, pz = pole[2] - pd * uz; const pl = Math.hypot(px, py, pz) || 1;
-    E = [S[0] + ux * a + (px / pl) * h, S[1] + uy * a + (py / pl) * h, S[2] + uz * a + (pz / pl) * h];
-  }
-  const fx = H[0] - E[0], fy = H[1] - E[1], fz = H[2] - E[2], fl = Math.hypot(fx, fy, fz) || 1, W = [H[0] - (fx / fl) * 0.06, H[1] - (fy / fl) * 0.06, H[2] - (fz / fl) * 0.06];
-  tubeI(c, [S, E, W], [0.058, 0.05, 0.043], 6, jk);
-  ellI(c, H[0], H[1], H[2], 0.04, 0.045, 0.04, 5, 3, () => sk);
-}
+const _fm = new THREE.Matrix4(), _fr = new THREE.Matrix4(), _fs = new THREE.Vector3();
 /** a fisherman at the bridge's walkway railing, the bridge's best-known sight (his own frame: −z to the road; he faces +z, out over
  *  the water), as the Galata Bridge's fishermen stand along it: most on their feet holding the rod in both hands, some with one, some
  *  leaning their forearms on the rail with the rod propped against it beside them, now and then one on a camping stool with his rod
@@ -1810,53 +1741,11 @@ function arm(c, S, H, pole, jk, sk, E = null) {
  *  catch beside him now and then, a white bag or a tackle box. r: the random numbers of the old builder, drawn as it drew them (so
  *  everything placed after the fishermen keeps its place); yaw: his turn from square to the railing; h: a hash of where he stands */
 export function fisherman(G, M, r, drop, yaw = 0, h = 0.5) {
-  const c = G.fish || G.color;
-  const jk = r.pick(JACKETS), tr = r.pick(TROUSERS), sk = r.pick(SKIN), sit = r() < 0.22, hat = r() < 0.65 ? r.pick(CAPS) : null, s = r.range(0.94, 1.06);
+  r(); r(); r(); const sit = r() < 0.22; if (r() < 0.65) r(); const s = r.range(0.94, 1.06); // (step 33's jacket, trousers, skin and cap, still drawn)
   const L = r.range(4, 5.2), el0 = r.range(0.6, 0.87), sw = r.range(-0.35, 0.35), bucket = r() < 0.45 ? r.pick(BUCKETS) : null;
-  if (FISHERS.sheets) { paintedFisher(G, c, M, drop, yaw, h, sit, s, L, el0, sw, bucket); return; } // (step 35a: a painted figure, his things in 3D)
-  const pose = sit ? 'sit' : h < 0.42 ? 'stand' : h < 0.66 ? 'one' : 'lean', P = POSES[pose], h2 = (h * 7.31) % 1, h3 = (h * 53.7) % 1;
-  // (square to the rail when leaning on it or sitting at it, else turned a little as drawn)
-  _fr.makeRotationY(yaw * (pose === 'lean' || pose === 'sit' ? 0.2 : 1)); _fm.multiplyMatrices(M, _fr).scale(_fs.set(s, s, s)); _fm.groundY = M.groundY;
-  const hair = h3 < 0.12 ? sk : HAIRS[Math.floor(h2 * HAIRS.length)], pal = [jk, tr, sk, SHOES[Math.floor(h3 * SHOES.length)], hair, hat || hair];
-  stampFig(c, figBody(pose, h2 < 0.3 ? 1 : 0), _fm, pal);
-  // his head on his neck, tipped forward with his lean and his own look down at the water
-  const nk = leanPt(P, [0, 0.61, 0]);
-  _fh.makeRotationX(P.lean + P.tilt).setPosition(nk[0], nk[1], nk[2]); _fh.premultiply(_fm); _fh.groundY = M.groundY;
-  stampFig(c, figHead(hat ? (h3 > 0.8 ? 2 : 1) : 0), _fh, pal);
-  c.setM(_fm);
-  const SL = leanPt(P, [0.185, 0.5, -0.005]), SR = leanPt(P, [-0.185, 0.5, -0.005]);
-  // the rod: 4–5.2 m, steeply up and out over the railing (43–69°, as the bridge's are held; a little to one side), held, propped or
-  // resting on the rail by the pose; its tip bending a little; its line straight down to the water
-  let d, bt, rl;
-  if (pose === 'lean' || pose === 'sit') {
-    const R = pose === 'lean' ? [0.46, 1.205, 0.47] : [0.02, 1.205, 0.47]; // (where it rests on the handrail)
-    if (pose === 'lean') {
-      const e = 1.0 + ((el0 - 0.6) / 0.27) * 0.25, a = sw * 0.4; d = [Math.cos(e) * Math.sin(a), Math.sin(e), Math.cos(e) * Math.cos(a)];
-      const t = (R[1] - 0.03) / d[1]; bt = [R[0] - d[0] * t, R[1] - d[1] * t, R[2] - d[2] * t]; rl = L;
-      for (const sx of [1, -1]) arm(c, sx > 0 ? SL : SR, [sx * 0.06, 1.225, 0.53], null, jk, sk, [sx * 0.2, 1.222, 0.37]); // (forearms on the rail)
-    } else {
-      const Hf = [0.03, 0.86, 0.2], dx = R[0] - Hf[0], dy = R[1] - Hf[1], dz = R[2] - Hf[2], dl = Math.hypot(dx, dy, dz); d = [dx / dl, dy / dl, dz / dl];
-      bt = [Hf[0] - d[0] * 0.42, Hf[1] - d[1] * 0.42, Hf[2] - d[2] * 0.42]; rl = L;
-      arm(c, SL, Hf, [0.7, -0.6, -0.2], jk, sk); arm(c, SR, [Hf[0] - d[0] * 0.27, Hf[1] - d[1] * 0.27, Hf[2] - d[2] * 0.27], [-0.7, -0.6, -0.2], jk, sk);
-    }
-  } else { // (its butt at his right hip, held at the reel by his right hand and further up by his left: over the handrail at 43°)
-    const e = 0.75 + ((el0 - 0.6) / 0.27) * 0.45; d = [Math.cos(e) * Math.sin(sw), Math.sin(e), Math.cos(e) * Math.cos(sw)];
-    bt = [-0.16, 0.92, 0.1]; rl = L; const at = k => [bt[0] + d[0] * k, bt[1] + d[1] * k, bt[2] + d[2] * k];
-    arm(c, SR, at(0.22), [-0.7, -0.6, -0.3], jk, sk);
-    if (pose === 'stand') arm(c, SL, at(0.5), [0.7, -0.6, -0.3], jk, sk); else arm(c, SL, [0.24, 0.74, 0.06], [0.3, 0.1, -1], jk, sk); // (or his other hand at his side)
-  }
-  { const k = 0.82 * rl, m = [bt[0] + d[0] * k, bt[1] + d[1] * k, bt[2] + d[2] * k], hz = Math.hypot(d[0], d[2]) || 1, e2 = Math.atan2(d[1], hz) - 0.28;
-    const tip = [m[0] + (d[0] / hz) * Math.cos(e2) * 0.18 * rl, m[1] + Math.sin(e2) * 0.18 * rl, m[2] + (d[2] / hz) * Math.cos(e2) * 0.18 * rl];
-    c.noShadow = true; tubeI(c, [bt, m, tip], [0.02, 0.011, 0.005], 4, ROD); tubeI(c, [tip, [tip[0], -drop / s, tip[2] + 0.3]], [0.004, 0.004], 3, LINE); c.noShadow = false; }
-  if (sit) { // a camping stool under him: its seat and its crossed legs
-    const sc = STOOL[Math.floor(h2 * STOOL.length)], z0 = P.hip[2];
-    boxI(c, -0.17, 0.395, z0 - 0.13, 0.17, 0.425, z0 + 0.13, sc);
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) tubeI(c, [[sx * 0.14, 0.4, z0 + sz * 0.11], [sx * 0.14, 0.0, z0 - sz * 0.13]], [0.012, 0.012], 3, STEEL);
-  }
-  const bx = pose === 'lean' || h2 >= 0.5 ? -0.42 : 0.42; // (his bucket and things at his feet, on one side of him: not under a propped rod)
-  if (bucket) latheI(c, [[0.0, 0.112, 0.112, 0.06, bucket], [0.27, 0.142, 0.142, 0.06, bucket], [0.29, 0.148, 0.148, 0.06, bucket], [0.29, 0.13, 0.13, 0.06, WATER], [0.25, 0.0, 0.0, 0.06, WATER]], 7, bx); // (its water a little below the rim)
-  if (h3 > 0.62 && h3 < 0.82) ellI(c, -bx * 0.95, 0.1, 0.12, 0.13, 0.11, 0.09, 6, 4, () => BAG); // (a white plastic bag)
-  else if (h3 > 0.9) boxI(c, -bx - 0.16, 0.0, -0.04, -bx + 0.16, 0.17, 0.16, TACKLE[Math.floor(h2 * 3)]); // (a tackle box)
+  // (step 35a: a painted figure, his things in 3D. Step 35f: without the painted figures nobody stands at the railing: step 33's smooth
+  // figures, the fallback, read as mannequins, and the rule is no box or mannequin people, ever)
+  if (FISHERS.sheets) paintedFisher(G, G.fish || G.color, M, drop, yaw, h, sit, s, L, el0, sw, bucket);
 }
 // ---- the fishermen as painted figures (step 35a: fishers.js). A fisherman is a card of the people atlas (main.js setFishers: its sheets,
 // each one man in one pose) drawn by fishers.js from the chunk's list (G.fishers: his feet, chunk-local; his facing; his scale; the
@@ -2822,18 +2711,16 @@ export function pasGrass(G, x, y, z, a, r, s = 1, k = 1) { // (k: its colour's s
     at.card([[x - cx, y - 0.05, z - cz], [x + cx, y - 0.05, z + cz], [x + cx, y + h, z + cz], [x - cx, y + h, z - cz]], PG_N, c, [lo, lo, hi, hi]);
   }
 }
-/** a tourist at Paşabağ's roadside (W6), as the concept's little group far ahead: light summer clothes, now and then a sun hat or a
- *  backpack, facing the valley across the road (−z), in G.color */
-const T_TOPS = ['#f1efe8', '#9cc4e4', '#e8d2b0', '#7fb2d8', '#e9b7b0', '#cfe0d8', '#f4dc8c', '#5f86b8', '#ffffff'].map(C);
-const T_LEGS = ['#3e5f8a', '#2b3a55', '#c8b48e', '#e8e2d4', '#33363d', '#6a7f9e'].map(C), T_HATS = ['#efe6d0', '#d8c49a', '#f4f1ea', '#2f3d5a'].map(C), T_BAGS = ['#d8572f', '#2f3d5a', '#5b5f3d', '#c9402e'].map(C);
-export function tourist(G, M, r) {
-  const c = G.color; c.setM(M); c.noShadow = false;
-  const top = r.pick(T_TOPS), leg = r.pick(T_LEGS), sk = r.pick(SKIN), s = r.range(0.9, 1.06), hip = 0.86 * s, sh = hip + 0.56 * s, shorts = r() < 0.35;
-  c.cyl(-0.1, 0, 0, 0.065, 0.08, hip, 5, shorts ? sk : leg); c.cyl(0.1, 0, 0, 0.065, 0.08, hip, 5, shorts ? sk : leg);
-  if (shorts) { c.cyl(-0.1, hip * 0.55, 0, 0.085, 0.09, hip * 0.45, 5, leg); c.cyl(0.1, hip * 0.55, 0, 0.085, 0.09, hip * 0.45, 5, leg); }
-  c.cyl(0, hip - 0.04, 0, 0.19, 0.17, sh - hip + 0.06, 6, top);
-  c.cyl(-0.23, sh - 0.5, 0, 0.045, 0.05, 0.48, 4, sk); c.cyl(0.23, sh - 0.5, 0, 0.045, 0.05, 0.48, 4, sk); // (the arms, hanging)
-  c.cyl(0, sh + 0.02, 0, 0.08, 0.065, 0.04, 6, sk); c.cyl(0, sh + 0.06, 0, 0.095, 0.09, 0.19 * s, 7, r() < 0.5 ? C('#3a2a22') : sk); // (the head: dark hair from behind)
-  if (r() < 0.4) { const ht = r.pick(T_HATS); c.cyl(0, sh + 0.19 * s, 0, 0.19, 0.19, 0.02, 8, ht); c.cyl(0, sh + 0.2 * s, 0, 0.1, 0.09, 0.08, 7, ht); }
-  if (r() < 0.45) c.box(-0.15, sh - 0.42, 0.16, 0.15, sh - 0.04, 0.32, r.pick(T_BAGS)); // (a backpack)
+/** a tourist at Paşabağ's roadside (W6), as the concept's little group far ahead (step 35f: a painted figure from the tourists' cast,
+ *  fishers.js, drawn by main.js once its sheet has loaded; W6's figures of cylinders and boxes are gone, and without the sheet nobody stands
+ *  there): its feet, its facing (the old figure's −z: back down the road, towards the car, as the concept's group), its size and its sheet
+ *  into the chunk's people (G.people: 8 numbers each, the last the cast: 0). r: the old builder's random numbers, drawn as it drew them
+ *  (its top, legs, skin, size, shorts, hair, a hat, a backpack: everything placed after the group keeps its place); k: its sheet (no two
+ *  side by side on one: chunks.js tourists) */
+export function tourist(G, M, r, k) {
+  r(); r(); r(); const s = r.range(0.9, 1.06); r(); r();
+  if (r() < 0.4) r();
+  if (r() < 0.45) r();
+  const e = M.elements, fl = Math.hypot(e[8], e[10]) || 1;
+  G.people.push(e[12], e[13], e[14], -e[8] / fl, -e[10] / fl, 0.96 + (s - 0.9) * 0.5, k, 0); // (±4% round the paintings' own heights)
 }

@@ -25,7 +25,7 @@ import { makePost } from './post.js';
 import { makeAudio } from './audio.js';
 import { makeParticles } from './particles.js';
 import { clamp, lerp, sstep, setSeed, hash2 } from './util.js';
-import { loadCloudAtlas, makePaintedClouds, loadBandAtlas, makePaintedBand, updatePainted, loadFieldTexture, loadFrontAtlas, loadRoomAtlas, roomTexture, roomGlass, loadHouseAtlas, loadHousePatch, loadTrHouseAtlas, loadTownAtlas, loadChainAtlas, loadFisherAtlas, loadDolmus, loadTrain, loadCar, loadTram, loadGalFronts, todTones, mixTones, paintSky, PAINT_TOD, BAND_R } from './painted.js';
+import { loadCloudAtlas, makePaintedClouds, loadBandAtlas, makePaintedBand, updatePainted, loadFieldTexture, loadFrontAtlas, loadRoomAtlas, roomTexture, roomGlass, loadHouseAtlas, loadHousePatch, loadTrHouseAtlas, loadTownAtlas, loadChainAtlas, loadFisherAtlas, loadPeopleAtlas, loadDolmus, loadTrain, loadCar, loadTram, loadGalFronts, todTones, mixTones, paintSky, PAINT_TOD, BAND_R } from './painted.js';
 
 const QS = new URLSearchParams(location.search);
 // inside an X player card (or any iframe): lighter quality, compact UI, tap-only start
@@ -41,6 +41,10 @@ const status = t => { const el = $('loading'); if (el) el.textContent = t; };
 const trSet = zs => zs.some(z => REGION[z] === 'tr');
 /** a Galata start (step 35R): m into the zone, ~35 m before the real bridge's Karaköy end (path.js GAL_BR) */
 const GAL_S0 = GAL_BR[0] - 35;
+/** (step 35f) the painted people's casts: their sheets' files and ids (painted.js loadPeopleAtlas) and their number in the chunks' lists of
+ *  people (chunks.js: 0 Paşabağ's tourists, 1 Istanbul's people in the Galata zone) */
+const PEOPLE = { tour: { file: 'people1t', ids: ['t1', 't2', 't3', 't4', 't5', 't6', 't7', 't8'], cast: 0 },
+  ist: { file: 'people1i', ids: ['i1', 'i2', 'i3', 'i4', 'i5', 'i6', 'i7', 'i8', 'i9', 'i10', 'i11', 'i12'], cast: 1 } };
 async function main() {
   await new Promise(r => setTimeout(r, 30));
   // ------------------------------------------------------------ renderer & scene
@@ -104,6 +108,12 @@ async function main() {
   // (only at a start in Turkey: a Japanese start near the border keeps loading them with the start's assets, as Turkey's other assets, so nothing
   // made after its start draws three's ids from Math.random under a seeded capture's particles)
   const TR_HOME = REGION[startZone()] === 'tr', EMIN_LATER = TR_HOME && !(zoneAt(S0) === 'galata' && galL(S0) > 1090 - 300), eminLoad = TR_START && !EMIN_LATER ? loadEminonu(HTIER) : null;
+  // (step 35f) the painted people's casts (painted.js loadPeopleAtlas: Paşabağ's tourists, Istanbul's people in the Galata zone), on the same
+  // tiers: at a start in Turkey the start zone's with the start's assets (its people are in the first view), the other after the start
+  // (galLazy); at a Japanese start within TR_NEAR of the border both with the start's; otherwise both in Turkey's lazy load
+  const PEOPLE_AT = REGION[startZone()] === 'tr' ? { pasabag: 'tour', galata: 'ist' }[startZone()] || null : null;
+  const peopleLoad = { tour: TR_START && (!TR_HOME || PEOPLE_AT === 'tour') ? loadPeopleAtlas(HTIER, PEOPLE.tour.file, PEOPLE.tour.ids) : null,
+    ist: TR_START && (!TR_HOME || PEOPLE_AT === 'ist') ? loadPeopleAtlas(HTIER, PEOPLE.ist.file, PEOPLE.ist.ids) : null };
   // (step 35c) Japan's crossing train as painted 3D cars (painted.js loadTrain: its parts and its texture pair), on the same tiers: with the
   // start's assets at a Japanese start (a train can cross soon after a city or country start); at a Turkish one in the background once the
   // drive comes within TR_NEAR of Japan (trainLazy, below)
@@ -352,6 +362,11 @@ async function main() {
   // golden hour, a rose-orange at sunset, as anime backlights figures against an evening sky; none at night (under the moon it read as a white
   // sticker's outline: the night's figures are dark against the lit city)
   const FISH_RIM = todKeys({ v: [0, 0, 0] }, { v: [1.05, 0.5, 0.36] }, { v: [0, 0, 0] }, { v: [1.2, 0.8, 0.43] });
+  // (step 35f) Paşabağ's painted tourists by the hour under a clear sky (materials.js U.uTourT, as U.uFishT): as painted by day; peach-gold at
+  // golden hour, rose-mauve at sunset, moonlit blue-grey at night, as the group in its repaints (ref/tod/pasabag_*.png); their rim a warmer
+  // gold than the bridge's at golden hour (the steppe's low sun), rose at sunset, none at night
+  const TOUR_T = todKeys({ v: [0.46, 0.54, 0.74] }, { v: [0.86, 0.66, 0.74] }, { v: [1, 1, 1] }, { v: [1.06, 0.9, 0.74] });
+  const TOUR_RIM = todKeys({ v: [0, 0, 0] }, { v: [0.72, 0.34, 0.3] }, { v: [0, 0, 0] }, { v: [1.25, 0.78, 0.36] }); // (sunset's softer than the bridge's: the steppe's figures read pink-lit in the repaint, not outlined)
   // Cappadocia's fairy chimneys (W5: materials.js tuffMaterial) under a clear sky: their tones (sRGB) in its concept painting
   // (ref/world/cappadocia_uchisar.png: the cones' mauve-brown shade, ochre middle and warm sandy light, the pale cream tuff at their
   // feet in the light) and in its repaints at golden hour, sunset and night (ref/tod/uchisar_*.png)
@@ -501,7 +516,7 @@ async function main() {
   // towards the kerb of the side the traffic keeps to (path.js trafficSide: left in Japan, right in Turkey), so through a
   // border tunnel the car moves over to the other side of the road with the traffic
   const MULT_MIN = 0.4, MULT_MAX = 5.5, SIDE0 = trafficSide(S0) < 0 ? -1 : 1;
-  const st = { s: S0, u: 1.65 * SIDE0 * (1 - zoneWeight(S0, 'galata') * clamp((zparam(S0, 'rw') - 3.4) / 1.85, 0, 1)), uHome: 1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, spray: QS.has('nospray') ? 0 : 1 /* test switch */, grass: 1 /* test switch: the meadow's blades */, pclouds: 1 /* test switch: painted clouds (0: the procedural ones, with ?clouds=both) */, band: 1 /* test switch: the painted horizon (0: the mountain rings) */, waves: 1 /* test switch: the painted sea's waves (0: its flat tones) */, shore: 1 /* test switch: the waves and foam along the sea wall (0: the open sea's colour there) */, surf: 1 /* test switch: the spray over the tetrapods */, tetra: 1 /* test switch: the tetrapods */, bark: 1 /* test switch: the bark's painted tones (0: the old colours, lit) */, trunks: 1 /* test switch: the painted trees' bark (0: hidden) */, todpaint: 1 /* test switch: the painted look at golden hour, sunset and night (0: only on a bright day, as before) */, road: 1 /* test switch: the coast's, the country's and the cherry avenue's painted asphalt (0: the old road; in the avenue's ground it also skips the tint's work) */, carkey: 1 /* test switch: the car lit by the painter's sun (0: by the real sun) */, sunroad: 1 /* test switch: the sun and the moon stand by the road's heading, as in the paintings (0: fixed in the world, as before) */, volkey: 1 /* test switch: the crowns and the tetrapods lit by the painted volumes' key (0: by the real sun) */, shsoft: 1 /* test switch: soft shadow edges near the camera (0: one tap everywhere, as before) */, shfit: 1 /* test switch: the sun's shadow box fitted to what can be seen at a low sun (0: the old square box) */, tuff: 1 /* test switch: Cappadocia's fairy chimneys in their painted tones (0: their own colours, lit) */, slope: 1 /* test switch: the coast's slope in the painting's lime with its painter's fill in the shade (0: as before, step 27) */, bandnear: 1 /* test switch: the country's painted horizon drawn just inside the world's far fade, over the next zone's far slopes (0: as before, step 28) */, banktod: 1 /* test switch: the country's verge banks' grass by the hour (0: lit only), step 28 */, evesky: 1 /* test switch: the painted evening sky (0: the old sky at golden hour and sunset), Audit 2 */, nightpaint: 1 /* test switch: the night as painted (0: as before), step 30 */, rooms: 1 /* test switch: the rooms behind the shop windows (0: their painted glass), step 31 */, tram: 1 /* test switch: the Galata Bridge's tram (0: hidden), step 33 */, fish: 1 /* test switch: the Galata Bridge's painted fishermen (0: hidden; their 3D rods and buckets stay), step 35a */, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
+  const st = { s: S0, u: 1.65 * SIDE0 * (1 - zoneWeight(S0, 'galata') * clamp((zparam(S0, 'rw') - 3.4) / 1.85, 0, 1)), uHome: 1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, spray: QS.has('nospray') ? 0 : 1 /* test switch */, grass: 1 /* test switch: the meadow's blades */, pclouds: 1 /* test switch: painted clouds (0: the procedural ones, with ?clouds=both) */, band: 1 /* test switch: the painted horizon (0: the mountain rings) */, waves: 1 /* test switch: the painted sea's waves (0: its flat tones) */, shore: 1 /* test switch: the waves and foam along the sea wall (0: the open sea's colour there) */, surf: 1 /* test switch: the spray over the tetrapods */, tetra: 1 /* test switch: the tetrapods */, bark: 1 /* test switch: the bark's painted tones (0: the old colours, lit) */, trunks: 1 /* test switch: the painted trees' bark (0: hidden) */, todpaint: 1 /* test switch: the painted look at golden hour, sunset and night (0: only on a bright day, as before) */, road: 1 /* test switch: the coast's, the country's and the cherry avenue's painted asphalt (0: the old road; in the avenue's ground it also skips the tint's work) */, carkey: 1 /* test switch: the car lit by the painter's sun (0: by the real sun) */, sunroad: 1 /* test switch: the sun and the moon stand by the road's heading, as in the paintings (0: fixed in the world, as before) */, volkey: 1 /* test switch: the crowns and the tetrapods lit by the painted volumes' key (0: by the real sun) */, shsoft: 1 /* test switch: soft shadow edges near the camera (0: one tap everywhere, as before) */, shfit: 1 /* test switch: the sun's shadow box fitted to what can be seen at a low sun (0: the old square box) */, tuff: 1 /* test switch: Cappadocia's fairy chimneys in their painted tones (0: their own colours, lit) */, slope: 1 /* test switch: the coast's slope in the painting's lime with its painter's fill in the shade (0: as before, step 27) */, bandnear: 1 /* test switch: the country's painted horizon drawn just inside the world's far fade, over the next zone's far slopes (0: as before, step 28) */, banktod: 1 /* test switch: the country's verge banks' grass by the hour (0: lit only), step 28 */, evesky: 1 /* test switch: the painted evening sky (0: the old sky at golden hour and sunset), Audit 2 */, nightpaint: 1 /* test switch: the night as painted (0: as before), step 30 */, rooms: 1 /* test switch: the rooms behind the shop windows (0: their painted glass), step 31 */, tram: 1 /* test switch: the Galata Bridge's tram (0: hidden), step 33 */, fish: 1 /* test switch: the Galata Bridge's painted fishermen (0: hidden; their 3D rods and buckets stay), step 35a */, people: 1 /* test switch: the painted people, Paşabağ's tourists and Istanbul's (0: hidden), step 35f */, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
   let started = false;
   // (the atlas's world variant and its shadow twin are made, and their programs compiled, at every start: without Turkey's
   // atlas yet, on a stand-in, its textures swapped in when they load (materials.js setWorldTex))
@@ -598,6 +613,10 @@ async function main() {
   };
   { const rj = await roomJpLoad; if (rj) jpRooms(rj); }
   if (TR_START) { const rt = await roomTrLoad; if (rt) trRooms(rt, watlas); }
+  // (three.js objects made after the start, or which mustn't move seeded captures, take their ids from a generator of their own: galLazy, step
+  // 35f's people)
+  let lazyId = 0x2545f491;
+  const quietIds = f => { const R0 = Math.random; Math.random = () => { lazyId = (Math.imul(lazyId, 1664525) + 1013904223) >>> 0; return lazyId / 4294967296; }; try { return f(); } finally { Math.random = R0; } };
   // (step 35a) the Galata Bridge's fishermen as painted figures (fishers.js: one instanced card each, its view picked on the GPU, and the
   // soft contact shadows under them): at a Turkish start made last of all (their ids draw random numbers), before the road is built (its
   // chunks then take the painted figures, else the smooth ones: props.js setFishers); in Turkey's lazy load otherwise
@@ -640,6 +659,27 @@ async function main() {
     while (train.st.active) await nextFrame();
     paintTrain(d, map, em);
   } };
+  // (step 35f) the painted people: their casts on the fishermen's programs (fishers.js: one instanced card each, its eight views picked and
+  // blended on the GPU; Paşabağ's tourists tinted by Cappadocia's light by the hour, Istanbul's by the Galata Bridge's, as the fishermen),
+  // made last of all at the start for the casts loaded with it, their ids from quietIds (no random numbers drawn). The chunks list their
+  // people either way (chunks.js G.people): nobody shows before their cast is in, nor if it failed (never the old box figures)
+  const people = { tour: null, ist: null };
+  const makeCast = (key, pa) => quietIds(() => { const f = makeFishers(pa, { cast: PEOPLE[key].cast, ring: [0, 8], T: key === 'tour' ? U.uTourT : U.uFishT, rim: key === 'tour' ? U.uTourRim : U.uFishRim, cap: 96 }); renderer.initTexture(f.tex); return f; });
+  for (const key of ['tour', 'ist']) { const pa = peopleLoad[key] && await peopleLoad[key]; if (pa) try { const f = makeCast(key, pa); scene.add(f.mesh, f.decal); people[key] = f; } catch (e) { console.warn('people:', e); pa.img.close(); } }
+  // (…and a cast made after the start: its programs, the fishermen's, compiled off the main thread should they not be yet (the fishermen
+  // failed, or came later); its shadow twin with the state three gives it in the shadow pass (its map, alpha test and both faces, and no fog:
+  // the shadow pass draws it in an empty scene, and the scene's fog is part of a program's key): the same program)
+  const warmCast = async f => {
+    const [fw, fw0] = quietIds(() => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute([0, -50, 0, 0.01, -50, 0, 0, -49.99, 0], 3));
+      const g0 = g.clone(); g.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0], 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 0, 1], 2)); return [g, g0]; });
+    Object.assign(f.depth, { map: f.mat.map, alphaTest: f.mat.alphaTest, side: f.mat.shadowSide }); // (as three sets it for the shadow pass)
+    for (const [g, m] of [[fw, f.mat], [fw, f.depth], [fw0, f.decalMat]]) {
+      await nextFrame(); const o = quietIds(() => new THREE.Mesh(g, m)); o.receiveShadow = m === f.mat;
+      const fog = scene.fog; if (m === f.depth) scene.fog = null; // (its program made now, synchronously: the fog back before anything draws)
+      renderer.setRenderTarget(post.composer.readBuffer); const ready = renderer.compileAsync(o, camera, scene); renderer.setRenderTarget(null); scene.fog = fog; await ready;
+    }
+    fw.dispose(); fw0.dispose();
+  };
   world.trReady = TR_START; // (no chunk of Turkey's, or of a border's, is built before its assets are in: chunks.js)
   world.eminWait = EMIN_LATER; // (step 35R-galata-2: …nor Eminönü's square's chunks before its paintings (galLazy))
   status('building the road…');
@@ -663,10 +703,11 @@ async function main() {
     // (the water's meshes have no normals, and three compiles a different program without them: they are warmed up on a
     // triangle without normals too, or the coast's water and surf and the rivers compiled when they first came into view)
     const tri0 = new THREE.BufferGeometry(); tri0.setAttribute('position', tri.attributes.position);
-    const bare = new Set([M.shore, M.surf, riverMat, ...(fishers ? [fishers.decalMat] : [])]);
-    const mats = [M.color, M.atlas, M.atlasW, ...(M.atlasI ? [M.atlasI] : []), ...(M.atlasC ? [M.atlasC] : []), ...(M.atlasCT ? [M.atlasCT] : []), ...[M.atlasCI, M.atlasCTI, M.atlasWI, M.atlasG, M.atlasGI].filter(m => m), M.foliage, M.leaf, ...(M.bank ? [M.bank] : []), M.lamp, M.sig, M.sodium, M.decal, M.pool, M.shore, M.surf, riverMat, M.tetra, M.bark, ...(M.gleaf ? [M.gleaf] : []), ...(M.gblossom ? [M.gblossom] : []), ...(M.tuff ? [M.tuff, M.capAtlas] : []), ...(M.pasGrass ? [M.pasGrass] : []), ...(fishers ? [fishers.mat, fishers.decalMat] : []), ...(M.atlasDol ? [M.atlasDol] : [])];
+    const castWarm = fishers ? null : people.ist || people.tour; // (step 35f: a cast of people is the fishermen's programs: warmed only without them)
+    const bare = new Set([M.shore, M.surf, riverMat, ...(fishers ? [fishers.decalMat] : []), ...(castWarm ? [castWarm.decalMat] : [])]);
+    const mats = [M.color, M.atlas, M.atlasW, ...(M.atlasI ? [M.atlasI] : []), ...(M.atlasC ? [M.atlasC] : []), ...(M.atlasCT ? [M.atlasCT] : []), ...[M.atlasCI, M.atlasCTI, M.atlasWI, M.atlasG, M.atlasGI].filter(m => m), M.foliage, M.leaf, ...(M.bank ? [M.bank] : []), M.lamp, M.sig, M.sodium, M.decal, M.pool, M.shore, M.surf, riverMat, M.tetra, M.bark, ...(M.gleaf ? [M.gleaf] : []), ...(M.gblossom ? [M.gblossom] : []), ...(M.tuff ? [M.tuff, M.capAtlas] : []), ...(M.pasGrass ? [M.pasGrass] : []), ...(fishers ? [fishers.mat, fishers.decalMat] : []), ...(castWarm ? [castWarm.mat, castWarm.decalMat] : []), ...(M.atlasDol ? [M.atlasDol] : [])];
     for (const zs of zoneSets()) if (TR_START || !trSet(zs)) mats.push(groundMaterialFor(zs)); // (each zone, each pair of neighbours, each border's: Turkey's later if not needed now)
-    for (const m of mats) { const o = new THREE.Mesh(bare.has(m) ? tri0 : tri, m); o.castShadow = o.receiveShadow = !bare.has(m); o.frustumCulled = false; if (m === M.gleaf) o.customDepthMaterial = M.gleafDepth; if (m === M.gblossom) o.customDepthMaterial = M.gblossomDepth; if (m === M.atlas || m === M.atlasI || m === M.atlasG || m === M.atlasGI) o.customDepthMaterial = M.atlasDepth; if (m === M.atlasW || m === M.atlasWI) o.customDepthMaterial = M.atlasWDepth; if (m === M.atlasC || m === M.atlasCI) o.customDepthMaterial = M.atlasCDepth; if (m === M.atlasCT || m === M.atlasCTI) o.customDepthMaterial = M.atlasCTDepth; if (m === M.color) o.customDepthMaterial = PROP_DEPTH; if (fishers && m === fishers.mat) o.customDepthMaterial = fishers.depth; if (m === M.atlasDol) o.customDepthMaterial = M.atlasDolDepth; warm.add(o); }
+    for (const m of mats) { const o = new THREE.Mesh(bare.has(m) ? tri0 : tri, m); o.castShadow = o.receiveShadow = !bare.has(m); o.frustumCulled = false; if (m === M.gleaf) o.customDepthMaterial = M.gleafDepth; if (m === M.gblossom) o.customDepthMaterial = M.gblossomDepth; if (m === M.atlas || m === M.atlasI || m === M.atlasG || m === M.atlasGI) o.customDepthMaterial = M.atlasDepth; if (m === M.atlasW || m === M.atlasWI) o.customDepthMaterial = M.atlasWDepth; if (m === M.atlasC || m === M.atlasCI) o.customDepthMaterial = M.atlasCDepth; if (m === M.atlasCT || m === M.atlasCTI) o.customDepthMaterial = M.atlasCTDepth; if (m === M.color) o.customDepthMaterial = PROP_DEPTH; if (fishers && m === fishers.mat) o.customDepthMaterial = fishers.depth; if (castWarm && m === castWarm.mat) o.customDepthMaterial = castWarm.depth; if (m === M.atlasDol) o.customDepthMaterial = M.atlasDolDepth; warm.add(o); }
     // (the props' shadow-pass twin too, W6: it used to compile only when a real props' mesh stood in the shadow box during the load, and a
     // start in Paşabağ's valley (no poles) met its first props in the city, 20 ms into the drive)
     warm.position.set(0, 0, 0); scene.add(warm);
@@ -788,18 +829,19 @@ async function main() {
   // each, the atlas's program); the world builds the square's chunks once these are in or have failed
   // (their three.js objects take their ids from a generator of their own: made after the start, ids drawn from Math.random would shift the random
   // numbers of everything drawn after them, a seeded capture's particles among them, by when a download happened to finish)
-  let lazyId = 0x2545f491;
-  const quietIds = f => { const R0 = Math.random; Math.random = () => { lazyId = (Math.imul(lazyId, 1664525) + 1013904223) >>> 0; return lazyId / 4294967296; }; try { return f(); } finally { Math.random = R0; } };
   const galLazy = { pending: TR_HOME, async run() {
+    const pl = ['tour', 'ist'].map(k => (peopleLoad[k] ? null : loadPeopleAtlas(HTIER, PEOPLE[k].file, PEOPLE[k].ids))); // (step 35f: the other cast of people)
     const [c2, e] = await Promise.all([realSky && realSky.texes.length < 2 ? loadCards(HTIER, 'cards2') : null, EMIN_LATER ? loadEminonu(HTIER) : null]);
     if (c2) try { await nextFrame(); const t = quietIds(() => realSky.addSheet(c2)); renderer.initTexture(t); } catch (err) { console.warn('cards2:', err); }
     if (e) try { await nextFrame(); const map = quietIds(() => dolTex(e.a)); renderer.initTexture(map); await nextFrame(); const em = quietIds(() => dolTex(e.e)); renderer.initTexture(em); quietIds(() => eminMat(map, em, e)); } catch (err) { console.warn('eminonu:', err); M.atlasEm = null; setEminonu(null); }
     world.eminWait = false;
+    for (let i = 0; i < 2; i++) { const pa = pl[i] && await pl[i], key = i ? 'ist' : 'tour'; if (pa) try { await nextFrame(); const f = makeCast(key, pa); await warmCast(f); scene.add(f.mesh, f.decal); people[key] = f; } catch (err) { console.warn('people:', err); } }
   } };
   async function trLazy() {
     TRL.started = true; TRL.t0 = performance.now();
     const eml = loadEminonu(HTIER); // (step 35R-galata-2c)
     const step = n => TRL.steps.push([n, Math.round(performance.now() - TRL.t0)]);
+    const pla = [loadPeopleAtlas(HTIER, PEOPLE.tour.file, PEOPLE.tour.ids), loadPeopleAtlas(HTIER, PEOPLE.ist.file, PEOPLE.ist.ids)]; // (step 35f: the painted people's casts)
     const skl = loadRealSky1(), [trAtlases, th, ta, ba, cta, rtr, fla, dla, sk, gla, tla] = await Promise.all([loadTrBands(), loadTrHouseAtlas(HTIER), loadTownAtlas(HTIER), loadBalloonAtlas(TIER), loadChainAtlas(HTIER, 'tr'), loadRoomAtlas(RTIER, 15000, 'rooms1tr'), loadFisherAtlas(HTIER), loadDolmus(HTIER), skl, loadGalFronts(HTIER), loadTram(HTIER)]); step('loaded');
     await nextFrame();
     const wa = buildWorldAtlas(atlas, HTIER, th, ta); if (wa.trHouses) setTrHouses(th.types, th.extras); if (th) th.img.close(); if (ta) ta.img.close(); step('atlas');
@@ -855,6 +897,11 @@ async function main() {
         fw.dispose(); fw0.dispose(); scene.add(f.mesh, f.decal); fishers = f; setFishers(fla.J);
       } catch (e) { console.warn('fishers:', e); setFishers(null); }
       step('fishers');
+    }
+    for (let i = 0; i < 2; i++) { // (step 35f: the painted people's casts: their texture a frame, their programs the fishermen's (compiled above, or now))
+      const pa = await pla[i], key = i ? 'ist' : 'tour'; if (!pa) continue;
+      try { await nextFrame(); const f = makeCast(key, pa); await warmCast(f); scene.add(f.mesh, f.decal); people[key] = f; } catch (e) { console.warn('people:', e); }
+      step('people ' + key);
     }
     { const e = await eml; if (e) try { await nextFrame(); const map = dolTex(e.a); renderer.initTexture(map); await nextFrame(); const em = dolTex(e.e); renderer.initTexture(em); eminMat(map, em, e); } catch (err) { console.warn('eminonu:', err); M.atlasEm = null; setEminonu(null); } step('eminonu'); } // (step 35R-galata-2c: its two textures a frame each)
     if (dla) { // (step 35b: the town's dolmuş: its two textures a frame each, then its material (the atlas's program: nothing compiles))
@@ -1468,9 +1515,14 @@ async function main() {
     if (M.atlasG) { M.atlasG.emissiveIntensity = M.atlas.emissiveIntensity; if (M.atlasGI) M.atlasGI.emissiveIntensity = M.atlas.emissiveIntensity; } // (and Galata's own fronts', step 35R-galata-2)
     if (M.train) M.train.emissiveIntensity = M.atlas.emissiveIntensity; // (and the crossing train's saloon, display and lamps, step 35c)
     if (tram) { tram.mat.emissiveIntensity = M.atlas.emissiveIntensity; tram.update(dt, path, st.s, camera.position, world.origin, st.speed, st.tram); } // (the Galata Bridge's tram, step 33)
-    if (fishers) { fishers.update(world, camera, st.fish, (0.16 + 0.22 * TOD.bright) * (1 - tunS)); // (the Galata Bridge's painted fishermen and their contact shadows, step 35a)
-      if (fishers.mesh.visible) { const c = FISH_T.at(TOD.t).rgb('v'), k = paintSky(); U.uFishT.value.set(lerp(1, c[0], k), lerp(1, c[1], k), lerp(1, c[2], k));
-        const r = FISH_RIM.at(TOD.t).rgb('v'); U.uFishRim.value.set(r[0] * k, r[1] * k, r[2] * k, k * (r[0] + r[1] + r[2]) > 0.01 ? 1 : 0); } } // (…their tint and rim by the hour)
+    { const kc = (0.16 + 0.22 * TOD.bright) * (1 - tunS); // (the contact shadows' strength)
+      if (fishers) fishers.update(world, camera, st.fish, kc); // (the Galata Bridge's painted fishermen and their contact shadows, step 35a)
+      if (people.ist) people.ist.update(world, camera, st.people, kc); // (step 35f: Istanbul's people in the Galata zone…)
+      if (people.tour) people.tour.update(world, camera, st.people, kc); // (…and Paşabağ's tourists)
+      if ((fishers && fishers.mesh.visible) || (people.ist && people.ist.mesh.visible)) { const c = FISH_T.at(TOD.t).rgb('v'), k = paintSky(); U.uFishT.value.set(lerp(1, c[0], k), lerp(1, c[1], k), lerp(1, c[2], k));
+        const r = FISH_RIM.at(TOD.t).rgb('v'); U.uFishRim.value.set(r[0] * k, r[1] * k, r[2] * k, k * (r[0] + r[1] + r[2]) > 0.01 ? 1 : 0); } // (…their tint and rim by the hour)
+      if (people.tour && people.tour.mesh.visible) { const c = TOUR_T.at(TOD.t).rgb('v'), k = paintSky(); U.uTourT.value.set(lerp(1, c[0], k), lerp(1, c[1], k), lerp(1, c[2], k));
+        const r = TOUR_RIM.at(TOD.t).rgb('v'); U.uTourRim.value.set(r[0] * k, r[1] * k, r[2] * k, k * (r[0] + r[1] + r[2]) > 0.01 ? 1 : 0); } } // (…the tourists' by Paşabağ's light)
     // leaves and grass glow when a low sun shines through them (materials.js backlit()): only while it's low and out
     U.uBacklit.value = BACKLIT_K * 1.6 * (1 - ov) * (1 - TOD.night) * sstep(0.0, 0.08, TOD.sunEl) * (1 - sstep(0.25, 0.55, TOD.sunEl)) * (1 - tunS);
     // the painted crowns' shade: the reference art's deep teal on a bright day, neutral at dusk, at night and under grey
@@ -1661,7 +1713,7 @@ async function main() {
     if (started && frames > 150 && dt > 0.03) slowT += dt; else slowT = Math.max(0, slowT - dt * 0.5);
     if (slowT > 3 && !QS.has('q')) { slowT = 0; stepDown(); }
   }
-  window.__dbg = { renderer, st, scene, camera, world, TOD, KEYS, X, train, weather, U, birds, cine, post, car, sun, M, cells: atlas.cells, clouds, pclouds, band, get bandTr() { return bandTr; }, sky, mountains, shadowDir, CM, spray, grass, sea, get ferry() { return ferry; }, get tram() { return tram; }, get fishers() { return fishers; }, get dolmus() { return M.atlasDol || null; }, get trainPaint() { return M.train || null; }, get balloons() { return balloons; }, get realSky() { return realSky; }, TRL, get audio() { return audio; }, uch: { TF_DAY, TF_GOLD, TF_SUNSET, TF_NIGHT, UG_DAY, UCH }, pas: { TFP_DAY, TFP_GOLD, TFP_SUNSET, TFP_NIGHT, PG_DAY, PG_GOLD, PG_SUNSET, PG_NIGHT, PAS_Z, PAS_R, pasAz }, night: { NT, NTZ, NSKY_N, MOON_B, CF_N } };
+  window.__dbg = { renderer, st, scene, camera, world, TOD, KEYS, X, train, weather, U, birds, cine, post, car, sun, M, cells: atlas.cells, clouds, pclouds, band, get bandTr() { return bandTr; }, sky, mountains, shadowDir, CM, spray, grass, sea, get ferry() { return ferry; }, get tram() { return tram; }, get fishers() { return fishers; }, people, get dolmus() { return M.atlasDol || null; }, get trainPaint() { return M.train || null; }, get balloons() { return balloons; }, get realSky() { return realSky; }, TRL, get audio() { return audio; }, uch: { TF_DAY, TF_GOLD, TF_SUNSET, TF_NIGHT, UG_DAY, UCH }, pas: { TFP_DAY, TFP_GOLD, TFP_SUNSET, TFP_NIGHT, PG_DAY, PG_GOLD, PG_SUNSET, PG_NIGHT, PAS_Z, PAS_R, pasAz }, night: { NT, NTZ, NSKY_N, MOON_B, CF_N } };
   status('');
   $start.classList.add('ready');
   if (QS.has('auto')) begin();

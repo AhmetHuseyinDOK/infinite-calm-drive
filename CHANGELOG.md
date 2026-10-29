@@ -2,6 +2,27 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-29 · 19:30 — Galata rolled back to the version before "Galata as the real place"
+- **The user, on that pass: "i dont wanna say this but it became eve more slop, maybe our techinque is wrong", then "i think we can
+  rollback galata and lets try your way".** The game is again exactly the 3639de6 build: `src/` is identical to it and the rebuilt
+  `dist/game.js` is byte-identical to its shipped, verified bundle (sha256 3347d303…). Galata is back to the second pass's bridge,
+  Karaköy and Eminönü, with the painted tram, people and street furniture.
+- That version's known faults come back with it until the rebuild:
+  - the Beyazıt Tower's card stands over open sky (the tower "on the air");
+  - some side walls are blank;
+  - behind Eminönü there is only the far ring;
+  - a slow load can show Japan's mountains on Istanbul's horizon.
+- **Next comes a different technique, not another pass of the same one: painted plates.** Each real view is painted once, as one
+  coherent anime background in the references' style, and projected onto a rough depth model of the real place. Only near things (the
+  road, rails, tram, people, cars) stay true 3D. A prototype at the bridge and on Kemeraltı is being judged against levelled Street
+  View before anything ships.
+- The old city's data stays in the repo, unused by the game, as the plates' depth model: `assets/real/galata/mass1*` and `CREDITS4.md`,
+  about 6,200 OpenStreetMap buildings on open elevation. Nothing loads it. Map data © OpenStreetMap contributors.
+- Checked:
+  - smoke at Galata (q=high noon, q=low dusk) and on the Bosphorus: no errors, 82–83 programs;
+  - staging rebuilt from the same tree, byte-identical;
+  - the paused boats step (35h) set aside intact, to be re-based later.
+
 ## 2026-10-29 · 19:00 — Galata as the real place: the old city's hill behind Eminönü, no floating tower, no blank walls, the squares' roads, Kemeraltı's width
 - **The old city now stands behind Eminönü as one built hill, from the water up to the Süleymaniye** (the user: "it is not realistic … the
   kız kulesi is on the air"). About 6,200 of OpenStreetMap's buildings (3,900 on phones) stand on their real outlines, on the real ground

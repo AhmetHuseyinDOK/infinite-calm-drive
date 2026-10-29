@@ -57,14 +57,11 @@ const GAL_TT = new Map('-382.440.s,-186.682.s,-173.34.s,-154.363.s,-140.487.s,-1
  *  as it was (a church, a mosque, the bazaar, the tomb, a site, a shed off the fish market) */
 export function galType(b) {
   const t = GAL_TT.get(Math.round(b.l * 10) * 1000 + b.id);
-  // (GALATA-3, D5: Kemeraltı's left side to Karaköy's square is its white office blocks and their glass, not the rose stone: Reşadiye's
-  // off-white offices' painting there)
-  if (t === 'm' && b.l < 175) return 'o';
   if (t !== undefined) return t === '-' ? null : t;
   if (b.k !== 'block' && !(b.k === 'shed' && b.l > 535 && b.l < 615)) return null;
   if (b.l > 535 && b.l < 615 && (b.lv <= 2 || b.k === 'shed')) return 'f';
   if (b.l < 1040) {
-    if (b.lv >= 8) return b.l < 175 ? 'o' : 'm';
+    if (b.lv >= 8) return 'm';
     let a = 0; const p = b.p, n = p.length; for (let i = 0; i < n; i++) { const q = p[i], r = p[(i + 1) % n]; a += q[0] * r[1] - r[0] * q[1]; }
     if (b.l > 380 && b.l < 580 && Math.abs(a) / 2 < 250) return 'p';
     return 's';

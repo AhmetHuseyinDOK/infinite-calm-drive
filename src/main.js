@@ -7,7 +7,7 @@ import { setAtlas, setFoliage, warmTrees, warmBare, warmTetrapods, setLeafDensit
 import { setFurniture, furnTris } from './furniture.js';
 import { loadTreeAtlas } from './ghibli.js';
 import { World, CH } from './chunks.js';
-import { loadRealSky, makeRealSky, loadCards, loadMass } from './realsky.js';
+import { loadRealSky, makeRealSky, loadCards } from './realsky.js';
 import { loadEminonu, setEminonu } from './eminonu.js'; // (step 35R-galata-2c: Eminönü's square)
 import { makeSky, paintClouds, makeClouds, makeMountains, updateTOD, applyWeather, TOD, lightDirAt, KEYS, REGION_KEYS, sunBearing, moonSkyDir } from './sky.js';
 import { makeWeather, makeRain, makeSnow, PLIGHT } from './weather.js';
@@ -144,11 +144,7 @@ async function main() {
   // stays loaded: the bridge keeps it if they fail (and leaving it out moved a few of the town's pixels in seeded captures))
   const loadRealSky1 = () => loadRealSky(HTIER), loadTrBands = () => Promise.all([loadBandAtlas(TIER, 15000, 'bandtr1'), loadBandAtlas(TIER, 15000, 'bandtr2'), loadBandAtlas(TIER, 15000, 'bandtr3'), loadBandAtlas(TIER, 15000, 'bandtr4'), loadBandAtlas(TIER, 15000, 'bandtr5')]);
   // (step 35R-galata-2: at a start in Turkey its first cards only; the second set, cards2, after the start: galLazy)
-  // (GALATA-3: and the far city's massing (realsky.js loadMass: the old city's hill, Galata and Sirkeci as their real buildings), with the cards
-  // at a start in or before Galata (or a Japanese start near the border), else after the start (galLazy); the phones' lighter one off the high tier)
-  // (phones and the embed fetch it after the start: their first visit on a slow line waits neither for its bytes nor its build)
-  const MTIER = quality === 'high' ? 'hi' : 'lo', MASS_NOW = TR_START && (!TR_HOME || (quality === 'high' && (startZone() === 'galata' || startZone() === 'bosphorus')));
-  const realSkyLoad = TR_START ? firstLoads.then(() => Promise.all([loadRealSky(HTIER, 15000, !TR_HOME), MASS_NOW ? loadMass(MTIER) : null])) : null, bandTrLoad = TR_START ? firstLoads.then(loadTrBands) : null;
+  const realSkyLoad = TR_START ? firstLoads.then(() => loadRealSky(HTIER, 15000, !TR_HOME)) : null, bandTrLoad = TR_START ? firstLoads.then(loadTrBands) : null;
   // (and Cappadocia's hot-air balloons, W5: on the clouds' tiers)
   const balloonLoad = TR_START ? firstLoads.then(() => loadBalloonAtlas(TIER)) : null, BALLOONS_N = quality === 'high' ? 36 : 22;
 
@@ -602,11 +598,8 @@ async function main() {
     t.onUpdate = () => { t.onUpdate = null; img.close(); }; return t; };
   /** the bay each Galata shop borrows its rooms from (the town's set: tr0 the bakery, tr2 the mini market, tr3 the tea house, tr6 the
    *  greengrocer, tm0 the chain market's bright window for the halls: the bank's arcade, the post office, the lobbies, the ticket hall) */
-  // (GALATA-3, D5: by the kind of place each front is, as near as the town's sheet holds them, not the mini market's shelves everywhere: Karaköy's
-  // stone hans' cafés (the tea house) and corner grocers, the square's barbers and chemists, the office blocks' and halls' bright clean rooms
-  // (the chemist's white shelves for a bank's or a post office's hall), the fish market's and the cafés' tables)
-  const GAL_ROOMS = { gfr_emhan_g: ['tr0', 'tr6'], gfr_nord_g: ['tr3', 'tr3b'], gfr_liman_g: ['tr3', 'tr3b'], gfr_fish_g: ['tr3', 'tr3b'], gfr_stone_g: ['tr3', 'tr1b'], gfr_pastel_g: ['tr4', 'tr5'],
-    gfr_surp_g: ['tr6'], gfr_palas_g: ['tr5', 'tr5b'], gfr_ptt_g: ['tr5b'], gfr_ito_g: ['tr5', 'tr3b'], gfr_modern_g: ['tr5b', 'tr3'], gfr_ferry_g: ['tr5'] };
+  const GAL_ROOMS = { gfr_emhan_g: ['tr0', 'tr0b'], gfr_nord_g: ['tr3', 'tr3b'], gfr_liman_g: ['tr3', 'tr3b'], gfr_fish_g: ['tr3', 'tr3b'], gfr_stone_g: ['tr2'], gfr_pastel_g: ['tr2'],
+    gfr_surp_g: ['tr6'], gfr_palas_g: ['tm0'], gfr_ptt_g: ['tm0'], gfr_ito_g: ['tm0'], gfr_modern_g: ['tm0'], gfr_ferry_g: ['tm0'] };
   const galFronts = (ga, map, em) => {
     // (in the Atlas's own cells' shape, u0 … py: the props' builders see one kind of cell)
     for (const t of ga.tiles) atlas.cells[t.name] = { u0: (t.x + 0.5) / ga.W, u1: (t.x + t.w - 0.5) / ga.W, v0: 1 - (t.y + t.h - 0.5) / ga.H, v1: 1 - (t.y + 0.5) / ga.H, w: t.w, h: t.h, px: t.x, py: t.y };
@@ -772,20 +765,11 @@ async function main() {
     if (pcAtlas) renderer.initTexture(pcAtlas.tex); if (bandAtlas) renderer.initTexture(bandAtlas.tex); if (bandAtlas && bandCo) renderer.initTexture(bandCo.tex); if (trAtlases) for (const a of trAtlases) if (a) renderer.initTexture(a.tex);
     // (step 35R) the real Galata zone's skyline: made last of all (its ids draw random numbers), its programs compiled and its sheet
     // uploaded here; the painted band's Galata row (the concept's old city) gives way to it
-    // (GALATA-3: made whatever came: without its cards, the far city and the far ring alone; without both, the far ring (a painted far city), so
-    // Istanbul's horizon never falls back to Japan's mountains)
-    if (TR_START) { const [sk, ms] = await realSkyLoad; try { realSky = makeRealSky(sk, post, scene.fog.color, ANISO, ms); useRealSky(sk || ms); scene.add(realSky.group); realSky.group.visible = true;
+    if (TR_START) { const sk = await realSkyLoad; if (sk) try { realSky = makeRealSky(sk, post, scene.fog.color, ANISO); useRealSky(); scene.add(realSky.group); realSky.group.visible = true;
       renderer.setRenderTarget(post.composer.readBuffer); renderer.compile(scene, camera); renderer.setRenderTarget(null); for (const t of realSky.texes) renderer.initTexture(t); realSky.group.visible = false; } catch (e) { console.warn('real skyline:', e); realSky = null; } }
   }
-  /** (step 35R) the real skyline in: the painted band's Galata row (the concept's old city) gives way to it. (GALATA-3: `real`: its cards or
-   *  its far city came; with neither, the band's own Galata row (if it came) stays and the far ring gives way to it; else the ring holds the
-   *  horizon, never the coast's mountains the band would borrow) */
-  function useRealSky(real = true) {
-    const row = !real && !!(bandTr && bandTr.has && bandTr.has('galata'));
-    if (realSky) realSky.ringOn = !row;
-    if (row) return;
-    if (bandTr) bandTr.hide.galata = true; if (band) band.hide.galata = true;
-  }
+  /** (step 35R) the real skyline in: the painted band's Galata row (the concept's old city) gives way to it */
+  function useRealSky() { if (bandTr) bandTr.hide.galata = true; if (band) band.hide.galata = true; }
   /** Turkey's zones without a row of their own (their file failed, or isn't in yet) borrow the coast's from Japan's band */
   // (the Turkish town's, W4, borrows Japan's far city in haze)
   // (…and Cappadocia's, W5, the country's far hills)
@@ -859,8 +843,7 @@ async function main() {
   // numbers of everything drawn after them, a seeded capture's particles among them, by when a download happened to finish)
   const galLazy = { pending: TR_HOME, async run() {
     const pl = ['tour', 'ist'].map(k => (peopleLoad[k] ? null : loadPeopleAtlas(HTIER, PEOPLE[k].file, PEOPLE[k].ids))); // (step 35f: the other cast of people)
-    const [c2, e, ms] = await Promise.all([realSky && realSky.texes.length < 2 ? loadCards(HTIER, 'cards2') : null, EMIN_LATER ? loadEminonu(HTIER) : null, realSky && !realSky.mass ? loadMass(MTIER) : null]);
-    if (ms) try { await nextFrame(); quietIds(() => realSky.addMass(ms)); useRealSky(true); } catch (err) { console.warn('far city:', err); } // (GALATA-3: the far city, at a start far from Galata)
+    const [c2, e] = await Promise.all([realSky && realSky.texes.length < 2 ? loadCards(HTIER, 'cards2') : null, EMIN_LATER ? loadEminonu(HTIER) : null]);
     if (c2) try { await nextFrame(); const t = quietIds(() => realSky.addSheet(c2)); renderer.initTexture(t); } catch (err) { console.warn('cards2:', err); }
     if (e) try { await nextFrame(); const map = quietIds(() => dolTex(e.a)); renderer.initTexture(map); await nextFrame(); const em = quietIds(() => dolTex(e.e)); renderer.initTexture(em); quietIds(() => eminMat(map, em, e)); } catch (err) { console.warn('eminonu:', err); M.atlasEm = null; setEminonu(null); }
     world.eminWait = false;
@@ -871,7 +854,7 @@ async function main() {
     const eml = loadEminonu(HTIER); // (step 35R-galata-2c)
     const step = n => TRL.steps.push([n, Math.round(performance.now() - TRL.t0)]);
     const pla = [loadPeopleAtlas(HTIER, PEOPLE.tour.file, PEOPLE.tour.ids), loadPeopleAtlas(HTIER, PEOPLE.ist.file, PEOPLE.ist.ids)]; // (step 35f: the painted people's casts)
-    const skl = loadRealSky1(), [trAtlases, th, ta, ba, cta, rtr, fla, dla, sk, gla, tla, msa] = await Promise.all([loadTrBands(), loadTrHouseAtlas(HTIER), loadTownAtlas(HTIER), loadBalloonAtlas(TIER), loadChainAtlas(HTIER, 'tr'), loadRoomAtlas(RTIER, 15000, 'rooms1tr'), loadFisherAtlas(HTIER), loadDolmus(HTIER), skl, loadGalFronts(HTIER), loadTram(HTIER), loadMass(MTIER)]); step('loaded');
+    const skl = loadRealSky1(), [trAtlases, th, ta, ba, cta, rtr, fla, dla, sk, gla, tla] = await Promise.all([loadTrBands(), loadTrHouseAtlas(HTIER), loadTownAtlas(HTIER), loadBalloonAtlas(TIER), loadChainAtlas(HTIER, 'tr'), loadRoomAtlas(RTIER, 15000, 'rooms1tr'), loadFisherAtlas(HTIER), loadDolmus(HTIER), skl, loadGalFronts(HTIER), loadTram(HTIER)]); step('loaded');
     await nextFrame();
     const wa = buildWorldAtlas(atlas, HTIER, th, ta); if (wa.trHouses) setTrHouses(th.types, th.extras); if (th) th.img.close(); if (ta) ta.img.close(); step('atlas');
     await nextFrame();
@@ -938,12 +921,11 @@ async function main() {
       catch (e) { console.warn('dolmus:', e); M.atlasDol = null; setDolmus(null); }
       step('dolmus');
     }
-    { // (step 35R: the real Galata zone's skyline: its sheet a frame, its two programs compiled off the main thread; GALATA-3: with its far city,
-      // and made without its cards should they fail)
+    if (sk) { // (step 35R: the real Galata zone's skyline: its sheet a frame, its two programs compiled off the main thread)
       try {
-        await nextFrame(); const rs = makeRealSky(sk, post, scene.fog.color, ANISO, msa); for (const t of rs.texes) { await nextFrame(); renderer.initTexture(t); } rs.group.visible = true; // (step 35R-galata-2: a sheet a frame)
+        await nextFrame(); const rs = makeRealSky(sk, post, scene.fog.color, ANISO); renderer.initTexture(rs.tex); for (const t of rs.texes) if (t !== rs.tex) { await nextFrame(); renderer.initTexture(t); } rs.group.visible = true; // (step 35R-galata-2: a sheet a frame)
         renderer.setRenderTarget(post.composer.readBuffer); const ready = renderer.compileAsync(rs.group, camera, scene); renderer.setRenderTarget(null);
-        await ready; rs.group.visible = false; scene.add(rs.group); realSky = rs; useRealSky(sk || msa);
+        await ready; rs.group.visible = false; scene.add(rs.group); realSky = rs; useRealSky();
       } catch (e) { console.warn('real skyline:', e); }
       step('realsky');
     }
@@ -1509,7 +1491,7 @@ async function main() {
     const bandW = Math.max(band && st.band !== 0 ? band.update(camera, vm, camH, scene.fog.near, scene.fog.far) : 0, bandTr && st.band !== 0 ? bandTr.update(camera, vm, camH, scene.fog.near, scene.fog.far) : 0);
     if (band && st.band === 0) band.mesh.visible = false; if (bandTr && st.band === 0) bandTr.mesh.visible = false;
     const realW = realSky ? realSky.update(camera, st.s, world.origin) : 0; // (step 35R: the real Galata zone's skyline)
-    if (realSky) { const ch = realSky.group.children, n = ch.length - 1; for (let i = 0; i < n; i++) ch[i].visible = ch[i] === realSky.mass ? st.rmass !== 0 && realSky.on : st.rcards !== 0; ch[n].visible = st.rring !== 0 && realSky.ringOn && realSky.on; } // (step 35R-galata-2: test switches st.rcards, st.rring: its cards, its far ring; GALATA-3: st.rmass, its far city)
+    if (realSky) { const ch = realSky.group.children, n = ch.length - 1; for (let i = 0; i < n; i++) ch[i].visible = st.rcards !== 0; ch[n].visible = st.rring !== 0; } // (step 35R-galata-2: test switches st.rcards, st.rring: its cards, its far ring)
     if (M.atlasG) { M.atlasG.visible = st.galf !== 0; if (M.atlasGI) M.atlasGI.visible = st.galf !== 0; } // (…and st.galf: Galata's painted fronts)
     mountains.update(camera.position, Math.max(w.snow, zoneW(st.s + 600).snow * 0.7), 1 - Math.max(bandW, realW));
     if (balloons) { // (over Cappadocia's zone, while it is here or ahead: W5; over Paşabağ's once the drive is in it, W6: they come down one

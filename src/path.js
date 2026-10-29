@@ -90,10 +90,9 @@ export function galL(s) {
 }
 /** on the real bridge's upper deck, l m into the Galata zone */
 export const galBridge = l => l >= GR.bridge[0] && l <= GR.bridge[1];
-/** the road's half-width l m into the Galata zone: Kemeraltı Caddesi's three lanes (GALATA-3, D5: as the real street's, where Street View's
- *  car drives 3–5 m right of its middle; they were two), a little wider over Karaköy's square to the bridge's three, three on over the bridge
- *  and round through Eminönü (the hand-overs blend it; real_galata.js's blocks stand back to it: ~/cdtest/g38/scripts/gen_galata.py) */
-export const galRW = l => (l < 430 ? 5.0 : l < 560 ? 5.0 + 0.25 * smooth((l - 430) / 130) : 5.25);
+/** the road's half-width l m into the Galata zone: Kemeraltı Caddesi's two lanes, widening to the bridge's three over Karaköy's
+ *  square (OSM: lanes 2, then 3 from ~520 m), three on over the bridge and round through Eminönü (the hand-overs blend it) */
+export const galRW = l => (l < 430 ? 3.4 : l < 560 ? 3.4 + 1.85 * smooth((l - 430) / 130) : 5.25);
 /** the real road's curvature (game sign: + turns left) l m into the zone, per 2 m step (path.js Path.ensure takes the step's
  *  middle: the steps integrate to the real road's headings exactly; real_galata.js) */
 const galK = l => (l >= 0 && l < ZONE_LEN ? GR.k[Math.min(GR.k.length - 1, Math.floor(l / 2))] : 0);

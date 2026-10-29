@@ -2327,11 +2327,10 @@ function galRow(G, M, t, w, cell, y0, lamps, vt = W1) {
 /** a block's face of type t (galata.js galType), w wide, lv storeys: on a front towards the road its ground bays (shops with their rooms,
  *  the ferry terminals' halls, the church's wall) and its storeys' bays over them; on its other walls only the storeys' (their ground floor
  *  the plain wall); the cornice under the roof in the painting's wall colour. vt: the building's own tint (galTint) */
-export function galFront(G, M, w, t, lv, front, vt = W1, low = false) {
+export function galFront(G, M, w, t, lv, front, vt = W1) {
   const g = G.galf, c = G.color, T = GAL_FT[t]; g.setM(M); c.setM(M);
   const gh = GAL_F.m[T.g][1], nu = galNU(T, lv), H = galFrontH(t, lv);
   if (front) galRow(G, M, g, w, T.g, 0, true, vt);
-  else if (low && T.u) { const uh = GAL_F.m[T.u][1]; for (let y = gh - uh; y > -uh * 0.6; y -= uh) galRow(G, M, g, w, T.u, y, false, vt); } // (GALATA-3: a side or back wall's ground band its storeys' bays too)
   if (T.u) for (let f = 0; f < nu; f++) galRow(G, M, g, w, T.u, gh + f * GAL_F.m[T.u][1], false, vt);
   const cor = [T.tint[0] * vt[0] * 1.04, T.tint[1] * vt[1] * 1.04, T.tint[2] * vt[2] * 1.04];
   c.box(-w / 2 - 0.05, H - 0.1, -0.4, w / 2 + 0.05, H + 0.3, 0.0, cor, null, { ny: mulC(cor, 0.67) }); // (the cornice)

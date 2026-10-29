@@ -1,0 +1,11 @@
+{
+ "files": {
+  "hi": "mass1_hi.bin",
+  "lo": "mass1_lo.bin"
+ },
+ "bytes": {
+  "hi": 209544,
+  "lo": 129552
+ },
+ "src": "OpenStreetMap buildings (\u00a9 OpenStreetMap contributors, ODbL) on AWS Terrain Tiles (SRTM) ground: ~/cdtest/g38/scripts/gen_mass.py"
+}

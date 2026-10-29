@@ -1104,6 +1104,8 @@ export function makePaintedBand(atlas, post, fog, alias = null, haze0 = 0, winZo
     noSkirt: {},
     /** zones whose row is hidden ({ zone: true }: the real Galata zone's skyline, realsky.js, stands there instead: main.js) */
     hide: {},
+    /** (GALATA-3) whether it holds a row of the zone's own */
+    has(z) { return !!Z[z]; },
     /** rows with their own tones by the time of day ({ zone: todTones(…) with shade, mid, lit, ch }: Cappadocia's, W5, read from its
      *  concept's repaints); the rest take BAND_TONES */
     tones: {},

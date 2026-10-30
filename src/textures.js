@@ -987,18 +987,52 @@ export function buildPaintedAtlas(main, tier, fa, ha) {
   P.houses = !!ha && paintHouses(P, ha);
   return P;
 }
+/** (step 41) The shophouses' painted boards (props.js machiya, in place of the plain ones: 'pb' + the old board's name): [the painted body (pieces2's
+ *  'pbb_' + colour: Grok Imagine's repaint of the city painting's navy board, blank, recoloured), the lettering, its ink, its glow at night]. The
+ *  painting has no plain white boards: the bookshop's (書店) is dark wood with gold letters, as the painting's dark fascia over its bookshop; the
+ *  white ones a painted cream enamel */
+export const BOARDS41 = Object.fromEntries([...Array(14)].map((_, i) => ['hs' + i, SHOPS[(i * 7) % SHOPS.length]]).map(([n, t]) => [n, [
+  { hs0: 'red', hs1: 'cream', hs2: 'blue', hs3: 'mustard', hs4: 'green', hs5: 'cream', hs6: 'orange', hs7: 'navy', hs8: 'purple', hs9: 'brown', hs10: 'red', hs11: 'cream', hs12: 'blue', hs13: 'mustard' }[n], t,
+  { hs1: '#c8241c', hs3: '#2b2622', hs5: '#6a3a1c', hs7: '#f6d35a', hs9: '#f6d35a', hs11: '#1f3f8c', hs13: '#2b2622' }[n] || '#ffffff',
+  { hs3: '#ffd890', hs13: '#ffd890', hs1: '#ff9a7a', hs11: '#a8c4ff' }[n] || null]]).concat([['hs_花屋', ['green', '花屋', '#ffffff', null]], ['hsN_洋品店', ['navy', '洋品店', '#f6d35a', null]]]));
+/** a painted board's face: its painted body (rect r of img), the lettering on it (its shadow a touch below, as the painting's letters sit on
+ *  the enamel), and in the emissive the lettering lit at night (glow: its colour, else the ink's) over a faint face */
+function paintedBoard(a, e, w, h, img, r, text, ink, glow) {
+  a.drawImage(img, r[0], r[1], r[2], r[3], 0, 0, w, h);
+  const cx = w / 2, cy = h * 0.53, mw = w * 0.7, fs = Math.round(h * 0.6);
+  a.save(); a.globalAlpha = 0.35; textFit(a, text, cx + w * 0.004, cy + h * 0.025, mw, fs, '#000', 900); a.restore();
+  textFit(a, text, cx, cy, mw, fs, ink, 900);
+  e.save(); e.globalAlpha = 0.16; e.drawImage(img, r[0], r[1], r[2], r[3], 0, 0, w, h); e.restore();
+  textFit(e, text, cx, cy, mw, fs, glow || ink, 900);
+}
+/** the そば shop's dark wooden wall (rect r of img: Grok Imagine's, blank) with そば painted on its planks in white, as the city painting has it */
+function sobaWall(a, e, w, h, img, r, text) {
+  a.drawImage(img, r[0], r[1], r[2], r[3], 0, 0, w, h);
+  if (text) { a.save(); a.globalAlpha = 0.9; textFit(a, 'そば', w * 0.5, h * 0.33, w * 0.62, Math.round(w * 0.3), '#f2eee6', 800); a.restore(); } // (its other bays plain)
+  e.fillStyle = '#000'; e.fillRect(0, 0, w, h);
+}
 /** (step 38) The shophouses' pieces (props.js machiya): the eave front (kawaraF), the greyer navy canopy tiles (kawaraT), the balconies'
  *  timber (wtimb) and the flower boxes (fbox…: their procedural paint, then the paintings over it when `pa` loaded: painted.js
  *  loadPieceAtlas), in a small texture pair of their own (its cells listed in the atlases' one namespace, uv in their own texture: drawn by a
  *  clone of the atlas material, as the chain stores are). Not in the painted atlas: the Turkish town's far walls sample that atlas's coarsest
  *  mips (fragments extrapolated past tiny, grazing triangles), so any new paint in it, even in its free space, moved a few of their pixels.
  *  1024 × 288 on desktops, half on phones; each cell its own random numbers */
-export function buildPieceAtlas(main, tier, pa) {
-  const k = tier === 'hi' ? 1 : 0.5, P = new Atlas(288 * k, 0, main.cells, true, 1024 * k); // (CPU-backed: a GPU canvas here made the foliage
-  // atlas, painted after it, come out in another of its anti-aliased variants at some loads; and Chrome 148 hands some GPU canvases back empty)
+export function buildPieceAtlas(main, tier, pa, pb = null) {
+  const k = tier === 'hi' ? 1 : 0.5;
   const list = [['kawaraT', [208 * k, 224 * k], (A, a, e, w, h) => canopyTiles(A, a, e, w, h, KAWARA_T)],
     ...PLANTER_CELLS.map(([n, box, mix], i) => [n, [288 * k, (i ? 162 : 120) * k], (A, a, e, w, h) => planterPaint(A, a, e, w, h, 3810 + i, box, mix)]),
     ['kawaraF', [360 * k, 48 * k], eaveFront], ['wtimb', [256 * k, 28 * k], timber]];
+  // (step 41) with the boards' and racks' paintings (pb: painted.js loadPieceAtlas(…, 'pieces2')): the painted boards with their lettering, the
+  // そば shop's wooden wall, the magazine covers, after step 38's cells (the atlas grows downwards: their cells keep their texels)
+  const pbT = pb ? Object.fromEntries(pb.tiles.map(t => [t.name, t])) : null, pbAt = n => { const t = pbT[n]; return [t.x * pb.img.width, t.y * pb.img.height, t.w * pb.img.width, t.h * pb.img.height]; };
+  if (pb && pb.bodies.length && pbT.pw_soba && pbT.pmag0) {
+    for (const [n, [body, text, ink, glow]] of Object.entries(BOARDS41)) if (pbT['pbb_' + body]) list.push(['pb_' + n, [320 * k, 128 * k], (A, a, e, w, h) => paintedBoard(a, e, w, h, pb.img, pbAt('pbb_' + body), text, ink, glow)]);
+    list.push(['pw_soba', [300 * k, 360 * k], (A, a, e, w, h) => sobaWall(a, e, w, h, pb.img, pbAt('pw_soba'), true)], ['pw_soba2', [300 * k, 360 * k], (A, a, e, w, h) => sobaWall(a, e, w, h, pb.img, pbAt('pw_soba'), false)]);
+    for (let i = 0; i < pb.covers; i++) if (pbT['pmag' + i]) list.push(['pmag' + i, [96 * k, 132 * k], (A, a, e, w, h) => { a.drawImage(pb.img, ...pbAt('pmag' + i), 0, 0, w, h); }]);
+  }
+  let fx = 0, fy = 0, fh = 0; for (const [, [w, h]] of list) { if (fx + w + 4 > 1024 * k) { fx = 0; fy += fh + 4; fh = 0; } fx += w + 4; fh = Math.max(fh, h); } // (its rows: 288 · k without step 41's)
+  const P = new Atlas(Math.max(288 * k, Math.ceil((fy + fh) / 8) * 8), 0, main.cells, true, 1024 * k); // (CPU-backed: a GPU canvas here made the foliage
+  // atlas, painted after it, come out in another of its anti-aliased variants at some loads; and Chrome 148 hands some GPU canvases back empty)
   for (const [n, [w, h], f] of list) P.add(n, w, h, (a, e, cw, ch) => f(P, a, e, cw, ch));
   for (const n of ['kawaraT', 'kawaraF', ...PLANTER_CELLS.map(c => c[0])]) { // (a clear ring round the cut-out pieces: their mips take no grey from the padding)
     const c = P.cells[n]; P.a.clearRect(c.px - 2, c.py - 2, c.w + 4, 2); P.a.clearRect(c.px - 2, c.py + c.h, c.w + 4, 2); P.a.clearRect(c.px - 2, c.py, 2, c.h); P.a.clearRect(c.px + c.w, c.py, 2, c.h);

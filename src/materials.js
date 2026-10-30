@@ -1518,6 +1518,7 @@ export function makeAtlasW(M, worldTex) {
  *  the world variant's room program), each region's rooms in a sheet of its own) */
 export const RM_N = 24; // (the shop cells one room set can tell: the shopping street's painted bays shop_p0…p9 and its procedural shop windows,
 // step 34; the Turkish town's bays; a region's chain bays)
+export const RM_N2 = 32; // (step 41: the shopping street's own program, 'atlasi-v2', tells more: its shops' and its upper windows' (home rooms))
 /** (step 34) One room set's uniforms (a material's own: its rooms' sheet, its glass, its table of shop cells and their rooms; the
  *  shopping street's, the Turkish town's, each region's chain stores'). tex: the rooms' sheet; glass: the one-channel glass mask; table:
  *  [{ cell: the shop cell's uv rect, a: its room's corner in the sheet, b: its second room's (or null), mask: [u, v, du, dv] its glass in
@@ -1525,18 +1526,21 @@ export const RM_N = 24; // (the shop cells one room set can tell: the shopping s
  *  m: half the bay across and up, half its depth), size (a room in the sheet), f (its back wall's share), e (the glow's gain, rgb),
  *  warp }; lo: the lowest light code a room is cast for (4.5: the shop codes 5…8, whose low bit mirrors the room and high bit picks its
  *  kind's second; −0.5: any code, the chain stores' bays, which are lit always (code 0) and take the first room, unmirrored) */
-export function roomSet(tex, glass, table, geo, lo = 4.5) {
-  const cells = [], ofs = [], masks = [], boxes = [];
-  for (let i = 0; i < RM_N; i++) {
+export function roomSet(tex, glass, table, geo, lo = 4.5, n = RM_N) {
+  const cells = [], ofs = [], masks = [], boxes = [], gain = [];
+  for (let i = 0; i < n; i++) {
     const t = table[i], a = t && t.a, b = t && (t.b || t.a);
     cells.push(t ? new THREE.Vector4(t.cell.u0, t.cell.v0, t.cell.u1, t.cell.v1) : new THREE.Vector4(-9, -9, -9, -9));
     ofs.push(new THREE.Vector4(a ? a[0] : -1, a ? a[1] : -1, b ? b[0] : -1, b ? b[1] : -1));
     masks.push(t ? new THREE.Vector4(...t.mask) : new THREE.Vector4());
     boxes.push(t ? new THREE.Vector4(t.box[0], t.box[1], 1 / (t.box[2] - t.box[0]), 1 / (t.box[3] - t.box[1])) : new THREE.Vector4(0, 0, 1, 1));
+    if (i % 4 === 0) gain.push(new THREE.Vector4(1, 1, 1, 1)); gain[i >> 2].setComponent(i & 3, t && t.k !== undefined ? t.k : 1);
   }
   const e = Array.isArray(geo.e) ? geo.e : [geo.e, geo.e, geo.e];
   return { uRoom: { value: tex }, uGlass: { value: glass }, uRmCell: { value: cells }, uRmOf: { value: ofs }, uRmMask: { value: masks }, uRmBox: { value: boxes }, uRmHalf: { value: new THREE.Vector3(...geo.half) }, uRmS: { value: new THREE.Vector2(...geo.size) }, uRmQ: { value: (1 / geo.f - 1) / 2 }, uRmE: { value: new THREE.Vector3(...e) }, uRmW: { value: geo.warp }, uRmLo: { value: lo }, uRmOn: U.uRmOn,
-    uRmD: { value: new THREE.Vector3(1, 1, 1) }, uRmG: { value: new THREE.Vector3(1, 1, 1) }, uRmR: { value: new THREE.Vector3(0, 0, 0) } }; // (step 38: the street's own, by the hour: main.js; read only by its program)
+    uRmD: { value: new THREE.Vector3(1, 1, 1) }, uRmG: { value: new THREE.Vector3(1, 1, 1) }, uRmR: { value: new THREE.Vector3(0, 0, 0) }, // (step 38: the street's own, by the hour: main.js; read only by its program)
+    uRmN: { value: gain }, uRmH: { value: new THREE.Vector2(1, 1) }, uRmHU: { value: geo.homeH || geo.half[1] }, uSunDir: U.uSunDir }; // (step 41: each cell's glow (table k), the home rooms'
+    // share of their glass by the hour on a sunlit and a shaded wall, their box's half height; read only by the street's)
 }
 /** the shopping street's rooms (step 31): the atlas material's room variant (M.atlasI), its room set R (roomSet) */
 export function makeAtlasRooms(M, R) {
@@ -1586,22 +1590,24 @@ export function makePlateFronts(M, base, rooms, hook) {
  *  linear light added last): darker, warmer interiors by day, as painted. (Main.js sets them by the hour; at night uRmG is 1, uRmR 0) */
 function roomsAtlas(sh, R, dim = false) {
   Object.assign(sh.uniforms, R);
+  const N = dim ? RM_N2 : RM_N; // (step 41: the street's program tells its shops' and its upper windows' cells)
   sh.vertexShader = sh.vertexShader
-    .replace('#include <common>', `#include <common>\nuniform vec4 uRmCell[${RM_N}]; uniform vec3 uRmHalf; uniform float uRmOn, uRmLo; varying vec4 vRmA; varying float vRmZ; flat varying float vRmI;`)
+    .replace('#include <common>', `#include <common>\nuniform vec4 uRmCell[${N}]; uniform vec3 uRmHalf; uniform float uRmOn, uRmLo${dim ? ', uRmHU; uniform vec3 uSunDir; varying float vRmS' : ''}; varying vec4 vRmA; varying float vRmZ; flat varying float vRmI;`)
     // a shop bay's vertex (a light code over uRmLo, up to the shop codes' 8, its uv in a cell of the table): where it is in the bay (0…1
     // from its bottom-left), the ray from the camera through it in its box's units (across: the bay's u, its viewer's right, mirrored with
     // the room; up: the world's; in: into the wall), and which bay and room (1 + cell + 32 · code; 0: none). Six numbers a vertex, for
     // every vertex of the chunk's atlas mesh: the rest is read per pixel
     .replace('#include <project_vertex>', /* glsl */`#include <project_vertex>
-vRmA = vec4(0.0); vRmZ = 1.0; vRmI = 0.0;
+vRmA = vec4(0.0); vRmZ = 1.0; vRmI = 0.0;${dim ? `
+vRmS = clamp(dot(normalize(mat3(modelMatrix) * objectNormal), uSunDir) * 2.5 + 0.2, 0.0, 1.0); // (step 41: how squarely the wall faces the sun: an upper window's share of room)` : ''}
 { float rc = aLit * 255.0;
-  if (uRmOn > 0.5 && rc < 8.5 && rc > uRmLo) {
-    for (int i = 0; i < ${RM_N}; i++) {
+  if (uRmOn > 0.5 && ${dim ? '((rc < 8.5 && rc > uRmLo) || rc > 20.5)' : 'rc < 8.5 && rc > uRmLo'}) {
+    for (int i = 0; i < ${N}; i++) {
       vec4 c = uRmCell[i];
       if (uv.x > c.x - 1e-4 && uv.x < c.z + 1e-4 && uv.y > c.y - 1e-4 && uv.y < c.w + 1e-4) {
-        float k = max(floor(rc - 4.5), 0.0), fl = mod(k, 2.0) > 0.5 ? -1.0 : 1.0;
+        float k = ${dim ? 'rc > 20.5 ? 4.0 + mod(floor(rc + 0.5), 4.0) : ' : ''}max(floor(rc - 4.5), 0.0), fl = mod(k, 2.0) > 0.5 ? -1.0 : 1.0;
         vec3 rN = normalize(transformedNormal), rB = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz), rT = normalize(cross(rB, rN));
-        vRmA = vec4((uv - c.xy) / (c.zw - c.xy), fl * dot(mvPosition.xyz, rT) / uRmHalf.x, dot(mvPosition.xyz, rB) / uRmHalf.y);
+        vRmA = vec4((uv - c.xy) / (c.zw - c.xy), fl * dot(mvPosition.xyz, rT) / uRmHalf.x, dot(mvPosition.xyz, rB) / ${dim ? '(rc > 20.5 ? uRmHU : uRmHalf.y)' : 'uRmHalf.y'});
         vRmZ = -dot(mvPosition.xyz, rN) / uRmHalf.z; vRmI = 1.0 + float(i) + 32.0 * k;
         break;
       }
@@ -1609,20 +1615,21 @@ vRmA = vec4(0.0); vRmZ = 1.0; vRmI = 0.0;
   }
 }`);
   sh.fragmentShader = sh.fragmentShader
-    .replace('#include <common>', `#include <common>\nuniform sampler2D uRoom, uGlass; uniform vec4 uRmOf[${RM_N}], uRmMask[${RM_N}], uRmBox[${RM_N}]; uniform vec2 uRmS; uniform vec3 uRmE${dim ? ', uRmD, uRmG, uRmR, uRmHalf' : ''}; uniform float uRmQ, uRmW; varying vec4 vRmA; varying float vRmZ; flat varying float vRmI;`)
+    .replace('#include <common>', `#include <common>\nuniform sampler2D uRoom, uGlass; uniform vec4 uRmOf[${N}], uRmMask[${N}], uRmBox[${N}]${dim ? `, uRmN[${N / 4}]` : ''}; uniform vec2 uRmS${dim ? ', uRmH; varying float vRmS' : ''}; uniform vec3 uRmE${dim ? ', uRmD, uRmG, uRmR, uRmHalf' : ''}; uniform float uRmQ, uRmW; varying vec4 vRmA; varying float vRmZ; flat varying float vRmI;`)
     // the bay's glass (its mask, read in step with the triangle's other pixels), and only inside its glass box (half its pixels: the frame,
     // the boards and the beams round it pay nothing), whose edge lies on the frame where the glass is 0 (the room's read across it, with
     // its neighbours outside, is never seen): the ray's exit from the box (the nearest of the three far planes), then its place in the
     // painted view: the room's front at the image's edges, its back wall at f of them (one-point perspective: 1 / (1 + q · depth));
     // across, as the sheet stores it (x (w + (1 − w) x²): the side walls' near strips, all a view down the street sees, at up to 3 − 2w
     // times the texels)
-    .replace('diffuseColor *= sampledDiffuseColor;', /* glsl */`vec3 rmC = vec3(0.0); float rmK = 0.0;${dim ? ' float rmF = 0.0;' : ''}
+    .replace('diffuseColor *= sampledDiffuseColor;', /* glsl */`vec3 rmC = vec3(0.0); float rmK = 0.0;${dim ? ' float rmF = 0.0, rmNk = 1.0;' : ''}
 if (vRmI > 0.5) {
-  int rmX = int(vRmI + 0.5) - 1, rmI = rmX - (rmX / 32) * 32, rmJ = rmX / 32;
+  int rmX = int(vRmI + 0.5) - 1, rmI = rmX - (rmX / 32) * 32, rmJ = rmX / 32;${dim ? `
+  bool rmHm = rmJ >= 4; if (rmHm) rmJ -= 4; // (step 41: an upper window's home room: its share of the glass by the hour, uRmH)` : ''}
   vec4 rmB = uRmBox[rmI], rmM = uRmMask[rmI]; vec2 rmb = (vRmA.xy - rmB.xy) * rmB.zw;
   float rmG = texture2D(uGlass, rmM.xy + vRmA.xy * rmM.zw).r; // (read where every pixel of the bay's triangle reads it: its mip holds)
   if (rmb.x >= 0.0 && rmb.y >= 0.0 && rmb.x <= 1.0 && rmb.y <= 1.0) {
-    vec4 rmO = uRmOf[rmI]; rmK = rmG;
+    vec4 rmO = uRmOf[rmI]; rmK = rmG${dim ? ' * (rmHm ? mix(uRmH.y, uRmH.x, vRmS) : 1.0); rmNk = dot(uRmN[rmI / 4], vec4(equal(ivec4(rmI - (rmI / 4) * 4), ivec4(0, 1, 2, 3))))' : ''};
     vec3 rp = vec3(vRmA.xy * 2.0 - 1.0, -1.0), rd = vec3(vRmA.zw, vRmZ) + 1e-6;
     if (rmJ == 1 || rmJ == 3) rp.x = -rp.x;
     vec3 ri = 1.0 / rd, rk = abs(ri) - rp * ri, rh = rp + min(min(rk.x, rk.y), rk.z) * rd;
@@ -1634,7 +1641,7 @@ if (vRmI > 0.5) {
   }
 }
 diffuseColor *= sampledDiffuseColor;`)
-    .replace('totalEmissiveRadiance *= emissiveColor.rgb;', `if (rmK > 0.0) emissiveColor.rgb = mix(emissiveColor.rgb, rmC * uRmE${dim ? ' * uRmG' : ''}, rmK);\ntotalEmissiveRadiance *= emissiveColor.rgb;`);
+    .replace('totalEmissiveRadiance *= emissiveColor.rgb;', `if (rmK > 0.0) emissiveColor.rgb = mix(emissiveColor.rgb, rmC * uRmE${dim ? ' * uRmG * rmNk' : ''}, rmK);\ntotalEmissiveRadiance *= emissiveColor.rgb;`);
   if (dim) sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', 'outgoingLight += uRmR * (rmK * rmF);\n#include <opaque_fragment>');
 }
 /** (step 38) The shopping street's neon halos by day (props.js haloRect: hollow nine-sliced cards round the big signs and the neon tubes, in

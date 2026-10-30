@@ -2,6 +2,93 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-30 · 20:18 — The shopping street, second pass: painted boards, the painting's magazine racks and そば shop, homes behind the upper windows, calmer night shops
+- **Painted sign boards in place of the plain ones:** every shophouse's board is now a glossy enamel box sign as the city painting paints its navy
+  洋品店 board (a bevelled rim catching the light, a soft gradient across its face, its sides in its own colour in shade), in the painting's
+  colours: navy with gold letters, red, royal blue, green, mustard, orange, purple, and the bookshops' dark wood with gold (書店); the painting has
+  no plain white boards, so the white ones are a painted cream enamel. Boxes about 2.6 × 1 m in front of the eave, as the painting's, their
+  lettering lit at night. The opening view's bookshop has none, as painted: its eave and dark soffit over its red awning.
+- **The bookshops' magazine racks as painted:** tall wooden racks leaning back like steep ladders, five tiers of magazines standing on ledges
+  with a lip against a plank back, an A-frame's back legs behind, two side by side, turned towards the oncoming view as the painting's stand;
+  every magazine its own painted cover (28 covers). They were a brown box with a card of the shop window's magazines that glowed at night.
+- **The painting's そば shop beside the car:** the opening view's near-right shophouse (a bright bakery) is now the painting's soba shop: a
+  wooden wall of stained planks with そば painted on it in white, its noren entrance, a blue awning right under its eave, no board.
+- **Homes behind the upper windows:** the shophouses' painted upper windows show a room behind their glass (step 31's interior mapping): a
+  tatami room with a paper lamp, a living room, a teenager's room, a kitchen, between the painted curtains, frames and flower boxes. On a bright
+  day a sunlit wall's windows keep most of their painted sky and a shaded wall's show their dark room, as painted; at dusk and at night every
+  window shows its room, dark, or lit warm when its light comes on. They no longer show blue sky with clouds at night.
+- **Calmer shops at night and by day:** each shop window's room has its own glow; the bakeries' bright orange windows glow about half as much.
+  The awnings are lighter and softer, as they come out painted (the dark saturated ones went near-black red and pure blue in the frame).
+- Against the paintings (CIELAB ΔE of region medians, the city at s = 140, the gap tools, Audit 2's boxes; live → staging):
+  - noon (city.png): left upper floors 16.3 → 8.1, right shops 15.0 → 8.2, right upper 5.3 → 5.0, left shops 13.9 → 14.2; the frame 8.52 → 6.68;
+  - golden hour: left upper 10.3 → 9.6, right upper 7.8 → 6.6, left shops 9.7 → 9.3, right shops 16.2 → 17.5; the frame 9.90 → 9.69;
+  - sunset: right upper 19.5 → 16.6, right shops 18.6 → 11.8, left shops 12.4 → 10.2, left upper 15.2 → 14.1; the frame 10.55 → 9.13;
+  - night: right shops 27.3 → 15.1, left upper 16.1 → 14.0, right upper 6.7 → 4.5; the frame 9.94 → 8.15;
+  - the four building boxes, time-weighted (Audit 3's measure): 591 → 445.
+- Every other zone identical to live in seeded captures (the ten other zones' starts and Audit 2's places, at noon, at night and on a phone):
+  on this box (Chrome 148) two live and two staging captures a shot, each staging capture byte-identical to one of live's (the Turkish town's and
+  the mountain's shots vary in live itself; two captures in which this busy box timed out the car's painting, in live and in staging alike,
+  re-shot one at a time: identical). On the desktop machine (Chrome 156) the build before the last fix was identical at noon, at night and on a
+  phone but for the coast's verge banks, which took another anti-aliased variant in 3 of 20 loads: with the home rooms decoded before the foliage
+  atlas none in 20 there and none in 8 here. (The final build's full sweep on the desktop machine could not run: another session's virtual
+  machine loaded it to 10–20 and its captures timed out.) The shopping street renders the same in the final build as in the measured one
+  (0 px).
+- How:
+  - `props.js machiya`: `board41` (the painted face in the pieces' mesh, its box in the props' colours, `BOARD_SIDE`), `bare` (the opening
+    view's bookshop and そば shop), `soba` (the building over s ≈ 138.5 on the right: its glass bays the wooden wall `pw_soba` / `pw_soba2`,
+    its door the noren entrance, its blue awning under the eave; every random number drawn as before, so the street's layout stays);
+    `magazineRack` → `rack41` (timber bars `rbar`, faces wound outward `qc`, turned 35° towards the oncoming view by side), its random
+    number as before; `AWN_REF` lighter; `HOME_WIN`: an unlit upper window with a room takes a home code that never glows (21…23, which room
+    by where it is), its lit twin keeps its own (24…255).
+  - `textures.js`: `BOARDS41` (body, lettering, ink, glow), `paintedBoard`, `sobaWall`, `buildPieceAtlas(main, tier, pa, pb)`: step 41's cells
+    after step 38's in the pieces' own atlas (it grows downwards: 1024 × 1792 desktops, 512 × 920 phones; without pieces2 it is the same
+    1024 × 288 as before). Nothing goes into the painted atlas.
+  - `materials.js`: the street's room program ('atlasi-v2' only) tells 32 cells (`RM_N2`), casts rooms behind the home codes too, with each
+    cell's glow (`uRmN`), the homes' share of their glass by the hour on a sunlit and a shaded wall (`uRmH`, `vRmS` from the wall's facing to
+    the sun), their box's height (`uRmHU`); the konbini's, the Turkish town's and Galata's rooms keep 'atlasi-v1' exactly.
+  - `painted.js`: `loadPieceAtlas(tier, timeout, name)`, `roomSheets` (the shop rooms and the home rooms laid one under the other in one
+    texture, one room set), `roomGlass(…, more)` (the upper windows' glass in the same mask); `main.js`: their loads, the merged room set,
+    `ROOM_K` (the bakery 0.55, a lit home 0.85, an unlit one 0), `HOME_H` (0.45 sunlit, 0.85 shaded). The home rooms' sheet is awaited with
+    rooms1's, before the foliage atlas is drawn: decoded while that GPU canvas was being drawn, it made the coast's verge banks come out in
+    another of their anti-aliased variants in 3 of 20 seeded loads (now none in 20 on the desktop machine and 8 on this box, as live). (Building
+    the pieces' atlas after the foliage instead made the cherry avenue's and a phone country start's foliage take other variants: it stays where
+    step 38 put it.)
+  - Assets (new): `assets/fronts/pieces2.json`, `pieces2_hi.webp` (66.7 KB), `pieces2_lo.webp` (23.8 KB): Grok Imagine `image_edit`s of the city
+    painting's navy board (blank, recoloured in CIELAB to nine colours), the そば shop's wall (blank, its paint lifted so it comes out the painting's
+    brown), the bookshop's racks repainted as rows of covers (those of recognisable characters left out); `assets/rooms/rooms2up.json`,
+    `rooms2up_hi.webp` (38.9 KB), `rooms2up_lo.webp` (13.6 KB), `glass2up_hi.png` (4.1 KB), `glass2up_lo.png` (2.6 KB): four home rooms (Grok on
+    drawn one-point rooms) at rooms1's room size and warp, and the upper windows' glass masked from their painted sky. Scripts and masters in
+    `~/cdtest/s41/` (`pack41.py`, `packhome.py`, `homeroom.py`). First visit +106 KB desktop / +40 KB phone.
+- Checks (the desktop machine, GTX 1660, the final build):
+  - Programs at a city start 65 desktop / 64 phone, as live; none compiled through sunset, night or rain, or on city drives (compile, compile2
+    at high and mid, progwatch).
+  - 0 shader errors in all eleven zones (desktop tier at noon, phone tier at night; the city on the phone tier at noon and sunset, at q=low).
+  - No console errors at q=low, mid and high and the default; the embed starts on tap.
+  - Without the boards' and racks' paintings (index missing, image missing or truncated) the street is as before (plain boards, the box rack, the
+    bakery), no errors; without the home rooms (index, image or glass missing) the upper windows keep their painted glass and the shops their
+    rooms; without the shop rooms or the flower boxes, as before.
+  - Seen in Chrome 156 (the desktop machine) and Chrome 148 (this box): the composite room texture, the boards, the racks and the そば wall render
+    in both.
+- Cost (PROVISIONAL: the desktop machine's GTX 1660 was passed through to another session's virtual machine from ~18:00, so its Chrome drew with
+  SwiftShader; the GPU numbers below are this box's Vega, interleaved with live, at load 7–17 from other sessions):
+  - Per draw over 30 s city drives (L S S L): desktop profile at noon, the street's rooms 4.47 → 5.31 ms and the pieces 1.54 → 1.87 (the
+    unchanged draws read 7.5% slower in the staging runs, the box's clock: corrected, about +0.5 and +0.2 ms), their shadows +0.15 / +0.08;
+    phone profile at night, the rooms 2.34 → 2.75 and the pieces 0.97 → 1.14, the frame's draws 16.84 → 16.98 ms. Frame-level drives:
+    desktop profile 19.73 / 21.99 / 22.31 → 21.34 / 22.27 / 22.37 ms, phone profile 12.99 / 12.97 / 11.05 → 15.49 / 13.50 / 14.48 (bimodal on
+    this box; to re-time on the desktop machine once it has its GPU back).
+  - Triangles at a city start 353k → 360k (+1.8%); no new draws (the racks, boards and walls ride in the pieces' mesh, the boards' boxes in the
+    props'); no new program (65 desktop / 64 phone at a city start, as live).
+  - World build over city chunks (genbench on the desktop machine's CPU, interleaved): desktop profile 268.8 / 193.3 / 186.6 → 184.3 / 201.9 /
+    170.3 ms per 20 chunks (no change), phone profile 157.4 / 165.6 / 133.7 → 157.5 / 169.6 / 183.6 (about +8–12%); flat out on this box's
+    phone profile (×4 CPU) world spikes 16 / 7 / 6 → 19 / 11 / 10, the worst step 52.7 / 24.2 / 28.1 → 53.1 / 33 / 42.8 ms (the box at load 10–14).
+  - Textures: the pieces' atlas 1024 × 288 → 1024 × 1792 (desktop; 512 × 920 phones), the street's room texture 2320 × 1662 → 2320 × 2216, its
+    glass mask 2880 × 864 → 2880 × 1296. Download +106 KB desktop / +40 KB phone on a first visit; code +8.8 KB (+3.4 KB gzipped).
+- Left over: the left shops by day (14.2: the painting's shaded bookshop window glows brighter than ours; a brighter glow for rooms on a
+  shaded wall was tried and gained nothing in the boxes); the golden hour's right shops (16.2 → 17.5: the そば wall's lighter paint catches the
+  low sun, where the golden repaint has it in shade); the far street (Audit 3's 11–14, untouched); the procedural shop fronts' wide fascia
+  boards (the 'shop' type further down the street) are still plain; the left upper floors at night (14.0: the repaint's are a dim violet, ours
+  near black); a third, angled rack as the painting has; covers without thickness.
+
 ## 2026-10-30 · 15:26 — The shopping street's shopfronts as painted: each shop its own eave, wooden balconies with flower boxes, calmer interiors, neon that glows by day
 - **Each shop its own short tiled eave, as the city painting has them** (it was one long canopy down the whole row): every shophouse's
   canopy stops a little short of its ends, so the wall and its posts show between two shops, and sits at its own height and depth; its ends

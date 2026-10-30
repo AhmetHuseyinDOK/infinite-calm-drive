@@ -184,11 +184,11 @@ export async function loadFrontAtlas(tier, timeoutMs = 15000) {
  *  of the city painting's own flower boxes): cut-out flower boxes (alpha), drawn over their cells' procedural paint in the painted atlas
  *  (textures.js buildPaintedAtlas). 'hi' or 'lo' (half: phones, the embed), as the fronts. Null (never rejects) when the index or the image
  *  is missing, broken, truncated or too slow: the flower boxes then keep their procedural paint */
-export async function loadPieceAtlas(tier, timeoutMs = 15000) {
+export async function loadPieceAtlas(tier, timeoutMs = 15000, name = 'pieces1') {
   const base = ASSETS + 'fronts/';
   return orNull((async () => {
-    const r = await fetch(base + 'pieces1.json');
-    if (!r.ok) throw new Error('pieces1.json ' + r.status);
+    const r = await fetch(base + name + '.json');
+    if (!r.ok) throw new Error(name + '.json ' + r.status);
     const J = await r.json();
     const tiles = (J.tiles || []).filter(t => t.name && t.w > 0 && t.h > 0 && t.x >= 0 && t.x + t.w <= 1 && t.y >= 0 && t.y + t.h <= 1);
     if (!tiles.length) throw new Error('no pieces listed');
@@ -198,8 +198,8 @@ export async function loadPieceAtlas(tier, timeoutMs = 15000) {
     if (!J.bytes || blob.size !== J.bytes[file]) throw new Error(J.files[file] + ' is ' + blob.size + ' bytes, not ' + (J.bytes && J.bytes[file]));
     const img = await createImageBitmap(blob);
     if (!J.size || img.width !== J.size[file][0] || img.height !== J.size[file][1]) { img.close(); throw new Error(J.files[file] + ' has the wrong size'); }
-    return { img, tiles, tier: file };
-  })(), timeoutMs, 'painted flower boxes unavailable, keeping their procedural paint:');
+    return { img, tiles, tier: file, bodies: J.bodies || [], covers: J.covers | 0 };
+  })(), timeoutMs, name === 'pieces1' ? 'painted flower boxes unavailable, keeping their procedural paint:' : 'painted boards and racks (' + name + ') unavailable, keeping the old ones:');
 }
 
 /** (step 31) Loads the rooms behind the painted shop windows (assets/rooms/rooms1.*, made by ~/cdtest/s31/scripts/packrooms.py from
@@ -260,17 +260,32 @@ export function roomTexture(img, aniso) {
   t.onUpdate = () => { t.onUpdate = null; img.close(); };
   return t;
 }
+/** (step 41) room sheets (loadRoomAtlas's imgs, each flipped as decoded) laid one under the other in one texture (the shopping street's: its shop
+ *  rooms and its upper windows' home rooms in one room set; their rooms must be the same size in px). Returns { tex, at(i, [u, v]) (a room's
+ *  corner in sheet i, GL space, in the texture's), size(i, [su, sv]) } ; the bitmaps closed once on the GPU */
+export function roomSheets(imgs, aniso) {
+  const ws = imgs.map(m => m.width), hs = imgs.map(m => m.height), W = Math.max(...ws), H = hs.reduce((h, x) => h + x, 0), cv = document.createElement('canvas'); cv.width = W; cv.height = H; // (sizes first: a closed bitmap's are 0)
+  const g = cv.getContext('2d', { willReadFrequently: true }), y0 = []; let y = 0; // (CPU-backed: a GPU canvas can come back empty in some Chromes)
+  for (const m of imgs) { y0.push(y); g.drawImage(m, 0, y); y += m.height; m.close(); } // (canvas row 0 is the texture's v = 0, as a flipped bitmap's)
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.flipY = false; t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter; t.anisotropy = aniso;
+  return { tex: t, at: (i, p) => [p[0] * ws[i] / W, (y0[i] + p[1] * hs[i]) / H], size: (i, s) => [s[0] * ws[i] / W, s[1] * hs[i] / H] };
+}
 /** (step 34) a room set's glass as a one-channel texture (rows from the bottom: v up), and each listed cell's tile in it. base: a mask
  *  image whose alpha is the glass (rooms1's: { img, tiles: [{ name, x, y, w, h, box }] in px }) or null; extra: [{ name, panes, holes }]
  *  (fractions of the cell from its top-left) drawn into base's free slots (a grid of its first tile's size: the slots no tile of it
  *  touches) or, without a base, into a grid of tiles of their own (tw × th px, as the cell's own px); cells with the same glass share a tile. Returns { tex, tiles: { name: {
  *  mask: [u, v, du, dv], box: [x0, y0, x1, y1] (the panes' bounds in the bay from its bottom-left, grown by 0.03) } } } */
-export function roomGlass(base, extra, tw = 256, th = 256) {
+export function roomGlass(base, extra, tw = 256, th = 256, more = null) {
   const pad = 0.03, tiles = {};
   let W, H, slots = [];
   if (base) {
     W = base.img.width; H = base.img.height; const t0 = base.tiles[0], sw = Math.round(t0.w), sh = Math.round(t0.h);
     for (let y = 0; y + sh <= H; y += sh) for (let x = 0; x + sw <= W; x += sw) if (!base.tiles.some(t => t.x < x + sw && t.x + t.w > x && t.y < y + sh && t.y + t.h > y)) slots.push([x, y, sw, sh]);
+    if (more) { // (step 41: another mask sheet's tiles (the upper windows' glass) in slots too: rows of them added under the base's when it is full)
+      const need = new Set(extra.map(q => JSON.stringify([q.panes, q.holes || []]))).size + new Set(more.tiles.map(t => [t.x, t.y].join())).size, cols = Math.floor(W / sw);
+      for (let y = H; slots.length < need; y += sh) { for (let x = 0; x + sw <= W; x += sw) slots.push([x, y, sw, sh]); H = y + sh; }
+      if (more.tiles.some(t => t.w > sw + 0.5 || t.h > sh + 0.5) || !cols) more = null; // (a tile bigger than a slot: left out, those windows keep their glass)
+    }
   } else {
     const n = new Set(extra.map(q => JSON.stringify([q.panes, q.holes || []]))).size, cols = Math.max(1, Math.ceil(Math.sqrt(n))), rows = Math.ceil(n / cols); W = cols * tw; H = rows * th;
     for (let i = 0; i < n; i++) slots.push([(i % cols) * tw, Math.floor(i / cols) * th, tw, th]);
@@ -291,6 +306,12 @@ export function roomGlass(base, extra, tw = 256, th = 256) {
     tiles[q.name] = { mask: [x / W, 1 - (y + h) / H, w / W, h / H], box: [Math.max(0, bx0 - pad), Math.max(0, 1 - by1 - pad), Math.min(1, bx1 + pad), Math.min(1, 1 - by0 + pad)] };
     seen.set(key, tiles[q.name]);
   });
+  if (more) { const at = new Map(); for (const t of more.tiles) { // (each of its tiles once, at its own size in a slot's corner; tiles of the same rect share it)
+    const key = [t.x, t.y].join(), had = at.get(key); if (had) { tiles[t.name] = { mask: had.mask, box: t.box }; continue; }
+    const sl = slots[k++]; if (!sl) { console.warn('rooms: no room left in the glass mask for', t.name); continue; } const [x, y] = sl;
+    g.drawImage(more.img, t.x, t.y, t.w, t.h, x, y, t.w, t.h);
+    tiles[t.name] = { mask: [x / W, 1 - (y + t.h) / H, t.w / W, t.h / H], box: t.box }; at.set(key, tiles[t.name]);
+  } more.img.close(); }
   const px = g.getImageData(0, 0, W, H).data, a8 = new Uint8Array(W * H);
   for (let y = 0; y < H; y++) { const r = (H - 1 - y) * W * 4, o = y * W; for (let x = 0; x < W; x++) a8[o + x] = px[r + x * 4 + 3]; }
   if (base) base.img.close();

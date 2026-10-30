@@ -323,7 +323,9 @@ export class World {
       emin: new GB({ uv: true, ao: true, lit: true }), // (step 35R-galata-2c: Eminönü's square's paintings, their own sheet: eminonu.js)
       fish: new GB({ ao: true, idx: true }), // (the Galata Bridge's fishermen, step 33: smooth figures, indexed, in the props' colour material)
       furn: new GB({ uv: true, ao: true, lit: true, idx: true }), // (step 35g: the street furniture's painted models, indexed, their own atlas, the atlas's program)
-      boat: new GB({ uv: true, ao: true, lit: true, idx: true }) }; // (step 35h: the boats' painted models, indexed, their region's sheet, the atlas's program)
+      boat: new GB({ uv: true, ao: true, lit: true, idx: true }), // (step 35h: the boats' painted models, indexed, their region's sheet, the atlas's program)
+      halo: new GB({ uv: true }), // (step 38: the shopping street's neon halos by day, additive: M.halo)
+      piece: new GB({ uv: true, ao: true, lit: true }) }; // (step 38: the shophouses' eaves, balconies and flower boxes: their own atlas, the atlas's program)
     G.chainList = []; // (…and where they stand: { s, side, c, n }, for the tools: __dbg.world's chunks' .chains)
     G.furnLamp = G.furnPool = 0; // (step 35g: the vertices the painted bus stop added to the chunk's lamps and pools)
     G.furnList = []; // (step 35g: the painted furniture, 4 numbers each: its kind (0 a vending machine, 1 a bicycle, 2 a simit cart, 3 a tea table, 4 a bus stop), where (chunk-local x, y, z), for the tools)
@@ -563,6 +565,7 @@ export class World {
     if (G.galf.count && this.M.atlasG) add(G.galf.build(), (G.galf.rooms && this.M.atlasGI) || this.M.atlasG, false, true, -1);
     if (G.emin.count && this.M.atlasEm) { const m = add(G.emin.build(), this.M.atlasEm, true, true); if (m) m.customDepthMaterial = this.M.atlasEmDepth; } // (step 35R-galata-2c)
     if (G.galf.count || G.emin.count) yield; // (step 35R-galata-2: Galata's chunks build two meshes more: a step of their own, on a slow phone)
+    if (G.piece.count && this.M.atlasP) quietly(() => { const m = add(G.piece.build(), this.M.atlasP, true, true); if (m) m.customDepthMaterial = this.M.atlasPDepth; }); // (step 38: the shophouses' pieces; ids from the private generator)
     if (G.chain.count) { const T = G.chain.tr, m = add(G.chain.build(), T ? this.M.atlasCTI || this.M.atlasCT : this.M.atlasCI || this.M.atlasC, true, true); if (m) m.customDepthMaterial = T ? this.M.atlasCTDepth : this.M.atlasCDepth; } // (the chain stores, step 32: Japan's or Turkey's chain atlas; most chunks have none, and no mesh. Step 34: with the rooms behind their glass)
     if (G.furn.count && this.M.atlasF) quietly(() => { const m = add(G.furn.build(), this.M.atlasF, true, true, 0, 'small'); if (m) m.customDepthMaterial = this.M.atlasFDepth; }); // (step 35g: the street furniture: its own atlas, the atlas's program; most chunks have none, and no mesh. Shown as far as the small things, World.lod: past ~380 m a machine is ~4 px)
     if (G.boat.count) { const T = G.boat.tr, mat = T ? this.M.atlasBT : this.M.atlasBJ; // (step 35h: the boats: their region's sheet, the atlas's program; ids from the private generator. Not 'small': the bay's boats stand 45–220 m off and must not pop in)
@@ -585,6 +588,7 @@ export class World {
     add(G.sodium.build(), this.M.sodium, false, false);
     add(G.decal.build(), this.M.decal, false, true, 1, 'small');
     { const f = () => add(G.pool.build(), this.M.pool, false, false, 2, 'light'); if (G.pool.count && G.pool.count === G.furnPool) quietly(f); else f(); }
+    if (G.halo.count && this.M.halo) quietly(() => add(G.halo.build(), this.M.halo, false, false, 3, 'small')); // (step 38: the neon's halos by day; ids from the private generator)
     if (shore.rows.length > 1) { // the water along the sea wall: a strip of rows across it (SHORE_D), drawn just before the sea
       const R = shore.rows, nc = SHORE_D.length, n = R.length * nc, pos = new Float32Array(n * 3), su = new Float32Array(n * 2), hf = new Float32Array(n * 2), idx = [];
       R.forEach((row, i) => {

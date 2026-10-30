@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { C, mulC, mixC, rng, hash2 } from './util.js';
 import { GB, BILL_OCT, BILL_HEX } from './geom.js';
-import { TS_CAP, TS_PAD, TOWN_SHOPS, TOWN_AWNINGS, CHAINS_J, CHAINS_T } from './textures.js';
+import { TS_CAP, TS_PAD, TOWN_SHOPS, TOWN_AWNINGS, CHAINS_J, CHAINS_T, PLANTER_CELLS, EAVE_F, BIG_SIGNS } from './textures.js';
 import { FURN, stampF } from './furniture.js';
 
 const W1 = [1, 1, 1];
@@ -231,6 +231,9 @@ export function setFoliage(f) { FOL = f; }
 // foliage density: fewer, slightly larger cards per clump (overdraw of alpha-tested cards was the top GPU cost)
 let LEAF_D = 1;
 export function setLeafDensity(d) { LEAF_D = d; }
+/** (step 38) how many cards cards() makes for n (8 random numbers each), and drawing n random numbers unused: a builder that no longer
+ *  makes what it made keeps the street's random numbers as they were */
+const cardsN = n => Math.max(2, Math.round(n * LEAF_D)), burn = (r, n) => { for (let i = 0; i < n; i++) r(); };
 function cards(G, cen, cx, cy, cz, R, cell, n, r, col, dark, yr, flat = 0) {
   const uvr = FOL[cell], grow = 1 + (1 - LEAF_D) * 0.35;
   n = Math.max(2, Math.round(n * LEAF_D));
@@ -680,17 +683,18 @@ function flatRoof(c, w, d, H, r, tall = false) {
   if (tall && r() < 0.6) c.box(-w * 0.15, H, d * 0.4, w * 0.15, H + 2.6, d * 0.75, PAL.parapet);
   if (r() < 0.3) c.rod([w * 0.3, H, d * 0.5], [w * 0.3, H + 3.5, d * 0.5], 0.03, 0.02, 4, PAL.metal);
 }
-function vsign(G, x, y0, y1, r) {
+function vsign(G, x, y0, y1, r, halo = false) {
   G.color.box(x - 0.06, y0, -0.88, x + 0.06, y1, -0.12, PAL.black);
-  const k = 'vs' + Math.floor(r() * 10);
+  const i = Math.floor(r() * 10), k = 'vs' + i;
   nxq(G.atlas, x - 0.065, -0.88, -0.12, y0, y1, k); pxq(G.atlas, x + 0.065, -0.88, -0.12, y0, y1, k);
+  if (halo && G.halo) { const col = VS_NEON[(i * 5 + 2) % VS_NEON.length], yc = (y0 + y1) / 2, hh = (y1 - y0) / 2; haloRect(G.halo, [x + 0.071, yc, -0.5], HZN, HY, 0.38, hh, 0.15, col); haloRect(G.halo, [x - 0.071, yc, -0.5], HZP, HY, 0.38, hh, 0.15, col); } // (step 38: its tube's halo by day)
   G.color.box(x - 0.03, y0 + 0.3, -0.12, x + 0.03, y0 + 0.36, 0, PAL.metal); G.color.box(x - 0.03, y1 - 0.36, -0.12, x + 0.03, y1 - 0.3, 0, PAL.metal);
 }
 // the city painting's big lit signs (袖看板, textures.js BIG_SIGNS: the painted atlas's vsB… cells): a light box up to 1.15 m
 // wide and 2.7 m tall standing off the first floor, its faces along the street (so they face the drive), on two arms.
 // One random number, as vsign: the street's layout stays as it was
 const SIGN_BOX = C('#d9d6cf');
-function vsignBig(G, x, y0, y1, r, hero = '') {
+function vsignBig(G, x, y0, y1, r, hero = '', halo = false) {
   const kr = Math.floor(r() * 10), cell = hero || 'vsB' + kr, d = Math.min(1.15, (y1 - y0) * 0.417), z1 = -0.14, z0 = z1 - d, t = 0.1, c = G.color;
   // the box's edges only (its sides are the two painted faces: the colour pass, drawn first, would shade them for nothing)
   c.quad([x + t, y0, z0], [x - t, y0, z0], [x - t, y1, z0], [x + t, y1, z0], SIGN_BOX); // (facing the road)
@@ -698,10 +702,12 @@ function vsignBig(G, x, y0, y1, r, hero = '') {
   c.quad([x - t, y0, z0], [x + t, y0, z0], [x + t, y0, z1], [x - t, y0, z1], SIGN_BOX); // (the underside)
   nxq(G.atlas, x - t, z0, z1, y0, y1, cell); pxq(G.atlas, x + t, z0, z1, y0, y1, cell);
   for (const y of [y0 + 0.28, y1 - 0.34]) G.color.box(x - 0.03, y, z1, x + 0.03, y + 0.06, 0, PAL.metal);
+  // (step 38) its neon's soft halo by day round both faces (the chunk's halos: materials.js makeHalo)
+  if (halo && G.halo) { const col = signHalo(cell); if (col) { const yc = (y0 + y1) / 2, hh = (y1 - y0) / 2, zc = (z0 + z1) / 2, hw = (z1 - z0) / 2; haloRect(G.halo, [x + t + 0.006, yc, zc], HZN, HY, hw, hh, 0.2, col); haloRect(G.halo, [x - t - 0.006, yc, zc], HZP, HY, hw, hh, 0.2, col); } }
 }
 
 export function building(G, M, r, spec) {
-  G.atlas.setM(M); G.color.setM(M);
+  G.atlas.setM(M); G.color.setM(M); if (G.halo) G.halo.setM(M); if (G.piece) G.piece.setM(M);
   G.color.box(-spec.w / 2, -1.6, 0.02, spec.w / 2, 0.02, spec.d || 10, PAL.concrete, null, { noBottom: true });
   switch (spec.type) {
     case 'shop': return shopHouse(G, M, r, spec);
@@ -753,7 +759,7 @@ function shopHouse(G, M, r, s) {
     c.quad([w / 2 - 0.2, y - 0.35, -1.1], [-w / 2 + 0.2, y - 0.35, -1.1], [-w / 2 + 0.2, y, -0.02], [w / 2 - 0.2, y, -0.02], col);
     c.quad([w / 2 - 0.2, y - 0.6, -1.1], [-w / 2 + 0.2, y - 0.6, -1.1], [-w / 2 + 0.2, y - 0.35, -1.1], [w / 2 - 0.2, y - 0.35, -1.1], mulC(col, 0.85));
   }
-  if (floors >= 2 && r() < 0.85) { const vx = (r() < 0.5 ? 1 : -1) * (w / 2 - 0.35); vsign(G, vx, fh0 + 0.3, Math.min(H - 0.15, fh0 + 2.8), r); }
+  if (floors >= 2 && r() < 0.85) { const vx = (r() < 0.5 ? 1 : -1) * (w / 2 - 0.35); vsign(G, vx, fh0 + 0.3, Math.min(H - 0.15, fh0 + 2.8), r, true); }
   for (let f = 1; f < floors; f++) {
     if (r() < 0.4) { // little balcony with a metal railing
       const i = Math.floor(r() * bays), xa = x0 + i * bw + 0.15, xb = x0 + (i + 1) * bw - 0.15, y = fy[f];
@@ -770,6 +776,106 @@ function shopHouse(G, M, r, s) {
   c.box(w / 2 - 0.5, 1.2, -0.12, w / 2 - 0.25, 1.55, 0, C('#d9d9d3'));
   if (floors >= 3 && r() < 0.18) billboard(G, w, H, d, r);
 }
+// ------------------------------------------------------------------ (step 38) the shophouses' own eaves, balconies, flower boxes, halos
+// The city painting gives each shop its own short tiled eave over a wooden fascia and rafter ends, and above it a wooden balcony with
+// flower boxes; its neon glows with a soft halo by day. These build them (machiya); their cells are the painted atlas's (textures.js:
+// kawaraF, wtimb, fbox…)
+/** (step 38) on once the pieces' atlas and material are made (main.js): their quads go to the chunk's G.piece, drawn with M.atlasP */
+export const PIECES = { on: false };
+/** a timber piece (a balcony's floor, joist, post, rail): a box in the pieces' timber (wtimb), less the faces in `skip` that are never seen
+ *  (where it meets the wall, a post, a rail or the floor: T_NZ … T_NY), wound as GB.box */
+const T_NZ = 1, T_PZ = 2, T_NX = 4, T_PX = 8, T_PY = 16, T_NY = 32;
+function timb(a, x0, y0, z0, x1, y1, z1, skip = 0) {
+  const t = uv('wtimb');
+  if (!(skip & T_NZ)) a.quad([x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0], W1, t);
+  if (!(skip & T_PZ)) a.quad([x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1], W1, t);
+  if (!(skip & T_NX)) a.quad([x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0], W1, t);
+  if (!(skip & T_PX)) a.quad([x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1], W1, t);
+  if (!(skip & T_PY)) a.quad([x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [x0, y1, z0], W1, t);
+  if (!(skip & T_NY)) a.quad([x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1], W1, t);
+}
+/** a triangle with its own normals, wound to face `want` (the side it is seen from) */
+function face3(g, A, B, Cc, nA, nB, nC, want, col) {
+  const ux = B[0] - A[0], uy = B[1] - A[1], uz = B[2] - A[2], vx = Cc[0] - A[0], vy = Cc[1] - A[1], vz = Cc[2] - A[2];
+  const ok = (uy * vz - uz * vy) * want[0] + (uz * vx - ux * vz) * want[1] + (ux * vy - uy * vx) * want[2] >= 0;
+  const [P1, N1, P2, N2] = ok ? [B, nB, Cc, nC] : [Cc, nC, B, nB];
+  g.vtx(A[0], A[1], A[2], nA[0], nA[1], nA[2], 0, 0, col); g.vtx(P1[0], P1[1], P1[2], N1[0], N1[1], N1[2], 0, 0, col); g.vtx(P2[0], P2[1], P2[2], N2[0], N2[1], N2[2], 0, 0, col);
+}
+/** the round tile roll (袖瓦) along a canopy's end, from its eave P up to the wall Q: half a smooth tube of radius r over the tiles, its
+ *  outer side towards s (±1 along x), a round cap at the eave; n: the tiles' normal there */
+function tileRoll(g, P, Q, r, s, n, col) {
+  const d = [Q[0] - P[0], Q[1] - P[1], Q[2] - P[2]], dl = Math.hypot(...d); d[0] /= dl; d[1] /= dl; d[2] /= dl;
+  const dir = th => [Math.cos(th) * s + Math.sin(th) * n[0], Math.sin(th) * n[1], Math.sin(th) * n[2]], seg = 6;
+  const at = (p, v) => [p[0] + v[0] * r, p[1] + v[1] * r, p[2] + v[2] * r];
+  for (let i = 0; i < seg; i++) {
+    const v0 = dir((i / seg) * Math.PI), v1 = dir(((i + 1) / seg) * Math.PI), m = dir(((i + 0.5) / seg) * Math.PI);
+    const A0 = at(P, v0), B0 = at(P, v1), C0 = at(Q, v1), D0 = at(Q, v0);
+    face3(g, A0, B0, C0, v0, v1, v1, m, col); face3(g, A0, C0, D0, v0, v1, v0, m, col);
+    const nd = [-d[0], -d[1], -d[2]]; face3(g, P, A0, B0, nd, nd, nd, nd, col); // (the cap at the eave)
+  }
+}
+/** a flower box (PLANTER_CELLS[k]: its painted front, the planks, the flowers and the ivy, cut out) with planks L long and D deep, centred
+ *  at x, the planks' foot at y and their front at z (the box runs back to z + D): the painting in front of a timber box, and the
+ *  flowers' band again part-way back, mirrored, so the mound keeps some depth seen along the street */
+function planter(G, x, y, z, L, D, k) {
+  const a = G.piece, [n, box] = PLANTER_CELLS[k % PLANTER_CELLS.length], c = uv(n), [bx0, by0, bx1, by1] = box;
+  const W = L / (bx1 - bx0), Hc = W * (c.h / c.w), Hp = (by1 - by0) * Hc, xR = x + L / 2 + bx0 * W, yT = y + by1 * Hc;
+  fq(a, xR - W, xR, yT - Hc, yT, z - 0.012, n);
+  { const t = uv('wtimb'), x0 = x - L / 2, x1 = x + L / 2, y1 = y + Hp - 0.02, z1 = z + D; // (the box: its ends, underside and top; the painting is its front)
+    a.quad([x0, y, z], [x0, y, z1], [x0, y1, z1], [x0, y1, z], W1, t); a.quad([x1, y, z1], [x1, y, z], [x1, y1, z], [x1, y1, z1], W1, t);
+    a.quad([x0, y, z], [x1, y, z], [x1, y, z1], [x0, y, z1], W1, t); a.quad([x0, y1, z1], [x1, y1, z1], [x1, y1, z], [x0, y1, z], W1, t); }
+  const dv = c.v1 - c.v0, f = by0 + 0.08, zb = z + D * 0.55, sx = 0.06 * L;
+  a.quad([xR - W + sx, yT - f * Hc + 0.02, zb], [xR + sx, yT - f * Hc + 0.02, zb], [xR + sx, yT + 0.03, zb], [xR - W + sx, yT + 0.03, zb], W1, { u0: c.u0, u1: c.u1, v0: c.v1 - dv * f, v1: c.v1 });
+}
+/** a wooden balcony as the painting's, over the canopy: its floor's top at yb from xa to xb, out to zr (< 0); joists under the floor, posts
+ *  along the front, a top rail and two lower rails along the front and both ends, balusters, and its flower boxes (q: their choices) */
+function balcony38(G, xa, xb, yb, zr, q, hero) {
+  const a = G.piece, L = xb - xa, t = 0.075;
+  timb(a, xa, yb - 0.1, zr, xb, yb, 0, T_PZ); // the floor
+  const nj = Math.max(2, Math.round(L / 1.1) + 1); // (the joists' ends under its front edge)
+  for (let i = 0; i < nj; i++) { const x = xa + 0.08 + ((L - 0.16) * i) / (nj - 1); timb(a, x - 0.035, yb - 0.175, zr + 0.03, x + 0.035, yb - 0.1, -0.02, T_PZ | T_PY); }
+  const np = Math.max(2, Math.round(L / 1.25) + 1); // posts along the front (and the rails die into the wall at the back)
+  for (let i = 0; i < np; i++) { const x = xa + t / 2 + ((L - t) * i) / (np - 1); timb(a, x - t / 2, yb, zr, x + t / 2, yb + 1.0, zr + t, T_NY); }
+  for (const [y0, y1, d] of [[yb + 0.9, yb + 0.965, 0.1], [yb + 0.5, yb + 0.545, 0.055], [yb + 0.17, yb + 0.215, 0.055]]) {
+    timb(a, xa, y0, zr, xb, y1, zr + d, T_NX | T_PX); timb(a, xa, y0, zr + d, xa + d, y1, 0, T_NZ | T_PZ); timb(a, xb - d, y0, zr + d, xb, y1, 0, T_NZ | T_PZ);
+  }
+  for (let i = 0; i < np - 1; i++) { // balusters between the posts, ~0.42 m apart
+    const x0 = xa + t + ((L - t) * i) / (np - 1), x1 = xa + ((L - t) * (i + 1)) / (np - 1), nb = Math.max(1, Math.round((x1 - x0) / 0.42) - 1);
+    for (let j = 1; j <= nb; j++) { const x = x0 + ((x1 - x0) * j) / (nb + 1); timb(a, x - 0.022, yb + 0.215, zr + 0.012, x + 0.022, yb + 0.9, zr + 0.052, T_PY | T_NY); }
+  }
+  // flower boxes hung on the front rail's outside, the flowers over the rail and the ivy down its front; a balcony's one or two
+  const nf = L > 2.6 ? 2 : 1, k = hero ? 0 : Math.floor(q() * 2);
+  for (let i = 0; i < nf; i++) {
+    const xc = xa + (L * (i + 0.5)) / nf + (nf > 1 ? 0 : q.range(-0.15, 0.15) * L), Lp = Math.min(L / nf - 0.35, q.range(1.0, 1.3));
+    if (Lp > 0.6) planter(G, xc, yb + 0.6, zr - 0.27, Lp, 0.24, k + i);
+  }
+}
+/** a window's flower box on two small brackets, its planks' foot at y in front of the wall (z 0), centred at x */
+function windowBox(G, x, y, L, k) {
+  planter(G, x, y, -0.27, L, 0.25, k);
+  for (const sx of [-1, 1]) timb(G.piece, x + sx * (L / 2 - 0.12) - 0.03, y - 0.14, -0.2, x + sx * (L / 2 - 0.12) + 0.03, y, -0.0, T_PZ | T_PY);
+}
+// the neon's halo by day (materials.js makeHalo; main.js weighs it by TOD.bright: the bloom takes over at dusk): a hollow glow round a lit
+// rect in its own plane, nine-sliced from the halo texture (its middle 24…40 of 64 px is the rect itself: nothing is added over it)
+const HALO_UV = [0, 0.375, 0.625, 1], _hx = [0, 0, 0, 0], _hy = [0, 0, 0, 0];
+/** the halo round the rect centred at o (its width along ux, height along vy: unit vectors; its face towards ux × vy), half sizes hw × hh,
+ *  m metres wide, colour col (linear) */
+function haloRect(h, o, ux, vy, hw, hh, m, col) {
+  _hx[0] = -hw - m; _hx[1] = -hw; _hx[2] = hw; _hx[3] = hw + m; _hy[0] = -hh - m; _hy[1] = -hh; _hy[2] = hh; _hy[3] = hh + m;
+  const P = (i, j) => [o[0] + ux[0] * _hx[i] + vy[0] * _hy[j], o[1] + ux[1] * _hx[i] + vy[1] * _hy[j], o[2] + ux[2] * _hx[i] + vy[2] * _hy[j]];
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {
+    if (i === 1 && j === 1) continue;
+    h.quad(P(i, j), P(i + 1, j), P(i + 1, j + 1), P(i, j + 1), col, { u0: HALO_UV[i], u1: HALO_UV[i + 1], v0: HALO_UV[j], v1: HALO_UV[j + 1] });
+  }
+}
+const VS_NEON = ['#ff4fd8', '#b45cff', '#3fd8ff', '#ff4a5a', '#4dff9a', '#ffc94a'].map(c => mulC(C(c), 0.8)); // (the small signs' tubes: textures.js 'vs…')
+const NEON_COL = { vsNp: C('#ff4fc8'), vsNv: C('#a95cff'), vsNg: C('#38f0b8') }, BOX_HALO = C('#ffe6c0'), HX = [-1, 0, 0], HY = [0, 1, 0], HZN = [0, 0, -1], HZP = [0, 0, 1];
+/** a big sign's halo colour: its neon tube's, else a coloured panel's own, else a lit white box's warm white (dimmer) */
+function signHalo(cell) {
+  const i = +cell.slice(3), S = BIG_SIGNS[i]; if (!S) return null;
+  return S[3] ? C(S[3]) : S[4] ? mulC(BOX_HALO, 0.5) : mulC(C(S[1]), 0.8);
+}
+
 // 町家 shophouse, the reference art's shopping street: a shop on the ground floor under a deep tiled canopy whose front
 // board carries the shop's sign, warm bulbs hanging under it, a timber upper floor of lattice windows behind a wooden
 // balcony rail hung with flower boxes, a tiled gable roof, and pots of plants out on the pavement
@@ -826,30 +932,53 @@ function machiya(G, M, r, s) {
   // Steep (44°) and high at the wall, so its tiles show above the board from the street as the deep band of blue-grey tiles
   // over every shop of the city painting (at 33° they were a thin stripe, at 22° a sliver); the eave and the board are
   // where they were, the balcony on it a little higher
-  const cd = 1.05, drop = 1.0, cy = fh0 - 0.08 + drop, nS = Math.max(2, Math.round((w + 0.3) / 3));
+  // (step 38) each shop its own canopy, as painted: a little short of the building's ends (the wall and its posts show between two shops),
+  // its own height and depth, its ends closed by a barge board under a roll of round tiles; along its eave the painting's round tile caps
+  // over a wooden fascia and the rafter ends (kawaraF: the ends of kawaraC's 11 tile rolls, in place of the bold row of tile ends), the
+  // board in front of them. From the building's own new random numbers (q2): the street's (r) and the building's (q) are drawn as before.
+  // (Without its cells, the old long canopy)
+  const S38 = PIECES.on && A.has('kawaraF') && A.has('wtimb'), pc = G.piece, q2 = rng(Math.floor((G.atlas.e[12] * 53.7 + G.atlas.e[14] * 91.1) * 613) ^ 0x38e5);
+  let cd = 1.05, drop = 1.0, dh = 0, ia = -0.15, ib = -0.15;
+  if (S38) { cd = q2.range(0.95, 1.12); drop = cd * q2.range(0.86, 0.97); dh = q2.range(-0.12, 0.26); ia = q2.range(0.1, 0.34); ib = q2.range(0.1, 0.34); }
+  const cy = fh0 - 0.08 + drop + dh, ye = cy - drop, cxa = x0 + ia, cxb = -x0 - ib, cxw = cxb - cxa;
+  const nS = S38 ? Math.max(1, Math.round(cxw / 2.9)) : Math.max(2, Math.round((w + 0.3) / 3)), sxS = i => cxa + (cxw * i) / nS;
   // (its tiles: the painted atlas's kawaraC, a lighter slate than the roof's, with the round tile ends along the eave)
-  const kc = A.has('kawaraC') ? uv('kawaraC') : null;
-  for (let i = 0; i < nS; i++) { const xa = x0 - 0.15 + ((w + 0.3) * i) / nS, xb = x0 - 0.15 + ((w + 0.3) * (i + 1)) / nS; a.quad([xb, cy - drop, -cd], [xa, cy - drop, -cd], [xa, cy, 0], [xb, cy, 0], kc ? W1 : RC, kc || k); }
-  // (and along its eave the round tile ends face on, the painting's bold scalloped edge over each shop)
-  const ke = A.has('kawaraE') ? uv('kawaraE') : null;
-  if (ke) for (let i = 0; i < nS; i++) { const xa = x0 - 0.15 + ((w + 0.3) * i) / nS, xb = x0 - 0.15 + ((w + 0.3) * (i + 1)) / nS, ye = cy - drop; a.quad([xb, ye, -cd - 0.03], [xa, ye, -cd - 0.03], [xa, ye + 0.24, -cd - 0.03], [xb, ye + 0.24, -cd - 0.03], W1, ke); }
-  c.quad([x0 - 0.15, cy - drop - 0.03, -cd], [-x0 + 0.15, cy - drop - 0.03, -cd], [-x0 + 0.15, cy - 0.1, 0], [x0 - 0.15, cy - 0.1, 0], WOOD);
-  const sw = Math.min(w * 0.9, 4.4), y1 = cy - drop + 0.02, y0 = y1 - 0.62; // (a board at most 4.4 m long, its sign's own shape: the eave shows either side)
-  c.box(-sw / 2, y0, -cd - 0.02, sw / 2, y1, -cd + 0.07, DARK);
-  { const hsR = oldTheme ? '' : 'hs' + Math.floor(r() * 14); fq(a, -sw / 2, sw / 2, y0, y1, -cd - 0.025, theme || hsR || 'hs' + Math.floor(q() * 14)); } // (r as before)
-  for (const x of [-sw / 2 + 0.25, sw / 2 - 0.25]) c.box(x - 0.03, y1, -cd + 0.02, x + 0.03, cy - drop * 0.1, -cd + 0.06, DARK); // the board's hangers
+  // (step 38: kawaraT, the painting's greyer navy slate, where it is in)
+  const kT = S38 && A.has('kawaraT'), kc = kT ? uv('kawaraT') : A.has('kawaraC') ? uv('kawaraC') : null, ga = kT ? pc : a;
+  for (let i = 0; i < nS; i++) { const xa = sxS(i), xb = sxS(i + 1); ga.quad([xb, ye, -cd], [xa, ye, -cd], [xa, cy, 0], [xb, cy, 0], kc ? W1 : RC, kc || k); }
+  if (S38) {
+    const kf = uv('kawaraF'), zf = -cd - 0.035, yt = ye + EAVE_F.cap, yf = yt - EAVE_F.h;
+    for (let i = 0; i < nS; i++) { const xa = sxS(i), xb = sxS(i + 1); pc.quad([xb, yf, zf], [xa, yf, zf], [xa, yt, zf], [xb, yt, zf], W1, kf); }
+    // its ends: a barge board down the slope, closing the side under the tiles, and a roll of round tiles along its top edge
+    const sl = Math.hypot(cd, drop), tn = [0, cd / sl, -drop / sl], ROLL = C('#3b4a7e');
+    for (const [x, sg] of [[cxa, -1], [cxb, 1]]) {
+      if (sg > 0) c.quad([x, cy - 0.12, 0], [x, ye - 0.27, -cd], [x, ye + 0.02, -cd], [x, cy + 0.02, 0], DARK);
+      else c.quad([x, ye - 0.27, -cd], [x, cy - 0.12, 0], [x, cy + 0.02, 0], [x, ye + 0.02, -cd], DARK);
+      tileRoll(c, [x - sg * 0.045, ye + 0.035, -cd - 0.03], [x - sg * 0.045, cy + 0.035, 0], 0.06, sg, tn, ROLL);
+    }
+  } else { // (and along its eave the round tile ends face on, the painting's bold scalloped edge over each shop)
+    const ke = A.has('kawaraE') ? uv('kawaraE') : null;
+    if (ke) for (let i = 0; i < nS; i++) { const xa = sxS(i), xb = sxS(i + 1); a.quad([xb, ye, -cd - 0.03], [xa, ye, -cd - 0.03], [xa, ye + 0.24, -cd - 0.03], [xb, ye + 0.24, -cd - 0.03], W1, ke); }
+  }
+  c.quad([cxa, S38 ? ye - 0.25 : ye - 0.03, -cd], [cxb, S38 ? ye - 0.25 : ye - 0.03, -cd], [cxb, cy - 0.1, 0], [cxa, cy - 0.1, 0], WOOD);
+  // (a board at most 4.4 m long, its sign's own shape: the eave shows either side; step 38: centred on its canopy, in front of the eave's
+  // fascia and rafters, just under the tile caps)
+  const bxc = S38 ? (cxa + cxb) / 2 : 0, sw = S38 ? Math.min(cxw * 0.9, 4.4) : Math.min(w * 0.9, 4.4), y1 = S38 ? ye - 0.04 : ye + 0.02, y0 = y1 - 0.62, bz = S38 ? -0.04 : 0;
+  c.box(bxc - sw / 2, y0, -cd - 0.02 + bz, bxc + sw / 2, y1, -cd + 0.07 + bz, DARK);
+  { const hsR = oldTheme ? '' : 'hs' + Math.floor(r() * 14); fq(a, bxc - sw / 2, bxc + sw / 2, y0, y1, -cd - 0.025 + bz, theme || hsR || 'hs' + Math.floor(q() * 14)); } // (r as before)
+  if (!S38) for (const x of [-sw / 2 + 0.25, sw / 2 - 0.25]) c.box(x - 0.03, y1, -cd + 0.02, x + 0.03, cy - drop * 0.1, -cd + 0.06, DARK); // the board's hangers
   // warm bulbs on short flexes under the canopy (lit by day too, as in a shopping street)
   G.sodium.setM(M);
   c.noShadow = true; for (let i = 0; i < bays; i++) { const x = x0 + (i + 0.5) * bw; c.box(x - 0.008, y0 - 0.02, -0.62, x + 0.008, cy - drop * 0.6, -0.6, DARK); G.sodium.box(x - 0.06, y0 - 0.16, -0.67, x + 0.06, y0 - 0.04, -0.55, null); } c.noShadow = false;
   let awn = false;
-  if (r() < 0.5 || hero) { awn = true; // a fabric awning under the board
-    const col = hero ? AWN_REF[0] : r.pick(AWN_REF), y = y0 - 0.12;
-    c.quad([w / 2 - 0.2, y - 0.32, -0.95], [-w / 2 + 0.2, y - 0.32, -0.95], [-w / 2 + 0.2, y, -0.02], [w / 2 - 0.2, y, -0.02], col);
-    c.quad([w / 2 - 0.2, y - 0.55, -0.95], [-w / 2 + 0.2, y - 0.55, -0.95], [-w / 2 + 0.2, y - 0.32, -0.95], [w / 2 - 0.2, y - 0.32, -0.95], mulC(col, 0.85));
+  if (r() < 0.5 || hero) { awn = true; // a fabric awning under the board (step 38: under its own canopy)
+    const col = hero ? AWN_REF[0] : r.pick(AWN_REF), y = y0 - 0.12, ax0 = S38 ? cxa + 0.06 : -w / 2 + 0.2, ax1 = S38 ? cxb - 0.06 : w / 2 - 0.2;
+    c.quad([ax1, y - 0.32, -0.95], [ax0, y - 0.32, -0.95], [ax0, y, -0.02], [ax1, y, -0.02], col);
+    c.quad([ax1, y - 0.55, -0.95], [ax0, y - 0.55, -0.95], [ax0, y - 0.32, -0.95], [ax1, y - 0.32, -0.95], mulC(col, 0.85));
   }
   // the balcony on the floor above: a plank floor on the canopy, the wooden rail, flower boxes hung on it
   const yb = fy[1] + 0.56, zr = -0.5, balc = floors >= 2 && (!P || r() < 0.5); // (its plank floor just over the canopy's tiles)
-  if (balc) {
+  if (balc && !S38) {
     const xa = x0 + 0.12, xb = -x0 - 0.12;
     c.box(xa, yb - 0.07, zr - 0.04, xb, yb, 0, WOOD);
     for (let i = 0; i < bays; i++) fq(a, x0 + 0.12 + ((w - 0.24) * i) / bays, x0 + 0.12 + ((w - 0.24) * (i + 1)) / bays, yb, yb + 0.95, zr, 'wrail');
@@ -860,13 +989,19 @@ function machiya(G, M, r, s) {
       c.noShadow = true; c.box(xc - bl / 2, yb + 0.72, zr - 0.2, xc + bl / 2, yb + 0.92, zr - 0.02, C('#7a5236')); c.noShadow = false;
       for (let fx = xc - bl / 2 + 0.2; fx < xc + bl / 2 - 0.1; fx += 0.32) cards(G, [fx, yb + 0.95, zr - 0.11], fx, yb + 1.05, zr - 0.11, 0.26, r() < 0.65 ? 'sakura' : 'flowers', 3, r, [1, 0.92, 0.96], [0.7, 0.55, 0.62], [yb + 0.9, yb + 1.3]);
     }
+  } else if (balc) { // (step 38: the balcony is built below, from q2; the old flower boxes' random numbers are drawn as they were, so the street's layout stays)
+    for (let i = 0; i < bays; i++) if (r() < 0.7) {
+      const xc = x0 + (i + 0.5) * bw, bl = Math.min(bw * 0.7, 1.6);
+      for (let fx = xc - bl / 2 + 0.2; fx < xc + bl / 2 - 0.1; fx += 0.32) burn(r, 1 + 8 * cardsN(3));
+    }
   }
   // a big lit sign over the canopy (and on a wide front now and then a small one at its other end)
-  if (floors >= 2 && (r() < 0.9 || hero)) { const sdR = r() < 0.5 ? 1 : -1, sd = hero || sdR; /* (the opening view's: at the end further along the road, in view) */ vsignBig(G, sd * (w / 2 - 0.35), cy + 0.1, Math.min(H - 0.2, cy + 2.8), r, hero ? (hero < 0 ? 'vsB10' : 'vsB0') : ''); if (w > 7 && r() < 0.35) vsign(G, -sd * (w / 2 - 0.35), fh0 + 1.0, Math.min(H - 0.2, fh0 + 2.7), r); }
+  let sgA = 1e9, sgB = 1e9; // (step 38: where they stand, kept clear by the balcony)
+  if (floors >= 2 && (r() < 0.9 || hero)) { const sdR = r() < 0.5 ? 1 : -1, sd = hero || sdR; /* (the opening view's: at the end further along the road, in view) */ sgA = sd * (w / 2 - 0.35); vsignBig(G, sgA, cy + 0.1, Math.min(H - 0.2, cy + 2.8), r, hero ? (hero < 0 ? 'vsB10' : 'vsB0') : '', S38); if (w > 7 && r() < 0.35) { sgB = -sd * (w / 2 - 0.35); vsign(G, sgB, fh0 + 1.0, Math.min(H - 0.2, fh0 + 2.7), r, S38); } }
   // paper lanterns (提灯) glowing at the canopy's edge: a pair by a noren or a café's door, now and then one elsewhere
   { const pair = kinds.includes('noren') || kinds.includes('cafe'), nL = awn ? 0 : pair ? 2 : r() < 0.3 ? 1 : 0; // (not where an awning hangs)
     G.sodium.setM(M);
-    for (let j = 0; j < nL; j++) { const x = nL === 2 ? (j ? 1 : -1) * Math.min(1.4, w / 2 - 0.6) : (r() - 0.5) * (w - 1.5), y = y0 - 0.5;
+    for (let j = 0; j < nL; j++) { const x0L = nL === 2 ? (j ? 1 : -1) * Math.min(1.4, w / 2 - 0.6) : (r() - 0.5) * (w - 1.5), x = S38 ? Math.min(cxb - 0.25, Math.max(cxa + 0.25, x0L)) : x0L, y = y0 - 0.5;
       c.noShadow = true; c.box(x - 0.006, y + 0.42, -cd + 0.12, x + 0.006, y0, -cd + 0.14, DARK);
       G.sodium.cyl(x, y, -cd + 0.13, 0.11, 0.16, 0.18, 10, null, false); G.sodium.cyl(x, y + 0.18, -cd + 0.13, 0.16, 0.11, 0.18, 10, null, false); // a barrel of paper
       c.cyl(x, y - 0.035, -cd + 0.13, 0.1, 0.1, 0.04, 8, DARK); c.cyl(x, y + 0.355, -cd + 0.13, 0.1, 0.1, 0.04, 8, DARK); c.noShadow = false; } }
@@ -876,21 +1011,51 @@ function machiya(G, M, r, s) {
   if (hero < 0 && bays >= 3) { xr2 = x0 + 2.5 * bw; magazineRack(G, M, xr2, -0.62, r); } // (the opening view's bookshop: racks along its front)
   for (let x = x0 + 0.45 + r() * 0.4; x < -x0 - 0.3; x += 0.7 + r() * 1.3) if (r() < 0.7 && Math.abs(x - xr) > 0.95 && Math.abs(x - xr2) > 0.95) pottedPlant(G, M, r, x, -0.4);
   G.color.setM(M); G.atlas.setM(M);
+  // (step 38) the balcony as painted: over one bay, two or the whole front (q2), just above its canopy, clear of the signs, with its
+  // flower boxes; without one, now and then a flower box on brackets at a window over the canopy (not on the painted bays that have
+  // theirs), and on a third floor's. The opening view's: the bookshop's balcony with pink flowers, the clothes shop's window box with ivy
+  if (S38 && floors >= 2) {
+    const yb2 = cy + 0.09, zb = hero ? -0.66 : -q2.range(0.56, 0.7), tb = q2(), tw = q2();
+    let built = false;
+    if ((balc && hero >= 0) || hero < 0) {
+      let i0 = 0, i1 = bays - 1;
+      if (bays === 2) { if (tb < 0.55) i0 = i1 = tw < 0.5 ? 0 : 1; }
+      else if (tb < 0.4) i0 = i1 = 1; else if (tb < 0.7) { if (tw < 0.5) i1 = 1; else i0 = 1; }
+      if (hero < 0) { i0 = 0; i1 = bays - 1; } // (the opening view's bookshop: across its front, but 1.5 m short of its 焼き鳥 sign: seen from the
+      // start, a balcony nearer than that stands in front of the sign)
+      let xa = Math.max(cxa + 0.05, x0 + i0 * bw + (i0 ? 0.2 : 0.15)), xb = Math.min(cxb - 0.05, x0 + (i1 + 1) * bw - (i1 < bays - 1 ? 0.2 : 0.15));
+      const gap = hero < 0 ? 1.5 : 0.24;
+      for (const sx of [sgA, sgB]) { if (sx > 1e8) continue; if (sx > (xa + xb) / 2) xb = Math.min(xb, sx - gap); else xa = Math.max(xa, sx + gap); }
+      if (xb - xa > 1.1) { balcony38(G, xa, xb, yb2, zb, q2, hero < 0); built = true; }
+    }
+    const painted = up === 'win9' || up === 'win10'; // (those upper bays have flower boxes of their own, painted)
+    if (!built && !painted && (hero > 0 || tw < 0.55)) {
+      const i = hero > 0 ? bays - 1 : Math.floor(q2() * bays), x = x0 + (i + 0.5) * bw;
+      if (Math.abs(x - sgA) > 0.85 && Math.abs(x - sgB) > 0.85) windowBox(G, x, cy + 0.3, Math.min(bw * 0.62, 1.25), hero > 0 ? 1 : Math.floor(q2() * 2)); // (on the sill, clear of the canopy's slope)
+    }
+    if (floors >= 3 && !painted && q2() < 0.35) {
+      const i = Math.floor(q2() * bays), x = x0 + (i + 0.5) * bw;
+      if (Math.abs(x - sgA) > 0.85 && Math.abs(x - sgB) > 0.85) windowBox(G, x, fy[2] + 0.5, Math.min(bw * 0.62, 1.2), Math.floor(q2() * 2));
+    }
+  }
   // neon tubes, as in the city painting: a pink, violet or green one along the top floor under the eave, and a green or pink
   // one along the canopy's top (under the balcony, at its plank floor's edge); the opening view's bookshop has both, as its
   // painted twin. From the building's own random numbers (q, drawn last: nothing else changes)
+  // (step 38: the lower one along its own canopy's top at the wall, under the balcony; each with its halo by day)
   if (A.has('vsNg')) {
-    const n1 = q(), n2 = q(), n3 = q();
-    if (hero < 0 || n1 < 0.4) neonTube(a, x0 + 0.15, -x0 - 0.15, H - 0.2, -0.07, hero < 0 ? 'vsNv' : n2 < 0.45 ? 'vsNp' : n2 < 0.8 ? 'vsNv' : 'vsNg');
-    if (hero < 0 || n3 < 0.3) neonTube(a, x0 + 0.15, -x0 - 0.15, balc ? yb - 0.16 : cy + 0.04, balc ? zr - 0.06 : -0.08, hero < 0 || n2 < 0.5 ? 'vsNg' : 'vsNp');
+    const n1 = q(), n2 = q(), n3 = q(), hl = S38 ? G.halo : null;
+    if (hero < 0 || n1 < 0.4) neonTube(a, x0 + 0.15, -x0 - 0.15, H - 0.2, -0.07, hero < 0 ? 'vsNv' : n2 < 0.45 ? 'vsNp' : n2 < 0.8 ? 'vsNv' : 'vsNg', hl);
+    if (hero < 0 || n3 < 0.3) { const cn = hero < 0 || n2 < 0.5 ? 'vsNg' : 'vsNp'; if (S38) neonTube(a, cxa + 0.1, cxb - 0.1, cy + 0.035, -0.075, cn, hl); else neonTube(a, x0 + 0.15, -x0 - 0.15, balc ? yb - 0.16 : cy + 0.04, balc ? zr - 0.06 : -0.08, cn); }
   }
 }
 // a neon tube along a front from x xa to xb at height y, z out from the wall: a strip facing the street and one facing down,
 // so it reads from below and along the street (the neon light code: bright by day, with the bloom's soft halo)
-function neonTube(a, xa, xb, y, z, cell) {
+// (step 38: h, the chunk's halos: its soft glow by day round the strip that faces the street)
+function neonTube(a, xa, xb, y, z, cell, h = null) {
   const t = 0.075, c = uv(cell);
   fq(a, xa, xb, y, y + t, z, cell);
   a.litV = 12; a.quad([xa, y, z - t], [xb, y, z - t], [xb, y, z], [xa, y, z], W1, c); a.litV = 0;
+  if (h) haloRect(h, [(xa + xb) / 2, y + t / 2, z - 0.004], HX, HY, (xb - xa) / 2, t / 2, 0.13, NEON_COL[cell]);
 }
 function billboard(G, w, H, d, r) {
   const bw = Math.min(w * 0.85, 7), bh = bw * 0.47, z = d * 0.3;

@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { Path, zoneW, zoneWeight, zoneAt, zparam, ZINFO, setStartZone, startZone, zoneSets, trafficSide, seaWeight, regionWeight, viewMix, bandMix, bayQ, borderNear, nextBorderS, REGION, crossingS, crossingValid, XING, XOFF, riverNear, RIV, ROFF, groundOffsetMix, tunnelNear, T_HALF, T_RIDGE, ZONE_LEN, GAL_BR, galL } from './path.js';
 import { makeCrossingRig, makeTrain, xingPosts } from './crossing.js';
-import { buildAtlas, buildFoliage, buildPaintedAtlas, buildWorldAtlas, buildCapAtlas, buildPasAtlas, buildChainAtlas, albedoTexture, SHOP_GLASS, stickerHolesJ } from './textures.js';
-import { makePlateFronts, GRAD_CAR, trainRamp, makeMaterials, makeAtlasW, makeAtlasRooms, makeAtlasWRooms, makeChainRooms, roomSet, makeAtlasChain, makeCapAtlas, makePasGrass, setWorldTex, U, groundMaterialFor, setGrazeFade, makeCloudMap, makeGhibliLeaf, FIELD, tetraMaterial, barkMaterial, tuffMaterial, PROP_DEPTH } from './materials.js';
-import { setAtlas, setFoliage, warmTrees, warmBare, warmTetrapods, setLeafDensity, GHIBLI, setHouses, setTrHouses, setChains, PROC_ROOMS, setFishers, setDolmus, setGalFronts, setBoats, BOATS, GAL_F } from './props.js';
+import { buildAtlas, buildFoliage, buildPaintedAtlas, buildPieceAtlas, buildWorldAtlas, buildCapAtlas, buildPasAtlas, buildChainAtlas, albedoTexture, SHOP_GLASS, stickerHolesJ } from './textures.js';
+import { makePlateFronts, GRAD_CAR, trainRamp, makeMaterials, makeAtlasW, makeAtlasRooms, makeAtlasWRooms, makeChainRooms, roomSet, makeAtlasChain, makeCapAtlas, makePasGrass, makeHalo, setWorldTex, U, groundMaterialFor, setGrazeFade, makeCloudMap, makeGhibliLeaf, FIELD, tetraMaterial, barkMaterial, tuffMaterial, PROP_DEPTH } from './materials.js';
+import { setAtlas, setFoliage, warmTrees, warmBare, warmTetrapods, setLeafDensity, GHIBLI, setHouses, setTrHouses, setChains, PROC_ROOMS, setFishers, setDolmus, setGalFronts, setBoats, BOATS, GAL_F, PIECES } from './props.js';
 import { setFurniture, furnTris } from './furniture.js';
 import { loadTreeAtlas } from './ghibli.js';
 import { World, CH } from './chunks.js';
@@ -27,7 +27,7 @@ import { makePost } from './post.js';
 import { makeAudio } from './audio.js';
 import { makeParticles } from './particles.js';
 import { clamp, lerp, sstep, setSeed, hash2 } from './util.js';
-import { loadCloudAtlas, makePaintedClouds, loadBandAtlas, makePaintedBand, updatePainted, loadFieldTexture, loadFrontAtlas, loadRoomAtlas, roomTexture, roomGlass, loadHouseAtlas, loadHousePatch, loadTrHouseAtlas, loadTownAtlas, loadChainAtlas, loadFisherAtlas, loadPeopleAtlas, loadDolmus, loadTrain, loadCar, loadTram, loadGalFronts, loadFurniture, loadBoats, todTones, mixTones, paintSky, PAINT_TOD, BAND_R, BT_DAY, BT_GOLD, BT_SUNSET, BT_NIGHT } from './painted.js';
+import { loadCloudAtlas, makePaintedClouds, loadBandAtlas, makePaintedBand, updatePainted, loadFieldTexture, loadFrontAtlas, loadPieceAtlas, loadRoomAtlas, roomTexture, roomGlass, loadHouseAtlas, loadHousePatch, loadTrHouseAtlas, loadTownAtlas, loadChainAtlas, loadFisherAtlas, loadPeopleAtlas, loadDolmus, loadTrain, loadCar, loadTram, loadGalFronts, loadFurniture, loadBoats, todTones, mixTones, paintSky, PAINT_TOD, BAND_R, BT_DAY, BT_GOLD, BT_SUNSET, BT_NIGHT } from './painted.js';
 
 const QS = new URLSearchParams(location.search);
 // inside an X player card (or any iframe): lighter quality, compact UI, tap-only start
@@ -76,6 +76,8 @@ async function main() {
   // the shopping street's painted shopfronts and upper floors (painted.js), on the crowns' tiers (a near shopfront fills
   // a third of the frame): 360×432 px a bay on desktops, half that on phones and in the X card
   const frontLoad = loadFrontAtlas(quality === 'high' && innerHeight * DPR >= 560 ? 'hi' : 'lo');
+  // (step 38) …and the shophouses' painted flower boxes, on the same tiers (painted.js loadPieceAtlas)
+  const pieceLoad = loadPieceAtlas(quality === 'high' && innerHeight * DPR >= 560 ? 'hi' : 'lo');
   // (step 31) …and the rooms behind their windows, with the windows' glass, on the same tiers (painted.js loadRoomAtlas)
   const RTIER = quality === 'high' && innerHeight * DPR >= 560 ? 'hi' : 'lo', roomLoad = loadRoomAtlas(RTIER);
   // (step 34) …and the rooms behind every other shop window still painted, a region's in a sheet of its own (painted.js loadRoomAtlas):
@@ -234,9 +236,13 @@ async function main() {
   const fa = await frontLoad, ha = await houseLoad, hp = await housePatchLoad, ra = await roomLoad;
   if (ha && hp) ha.patch = hp; // (the coast painting's house as painted, over houses2's: step 27)
   const patlas = buildPaintedAtlas(atlas, HTIER, fa, ha); // (the cells keep their procedural paint where a painting failed)
+  // (step 38) the shophouses' eaves, balconies and flower boxes: a small atlas of their own (textures.js buildPieceAtlas; the flower boxes'
+  // paintings over their procedural paint when they loaded). Without it the shophouses keep the old long canopy and balcony
+  const pa = await pieceLoad;
+  let pieceAtlas = null; try { pieceAtlas = buildPieceAtlas(atlas, HTIER, pa); } catch (err) { console.warn('the shophouses\' pieces:', err.message); }
   if (patlas.houses) setHouses(ha.types); // (else: the procedural houses)
   if (patlas.houses) U.uHouseV.value = Math.max(...ha.tiles.map(t => atlas.uv(t.name).v1)) + 1e-4; // (step 30: the houses' rows, for their night fill)
-  if (fa) fa.img.close(); if (ha) ha.img.close(); if (hp) hp.img.close();
+  if (fa) fa.img.close(); if (ha) ha.img.close(); if (hp) hp.img.close(); if (pa) pa.img.close();
   // (step 32) the chains' atlases: Japan's konbini's, and at a Turkish start the town's markets' (textures.js buildChainAtlas; null when
   // their bays failed: the old konbini and markets)
   const chainAtlas = async (load, region) => { const ca = await load; if (!ca) return null; try { return buildChainAtlas(atlas, HTIER, ca, region); } catch (err) { console.warn('the chain fronts:', err.message); return null; } finally { ca.img.close(); } };
@@ -498,6 +504,10 @@ async function main() {
   // the brightest thing in it), the headlights (car.js head: their cone's angle, softness, strength × the old, reach and fall-off: the
   // repaints' warm pool round the car's nose); NTZ: a zone's own, blended in by its weight. Fitted on the repaints (~/cdtest/s30/tools)
   // (bloom: its strength × the old: the shops' and the tail lamps' glow spread over their fronts and the rear window)
+  // (step 38) the neon halos' strength on a bright day (materials.js makeHalo); the shopping street's rooms: the share of the street's light on
+  // their paint (rgb: an interior seen through glass is not sunlit) and their glow's gain by day (warmer), as painted
+  // (the glass's reflection: linear light, × a Fresnel-like weight in the shader, materials.js roomsAtlas)
+  const HALO_K = 0.85, ROOM_D = [0.3, 0.29, 0.34], ROOM_G = [1.0, 0.95, 0.9], ROOM_R = [0.034, 0.04, 0.058];
   const NT = { road: [2.4, 2.5, 1.6], walk: [1.5, 1.6, 1.15], shadow: [0.5], lit: [0.4, 1.0, 0.8, 0.3], head: [0.95, 1.0, 2.2, 28, 2.0], headC: new THREE.Color(1.0, 0.8, 0.52), bloom: [0.5],
     house: [0.45, 0.42, 0.4], // (the painted houses' walls: a fill light at night, linear irradiance: materials.js uHouseFill)
     carD: [5, 5.5, 4.5] }; // (the car's moonlit paint × this: car.js uCarDT, the repaints' pale roof)
@@ -587,6 +597,11 @@ async function main() {
   // 35f's people, step 35h's boats)
   let lazyId = 0x2545f491;
   const quietIds = f => { const R0 = Math.random; Math.random = () => { lazyId = (Math.imul(lazyId, 1664525) + 1013904223) >>> 0; return lazyId / 4294967296; }; try { return f(); } finally { Math.random = R0; } };
+  // (step 38) the shopping street's neon halos by day (materials.js makeHalo; chunks.js G.halo), and the shophouses' pieces' material (the
+  // atlas's program on their own texture pair: makeAtlasChain, nothing new compiles; chunks.js G.piece), their ids from the private generator
+  // (no random numbers drawn: seeded captures keep their particles), warmed up with the rest below
+  quietIds(() => makeHalo(M));
+  if (pieceAtlas) quietIds(() => { const t = pieceAtlas.textures(renderer); renderer.initTexture(t.map); renderer.initTexture(t.emissive); const ch = makeAtlasChain(M, t); ch.mat.emissiveIntensity = M.atlas.emissiveIntensity; M.atlasP = ch.mat; M.atlasPDepth = ch.depth; PIECES.on = true; });
   // (step 35h) the boats' materials: the atlas's program on their region's own texture pair (makeAtlasChain: nothing new compiles), the small
   // boats' with the car's soft ramp (GRAD_CAR: their rounded hulls shade without bands), the ferry's bow and stern with the atlas's own (as its
   // sides, the world atlas's), their shadow twins; their ids from quietIds (no random numbers drawn: they may be made before the ferry), their
@@ -781,9 +796,9 @@ async function main() {
     const tri0 = new THREE.BufferGeometry(); tri0.setAttribute('position', tri.attributes.position);
     const castWarm = fishers ? null : people.ist || people.tour; // (step 35f: a cast of people is the fishermen's programs: warmed only without them)
     const bare = new Set([M.shore, M.surf, riverMat, ...(fishers ? [fishers.decalMat] : []), ...(castWarm ? [castWarm.decalMat] : [])]);
-    const mats = [M.color, M.atlas, M.atlasW, ...(M.atlasI ? [M.atlasI] : []), ...(M.atlasC ? [M.atlasC] : []), ...(M.atlasCT ? [M.atlasCT] : []), ...[M.atlasCI, M.atlasCTI, M.atlasWI, M.atlasG, M.atlasGI, M.atlasGIg].filter(m => m), M.foliage, M.leaf, ...(M.bank ? [M.bank] : []), M.lamp, M.sig, M.sodium, M.decal, M.pool, M.shore, M.surf, riverMat, M.tetra, M.bark, ...(M.gleaf ? [M.gleaf] : []), ...(M.gblossom ? [M.gblossom] : []), ...(M.tuff ? [M.tuff, M.capAtlas] : []), ...(M.pasGrass ? [M.pasGrass] : []), ...(fishers ? [fishers.mat, fishers.decalMat] : []), ...(castWarm ? [castWarm.mat, castWarm.decalMat] : []), ...(M.atlasDol ? [M.atlasDol] : [])];
+    const mats = [M.color, M.atlas, M.atlasW, ...(M.atlasI ? [M.atlasI] : []), ...(M.atlasC ? [M.atlasC] : []), ...(M.atlasCT ? [M.atlasCT] : []), ...[M.atlasCI, M.atlasCTI, M.atlasWI, M.atlasG, M.atlasGI, M.atlasGIg].filter(m => m), M.foliage, M.leaf, ...(M.bank ? [M.bank] : []), M.lamp, M.sig, M.sodium, M.decal, M.pool, ...(M.halo ? [M.halo] : []), ...(M.atlasP ? [M.atlasP] : []), M.shore, M.surf, riverMat, M.tetra, M.bark, ...(M.gleaf ? [M.gleaf] : []), ...(M.gblossom ? [M.gblossom] : []), ...(M.tuff ? [M.tuff, M.capAtlas] : []), ...(M.pasGrass ? [M.pasGrass] : []), ...(fishers ? [fishers.mat, fishers.decalMat] : []), ...(castWarm ? [castWarm.mat, castWarm.decalMat] : []), ...(M.atlasDol ? [M.atlasDol] : [])];
     for (const zs of zoneSets()) if (TR_START || !trSet(zs)) mats.push(groundMaterialFor(zs)); // (each zone, each pair of neighbours, each border's: Turkey's later if not needed now)
-    for (const m of mats) { const o = new THREE.Mesh(bare.has(m) ? tri0 : tri, m); o.castShadow = o.receiveShadow = !bare.has(m); o.frustumCulled = false; if (m === M.gleaf) o.customDepthMaterial = M.gleafDepth; if (m === M.gblossom) o.customDepthMaterial = M.gblossomDepth; if (m === M.atlas || m === M.atlasI || m === M.atlasG || m === M.atlasGI) o.customDepthMaterial = M.atlasDepth; if (m === M.atlasW || m === M.atlasWI) o.customDepthMaterial = M.atlasWDepth; if (m === M.atlasC || m === M.atlasCI) o.customDepthMaterial = M.atlasCDepth; if (m === M.atlasCT || m === M.atlasCTI) o.customDepthMaterial = M.atlasCTDepth; if (m === M.color) o.customDepthMaterial = PROP_DEPTH; if (fishers && m === fishers.mat) o.customDepthMaterial = fishers.depth; if (castWarm && m === castWarm.mat) o.customDepthMaterial = castWarm.depth; if (m === M.atlasDol) o.customDepthMaterial = M.atlasDolDepth; warm.add(o); }
+    for (const m of mats) { const o = new THREE.Mesh(bare.has(m) ? tri0 : tri, m); o.castShadow = o.receiveShadow = !bare.has(m); o.frustumCulled = false; if (m === M.gleaf) o.customDepthMaterial = M.gleafDepth; if (m === M.gblossom) o.customDepthMaterial = M.gblossomDepth; if (m === M.atlas || m === M.atlasI || m === M.atlasG || m === M.atlasGI) o.customDepthMaterial = M.atlasDepth; if (m === M.atlasW || m === M.atlasWI) o.customDepthMaterial = M.atlasWDepth; if (m === M.atlasC || m === M.atlasCI) o.customDepthMaterial = M.atlasCDepth; if (m === M.atlasCT || m === M.atlasCTI) o.customDepthMaterial = M.atlasCTDepth; if (m === M.color) o.customDepthMaterial = PROP_DEPTH; if (fishers && m === fishers.mat) o.customDepthMaterial = fishers.depth; if (castWarm && m === castWarm.mat) o.customDepthMaterial = castWarm.depth; if (m === M.atlasDol) o.customDepthMaterial = M.atlasDolDepth; if (m === M.atlasP) o.customDepthMaterial = M.atlasPDepth; warm.add(o); }
     // (the props' shadow-pass twin too, W6: it used to compile only when a real props' mesh stood in the shadow box during the load, and a
     // start in Paşabağ's valley (no poles) met its first props in the city, 20 ms into the drive)
     warm.position.set(0, 0, 0); scene.add(warm);
@@ -1629,6 +1644,7 @@ async function main() {
     if (M.atlasC) M.atlasC.emissiveIntensity = M.atlas.emissiveIntensity; if (M.atlasCT) M.atlasCT.emissiveIntensity = M.atlas.emissiveIntensity; // (and the chain stores', step 32)
     if (M.atlasCI) M.atlasCI.emissiveIntensity = M.atlas.emissiveIntensity; if (M.atlasCTI) M.atlasCTI.emissiveIntensity = M.atlas.emissiveIntensity; if (M.atlasWI) M.atlasWI.emissiveIntensity = M.atlas.emissiveIntensity; // (and the rooms' of the chains and the town, step 34)
     if (M.atlasDol) M.atlasDol.emissiveIntensity = M.atlas.emissiveIntensity; // (and the town's dolmuş's lamps and saloon, step 35b)
+    if (M.atlasP) M.atlasP.emissiveIntensity = M.atlas.emissiveIntensity; // (and the shophouses' pieces', step 38)
     if (M.atlasBJ) M.atlasBJ.emissiveIntensity = M.atlas.emissiveIntensity; // (and the boats' windows and lights, step 35h)
     if (M.atlasBT) { M.atlasBT.emissiveIntensity = M.atlas.emissiveIntensity; if (M.atlasBF) M.atlasBF.emissiveIntensity = M.atlas.emissiveIntensity; }
     if (M.atlasF) M.atlasF.emissiveIntensity = M.atlas.emissiveIntensity; // (and the street furniture's: the vending machines' windows, step 35g)
@@ -1737,6 +1753,10 @@ async function main() {
       if (k > 0) for (const z in HSZ) { const wz = w[z]; if (!(wz > 0)) continue; const f = HSZ[z].at(TOD.t).rgb('f'); U.uHouseFill.value.x += wz * k * f[0]; U.uHouseFill.value.y += wz * k * f[1]; U.uHouseFill.value.z += wz * k * f[2]; } }
     M.lamp.color.setRGB(0.9, 0.86, 0.74).lerp(LAMP_NIGHT, nightK); // (by day a milky, warm cream glass, as the avenue's lanterns in the painting)
     M.pool.opacity = nightK * 0.42 * (1 + 0.8 * wet);
+    // (step 38) the neon's halos by day (on a bright clear day; at dusk, at night and under grey skies the bloom's glow alone), and the
+    // shopping street's rooms darker and warmer by day, as painted (their glow's warmth fading to the night's as the lights come on)
+    if (M.halo) { const hk = HALO_K * TOD.bright; M.halo.opacity = hk; M.halo.visible = hk > 0.003; }
+    if (M.atlasI) { const R = M.atlasI.userData.rooms, dk = 1 - U.uLightsOn.value; R.uRmD.value.set(ROOM_D[0], ROOM_D[1], ROOM_D[2]); R.uRmG.value.set(1 + (ROOM_G[0] - 1) * dk, 1 + (ROOM_G[1] - 1) * dk, 1 + (ROOM_G[2] - 1) * dk); R.uRmR.value.set(ROOM_R[0] * dk, ROOM_R[1] * dk, ROOM_R[2] * dk); }
     { // the two lights that light the car most (street lamps, lit shop windows, tunnel lamps) light its paint and glass
       // (car.js); lights sit in their chunk's frame. Sodium orange inside tunnels, which are lit by day too
       const cp = car.group.position, L = car.lamps, K = Math.max(nightK, tunS);

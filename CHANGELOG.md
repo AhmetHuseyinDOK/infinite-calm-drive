@@ -2,6 +2,70 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-30 · 15:26 — The shopping street's shopfronts as painted: each shop its own eave, wooden balconies with flower boxes, calmer interiors, neon that glows by day
+- **Each shop its own short tiled eave, as the city painting has them** (it was one long canopy down the whole row): every shophouse's
+  canopy stops a little short of its ends, so the wall and its posts show between two shops, and sits at its own height and depth; its ends
+  are closed by a dark barge board under a smooth roll of round tiles. Along the eave the painting's small round tile caps, one at the end
+  of each tile roll, over a wooden fascia and the rafter ends (the bold row of big tile ends is gone); the sign board hangs in front of the
+  fascia. The tiles are the painting's greyer navy slate (in the shade (34, 49, 89) in the painting; ours were a pure (4, 39, 104)).
+- **Wooden balconies with flower boxes over the canopies:** 3D timber (a floor on joists, posts, a top rail and two lower ones round the
+  front and both ends, balusters) over one bay, two or the whole front, kept clear of the big signs; on the front rail one or two flower
+  boxes of pink impatiens, or pink, white and coral petunias with ivy trailing down, painted from the city painting's own flower boxes;
+  without a balcony, now and then a flower box on brackets at a window. The opening view's bookshop has the painting's balcony with pink
+  flowers, 1.5 m short of its violet 焼き鳥 sign so the sign stays in view.
+- **Darker, warmer shop interiors by day, behind glass:** the rooms behind the street's windows (step 31) take only a share of the street's
+  light (an interior is not sunlit), their own warm glow, and the glass's faint reflection, stronger at a grazing angle and towards the top
+  of the pane (Fresnel's), so a window seen head-on still shows its room clearly. Every window keeps its room. At dusk and at night as before.
+- **Neon with a soft halo by day,** as painted: the big lit signs, the small vertical ones and the neon tubes along the eaves glow in their
+  own colours over what is behind them on a bright day (the bloom is off by day); at golden hour less, at sunset, at night and under grey
+  skies the bloom's glow alone, as before.
+- Against the paintings (CIELAB ΔE of region medians, the city at s = 140, the gap tools; live → staging):
+  - noon (city.png): left upper floors 20.3 → 16.3, right shops 23.4 → 15.0, right upper floors 6.0 → 5.3, left shops 12.8 → 13.9 (darker);
+    the frame (share-weighted, Audit 2's boxes) 9.90 → 8.52;
+  - golden hour (its repaint): left upper 22.5 → 10.3, right shops 26.2 → 16.2, left shops 13.6 → 9.7; frame 13.04 → 9.90;
+  - sunset (its repaint): left upper 17.9 → 15.2, right shops 23.7 → 18.6, left shops 14.3 → 12.4 (right upper 19.3 → 19.5); frame 11.60 → 10.55;
+  - night (its repaint): frame 10.35 → 9.94 (left upper 17.9 → 16.1, right shops 28.1 → 27.3).
+- Every other zone identical to live in seeded captures (desktop at noon and at night, phone at noon; each staging capture byte-identical to
+  one of live's own variants of the shot, the ten other zones' starts and Audit 2's places). The procedural and painted atlases are byte-identical
+  to live's (every cell, desktop and phone tiers). The street's layout is unchanged (the old balcony's random numbers are still drawn). Seen
+  in Chrome 156 (the desktop machine) and Chrome 148 (this box).
+- How:
+  - `props.js machiya`: the canopy from the building's own new random numbers (`q2`); `tileRoll`, `face3` (the barge roll), `balcony38`,
+    `planter`, `windowBox`, `timb` (timber boxes without the faces that are never seen); halos `haloRect` (a hollow nine-sliced glow round a rect in its own plane), `signHalo`, `VS_NEON`, through
+    `vsignBig`, `vsign` and `neonTube`; `burn` / `cardsN` (the old flower boxes' random numbers); `PIECES`.
+  - `textures.js buildPieceAtlas`: the pieces' own small atlas (1024 × 288 desktops, 512 × 144 phones; CPU-backed: a GPU canvas there
+    made the foliage atlas, painted after it, come out in another of its anti-aliased variants at some loads): `kawaraT` (the canopy
+    tiles' greyer palette, `KAWARA_T`), `kawaraF` (`eaveFront`), `wtimb` (`timber`), `fbox0` / `fbox1` (`planterPaint` + the paintings); drawn
+    by a clone of the atlas material (`makeAtlasChain`: nothing new compiles) with its own shadow twin, a mesh per city chunk (`G.piece`).
+    Not in the painted atlas: the Turkish town's far walls sample that atlas's coarsest mips (fragments extrapolated past tiny, grazing
+    triangles), so any new paint in it, even in its free space, moved three of their pixels. Both atlases keep every texel.
+  - `materials.js`: `makeHalo` (additive, faded with the fog's distance, opacity `HALO_K` × `TOD.bright`; chunks' `G.halo`); `roomsAtlas`'s
+    dim variant for the street's rooms only (`M.atlasI`, 'atlasi-v2': `uRmD`, `uRmG`, `uRmR`); the konbini's, the Turkish town's and
+    Galata's rooms keep 'atlasi-v1' exactly.
+  - `painted.js loadPieceAtlas`; `main.js` (the pieces' and halos' materials from the private ids, warm-up, the rooms' and halos' weights
+    by the hour).
+  - Assets: `assets/fronts/pieces1.json`, `pieces1_hi.webp` (34 KB), `pieces1_lo.webp` (12 KB): two Grok Imagine `image_edit`s of the
+    painting's own flower boxes, cut out (`~/cdtest/s38/scripts/cutfb.py`, `pack38.py`; masters in `~/cdtest/s38/masters/`). First visit
+    +34 KB desktop / +12 KB phone. Code +12.7 KB (+5.0 KB gzipped).
+- Checks (the desktop machine, GTX 1660):
+  - Programs at a city start 65 desktop / 64 phone (live 63 / 62: the halos' and the street rooms' own); at a Galata start 91 (89); none
+    compiled through sunset, night or rain, or on city drives.
+  - 0 shader errors in all eleven zones (desktop tier at noon, phone tier at night; the city on the phone tier at noon and sunset, at q=low).
+  - No console errors at q=low, mid and high and the default; the embed starts on tap.
+  - Without the flower boxes' paintings (index missing, image missing or truncated) the boxes keep their procedural paint, nothing else
+    changes, no errors; without the rooms or the fronts, as before.
+- Cost (the desktop machine, GTX 1660, interleaved with live, L S S L L S):
+  - GPU over 0.9 km city drives: desktop profile 3.21 / 3.21 / 3.31 → 3.32 / 3.40 / 3.35 ms (+0.11); phone profile 4.58 / 4.57 / 4.57 →
+    4.22 / 4.23 / 4.32 (−0.3: the old balconies' alpha-tested flower cards are gone). Per draw over a drive: the pieces 0.38 ms (+0.07 in the
+    shadow pass), the halos 0.08; the street's atlas mesh −0.12 (its canopy tiles and rails moved out), the props −0.06.
+  - Triangles at a city start 318k → 353k (+11%; the balconies' hidden faces are left out); two draws more a city chunk (the pieces, and the
+    halos by day).
+  - World build over city chunks +10%: desktop 109.3 / 114.8 / 109.2 → 121.6 / 121.9 / 122.8 ms per 20 chunks (medians), phone profile
+    106.3 / 105.5 / 108.3 → 115.2 / 121.0 / 118.0. Flat out on the phone profile (×4 CPU) no world-build spikes in either (the worst step
+    7.7 / 9.2 / 10 → 10 / 8.7 / 0 ms).
+- Left over: the plain white sign boards (書店…), the upper floors' blue-sky windows where the painting shows a warm room, the night's shop
+  glow (right shops 27.3 at night), the sunset's right upper floors (19.5).
+
 ## 2026-10-30 · 12:34 — Sunset as painted, and golden hour's leftovers
 - **Sunset's ground as painted:** under a clear sky at sunset the country's fields turn a dusky mauve-lilac (they were an orange-brown),
   the cherry avenue's lawns lilac (a dark teal), the coast's slope a warm olive-khaki and its round crowns a dark olive against the glow,

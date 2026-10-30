@@ -180,6 +180,28 @@ export async function loadFrontAtlas(tier, timeoutMs = 15000) {
   })(), timeoutMs, 'painted fronts unavailable, keeping the procedural shopfronts:');
 }
 
+/** (step 38) Loads the shophouses' painted pieces (assets/fronts/pieces1.*, made by ~/cdtest/s38/scripts/pack38.py from Grok Imagine edits
+ *  of the city painting's own flower boxes): cut-out flower boxes (alpha), drawn over their cells' procedural paint in the painted atlas
+ *  (textures.js buildPaintedAtlas). 'hi' or 'lo' (half: phones, the embed), as the fronts. Null (never rejects) when the index or the image
+ *  is missing, broken, truncated or too slow: the flower boxes then keep their procedural paint */
+export async function loadPieceAtlas(tier, timeoutMs = 15000) {
+  const base = ASSETS + 'fronts/';
+  return orNull((async () => {
+    const r = await fetch(base + 'pieces1.json');
+    if (!r.ok) throw new Error('pieces1.json ' + r.status);
+    const J = await r.json();
+    const tiles = (J.tiles || []).filter(t => t.name && t.w > 0 && t.h > 0 && t.x >= 0 && t.x + t.w <= 1 && t.y >= 0 && t.y + t.h <= 1);
+    if (!tiles.length) throw new Error('no pieces listed');
+    const file = J.files && J.files[tier] ? tier : 'hi', ri = await fetch(base + J.files[file]);
+    if (!ri.ok) throw new Error(J.files[file] + ' ' + ri.status);
+    const blob = await ri.blob(); // (checked whole: a truncated image decodes without complaint)
+    if (!J.bytes || blob.size !== J.bytes[file]) throw new Error(J.files[file] + ' is ' + blob.size + ' bytes, not ' + (J.bytes && J.bytes[file]));
+    const img = await createImageBitmap(blob);
+    if (!J.size || img.width !== J.size[file][0] || img.height !== J.size[file][1]) { img.close(); throw new Error(J.files[file] + ' has the wrong size'); }
+    return { img, tiles, tier: file };
+  })(), timeoutMs, 'painted flower boxes unavailable, keeping their procedural paint:');
+}
+
 /** (step 31) Loads the rooms behind the painted shop windows (assets/rooms/rooms1.*, made by ~/cdtest/s31/scripts/packrooms.py from
  *  Grok Imagine edits of a drawn room carrying each bay's own goods): one painted one-point-perspective view a room (its back wall the
  *  middle f × f of it), padded, in one sheet; each painted bay's rooms (.cells: shop_p0 → [room, second room]); and the bays' glass,

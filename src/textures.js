@@ -754,15 +754,15 @@ function bigSign(A, a, e, w, h, [text, panel, ink, neon, box]) {
  *  tiles (丸瓦) a rounded ridge catching the light, and along the eave (the cell's bottom edge) their round ends (軒丸瓦),
  *  scalloped (the gaps between them transparent: the atlas alpha-tests). The cell spans ~3 m of eave and the 1.26 m slope,
  *  so it is painted in a frame squeezed to those proportions (a tile end comes out round on the canopy) */
-function canopyTiles(A, a, e, w, h) {
-  const q = rng(7331), sy = (h / 1.26) / (w / 3); // (v px per u px for round shapes)
+function canopyTiles(A, a, e, w, h, P = KAWARA_C) {
+  const q = rng(P.seed), sy = (h / 1.26) / (w / 3); // (v px per u px for round shapes)
   a.clearRect(0, 0, w, h);
   const n = 11, tw = w / n, endH = 0.15 * (h / 1.26); // rolls across the 3 m; the round ends' height in px
-  rect(a, 0, 0, w, h - endH * 0.5, '#4d5f92');
+  rect(a, 0, 0, w, h - endH * 0.5, P.base);
   for (let i = 0; i < n; i++) { // the round tiles: a ridge lit along its top, dark gutters between
     const x = i * tw;
     const g = a.createLinearGradient(x, 0, x + tw, 0);
-    g.addColorStop(0, '#2c3760'); g.addColorStop(0.18, '#5a70a8'); g.addColorStop(0.45, '#9fb4e0'); g.addColorStop(0.7, '#6a80b8'); g.addColorStop(1, '#33416e');
+    P.roll.forEach((c, j) => g.addColorStop([0, 0.18, 0.45, 0.7, 1][j], c));
     a.fillStyle = g; a.fillRect(x, 0, tw, h - endH * 0.5);
   }
   for (let y = h - endH * 0.5 - 52; y > 0; y -= 52) { // the courses: each row of tiles overlapping the next, a shadow under its lip
@@ -771,15 +771,19 @@ function canopyTiles(A, a, e, w, h) {
   for (let i = 0; i < n; i++) { // the round ends along the eave
     const cx = (i + 0.5) * tw, cy = h - endH * 0.5, r = tw * 0.47;
     a.save(); a.translate(cx, cy); a.scale(1, sy);
-    a.fillStyle = '#26305a'; a.beginPath(); a.arc(0, 0, r, 0, 7); a.fill();
-    a.fillStyle = '#5c72aa'; a.beginPath(); a.arc(0, 0, r * 0.8, 0, 7); a.fill();
-    a.fillStyle = 'rgba(190,206,240,0.8)'; a.beginPath(); a.arc(-r * 0.2, -r * 0.25, r * 0.38, 0, 7); a.fill();
-    a.fillStyle = '#3a4878'; a.beginPath(); a.arc(0, 0, r * 0.22, 0, 7); a.fill(); // (the boss in the middle)
+    a.fillStyle = P.end[0]; a.beginPath(); a.arc(0, 0, r, 0, 7); a.fill();
+    a.fillStyle = P.end[1]; a.beginPath(); a.arc(0, 0, r * 0.8, 0, 7); a.fill();
+    a.fillStyle = P.end[2]; a.beginPath(); a.arc(-r * 0.2, -r * 0.25, r * 0.38, 0, 7); a.fill();
+    a.fillStyle = P.end[3]; a.beginPath(); a.arc(0, 0, r * 0.22, 0, 7); a.fill(); // (the boss in the middle)
     a.restore();
   }
   a.save(); a.globalCompositeOperation = 'source-atop'; a.globalAlpha = 0.12; a.fillStyle = A.grain; a.fillRect(0, 0, w, h); a.restore();
   for (let i = 0; i < 40; i++) { a.fillStyle = q() < 0.5 ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,20,0.1)'; a.fillRect(q() * w, q() * (h - endH), tw * (0.5 + q()), 3 + q() * 6); } // (weathering)
 }
+// the canopy tiles' palettes: kawaraC's lighter blue slate (Restyle 15) and (step 38) kawaraT, the painting's greyer navy, whose shade keeps
+// some red (in the painting's shade the canopies are (34, 49, 89); kawaraC's went a pure (4, 39, 104)) and whose rolls catch a warmer light
+const KAWARA_C = { seed: 7331, base: '#4d5f92', roll: ['#2c3760', '#5a70a8', '#9fb4e0', '#6a80b8', '#33416e'], end: ['#26305a', '#5c72aa', 'rgba(190,206,240,0.8)', '#3a4878'] };
+const KAWARA_T = { seed: 3804, base: '#5d6584', roll: ['#2f3450', '#5f6888', '#aab2cc', '#737b9a', '#383e5c'], end: ['#262b45', '#5e6788', 'rgba(214,218,236,0.8)', '#3a4060'] };
 /** the city painting's navy board with gold letters (洋品店) for the painted clothes shop */
 function navyBoard(A, a, e, w, h, text) {
   rect(a, 0, 0, w, h, '#1c2b5e'); rect(a, 0, 0, w, 4, 'rgba(255,255,255,0.3)'); rect(a, 0, h - 5, w, 5, 'rgba(0,0,0,0.25)');
@@ -883,6 +887,78 @@ function eaveEnds(A, a, e, w, h) {
     a.fillStyle = '#262f52'; a.beginPath(); a.arc(cx, cy, r * 0.26, 0, 7); a.fill();
   }
 }
+// ---------------------------------------------------------------- (step 38) the shophouses' own eaves, balconies and flower boxes
+// The city painting gives each shop its own short tiled eave (庇) over a wooden fascia and rafter ends, a wooden balcony with flower boxes
+// above it: these cells (in the painted atlas's free space: buildPaintedAtlas) carry them (props.js machiya)
+/** the eave's front, as the painting draws it over each shop: the round tile caps (軒丸瓦) as the ends of the canopy's 11 tile rolls
+ *  (kawaraC: the same 11 across the cell, so they line up), the pan tiles' dark lips between them, the wooden fascia (広小舞) and under
+ *  it the rafter ends (垂木) over the soffit's shade. 0.36 m of eave (the cell's height) across one tile strip (its width) */
+export const EAVE_F = { h: 0.36, cap: 0.075, capR: 0.068, fas: [0.135, 0.235], raf: [0.235, 0.33] }; // (metres from the top: props.js machiya)
+function eaveFront(A, a, e, w, h) {
+  const q = rng(3801), n = 11, tw = w / n, ky = h / EAVE_F.h, kx = w / 3; // (px per metre: down the cell, along it on a 3 m strip)
+  a.clearRect(0, 0, w, h);
+  const fy0 = EAVE_F.fas[0] * ky, fy1 = EAVE_F.fas[1] * ky, ry1 = EAVE_F.raf[1] * ky;
+  // the rafters' zone: the soffit's shade, the rafter ends in it (8 across, a lighter end grain, a shadow on their right)
+  rect(a, 0, fy1, w, ry1 - fy1, '#22150e');
+  for (let i = 0; i < 8; i++) {
+    const x = ((i + 0.5) / 8) * w - 0.03 * kx, rw = 0.06 * kx;
+    rect(a, x, fy1, rw, ry1 - fy1, '#6b452b'); rect(a, x + rw * 0.12, fy1 + 1, rw * 0.7, ry1 - fy1 - 2, '#87593a');
+    rect(a, x, fy1, rw, Math.max(1, (ry1 - fy1) * 0.18), 'rgba(0,0,0,0.35)'); rect(a, x + rw, fy1, Math.max(1, rw * 0.25), ry1 - fy1, 'rgba(0,0,0,0.3)');
+  }
+  // the fascia board: warm timber lit along its top edge, darker at its foot, a little grain
+  vgrad(a, 0, fy0, w, fy1 - fy0, [[0, '#a8754a'], [0.18, '#8c5c39'], [0.85, '#6e472c'], [1, '#4a2f1d']]);
+  for (let i = 0; i < 9; i++) { a.fillStyle = q() < 0.5 ? 'rgba(255,225,190,0.08)' : 'rgba(40,20,10,0.12)'; a.fillRect(0, fy0 + q() * (fy1 - fy0), w, 1); }
+  // the pan tiles' lips between the caps: a dark navy band, scalloped up between the rolls
+  const cy = EAVE_F.cap * ky, r = EAVE_F.capR, rx = r * kx, ryy = r * ky;
+  a.fillStyle = '#1d2547'; a.fillRect(0, cy + ryy * 0.1, w, fy0 - cy - ryy * 0.1 + 1);
+  for (let i = 0; i < n; i++) { a.beginPath(); a.ellipse((i + 1) * tw, cy + ryy * 0.25, tw * 0.5 - rx * 0.6, ryy * 0.62, 0, Math.PI, 0); a.fill(); }
+  rect(a, 0, fy0 - 2, w, 2, 'rgba(0,0,0,0.35)'); // (their shadow on the fascia)
+  // the caps: a dark rim, the face lit from above (a cool highlight up-left), the boss; a soft shadow under each on the fascia
+  for (let i = 0; i < n; i++) {
+    const cx = (i + 0.5) * tw;
+    a.fillStyle = 'rgba(0,0,0,0.3)'; a.beginPath(); a.ellipse(cx + rx * 0.15, fy0 + ryy * 0.35, rx * 0.9, ryy * 0.42, 0, 0, 7); a.fill();
+    a.fillStyle = '#161d3a'; a.beginPath(); a.ellipse(cx, cy, rx, ryy, 0, 0, 7); a.fill();
+    const g = a.createLinearGradient(0, cy - ryy, 0, cy + ryy); g.addColorStop(0, '#6f86c4'); g.addColorStop(0.45, '#3c4c86'); g.addColorStop(1, '#232c56');
+    a.fillStyle = g; a.beginPath(); a.ellipse(cx, cy, rx * 0.8, ryy * 0.8, 0, 0, 7); a.fill();
+    a.fillStyle = 'rgba(205,220,255,0.55)'; a.beginPath(); a.ellipse(cx - rx * 0.3, cy - ryy * 0.38, rx * 0.26, ryy * 0.16, -0.5, 0, 7); a.fill();
+    a.fillStyle = '#212a50'; a.beginPath(); a.ellipse(cx, cy + ryy * 0.05, rx * 0.24, ryy * 0.24, 0, 0, 7); a.fill();
+  }
+  grain(a, A, w, h, 0.06);
+}
+/** timber for the balconies (posts, rails, the floor's edge, brackets): warm brown boards, the grain along the cell (u), a lighter
+ *  top edge and a darker foot, as the painting's balconies */
+function timber(A, a, e, w, h) {
+  const q = rng(3803);
+  vgrad(a, 0, 0, w, h, [[0, '#b27d52'], [0.16, '#93613d'], [0.7, '#7c5033'], [1, '#55351f']]);
+  for (let i = 0; i < 26; i++) { const y = q() * h, l = w * (0.2 + q() * 0.6), x = q() * (w - l); a.fillStyle = q() < 0.55 ? 'rgba(60,32,16,0.22)' : 'rgba(255,214,170,0.12)'; a.fillRect(x, y, l, 1); }
+  grain(a, A, w, h, 0.1);
+}
+/** a flower box's procedural paint, in case its painting doesn't load (fbox…): a box of reddish timber planks under a mound of leaves
+ *  and pink (or pink, white and coral) flowers, trailing ivy (alpha: the atlas alpha-tests). box: its planks' place in the cell
+ *  [x0, y0, x1, y1] as fractions (props.js PLANTERS) */
+function planterPaint(A, a, e, w, h, seed, box, mix) {
+  const q = rng(seed), [bx0, by0, bx1, by1] = box, X0 = bx0 * w, X1 = bx1 * w, Y0 = by0 * h, Y1 = by1 * h, k = w / 288;
+  a.clearRect(0, 0, w, h);
+  const leaf = (x, y, s, c) => { a.fillStyle = c; a.beginPath(); a.ellipse(x, y, s, s * 0.6, q() * 3, 0, 7); a.fill(); };
+  for (let i = 0; i < 70; i++) leaf(X0 + q() * (X1 - X0), Y0 - q() * (Y0 * 0.75), (5 + q() * 6) * k, ['#2f6a2a', '#3f8034', '#5b9a3e', '#78b04c'][Math.floor(q() * 4)]);
+  const pal = mix ? ['#f2a7b4', '#fbe9ec', '#f08a74', '#f6c3cf'] : ['#e8478f', '#f06aa6', '#d23a7c', '#ff8cbf'];
+  for (let i = 0; i < 26; i++) {
+    const x = X0 + 6 * k + q() * (X1 - X0 - 12 * k), y = Y0 - (0.15 + q() * 0.7) * Y0 * 0.8, s = (4 + q() * 3) * k, c = pal[Math.floor(q() * pal.length)];
+    for (let p = 0; p < 5; p++) { const t = (p / 5) * 6.283; a.fillStyle = c; a.beginPath(); a.ellipse(x + Math.cos(t) * s * 0.55, y + Math.sin(t) * s * 0.55, s * 0.5, s * 0.38, t, 0, 7); a.fill(); }
+    a.fillStyle = '#ffe9a6'; a.beginPath(); a.arc(x, y, s * 0.18, 0, 7); a.fill();
+  }
+  vgrad(a, X0, Y0, X1 - X0, Y1 - Y0, [[0, '#a1623a'], [1, '#7a4426']]); // the planks, a rim along the top, a shadow under the flowers
+  for (let y = Y0 + (Y1 - Y0) / 3; y < Y1 - 2; y += (Y1 - Y0) / 3) rect(a, X0, y, X1 - X0, Math.max(1, k), 'rgba(50,25,10,0.45)');
+  rect(a, X0 - 2 * k, Y0, X1 - X0 + 4 * k, 3 * k, '#8b5232'); vgrad(a, X0, Y0, X1 - X0, 6 * k, [[0, 'rgba(0,0,0,0.35)'], [1, 'rgba(0,0,0,0)']]);
+  for (let s = 0; s < (mix ? 5 : 3); s++) { // trailing ivy
+    let x = X0 + q() * (X1 - X0), y = Y0; const L = (mix ? 0.5 : 0.3) * h + q() * 0.25 * h;
+    for (let t = 0; t < L; t += 5 * k) { x += (q() - 0.5) * 4 * k; y += 5 * k; if (y > h - 4 * k) break; leaf(x, y, (3 + q() * 2.5) * k, q() < 0.5 ? '#3f8034' : '#5b9a3e'); }
+  }
+  grain(a, A, w, h, 0.06);
+}
+/** (step 38) the flower boxes: [name, painting's planks in the cell [x0, y0, x1, y1] (fractions from its top-left), mixed colours]. The
+ *  paintings (assets/fronts/pieces1: Grok on the painting's own flower boxes) are drawn over the procedural paint when they load */
+export const PLANTER_CELLS = [['fbox0', [0.085, 0.5, 0.935, 0.98], false], ['fbox1', [0.072, 0.36, 0.95, 0.645], true]];
 /** the cells' sizes in rows of 2048 px, as Atlas.add lays them out: the y under the last one */
 function flowEnd(sizes) {
   let x = 0, y = 0, rowH = 0;
@@ -909,6 +985,25 @@ export function buildPaintedAtlas(main, tier, fa, ha) {
   for (const [n, [w, h], f] of list) P.add(n, w, h, (a, e, cw, ch) => f(P, a, e, cw, ch));
   if (fa) { const W = fa.img.width, Hh = fa.img.height; for (const t of fa.tiles) P.paintCell(t.name, fa.img, t.x * W, t.y * Hh, t.w * W, t.h * Hh, t.ey < 0 ? -1 : t.ey * Hh); }
   P.houses = !!ha && paintHouses(P, ha);
+  return P;
+}
+/** (step 38) The shophouses' pieces (props.js machiya): the eave front (kawaraF), the greyer navy canopy tiles (kawaraT), the balconies'
+ *  timber (wtimb) and the flower boxes (fbox…: their procedural paint, then the paintings over it when `pa` loaded: painted.js
+ *  loadPieceAtlas), in a small texture pair of their own (its cells listed in the atlases' one namespace, uv in their own texture: drawn by a
+ *  clone of the atlas material, as the chain stores are). Not in the painted atlas: the Turkish town's far walls sample that atlas's coarsest
+ *  mips (fragments extrapolated past tiny, grazing triangles), so any new paint in it, even in its free space, moved a few of their pixels.
+ *  1024 × 288 on desktops, half on phones; each cell its own random numbers */
+export function buildPieceAtlas(main, tier, pa) {
+  const k = tier === 'hi' ? 1 : 0.5, P = new Atlas(288 * k, 0, main.cells, true, 1024 * k); // (CPU-backed: a GPU canvas here made the foliage
+  // atlas, painted after it, come out in another of its anti-aliased variants at some loads; and Chrome 148 hands some GPU canvases back empty)
+  const list = [['kawaraT', [208 * k, 224 * k], (A, a, e, w, h) => canopyTiles(A, a, e, w, h, KAWARA_T)],
+    ...PLANTER_CELLS.map(([n, box, mix], i) => [n, [288 * k, (i ? 162 : 120) * k], (A, a, e, w, h) => planterPaint(A, a, e, w, h, 3810 + i, box, mix)]),
+    ['kawaraF', [360 * k, 48 * k], eaveFront], ['wtimb', [256 * k, 28 * k], timber]];
+  for (const [n, [w, h], f] of list) P.add(n, w, h, (a, e, cw, ch) => f(P, a, e, cw, ch));
+  for (const n of ['kawaraT', 'kawaraF', ...PLANTER_CELLS.map(c => c[0])]) { // (a clear ring round the cut-out pieces: their mips take no grey from the padding)
+    const c = P.cells[n]; P.a.clearRect(c.px - 2, c.py - 2, c.w + 4, 2); P.a.clearRect(c.px - 2, c.py + c.h, c.w + 4, 2); P.a.clearRect(c.px - 2, c.py, 2, c.h); P.a.clearRect(c.px + c.w, c.py, 2, c.h);
+  }
+  if (pa) { const W = pa.img.width, Hh = pa.img.height; for (const t of pa.tiles) { const c = P.cells[t.name]; if (!c || c.u0 > 1.5) continue; P.a.clearRect(c.px, c.py, c.w, c.h); P.paintCell(t.name, pa.img, t.x * W, t.y * Hh, t.w * W, t.h * Hh, -1); } }
   return P;
 }
 // ------------------------------------------------------------------ the world atlas (the regions after Japan)

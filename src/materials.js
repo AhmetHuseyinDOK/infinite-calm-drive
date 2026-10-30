@@ -1535,13 +1535,16 @@ export function roomSet(tex, glass, table, geo, lo = 4.5) {
     boxes.push(t ? new THREE.Vector4(t.box[0], t.box[1], 1 / (t.box[2] - t.box[0]), 1 / (t.box[3] - t.box[1])) : new THREE.Vector4(0, 0, 1, 1));
   }
   const e = Array.isArray(geo.e) ? geo.e : [geo.e, geo.e, geo.e];
-  return { uRoom: { value: tex }, uGlass: { value: glass }, uRmCell: { value: cells }, uRmOf: { value: ofs }, uRmMask: { value: masks }, uRmBox: { value: boxes }, uRmHalf: { value: new THREE.Vector3(...geo.half) }, uRmS: { value: new THREE.Vector2(...geo.size) }, uRmQ: { value: (1 / geo.f - 1) / 2 }, uRmE: { value: new THREE.Vector3(...e) }, uRmW: { value: geo.warp }, uRmLo: { value: lo }, uRmOn: U.uRmOn };
+  return { uRoom: { value: tex }, uGlass: { value: glass }, uRmCell: { value: cells }, uRmOf: { value: ofs }, uRmMask: { value: masks }, uRmBox: { value: boxes }, uRmHalf: { value: new THREE.Vector3(...geo.half) }, uRmS: { value: new THREE.Vector2(...geo.size) }, uRmQ: { value: (1 / geo.f - 1) / 2 }, uRmE: { value: new THREE.Vector3(...e) }, uRmW: { value: geo.warp }, uRmLo: { value: lo }, uRmOn: U.uRmOn,
+    uRmD: { value: new THREE.Vector3(1, 1, 1) }, uRmG: { value: new THREE.Vector3(1, 1, 1) }, uRmR: { value: new THREE.Vector3(0, 0, 0) } }; // (step 38: the street's own, by the hour: main.js; read only by its program)
 }
 /** the shopping street's rooms (step 31): the atlas material's room variant (M.atlasI), its room set R (roomSet) */
 export function makeAtlasRooms(M, R) {
   M.atlasI = M.atlas.clone();
-  M.atlasI.onBeforeCompile = sh => { contactAO(sh); windowLights(sh); worldShade(sh); paintedAtlas(sh, M.ptex); roomsAtlas(sh, R); };
-  M.atlasI.customProgramCacheKey = () => 'atlasi-v1'; M.atlasI.userData.rooms = R; // (its room set: __dbg)
+  // (step 38: the shopping street's rooms darker and warmer by day, as painted: roomsAtlas's dim variant, a program of its own; the konbini's,
+  // the Turkish town's and Galata's rooms keep the old one, 'atlasi-v1', exactly)
+  M.atlasI.onBeforeCompile = sh => { contactAO(sh); windowLights(sh); worldShade(sh); paintedAtlas(sh, M.ptex); roomsAtlas(sh, R, true); };
+  M.atlasI.customProgramCacheKey = () => 'atlasi-v2'; M.atlasI.userData.rooms = R; // (its room set: __dbg)
   return M.atlasI;
 }
 /** (step 34) the Turkish town's rooms: the atlas material's world variant with the rooms (M.atlasWI, a program of its own, one of Turkey's:
@@ -1556,7 +1559,8 @@ export function makeAtlasWRooms(M, R) {
 }
 /** (step 34) a chain store material's room variant: the chain material (makeAtlasChain: its own texture pair) under the shopping street's
  *  room program (the same shader under the same key as M.atlasI: nothing new is compiled) with its own room set R (roomSet, lo −0.5: its
- *  bays are lit always). Its shadow twin stays the chain material's */
+ *  bays are lit always). Its shadow twin stays the chain material's. (Step 38: the street's M.atlasI has a program of its own now, the dim
+ *  variant 'atlasi-v2'; the chains, the Turkish town's markets and Galata's shops keep this one, 'atlasi-v1', unchanged) */
 export function makeChainRooms(M, base, R) {
   const m = base.clone(); m.map = base.map; m.emissiveMap = base.emissiveMap; m.emissiveIntensity = base.emissiveIntensity;
   m.onBeforeCompile = sh => { contactAO(sh); windowLights(sh); worldShade(sh); paintedAtlas(sh, M.ptex); roomsAtlas(sh, R); };
@@ -1577,7 +1581,10 @@ export function makePlateFronts(M, base, rooms, hook) {
   m.customProgramCacheKey = () => bk + (rooms ? '-pxfronts-v1' : '-pxfronts0-v1');
   return m;
 }
-function roomsAtlas(sh, R) {
+/** (step 38) dim: the shopping street's variant: the room's paint lit by the street's light only a share of it (uRmD, rgb: an interior seen
+ *  through glass is not sunlit), its own glow by day warmer (uRmG), and the glass's faint reflection of the street and the sky over it (uRmR,
+ *  linear light added last): darker, warmer interiors by day, as painted. (Main.js sets them by the hour; at night uRmG is 1, uRmR 0) */
+function roomsAtlas(sh, R, dim = false) {
   Object.assign(sh.uniforms, R);
   sh.vertexShader = sh.vertexShader
     .replace('#include <common>', `#include <common>\nuniform vec4 uRmCell[${RM_N}]; uniform vec3 uRmHalf; uniform float uRmOn, uRmLo; varying vec4 vRmA; varying float vRmZ; flat varying float vRmI;`)
@@ -1602,14 +1609,14 @@ vRmA = vec4(0.0); vRmZ = 1.0; vRmI = 0.0;
   }
 }`);
   sh.fragmentShader = sh.fragmentShader
-    .replace('#include <common>', `#include <common>\nuniform sampler2D uRoom, uGlass; uniform vec4 uRmOf[${RM_N}], uRmMask[${RM_N}], uRmBox[${RM_N}]; uniform vec2 uRmS; uniform vec3 uRmE; uniform float uRmQ, uRmW; varying vec4 vRmA; varying float vRmZ; flat varying float vRmI;`)
+    .replace('#include <common>', `#include <common>\nuniform sampler2D uRoom, uGlass; uniform vec4 uRmOf[${RM_N}], uRmMask[${RM_N}], uRmBox[${RM_N}]; uniform vec2 uRmS; uniform vec3 uRmE${dim ? ', uRmD, uRmG, uRmR, uRmHalf' : ''}; uniform float uRmQ, uRmW; varying vec4 vRmA; varying float vRmZ; flat varying float vRmI;`)
     // the bay's glass (its mask, read in step with the triangle's other pixels), and only inside its glass box (half its pixels: the frame,
     // the boards and the beams round it pay nothing), whose edge lies on the frame where the glass is 0 (the room's read across it, with
     // its neighbours outside, is never seen): the ray's exit from the box (the nearest of the three far planes), then its place in the
     // painted view: the room's front at the image's edges, its back wall at f of them (one-point perspective: 1 / (1 + q · depth));
     // across, as the sheet stores it (x (w + (1 − w) x²): the side walls' near strips, all a view down the street sees, at up to 3 − 2w
     // times the texels)
-    .replace('diffuseColor *= sampledDiffuseColor;', /* glsl */`vec3 rmC = vec3(0.0); float rmK = 0.0;
+    .replace('diffuseColor *= sampledDiffuseColor;', /* glsl */`vec3 rmC = vec3(0.0); float rmK = 0.0;${dim ? ' float rmF = 0.0;' : ''}
 if (vRmI > 0.5) {
   int rmX = int(vRmI + 0.5) - 1, rmI = rmX - (rmX / 32) * 32, rmJ = rmX / 32;
   vec4 rmB = uRmBox[rmI], rmM = uRmMask[rmI]; vec2 rmb = (vRmA.xy - rmB.xy) * rmB.zw;
@@ -1621,11 +1628,39 @@ if (vRmI > 0.5) {
     vec3 ri = 1.0 / rd, rk = abs(ri) - rp * ri, rh = rp + min(min(rk.x, rk.y), rk.z) * rd;
     vec2 rv = rh.xy / (1.0 + uRmQ * (rh.z + 1.0)); rv.x *= uRmW + (1.0 - uRmW) * rv.x * rv.x;
     rmC = texture2D(uRoom, (rmJ >= 2 ? rmO.zw : rmO.xy) + clamp(0.5 + 0.5 * rv, 0.0, 1.0) * uRmS).rgb;
-    sampledDiffuseColor.rgb = mix(sampledDiffuseColor.rgb, rmC, rmK);
+    sampledDiffuseColor.rgb = mix(sampledDiffuseColor.rgb, ${dim ? 'rmC * uRmD' : 'rmC'}, rmK);${dim ? `
+    { vec3 dv = rd * uRmHalf; float f = 1.0 - clamp(dv.z / length(dv), 0.0, 1.0); rmF = (0.2 + 0.8 * f * f) * (0.75 + 0.5 * rmb.y); } // (the glass's
+    // reflection: faint seen head-on, stronger at a grazing angle, as glass is (Fresnel's); a little more towards the top of the pane)` : ''}
   }
 }
 diffuseColor *= sampledDiffuseColor;`)
-    .replace('totalEmissiveRadiance *= emissiveColor.rgb;', 'if (rmK > 0.0) emissiveColor.rgb = mix(emissiveColor.rgb, rmC * uRmE, rmK);\ntotalEmissiveRadiance *= emissiveColor.rgb;');
+    .replace('totalEmissiveRadiance *= emissiveColor.rgb;', `if (rmK > 0.0) emissiveColor.rgb = mix(emissiveColor.rgb, rmC * uRmE${dim ? ' * uRmG' : ''}, rmK);\ntotalEmissiveRadiance *= emissiveColor.rgb;`);
+  if (dim) sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', 'outgoingLight += uRmR * (rmK * rmF);\n#include <opaque_fragment>');
+}
+/** (step 38) The shopping street's neon halos by day (props.js haloRect: hollow nine-sliced cards round the big signs and the neon tubes, in
+ *  each one's colour; chunks.js G.halo): added over what is behind them, by the halo texture's alpha (its middle, 24…40 of 64 px, is the lit
+ *  rect itself) × the material's opacity (main.js: TOD.bright, so the night, dusk and grey skies keep the bloom's glow alone), faded in the
+ *  fog's distance (not mixed towards the fog's colour: added light). A program of its own; made with the private ids (main.js quietIds) */
+export function makeHalo(M) {
+  const S = 64, cv = document.createElement('canvas'); cv.width = cv.height = S;
+  const g = cv.getContext('2d'), im = g.createImageData(S, S);
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const px = x + 0.5, py = y + 0.5, dx = Math.max(24 - px, 0, px - 40), dy = Math.max(24 - py, 0, py - 40), d = Math.min(1, Math.hypot(dx, dy) / 24), i = (y * S + x) * 4;
+    im.data[i] = im.data[i + 1] = im.data[i + 2] = 255; im.data[i + 3] = Math.round(255 * Math.pow(1 - d, 2.4));
+  }
+  g.putImageData(im, 0, 0);
+  const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+  const m = new THREE.MeshBasicMaterial({ map: t, vertexColors: true, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+  m.onBeforeCompile = sh => {
+    sh.fragmentShader = sh.fragmentShader.replace('#include <fog_fragment>', `#ifdef USE_FOG
+  float fogFactor = 1.0 - exp( - fogNear * fogNear * vFogDepth * vFogDepth );
+  fogFactor = max( fogFactor, smoothstep( fogFar * 0.8, fogFar, vFogDepth ) );
+  gl_FragColor.a *= 1.0 - fogFactor;
+#endif`);
+  };
+  m.customProgramCacheKey = () => 'halo-v1';
+  M.halo = m;
+  return m;
 }
 /** (step 32) The chain stores' fronts (textures.js buildChainAtlas: their painted bays, signs and stickers, in a texture pair of their
  *  own): the atlas material with that pair as its map and its glow, sharing the atlas's program (the same shader under the same key:

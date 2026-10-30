@@ -2,6 +2,91 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-31 · 01:26 — The night headlights as the repaints paint them: a short, soft glow beside the car's nose
+- **A soft glow beside the nose instead of a yellow flare:** at night under a clear sky, the headlights now throw a short, soft, warm tan
+  glow on the road on both sides of the car's nose. It fades out a few metres ahead, as the coast's, the country's and the strait's night
+  repaints paint it. Before, the headlights made a long, bright, yellow wedge that reached 28 m ahead and out over the other lane. Step 30
+  fitted that look on the old van, whose wide, boxy body hid most of it.
+- **Almost no glow where the repaints show none:** on the shopping street, the cherry avenue, Uçhisar and Paşabağ, only a faint glow is
+  left by the nose, as in their repaints.
+- **The glow sits round the nose instead of leaning towards the other lane:** before, the pool leaned towards the open lane in every
+  frame: right in Japan, left in Turkey. The beam itself was straight. The car drives in its lane, the chase camera sits a little nearer the
+  road's middle, and the wide open lane beside the car caught the pool's far side. The light now sits a quarter of a metre towards the kerb
+  (in proportion to the car's distance from the road's middle), the way real low beams lean towards the kerb. The glow then reads on both
+  sides of the nose. On the country road and the Bosphorus shore the kerb side is a grass verge, which takes little of the light, so the
+  road side still shows more there.
+- Against the night repaints (desktop machine, GTX 1660; seeded captures at each painting's size; live → staging):
+  - The pool's own share of the frame (warm-bright pixels, L* > 55 and b* > 20, in the lower middle of the frame, the car itself left out;
+    `~/cdtest/s43/tools/pool2.py`):
+    - coast 1.35 → 0.75% (repaint 0.74%);
+    - country 1.01 → 0.75% (0.79%);
+    - Bosphorus 0.93 → 0.88% (0.95%), now as two lobes in the repaint's colour instead of one yellow wedge;
+    - shopping street 1.64 → 0.15% (0.02%);
+    - cherry avenue 1.21 → 0.13% (0.52%: the repaint's wet-road reflections, not a pool);
+    - Uçhisar 1.02 → 0.04% (0%);
+    - Paşabağ 1.60 → 0.13% (0%).
+    The pool's colour (coast, country, Bosphorus) was (210–220, 191–192, 122–134); it is now (214–218, 171–174, 119–123), against the repaints' tan (187–193, 146–156,
+    104–114).
+  - Audit 3's measure (warm-bright pixels in the frame's lower-middle box, which also counts our car's yellow plate and lamp rings: about
+    2.3% of the box even with the headlights off):
+    - street 10.93 → 3.04% (repaint 0.80%);
+    - avenue 8.68 → 2.72% (2.40%);
+    - coast 9.30 → 5.58% (4.80%);
+    - country 8.06 → 5.70% (4.75%);
+    - Bosphorus 6.92 → 6.41% (4.95%);
+    - Uçhisar 7.06 → 2.28% (0.15%);
+    - Paşabağ 10.23 → 2.91% (0.29%);
+    - the brightest 1% of that box: L* 85–93 → 74–87 (the repaints' 76–84).
+  - Left/right balance of the light the headlights add (the frame minus a capture with the headlights off; 1 = even): coast 1.57 → 0.99,
+    street 1.58 → 0.90, Uçhisar 0.51 → 0.87, Paşabağ 0.46 → 0.79, avenue 1.36 → 0.67; country 2.66 → 2.51 and Bosphorus 0.52 → 0.59 are
+    still uneven (their verges).
+  - Whole-frame ΔE at night (share-weighted ΔE of region medians, Audit 2's boxes): street 8.15 → 7.94, avenue 5.18 → 4.49, country
+    3.17 → 2.75; coast 5.52 → 5.61 (worse): the old pool's glow had warmed the whole frame through the bloom (the sky box 2.7 → 3.2), and
+    its long beam had lit the tetrapods (4.4 → 5.3); the coast's road shade and car body improved (13.5 → 9.2, 16.7 → 14.5).
+- Unchanged:
+  - Noon, golden hour and sunset in all eleven zones, plus the night under grey skies and in rain (street, country, Bosphorus): every
+    staging capture is byte-identical to a live capture (2–5 live captures per shot, 1280 × 720 seeded, desktop machine).
+  - One exception: the mountain at noon came out as a fourth anti-aliasing variant of its autumn crowns. That is 1,335 px with one pixel
+    over 8 levels, and 37 of its 38 differing 80-pixel cells are cells where live's own three variants differ too. The headlights are off at
+    noon.
+  - At dusk, 0.78 is identical; from 0.80 to 0.86 the old beam blends smoothly into the new glow, and at dawn it blends back by 0.245.
+  - The falling snow and rain lit by the beam (weather.js) are unchanged.
+- Turkey at night changes deliberately: the Bosphorus, Uçhisar and Paşabağ to their repaints. Galata and the Turkish town have no night
+  repaint, so they take the default soft glow (the country's) in place of the flare that all seven repaints disagree with. The mountain and
+  the snow country take it too.
+- How (`main.js` only; no assets, no new programs):
+  - `NT.head` refitted: the light's cone opened to 83° (1.45 rad) so it reaches beside the nose, penumbra 0.5, strength × 0.42 (it was
+    × 2.2), reach 7 m (was 28), decay 1.5 (was 2).
+  - `NT.headC` changed to the repaints' tan (1.0, 0.62, 0.38) (was (1.0, 0.8, 0.52)).
+  - `NTZ.<zone>.head` sets each zone's strength: coast × 0.25, Bosphorus × 0.5, street × 0.08, avenue × 0.1, Uçhisar and Paşabağ × 0.06;
+    zones are blended by their weights (`ntAt`).
+  - `HEAD_KERB` (0.15 of the lane offset) moves the light and its target towards the kerb, weighted by the night's painted share. By day,
+    at golden hour, at sunset, under grey skies and in tunnels by day, it is exactly as before.
+  - The headlight block now runs after the zone weights are known.
+  - `NT.flakes` / `headPI` keep the beam's strength on falling snow and rain as step 30 had it.
+  - The fit and its tools are in `~/cdtest/s43/` (sweeps sw1–sw6 with in-page overrides; `pool.py`, `pool2.py`, `lr.py`, `nightde.py`).
+- Checks (desktop machine, final build):
+  - 0 shader errors in all eleven zones, at noon (desktop tier) and at night (phone tier). Also 0 for the street and the coast at night at
+    q=low and at the default tier.
+  - No console errors at q=low, mid, high or the default tier.
+  - Programs at a street start at night: 66 desktop / 65 phone, as live (66). None compiled through sunset, night or rain (compile,
+    compile2 high and mid), or on night drives (progwatch: the country in rain, the street and the coast in clear weather).
+  - The embed starts on tap.
+  - Fallbacks: with the painted car missing, the procedural van takes the same soft glow (68 programs, as live). With Japan's band missing,
+    and with the painted fields missing, there were no errors except the blocked requests' own.
+- Cost: none measurable (uniforms only).
+  - Night drives on the desktop machine (GTX 1660), interleaved live / staging (L S S L L S, 20 s, t 0.9), medians:
+    - desktop profile: coast 4.23 → 4.22 ms, street 4.02 → 3.92, country 4.98 → 4.97 (nine drives a side);
+    - phone profile: coast 4.08 → 4.06 (nine a side), street 3.41 → 3.39, country 4.52 → 4.57.
+  - Two single slow staging drives in the first pass (the country 6.10, the phone coast 7.57) did not recur in two re-runs. The desktop's
+    load was 2–3 from other sessions throughout.
+- Left over:
+  - The coast car's body at night (car_body 14.5): its tailgate is lit by the hemisphere light, which neither the fill (`CF_N`) nor the
+    moonlit tint (`NT.carD`) reaches, so fixing it needs a change in the car's shader.
+  - The verge side on the country road and the Bosphorus shore: their grass blades take no spot light.
+  - The avenue's wet-road reflections (step 49).
+  - The snow country's bright snowbank by the car (it has no repaint).
+
 ## 2026-10-30 · 23:47 — The evening sun as painted: a sun on the horizon at golden hour and sunset, its glow, its path on the sea and the wet avenue, the golden hour's streets
 - **A sun where the repaints paint one:** at golden hour and sunset under a clear sky the sun is now drawn where each zone's repaint has it, on
   its far ridge: at sunset straight ahead at the end of the shopping street, the cherry avenue and the country road, over the bay on the coast,

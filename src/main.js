@@ -524,11 +524,20 @@ async function main() {
   // (step 41) each street room's glow (× its paint, by day and at night): the bakery's (and the procedural bakery windows borrowing it) calmer, its
   // window the brightest on the street; an upper window's home lamp when it is lit at dusk (an unlit one's none: its code never glows)
   const ROOM_K = { shop_p4: 0.55, home: 0.85 };
-  const NT = { road: [2.4, 2.5, 1.6], walk: [1.5, 1.6, 1.15], shadow: [0.5], lit: [0.4, 1.0, 0.8, 0.3], head: [0.95, 1.0, 2.2, 28, 2.0], headC: new THREE.Color(1.0, 0.8, 0.52), bloom: [0.5],
+  // (step 43) the headlights refitted on the 35e car against the seven night repaints (~/cdtest/s43): where a repaint shows a pool (the
+  // coast, the country, the strait) it is a short, soft, warm tan glow on the road beside the car's nose, on both sides, gone a few metres
+  // ahead (the light's cone opened to 83° so it reaches beside the nose, flat in its middle, a gentle fall-off, 7 m); the shopping street,
+  // the cherry avenue and Cappadocia show almost none (their NTZ head). Step 30's was the old van's: a long warm-yellow wedge ahead-right.
+  // flakes: the beam's strength on falling snow and rain (weather.js PLIGHT), as step 30 had it
+  const NT = { road: [2.4, 2.5, 1.6], walk: [1.5, 1.6, 1.15], shadow: [0.5], lit: [0.4, 1.0, 0.8, 0.3], head: [1.45, 0.5, 0.42, 7, 1.5] /* (step 43: was [0.95, 1.0, 2.2, 28, 2.0]) */, headC: new THREE.Color(1.0, 0.62, 0.38) /* (was (1.0, 0.8, 0.52)) */, flakes: [2.2], bloom: [0.5],
     house: [0.45, 0.42, 0.4], // (the painted houses' walls: a fill light at night, linear irradiance: materials.js uHouseFill)
     carD: [5, 5.5, 4.5] }; // (the car's moonlit paint × this: car.js uCarDT, the repaints' pale roof)
-  const NTZ = { city: { lit: [0.15, 1.0, 0.3, 0.15], road: [3.5, 3.6, 2.1], shadow: [0.7], bloom: [0.45] }, sakura: { walk: [1.08, 1.18, 0.86], road: [2.6, 3.0, 2.1], house: [0.25, 0.36, 0.33] }, coast: { road: [2.2, 1.9, 1.1], walk: [1.8, 2.0, 1.6] }, snow: { road: [1.25, 1.25, 1.1] } }; // (the snow country's road is packed snow: barely)
-  const HEAD_C0 = new THREE.Color(0xfff0d0);
+  const NTZ = { city: { lit: [0.15, 1.0, 0.3, 0.15], road: [3.5, 3.6, 2.1], shadow: [0.7], bloom: [0.45], head: [1.45, 0.5, 0.08, 7, 1.5] }, sakura: { walk: [1.08, 1.18, 0.86], road: [2.6, 3.0, 2.1], house: [0.25, 0.36, 0.33], head: [1.45, 0.5, 0.1, 7, 1.5] }, coast: { road: [2.2, 1.9, 1.1], walk: [1.8, 2.0, 1.6], head: [1.45, 0.5, 0.25, 7, 1.5] }, snow: { road: [1.25, 1.25, 1.1] }, // (the snow country's road is packed snow: barely)
+    bosphorus: { head: [1.45, 0.5, 0.5, 7, 1.5] }, uchisar: { head: [1.45, 0.5, 0.06, 7, 1.5] }, pasabag: { head: [1.45, 0.5, 0.06, 7, 1.5] } }; // (step 43: the pool by zone)
+  // (step 43) the headlights lean to the kerb as real low beams do, by the car's offset from the road's middle (its lane: left in Japan,
+  // right in Turkey): the chase camera sits 15% of that offset nearer the middle, and the open lane beside the car caught the pool's far
+  // side, so it leaned away from the kerb in every frame; moved this share of the offset towards the kerb, it reads round the nose
+  const HEAD_C0 = new THREE.Color(0xfff0d0), HEAD_KERB = 0.15;
   /** a night tunable's i-th value here (the zones' own blended in by their weights) */
   const ntAt = (wz, key, i) => { let v = NT[key][i]; for (const z in NTZ) { const o = NTZ[z][key]; if (o && wz[z] > 0) v += wz[z] * (o[i] - NT[key][i]); } return v; };
   // the drawn moon's bearing from the road's mean heading (degrees, + left), by zone, as the night repaints frame it: straight
@@ -1264,7 +1273,7 @@ async function main() {
   // ------------------------------------------------------------ loop
   let last = performance.now(), t = 0, frames = 0, slowT = 0;
   const day = () => 1 - TOD.night;
-  let ftAvg = 0, tunS = 0, carWet = 0;
+  let ftAvg = 0, tunS = 0, carWet = 0, headPI = 0; // (headPI: the headlights' beam on falling snow and rain, weather.js PLIGHT)
   const PROF = QS.has('prof') ? (window.__prof = { spikes: [], frames: 0, sum: 0, max: 0, progs: 0, geos: 0, tex: 0, last: null, gpu: 0, gpuN: 0, gpuSum: 0, gpuMax: 0, pend: [] }) : null;
   if (PROF) { PROF.gl = renderer.getContext(); PROF.tq = PROF.gl.getExtension('EXT_disjoint_timer_query_webgl2'); }
   const meteor = { p: -1, a: new THREE.Vector3(), b: new THREE.Vector3(), next: 5 };
@@ -1435,10 +1444,6 @@ async function main() {
     U.uCarPos.value.set(car.group.position.x + f.fx * 1.7, car.group.position.y + 0.8, car.group.position.z + f.fz * 1.7);
     U.uCarFwd.value.set(f.fx, -0.05, f.fz).normalize(); U.uHead.value = inTun;
     car.update(dt, st.speed, Math.max(TOD.night, tunS), rn, CM, carWet);
-    { // (step 30) the headlights' pool as the night repaints paint it: warm, wide and soft round the car's nose (by day, at golden hour,
-      // at sunset and in tunnels as before)
-      const k = nightPaint(), h = car.head, H = NT.head; h.color.copy(HEAD_C0).lerp(NT.headC, k); h.angle = lerp(0.55, H[0], k); h.penumbra = lerp(0.65, H[1], k); h.intensity *= lerp(1, H[2], k);
-      h.distance = lerp(70, H[3], k); h.decay = lerp(1.2, H[4], k); car.roadGlow(k * (1 - tunS) * (1 - carWet)); } // (on a wet road the lamps' reflections take its place)
     rig.update(xValid && xDist > -24 && xDist < 700 ? xingPosts(path, sx) : null, world.origin, X.raise, bell, t);
     train.update(dt, path, world.origin, sstep(0.15, 0.8, TOD.night), zparam(sx, 'rw') + 3.2);
 
@@ -1507,6 +1512,12 @@ async function main() {
     // lighting & atmosphere
     const w = zoneW(st.s);
     const NP = nightPaint(); // (step 30: the night's painted look, by the weather and the hour)
+    { // (step 30) the headlights' pool as the night repaints paint it (by day, at golden hour, at sunset, under grey skies and in tunnels by
+      // day as before); (step 43) by zone, leaning to the kerb, the beam on falling snow and rain as before (headPI)
+      const k = NP, h = car.head; headPI = h.intensity * lerp(1, NT.flakes[0], k) / 60;
+      h.color.copy(HEAD_C0).lerp(NT.headC, k); h.angle = lerp(0.55, ntAt(w, 'head', 0), k); h.penumbra = lerp(0.65, ntAt(w, 'head', 1), k); h.intensity *= lerp(1, ntAt(w, 'head', 2), k);
+      h.distance = lerp(70, ntAt(w, 'head', 3), k); h.decay = lerp(1.2, ntAt(w, 'head', 4), k); h.position.x = h.target.position.x = k > 0 ? -HEAD_KERB * st.u * k : 0;
+      car.roadGlow(k * (1 - tunS) * (1 - carWet)); } // (on a wet road the lamps' reflections take its place)
     // On a bright day the whole frame is exposed 25% higher and the sun and sky lights are turned down by the same
     // factor: lit surfaces keep their level while everything that glows or is painted (the sky, the clouds, the haze, the
     // sea) reaches the bright, nearly white tones of the reference art, which the tone curve otherwise caps at ~240
@@ -1871,7 +1882,7 @@ async function main() {
       // the same two lights, and the headlight beam, light the rain and snow around the car (weather.js PLIGHT)
       PLIGHT.uLampW.value[0].set(x0, y0, z0, w0); PLIGHT.uLampW.value[1].set(x1, y1, z1, w1); PLIGHT.uLampCol.value.copy(car.lampCol);
       car.head.getWorldPosition(PLIGHT.uHeadPos.value); car.head.target.getWorldPosition(glowV);
-      PLIGHT.uHeadDir.value.copy(glowV).sub(PLIGHT.uHeadPos.value).normalize(); PLIGHT.uHeadI.value = car.head.intensity / 60;
+      PLIGHT.uHeadDir.value.copy(glowV).sub(PLIGHT.uHeadPos.value).normalize(); PLIGHT.uHeadI.value = headPI; // (step 43: as before, the pool's own strength apart)
     }
     M.pool.visible = M.pool.opacity > 0.003; // the night light pools were drawn all day at zero opacity (~11 draw calls)
     world.lod(st.s, DETAIL_FAR, nightK > 0.15, FAR_LEAF); world.dolLod(camera.position); // (and the town's dolmuş's near or far mesh, step 35b)

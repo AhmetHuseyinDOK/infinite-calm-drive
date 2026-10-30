@@ -27,7 +27,7 @@ import { makePost } from './post.js';
 import { makeAudio } from './audio.js';
 import { makeParticles } from './particles.js';
 import { clamp, lerp, sstep, setSeed, hash2 } from './util.js';
-import { loadCloudAtlas, makePaintedClouds, loadBandAtlas, makePaintedBand, updatePainted, loadFieldTexture, loadFrontAtlas, loadRoomAtlas, roomTexture, roomGlass, loadHouseAtlas, loadHousePatch, loadTrHouseAtlas, loadTownAtlas, loadChainAtlas, loadFisherAtlas, loadPeopleAtlas, loadDolmus, loadTrain, loadCar, loadTram, loadGalFronts, loadFurniture, loadBoats, todTones, mixTones, paintSky, PAINT_TOD, BAND_R } from './painted.js';
+import { loadCloudAtlas, makePaintedClouds, loadBandAtlas, makePaintedBand, updatePainted, loadFieldTexture, loadFrontAtlas, loadRoomAtlas, roomTexture, roomGlass, loadHouseAtlas, loadHousePatch, loadTrHouseAtlas, loadTownAtlas, loadChainAtlas, loadFisherAtlas, loadPeopleAtlas, loadDolmus, loadTrain, loadCar, loadTram, loadGalFronts, loadFurniture, loadBoats, todTones, mixTones, paintSky, PAINT_TOD, BAND_R, BT_DAY, BT_GOLD, BT_SUNSET, BT_NIGHT } from './painted.js';
 
 const QS = new URLSearchParams(location.search);
 // inside an X player card (or any iframe): lighter quality, compact UI, tap-only start
@@ -287,8 +287,12 @@ async function main() {
   // (bo: the Bosphorus's gardens and hill: the coast's by day; in the evening and at night darker and less blue than the coast's
   // slope, as the concept repainted at those hours (ref/tod/bosphorus_*.png) has its hillside: its steep banks face the road)
   const FT = (c, co, sa, bo) => ({ c, co, sa, bo });
-  const F_DAY = FT([...FIELD_DAY], [...COAST_DAY], [...SAK_DAY], [...COAST_DAY]), F_GOLD = FT([2.2, 1.02, 3.6], [2.51, 1.25, 3.05], [3.4, 1.62, 3.61], [1.45, 1.0, 1.9]); // (Audit 2: was [3.8, 1.6, 3.2], [3.4, 2.0, 3.0], [7.0, 4.6, 2.6])
-  const F_SUNSET = FT([2.3, 1.4, 5.6], [0.62, 0.85, 4.0], [2.6, 2.3, 10.0], [0.65, 0.5, 1.15]), F_NIGHT = FT([3.7, 2.4, 9.7], [2.8, 2.0, 7.2], [6.0, 3.25, 6.7], [0.55, 0.55, 1.1]); // (step 30: refitted on the night repaints, ~/cdtest/s30/tools/fit.py, with its moon's softer shadows: was [2.6, 1.8, 6.0], [5.5, 3.0, 8.0], [4.0, 2.6, 6.0])
+  // (step 37: the country's at golden hour the dim olive of its far fields, its blades lit on the low sun's side (BLADE_T); at sunset, fitted on
+  // the repaints (~/cdtest/s37/tools/fit37.py), the country's fields, the avenue's lawns and the coast's slope a dusky mauve-lilac, a lilac and
+  // a warm olive-khaki, where they were an orange-brown, a dark teal and a near-black olive: was c [2.2, 1.02, 3.6] at golden hour; at sunset
+  // c [2.3, 1.4, 5.6], co [0.62, 0.85, 4.0], sa [2.6, 2.3, 10.0])
+  const F_DAY = FT([...FIELD_DAY], [...COAST_DAY], [...SAK_DAY], [...COAST_DAY]), F_GOLD = FT([1.35, 0.78, 4.2], [2.51, 1.25, 3.05], [3.4, 1.62, 3.61], [1.45, 1.0, 1.9]); // (Audit 2: was [3.8, 1.6, 3.2], [3.4, 2.0, 3.0], [7.0, 4.6, 2.6])
+  const F_SUNSET = FT([1.75, 1.38, 8.5], [1.31, 1.35, 5.65], [6.2, 3.5, 15.5], [0.65, 0.5, 1.15]), F_NIGHT = FT([3.7, 2.4, 9.7], [2.8, 2.0, 7.2], [6.0, 3.25, 6.7], [0.55, 0.55, 1.1]); // (step 30: refitted on the night repaints, ~/cdtest/s30/tools/fit.py, with its moon's softer shadows: was [2.6, 1.8, 6.0], [5.5, 3.0, 8.0], [4.0, 2.6, 6.0])
   const FIELD_T = todTones([[0, F_NIGHT], [0.2, mixTones(F_NIGHT, F_SUNSET, 0.3)], [0.245, mixTones(F_SUNSET, F_GOLD, 0.4)], [0.3, F_DAY], [0.62, F_DAY], [0.7, F_GOLD], [0.75, F_SUNSET], [0.765, mixTones(F_SUNSET, F_NIGHT, 0.25)], [0.8, mixTones(F_SUNSET, F_NIGHT, 0.55)], [0.86, F_NIGHT], [1, F_NIGHT]]);
   { // the fields: the painted meadow once its texture is in (the country's ground variants then read it), else the paddies
     const fa = await fieldLoad;
@@ -335,13 +339,14 @@ async function main() {
   const BL_DAY = { b: [...BL_SHADE_DAY] }; // (its daytime key: kept as the old tint, deeper by TOD.warm, each frame)
   // the broadleaf crowns' leaves by the time of day (materials.js uGhTint; read against the coast painting repainted at those
   // hours: darker at golden hour and sunset, a little bluer at night)
-  const GH_D = { c: [1, 1, 1] }, GH_G = { c: [0.9, 0.69, 1.11] } /* (Audit 2: was [0.78, 0.82, 1.15]) */, GH_S = { c: [0.52, 0.56, 1.3] }, GH_N = { c: [1.64, 1.56, 2.95] }; // (step 30: was [1.25, 1.9, 2.2])
+  const GH_D = { c: [1, 1, 1] }, GH_G = { c: [0.9, 0.69, 1.11] } /* (Audit 2: was [0.78, 0.82, 1.15]) */, GH_S = { c: [0.65, 0.9, 3.25] } /* (step 37: was [0.52, 0.56, 1.3]) */, GH_N = { c: [1.64, 1.56, 2.95] }; // (step 30: was [1.25, 1.9, 2.2])
   const GH_T = todTones([[0, GH_N], [0.2, mixTones(GH_N, GH_S, 0.3)], [0.245, mixTones(GH_S, GH_G, 0.4)], [0.3, GH_D], [0.62, GH_D], [0.7, GH_G], [0.75, GH_S], [0.765, mixTones(GH_S, GH_N, 0.25)], [0.8, mixTones(GH_S, GH_N, 0.55)], [0.86, GH_N], [1, GH_N]]);
   // …and the Bosphorus's (W2), as its concept repainted at those hours (ref/tod/bosphorus_*.png) has its gardens' trees: a deep
   // olive at golden hour, nearly black-green against the sunset, a dark moonlit blue-green at night (the coast's moonlit teal
   // read far too light on its hillside, which faces the road)
   const GH_TR = todTones([[0, { c: [0.5, 0.72, 1.0] }], [0.2, { c: [0.5, 0.62, 0.95] }], [0.245, { c: [0.6, 0.6, 0.9] }], [0.3, GH_D], [0.62, GH_D], [0.7, { c: [0.66, 0.68, 0.85] }], [0.75, { c: [0.42, 0.42, 0.72] }], [0.765, { c: [0.44, 0.48, 0.8] }], [0.8, { c: [0.46, 0.56, 0.88] }], [0.86, { c: [0.5, 0.72, 1.0] }], [1, { c: [0.5, 0.72, 1.0] }]]);
-  const BL_T = todTones([[0, { b: [21, 17.6, 5.5] }], [0.2, { b: [16, 12, 5.5] }], [0.245, { b: [7, 4.6, 3] }], [0.3, BL_DAY], [0.62, BL_DAY], [0.7, { b: [5.63, 2.68, 1.09] }] /* (Audit 2: was [7.5, 5, 2.3]) */, [0.75, { b: [4.2, 3.0, 2.6] }], [0.765, { b: [8, 6.5, 3.8] }], [0.8, { b: [14, 11, 5] }], [0.86, { b: [21, 17.6, 5.5] }], [1, { b: [21, 17.6, 5.5] }]]); // (step 30: the night's was [22, 16, 6])
+  const BL_S = { b: [2.16, 4.3, 1.75] }; // (its sunset key, step 37: the repaint's dusky mauve-rose canopy, where it glowed a hot magenta; was [4.2, 3.0, 2.6])
+  const BL_T = todTones([[0, { b: [21, 17.6, 5.5] }], [0.2, { b: [16, 12, 5.5] }], [0.245, { b: [7, 4.6, 3] }], [0.3, BL_DAY], [0.62, BL_DAY], [0.7, { b: [5.63, 2.68, 1.09] }] /* (Audit 2: was [7.5, 5, 2.3]) */, [0.75, BL_S], [0.765, { b: [8, 6.5, 3.8] }], [0.8, { b: [14, 11, 5] }], [0.86, { b: [21, 17.6, 5.5] }], [1, { b: [21, 17.6, 5.5] }]]); // (step 30: the night's was [22, 16, 6])
   // the tetrapods' tones in coast.png (sRGB, by lightness): its deep blue (creases, the wet band), blue-grey shade, neutral
   // middle and warm light grey, and the white of its foam lit and in its light-blue shade
   // …and at golden hour, sunset and night from the coast painting repainted at those hours (ref/tod/; the same pixels'
@@ -363,11 +368,11 @@ async function main() {
   // the coast's long grass by the road (step 27): a deeper green than the slope above it, as painted, by the hour (a factor on its albedo,
   // materials.js uCoVerge): by day and at night as the painting and its night repaint have it, darker and less yellow at golden hour, as it
   // was at sunset (ref/tod/coast_*.png); grey skies keep the old verge
-  const CV_T = todKeys({ v: [0.44, 0.52, 0.73] } /* (step 30: was [0.3, 0.5, 0.65]) */, { v: [1, 1, 1] }, { v: [0.4, 0.62, 0.95] }, { v: [0.125, 0.143, 0.873] }); // (Audit 2: golden was [0.3, 0.35, 0.6])
+  const CV_S = { v: [1.78, 1.34, 1.58] } /* (step 37: was [1, 1, 1]) */, CV_T = todKeys({ v: [0.44, 0.52, 0.73] } /* (step 30: was [0.3, 0.5, 0.65]) */, CV_S, { v: [0.4, 0.62, 0.95] }, { v: [0.125, 0.143, 0.873] }); // (Audit 2: golden was [0.3, 0.35, 0.6])
   // (step 28) the country's verge banks' grass by the hour (materials.js M.bank, U.uBankT: a factor on its green texels' albedo; 1 on a
   // bright day), read against the painting's evening repaints (ref/tod/country_*.png: the verge a dark olive in the low sun's shade at
   // golden hour, a dusky mauve at sunset, a deep teal under the moon); grey skies keep 1
-  const BKV_T = todKeys({ v: [0.8, 0.92, 2.07] } /* (step 30: was [0.62, 0.8, 1.9]) */, { v: [0.52, 0.6, 1.6] }, { v: [1, 1, 1] }, { v: [0.33, 0.26, 1.09] }); // (Audit 2: golden was [0.34, 0.3, 1.0])
+  const BKV_S = { v: [0.8, 0.95, 2.3] } /* (step 37: was [0.52, 0.6, 1.6]) */, BKV_T = todKeys({ v: [0.8, 0.92, 2.07] } /* (step 30: was [0.62, 0.8, 1.9]) */, BKV_S, { v: [1, 1, 1] }, { v: [0.33, 0.26, 1.09] }); // (Audit 2: golden was [0.34, 0.3, 1.0])
   const TP_T = todKeys(TP_NIGHT, TP_SUNSET, TP_DAY, TP_GOLD), BK_T = todKeys(BK_NIGHT, BK_SUNSET, BK_DAY, BK_GOLD);
   // (step 35a) the Galata Bridge's painted fishermen by the hour under a clear sky (materials.js U.uFishT, a factor on the painting's colours):
   // by day as painted; a little warmer at golden hour, darker and mauve against the sunset, at night dark blue figures against the lit city
@@ -428,6 +433,32 @@ async function main() {
   // the coast's, the old road)
   const SR_DAY = { n: [1, 0.75, 0.92], f: [0.4, 0.53, 0.88] }, SR_GOLD = { n: [0.88, 1, 1.05], f: [0.88, 1, 1.05] };
   const SR_SUNSET = { n: [0.85, 1.4, 1.25], f: [1, 1, 1] }, SR_NIGHT = { n: [1, 1, 1], f: [1, 1, 1] }, SAK_R = todKeys(SR_NIGHT, SR_SUNSET, SR_DAY, SR_GOLD);
+  // (step 37) sunset as painted, by surface and zone, under a clear sky (each × the old; 1 by day and at night, so those keep their
+  // pixels; Turkey's zones aren't listed): RWZ, the asphalt's (r) and the pavements' (w) albedo (materials.js uNtRoad, uNtWalk, as the
+  // night's NT): the repaints' muted mauve-grey where the low sun's lilac sky light left them a saturated violet (at sunset the city's
+  // street lies in its houses' shade: that sky light is all it gets), the coast's and the country's shade the same (their sunlit
+  // asphalt kept by ROAD_T); HSZ, a fill on the painted houses' walls (linear irradiance, materials.js uHouseFill, as the night's
+  // NT.house): the repaints' dusky mauve-grey walls round their lit windows, where they stood a dark magenta
+  // (n, f: the sunlit asphalt's tint near and far on top of ROAD_T's and SAK_R's, by zone)
+  const ID3 = [1, 1, 1], RW1 = { r: ID3, w: ID3, n: ID3, f: ID3 }, HS0 = { f: [0, 0, 0] };
+  const RWS = { city: { r: [3.4, 4.2, 2.0], w: [1.7, 1.9, 1.24], n: ID3, f: ID3 }, sakura: { r: [1.3, 2.7, 1.8], w: [1.0, 1.45, 1.1], n: ID3, f: ID3 },
+    coast: { r: [1.03, 1.5, 1.13], w: [0.8, 1.2, 1.2], n: ID3, f: ID3 } /* (w: its wall's top too) */, country: { r: [1.34, 1.63, 1.25], w: ID3, n: [0.7, 0.4, 0.6], f: [0.7, 0.4, 0.6] } };
+  const RWZ = { city: todKeys(RW1, RWS.city, RW1, RW1), sakura: todKeys(RW1, RWS.sakura, RW1, RW1), coast: todKeys(RW1, RWS.coast, RW1, RW1), country: todKeys(RW1, RWS.country, RW1, RW1) };
+  const HSZ = { coast: todKeys(HS0, { f: [0.26, 0.32, 0.22] }, HS0, HS0), sakura: todKeys(HS0, { f: [0.42, 0.6, 0.6] }, HS0, HS0) };
+  // (…and the city's haze towards the low sun, a factor on its glow (the frame loop's aerial perspective): its repaint at sunset ends its
+  // street in a bright orange glow round the sun, where step 29's lower sun left ours a dim salmon haze)
+  // (g: the haze's glow, the sky's sun glow (sky.js uEveG): factors over 1 at sunset)
+  const G0 = { g: [0, 0, 0] }, CITY_GLOW = todKeys(G0, { g: [2, 1, 0] }, G0, G0);
+  const BTC_GOLD = { ...BT_GOLD, shade: [64, 72, 104], mid: [90, 96, 132], lit: [110, 114, 148] }; // (the country's far ranges at golden hour: the band's row tones, below)
+  // (…and the country's meadow at golden hour lit on one side only, as its repaint has it (its sun ahead-right: the right-hand fields a bright
+  // warm gold, the left-hand ones and the far fields a dim olive): its blades by the side of the road they stand on (materials.js
+  // FIELD.uBladeL / R, per vertex), × the meadow's tint (F_GOLD, the far fields' ground)
+  // (at sunset its near blades a little bluer, the right-hand ones more, as its repaint's near fields' lavender bands: the far fields' ground the
+  // repaint's dimmer mauve)
+  const BLD1 = { l: ID3, r: ID3 }, BLADE_T = todKeys(BLD1, { l: [0.94, 1.0, 1.3], r: [0.94, 1.0, 2.6] }, BLD1, { l: [1.21, 1.08, 0.83], r: [4.2, 2.6, 1.25] });
+  // (…and the low sun's light by zone at sunset (a factor on the sun's intensity; its shadows unchanged): the avenue's repaint lies almost
+  // wholly in its trees' shade then, where ours had the low sun lighting its left pavement a salmon pink)
+  const SN1 = { k: [1, 0, 0] }, SUNZ = { sakura: todKeys(SN1, { k: [0.35, 0, 0] }, SN1, SN1) };
   const GAL_ZEN = new THREE.Color('#385a92'); // (the Galata Bridge's zenith on a bright day: below)
   // (Cappadocia's, W5: its concept's deep, slightly greyed azure over the steppe, and its asphalt's tint on top of the painted
   // road's, near and far: below)
@@ -443,7 +474,7 @@ async function main() {
   // (Audit 2: at golden hour the canopy as its repaint has it, mostly a deep salmon-rose against the low sun with peach-lit edges, ref/tod/
   // sakura_golden.png (it was a pale peach: median ΔE 31); its petal tips (t) by the hour too, so the lit edges darken with the rest)
   const BLM_GOLD = { m: [121, 65, 119], w: [0.3, 0, 0], t: [155, 163, 196] };
-  const BLM_OLD = { m: [205, 105, 150], w: [0.3, 0, 0], t: [255, 232, 242] }, BLM_DAY = { m: [186, 91, 135], w: [0.47, 0, 0], t: [255, 232, 242] }, /* (step 26: a little less saturated for the new canopy, was 188, 88, 132) */ BLM_NIGHT = { m: [164, 89, 117], w: [0.3, 0, 0], t: [235, 211, 222] } /* (step 30: the repaint's dusky moonlit pink) */, BLM_T = todKeys(BLM_NIGHT, BLM_OLD, BLM_DAY, BLM_GOLD), blMid = new THREE.Color(), blTip = new THREE.Color();
+  const BLM_OLD = { m: [205, 105, 150], w: [0.3, 0, 0], t: [255, 232, 242] }, BLM_DAY = { m: [186, 91, 135], w: [0.47, 0, 0], t: [255, 232, 242] }, /* (step 26: a little less saturated for the new canopy, was 188, 88, 132) */ BLM_NIGHT = { m: [164, 89, 117], w: [0.3, 0, 0], t: [235, 211, 222] } /* (step 30: the repaint's dusky moonlit pink) */, BLM_SUN = { m: [170, 110, 150], w: [0.3, 0, 0], t: [230, 170, 200] } /* (step 37: its sunset key, was the old ramp's, BLM_OLD) */, BLM_T = todKeys(BLM_NIGHT, BLM_SUN, BLM_DAY, BLM_GOLD), blMid = new THREE.Color(), blTip = new THREE.Color();
   // (Audit 2) the evening sky under a clear sky (sky.js uEve), as all seven paintings repainted at golden hour and sunset have it
   // (ref/tod/: their upper sky's rows, ~/cdtest/gap2): a deep steel blue from ~21° up to the top of the frame (z), a pale blue-grey band
   // ~7° up (m), the warm colour only along the horizon (h); blue-violet over a mauve band at sunset (display sRGB). g: the sun's glow
@@ -790,6 +821,9 @@ async function main() {
     // hour, dark mauve silhouettes against the sunset, deep navy ones at night; the general band tones had them a cool blue-grey)
     if (band && bandCo) band.tones.coast = todKeys({ shade: [24, 50, 80], mid: [30, 60, 92], lit: [40, 72, 108], ch: [0.12, 0.12, 0.12] }, { shade: [86, 50, 72], mid: [100, 52, 72], lit: [130, 58, 66], ch: [0.15, 0.15, 0.15] },
       { shade: [84, 112, 132], mid: [142, 170, 190], lit: [200, 220, 234], ch: [0.6, 0.6, 0.6] }, { shade: [155, 106, 90], mid: [180, 122, 92], lit: [196, 132, 96], ch: [0.3, 0.3, 0.3] });
+    // (step 37) …and the country's far ranges by the hour as its repaints have them (ref/tod/country_*.png): lilac-blue at golden hour
+    // (they were a warm grey, ΔE 19), the general band's at sunset and night; rows with tones of their own blend over a hand-over
+    if (band) { band.blend = true; band.tones.country = todKeys(BT_NIGHT, BT_SUNSET, BT_DAY, BTC_GOLD); }
     bandTr = makeTrBand(trAtlases);
     if (band && zoneAt(st.s) === 'city') band.hero = 0.5; // (the street's far end: the far city's pale towers in haze, its second painting, not the first's green hill)
     { const ba = TR_START ? await balloonLoad : null; if (ba) { balloons = makeBalloons(ba, post, BALLOONS_N); scene.add(balloons.mesh); balloons.mesh.visible = true; } } // (seen to be compiled)
@@ -1375,6 +1409,7 @@ async function main() {
     // sea) reaches the bright, nearly white tones of the reference art, which the tone curve otherwise caps at ~240
     const dayExp = 1 + 0.25 * TOD.bright * (1 - tunS);
     sun.color.copy(TOD.sunCol); sun.intensity = TOD.sunI / dayExp;
+    { const k = paintSky(); if (k > 0) { let d = 0; for (const z in SUNZ) { const wz = w[z]; if (wz > 0) d += wz * (SUNZ[z].at(TOD.t).rgb('k')[0] - 1); } sun.intensity *= 1 + k * d; } } // (step 37: by zone at sunset)
     // Shadows (see the notes where the sun is created): the light itself follows the sun every frame; the shadow
     // camera is re-aimed only every ~6°, centred 26 m ahead of the car and snapped to whole texels; the skew
     // P' = P + (P.y − y0)·(D/D.y − L/L.y) slides each point along the true light L onto the camera's direction D.
@@ -1471,7 +1506,7 @@ async function main() {
           const a = i * 0.3, c = Math.cos(a), sn = Math.sin(a), dx = (fx * c - fz * sn) / fl, dz = (fx * sn + fz * c) / fl;
           const v = Math.max(0, dx * sd.x + dz * sd.z), v2 = v * v; g += v2 * v2 * v2;
         }
-        const k = (g / 5) * (0.10 + 0.35 * TOD.warm) * 1.4 * day * HAZE_GLOW;
+        const k = (g / 5) * (0.10 + 0.35 * TOD.warm) * 1.4 * day * HAZE_GLOW * (1 + w.city * paintSky() * CITY_GLOW.at(TOD.t).rgb('g')[0]); // (step 37: the city's street at sunset)
         TOD.fog.r += TOD.sunCol.r * k; TOD.fog.g += TOD.sunCol.g * k; TOD.fog.b += TOD.sunCol.b * k;
       }
     }
@@ -1514,7 +1549,7 @@ async function main() {
       const ev = paintSky() * sstep(0.62, 0.7, TOD.t) * (1 - sstep(0.765, 0.8, TOD.t)) * st.evesky; su.uEve.value = ev + NP; su.uEveTk.value = ev > 0 ? 0 : 1;
       if (ev > 0) {
         const P = EVE_T.at(TOD.t), g = post.grade.uniforms, sd = TOD.sunDir; P.ug(g, 'z', su.uEveZ.value); P.ug(g, 'm', su.uEveM.value); P.ug(g, 'h', su.uEveH.value);
-        su.uEveG.value = P.rgb('g')[0];
+        su.uEveG.value = P.rgb('g')[0] * (1 + w.city * CITY_GLOW.at(TOD.t).rgb('g')[1]); // (step 37: the city's street's end at sunset)
         const el = Math.asin(clamp(sd.y, -1, 1)), el2 = lerp(el, Math.min(el, EVE_EL), ev), k = Math.cos(el2) / Math.max(Math.hypot(sd.x, sd.z), 1e-6);
         su.uSkySun.value.set(sd.x * k, Math.sin(el2), sd.z * k);
       } else {
@@ -1548,7 +1583,7 @@ async function main() {
         st.moonB = st.moonB === undefined ? b : st.moonB + clamp(b - st.moonB, -MOON_RATE * dt, MOON_RATE * dt);
         moonSkyDir(TOD.head - st.sunAdj + st.moonB, TOD.moonSky);
       }
-      if (pclouds) { pclouds.moon = su.uMoon.value > 0 && NP > 0 ? Math.atan2(TOD.moonSky.x, TOD.moonSky.z) : NaN; pclouds.night = NP; } }
+      if (pclouds) { pclouds.moon = su.uMoon.value > 0 && NP > 0 ? Math.atan2(TOD.moonSky.x, TOD.moonSky.z) : NaN; pclouds.night = NP; pclouds.zw = w; } }
     { const painted = !!pclouds && (st.pclouds !== 0 || !clouds);
       if (pclouds) { pclouds.mesh.visible = painted; if (painted) pclouds.update(camera, dt); }
       if (clouds) { clouds.group.visible = !painted; if (!painted) clouds.update(camera.position, dt); } }
@@ -1583,7 +1618,7 @@ async function main() {
     // the coast's row: the bay's end), eased in and out over a few seconds
     if (band) { const kc = sea.mesh.visible || st.bandnear === 0 ? 0 : w.country; bandNear = bandNear < 0 ? kc : bandNear + (kc - bandNear) * Math.min(1, dt * 0.7);
       band.mesh.scale.setScalar(1 - (1 - BAND_NEAR / BAND_R) * bandNear); }
-    PAINT_TOD.on = st.todpaint; sea.u.uWaves.value = st.waves; sea.u.uShoreW.value = st.shore; M.surf.visible = st.surf > 0; M.tetra.visible = st.tetra > 0; M.bark.visible = st.trunks > 0; sea.update(camera.position, t, fogD * 0.8, sstep(0.0, 0.35, seaW), post.grade.uniforms, path, st.s, regionWeight(st.s, 'tr'), Math.max(w.galata, zoneWeight(st.s + 150, 'galata'))); // (and the shore's foam and surf; the strait's tones in Turkey, the Golden Horn's by the Galata Bridge)
+    PAINT_TOD.on = st.todpaint; sea.u.uWaves.value = st.waves; sea.u.uShoreW.value = st.shore; M.surf.visible = st.surf > 0; M.tetra.visible = st.tetra > 0; M.bark.visible = st.trunks > 0; sea.update(camera.position, t, fogD * 0.8, sstep(0.0, 0.35, seaW), post.grade.uniforms, path, st.s, regionWeight(st.s, 'tr'), Math.max(w.galata, zoneWeight(st.s + 150, 'galata')), sky.material.uniforms.uSkySun.value); // (and the shore's foam and surf; the strait's tones in Turkey, the Golden Horn's by the Galata Bridge; the sun's path under the sun as drawn, step 37)
     if (ferry) { const sv = sea.mesh.visible ? 1 : 0; ferry.update(dt, path, st.s, world.origin, (w.bosphorus + w.galata) * sv, w.galata * sv); }
     riverMat.uniforms.uTime.value = t; riverMat.uniforms.uFogD.value = scene.fog.near; riverMat.uniforms.uNight.value = TOD.night; riverMat.uniforms.uSpecK.value = 1 - TOD.overcast * 0.85;
     U.uSunDir.value.copy(TOD.lightDir); U.uSunCol.value.copy(TOD.sunCol);
@@ -1651,6 +1686,13 @@ async function main() {
       const pk = w.pasabag * paintSky() * st.road; // (Paşabağ's, W6, by the hour)
       if (pk > 0) { const Q = PAS_R.at(TOD.t), rn = Q.rgb('n'), rf = Q.rgb('f'); U.uRoadN.value.multiply(uchRT.set(lerp(1, rn[0], pk), lerp(1, rn[1], pk), lerp(1, rn[2], pk))); U.uRoadF.value.multiply(uchRT.set(lerp(1, rf[0], pk), lerp(1, rf[1], pk), lerp(1, rf[2], pk))); }
       U.uNtRoad.value.set(lerp(1, ntAt(w, 'road', 0), NP), lerp(1, ntAt(w, 'road', 1), NP), lerp(1, ntAt(w, 'road', 2), NP)); U.uNtWalk.value.set(lerp(1, ntAt(w, 'walk', 0), NP), lerp(1, ntAt(w, 'walk', 1), NP), lerp(1, ntAt(w, 'walk', 2), NP)); // (step 30)
+      { const k = paintSky(); // (step 37: …and at sunset as painted, by the zones here)
+        if (k > 0) { let r0 = 0, r1 = 0, r2 = 0, w0 = 0, w1 = 0, w2 = 0, n0 = 0, n1 = 0, n2 = 0, f0 = 0, f1 = 0, f2 = 0;
+          for (const z in RWZ) { const wz = w[z]; if (!(wz > 0)) continue; const P = RWZ[z].at(TOD.t), r = P.rgb('r'), q = P.rgb('w'), n = P.rgb('n'), f = P.rgb('f');
+            r0 += wz * (r[0] - 1); r1 += wz * (r[1] - 1); r2 += wz * (r[2] - 1); w0 += wz * (q[0] - 1); w1 += wz * (q[1] - 1); w2 += wz * (q[2] - 1);
+            n0 += wz * (n[0] - 1); n1 += wz * (n[1] - 1); n2 += wz * (n[2] - 1); f0 += wz * (f[0] - 1); f1 += wz * (f[1] - 1); f2 += wz * (f[2] - 1); }
+          U.uNtRoad.value.x *= 1 + k * r0; U.uNtRoad.value.y *= 1 + k * r1; U.uNtRoad.value.z *= 1 + k * r2; U.uNtWalk.value.x *= 1 + k * w0; U.uNtWalk.value.y *= 1 + k * w1; U.uNtWalk.value.z *= 1 + k * w2;
+          U.uRoadN.value.x *= 1 + k * n0; U.uRoadN.value.y *= 1 + k * n1; U.uRoadN.value.z *= 1 + k * n2; U.uRoadF.value.x *= 1 + k * f0; U.uRoadF.value.y *= 1 + k * f1; U.uRoadF.value.z *= 1 + k * f2; } }
       const sk = w.sakura * paintSky() * st.road; U.uSakRT.value = st.road; // (the cherry avenue's, step 26, by the hour; st.road 0 skips the work in its ground)
       if (sk > 0) { const Q = SAK_R.at(TOD.t), rn = Q.rgb('n'), rf = Q.rgb('f'); U.uRoadN.value.multiply(uchRT.set(lerp(1, rn[0], sk), lerp(1, rn[1], sk), lerp(1, rn[2], sk))); U.uRoadF.value.multiply(uchRT.set(lerp(1, rf[0], sk), lerp(1, rf[1], sk), lerp(1, rf[2], sk))); }
     }
@@ -1666,6 +1708,8 @@ async function main() {
       FIELD.uFieldC.value.set(lerp(FIELD_DIM[0], c[0], b), lerp(FIELD_DIM[1], c[1], b), lerp(FIELD_DIM[2], c[2], b));
       FIELD.uFieldCo.value.set(lerp(COAST_DIM[0], co[0], b), lerp(COAST_DIM[1], co[1], b), lerp(COAST_DIM[2], co[2], b));
       FIELD.uFieldSa.value.set(lerp(SAK_DIM[0], sa[0], b), lerp(SAK_DIM[1], sa[1], b), lerp(SAK_DIM[2], sa[2], b));
+      const bk = paintSky() * w.country, B = BLADE_T.at(TOD.t), bl = B.rgb('l'), br = B.rgb('r'); // (step 37: the blades by their side of the road)
+      FIELD.uBladeL.value.set(1 + (bl[0] - 1) * bk, 1 + (bl[1] - 1) * bk, 1 + (bl[2] - 1) * bk); FIELD.uBladeR.value.set(1 + (br[0] - 1) * bk, 1 + (br[1] - 1) * bk, 1 + (br[2] - 1) * bk);
     }
     { // (the coast slope's shade on a bright day only (golden hour, sunset and night keep their own), its verge's deeper green by the hour
       // under a clear sky: step 27)
@@ -1689,6 +1733,8 @@ async function main() {
     U.uLightsOn.value = LIGHTS_ON >= 0 ? LIGHTS_ON : Math.max(sstep(0.02, 0.75, TOD.night), 0.3 * ov);
     U.uLitN.value.set(lerp(1, ntAt(w, 'lit', 0), NP), lerp(1, ntAt(w, 'lit', 1), NP), lerp(1, ntAt(w, 'lit', 2), NP), lerp(1, ntAt(w, 'lit', 3), NP)); U.uBoardD.value = lerp(1, ntAt(w, 'lit', 3), NP); // (step 30)
     U.uHouseFill.value.set(ntAt(w, 'house', 0) * NP / Math.PI, ntAt(w, 'house', 1) * NP / Math.PI, ntAt(w, 'house', 2) * NP / Math.PI); // (as an emissive: irradiance / π)
+    { const k = paintSky() / Math.PI; // (step 37: …and the houses' walls at sunset as painted, by the zones here)
+      if (k > 0) for (const z in HSZ) { const wz = w[z]; if (!(wz > 0)) continue; const f = HSZ[z].at(TOD.t).rgb('f'); U.uHouseFill.value.x += wz * k * f[0]; U.uHouseFill.value.y += wz * k * f[1]; U.uHouseFill.value.z += wz * k * f[2]; } }
     M.lamp.color.setRGB(0.9, 0.86, 0.74).lerp(LAMP_NIGHT, nightK); // (by day a milky, warm cream glass, as the avenue's lanterns in the painting)
     M.pool.opacity = nightK * 0.42 * (1 + 0.8 * wet);
     { // the two lights that light the car most (street lamps, lit shop windows, tunnel lamps) light its paint and glass

@@ -817,7 +817,23 @@ const CLOUD_TONES = todTones([
   [0.0, CL_NIGHT], [0.2, mixTones(CL_NIGHT, CL_DUSK, 0.5)], [0.245, mixTones(CL_SUNSET, CL_GOLD, 0.4)], [0.3, CL_DAY], [0.62, CL_DAY],
   [0.7, CL_GOLD], [0.75, CL_SUNSET], [0.765, mixTones(CL_SUNSET, CL_DUSK, 0.4)], [0.8, CL_DUSK], [0.86, CL_NIGHT], [1.0, CL_NIGHT],
 ]);
-const _cm = new THREE.Color();
+// (step 37) Japan's sunset cumulus zone by zone, as each zone's repaint has them (ref/tod/*_sunset.png, their cloud boxes' pixels by
+// lightness: ~/cdtest/s37/tools/cloudq.py): the avenue's and the coast's brighter, salmon-pink and orange over a mauve middle, the country's
+// a dark purple-grey with rose-lit tops, the city's pink; blended in by the zones' weights here (api.zw, main.js), so Turkey's keep
+// CL_SUNSET (and the mountain's and the snow country's, which have no repaint)
+const CL_SUNSET_Z = {
+  city: { shade: [96, 65, 92], mid: [158, 82, 98], lit: [240, 132, 145], rim: [242, 172, 122] },
+  sakura: { shade: [67, 71, 119], mid: [202, 96, 113], lit: [255, 139, 113], rim: [242, 172, 122] },
+  coast: { shade: [88, 65, 105], mid: [189, 85, 93], lit: [253, 135, 94], rim: [242, 172, 122] },
+  country: { shade: [64, 55, 102], mid: [104, 71, 116], lit: [197, 89, 97], rim: [242, 172, 122] },
+};
+const CLOUD_TONES_Z = {};
+for (const z in CL_SUNSET_Z) { const S = CL_SUNSET_Z[z]; CLOUD_TONES_Z[z] = todTones([
+  [0.0, CL_NIGHT], [0.2, mixTones(CL_NIGHT, CL_DUSK, 0.5)], [0.245, mixTones(S, CL_GOLD, 0.4)], [0.3, CL_DAY], [0.62, CL_DAY],
+  [0.7, CL_GOLD], [0.75, S], [0.765, mixTones(S, CL_DUSK, 0.4)], [0.8, CL_DUSK], [0.86, CL_NIGHT], [1.0, CL_NIGHT],
+]); }
+const CL_N = ['shade', 'mid', 'lit', 'rim'];
+const _cm = new THREE.Color(), _cj = new THREE.Color(), CL_U = [null, null, null, null];
 
 /** The painted cloud field. `atlas` from loadCloudAtlas; `post` for the grade's uniforms. update(camera, dt) each frame. */
 export function makePaintedClouds(atlas, post, seed = 5) {
@@ -915,6 +931,8 @@ export function makePaintedClouds(atlas, post, seed = 5) {
      *  start the ring opens round it (two towers flanking it, as the country's night repaint), and while it shows the ring turns
      *  (at most MOON_TURN a second: the clouds drifting) to keep it clear of them; `night`: the night's painted look's weight */
     moon: NaN, night: 0,
+    /** (step 37, main.js, each frame) the zones' weights here (path.js zoneW): Japan's zones' own sunset tones (CL_SUNSET_Z) by them */
+    zw: null,
     /** (test) the layout, for checks */
     layout: C,
     update(camera, dt) {
@@ -949,9 +967,16 @@ export function makePaintedClouds(atlas, post, seed = 5) {
       { const b = Math.min(Math.max((TOD.bright - 0.55) / 0.4, 0), 1); u.uPaint.value = b * b * (3 - 2 * b); }
       // the palette: under a clear sky the targets' cloud tones by the time of day (ref/tod/, read by the painted day
       // lightness of each cloud pixel: ~/cdtest/tod/tools/ramps.py), ungraded; under grey skies the old time-of-day palette
-      const g = post.grade.uniforms, P = CLOUD_TONES.at(TOD.t), ov = 1 - paintSky();
-      P.ug(g, 'shade', u.uShade.value).lerp(TOD.cShade, ov); P.ug(g, 'mid', u.uMid.value).lerp(_cm.copy(TOD.cShade).lerp(TOD.cLit, 0.5), ov);
-      P.ug(g, 'lit', u.uLit.value).lerp(_cm.copy(TOD.cLit).multiplyScalar(1 + 0.35 * TOD.bright), ov); P.ug(g, 'rim', u.uRimCol.value).lerp(TOD.cRim, ov);
+      const g = post.grade.uniforms, P = CLOUD_TONES.at(TOD.t), ov = 1 - paintSky(), zw = api.zw, cu = CL_U;
+      cu[0] = u.uShade.value; cu[1] = u.uMid.value; cu[2] = u.uLit.value; cu[3] = u.uRimCol.value;
+      for (let i = 0; i < 4; i++) P.ug(g, CL_N[i], cu[i]);
+      let sw = 0; if (zw) for (const z in CLOUD_TONES_Z) sw += zw[z] || 0;
+      if (sw > 0) { // (step 37: Japan's zones' own at sunset, by their weights)
+        for (let i = 0; i < 4; i++) cu[i].multiplyScalar(1 - sw);
+        for (const z in CLOUD_TONES_Z) { const wz = zw[z]; if (!(wz > 0)) continue; const Q = CLOUD_TONES_Z[z].at(TOD.t); for (let i = 0; i < 4; i++) cu[i].add(Q.ug(g, CL_N[i], _cj).multiplyScalar(wz)); }
+      }
+      u.uShade.value.lerp(TOD.cShade, ov); u.uMid.value.lerp(_cm.copy(TOD.cShade).lerp(TOD.cLit, 0.5), ov);
+      u.uLit.value.lerp(_cm.copy(TOD.cLit).multiplyScalar(1 + 0.35 * TOD.bright), ov); u.uRimCol.value.lerp(TOD.cRim, ov);
       // as the procedural clouds: in rain they melt into the low grey deck the sky draws; at night, under a clear sky, the
       // moonlit cumulus stand as clearly as in the paintings (only dimmer under cloud)
       u.uOpacity.value = (1 - TOD.night * (0.08 + 0.27 * ov)) * (1 - TOD.overcast * 0.55) * (1 - 0.85 * TOD.rain);
@@ -1013,10 +1038,10 @@ export async function loadBandAtlas(tier, timeoutMs = 15000, name = 'band3') {
 // (ref/tod/; the far ranges', hills' and far city's pixels by their painted day lightness: ~/cdtest/tod/tools/ramps.py):
 // honey-brown ranges at golden hour, mauve and rose with an orange light on the peaks at sunset, deep blue at night; ch: how
 // much of the painting's own colour stays. (By day the band is the painting itself: the day key only shows in hand-overs)
-const BT_DAY = { shade: [84, 112, 132], mid: [142, 170, 190], lit: [200, 220, 234], ch: [0.6, 0.6, 0.6] };
-const BT_GOLD = { shade: [70, 78, 100], mid: [110, 108, 124], lit: [160, 140, 134], ch: [0.3, 0.3, 0.3] };
-const BT_SUNSET = { shade: [46, 36, 58], mid: [84, 56, 84], lit: [130, 76, 92], ch: [0.25, 0.25, 0.25] };
-const BT_NIGHT = { shade: [20, 38, 60], mid: [30, 54, 84], lit: [46, 76, 112], ch: [0.12, 0.12, 0.12] };
+export const BT_DAY = { shade: [84, 112, 132], mid: [142, 170, 190], lit: [200, 220, 234], ch: [0.6, 0.6, 0.6] };
+export const BT_GOLD = { shade: [70, 78, 100], mid: [110, 108, 124], lit: [160, 140, 134], ch: [0.3, 0.3, 0.3] };
+export const BT_SUNSET = { shade: [46, 36, 58], mid: [84, 56, 84], lit: [130, 76, 92], ch: [0.25, 0.25, 0.25] };
+export const BT_NIGHT = { shade: [20, 38, 60], mid: [30, 54, 84], lit: [46, 76, 112], ch: [0.12, 0.12, 0.12] };
 export const BAND_TONES = todTones([
   [0.0, BT_NIGHT], [0.2, mixTones(BT_NIGHT, BT_SUNSET, 0.3)], [0.245, mixTones(BT_SUNSET, BT_GOLD, 0.4)], [0.3, BT_DAY], [0.62, BT_DAY],
   [0.7, BT_GOLD], [0.75, BT_SUNSET], [0.765, mixTones(BT_SUNSET, BT_NIGHT, 0.25)], [0.8, mixTones(BT_SUNSET, BT_NIGHT, 0.55)], [0.86, BT_NIGHT], [1.0, BT_NIGHT],
@@ -1164,6 +1189,9 @@ export function makePaintedBand(atlas, post, fog, alias = null, haze0 = 0, winZo
     /** rows with their own tones by the time of day ({ zone: todTones(…) with shade, mid, lit, ch }: Cappadocia's, W5, read from its
      *  concept's repaints); the rest take BAND_TONES */
     tones: {},
+    /** (step 37) blend two rows' own tones over a hand-over between them (Japan's band: the country's row has its own since then),
+     *  where the rows used to switch tables halfway through */
+    blend: false,
     turnTo(z, h) { if (AH[z] === undefined) return; const r = AH[z] + (h / (Math.PI * 2)) * per; this.rot[z] = r - Math.floor(r); },
     /** m: { a, b, t } from path.zoneMix; camH: the camera's height above the ground; fogD / fogFar: the scene fog's
      *  exp² density and draw distance */
@@ -1196,7 +1224,14 @@ export function makePaintedBand(atlas, post, fog, alias = null, haze0 = 0, winZo
       u.uLightC.value.setRGB(_bc.x / (NOON_SUN.r + NOON_SKY.r), _bc.y / (NOON_SUN.g + NOON_SKY.g), _bc.z / (NOON_SUN.b + NOON_SKY.b)); u.uPaint.value = paint;
       // the time of day's tones (all but a bright day's: the painting itself), under a clear sky; the far city's windows
       u.uTone.value = paintSky() * (1 - paint);
-      if (u.uTone.value > 0) { const P = (this.tones[(A && B ? (t < 0.5 && !hA ? za : zb) : za || zb)] || BAND_TONES).at(TOD.t); u.uBS.value.fromArray(P.rgb('shade')).divideScalar(255); u.uBM.value.fromArray(P.rgb('mid')).divideScalar(255); u.uBH.value.fromArray(P.rgb('lit')).divideScalar(255); u.uBCh.value = P.rgb('ch')[0]; }
+      if (u.uTone.value > 0) { const P = (this.tones[(A && B ? (t < 0.5 && !hA ? za : zb) : za || zb)] || BAND_TONES).at(TOD.t); u.uBS.value.fromArray(P.rgb('shade')).divideScalar(255); u.uBM.value.fromArray(P.rgb('mid')).divideScalar(255); u.uBH.value.fromArray(P.rgb('lit')).divideScalar(255); u.uBCh.value = P.rgb('ch')[0];
+        const Pa = this.tones[za] || BAND_TONES, Pb = this.tones[zb] || BAND_TONES;
+        if (this.blend && A && B && !hA && !hB && Pa !== Pb) { // (step 37: Japan's rows' tones blended by the hand-over, a: 1 − t, b: t)
+          Pa.at(TOD.t); Pb.at(TOD.t); const sa = Pa.rgb('shade'), sb = Pb.rgb('shade'), ma = Pa.rgb('mid'), mb = Pb.rgb('mid'), la = Pa.rgb('lit'), lb = Pb.rgb('lit');
+          u.uBS.value.set(sa[0] + (sb[0] - sa[0]) * t, sa[1] + (sb[1] - sa[1]) * t, sa[2] + (sb[2] - sa[2]) * t).divideScalar(255);
+          u.uBM.value.set(ma[0] + (mb[0] - ma[0]) * t, ma[1] + (mb[1] - ma[1]) * t, ma[2] + (mb[2] - ma[2]) * t).divideScalar(255);
+          u.uBH.value.set(la[0] + (lb[0] - la[0]) * t, la[1] + (lb[1] - la[1]) * t, la[2] + (lb[2] - la[2]) * t).divideScalar(255);
+          u.uBCh.value = Pa.rgb('ch')[0] + (Pb.rgb('ch')[0] - Pa.rgb('ch')[0]) * t; } }
       const nk = Math.min(Math.max((TOD.night - 0.15) / 0.65, 0), 1), wn = nk * nk * (3 - 2 * nk) * (1 - 0.6 * TOD.overcast);
       u.uWin.value.set(wins.has(m.a) ? wn * PAINT_TOD.on : 0, wins.has(m.b) ? wn * PAINT_TOD.on : 0); // (Turkey's: the Asian shore's houses, the old city's)
       // (alpha-tested, without MSAA: a passing haze while one zone's skyline gives way to the next, or to the rings)

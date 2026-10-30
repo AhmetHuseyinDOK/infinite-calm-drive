@@ -987,6 +987,9 @@ export const FIELD = {
   uFieldBo: { value: new THREE.Vector3(1, 1, 1) },         // …on the Bosphorus's gardens and hill (main.js)
   uFieldSa: { value: new THREE.Vector3(1, 1, 1) },         // …on the cherry avenue's lawns (main.js)
   uFieldM: { value: new THREE.Vector3(0.16, 0.32, 0.05) }, // its average linear colour (the 3D blades take it)
+  // (step 37) the meadow's blades on the road's left and right (a factor on their colour, per vertex: the country's repaint at golden hour
+  // lights its fields on one side only; 1 at every other hour: main.js)
+  uBladeL: { value: new THREE.Vector3(1, 1, 1) }, uBladeR: { value: new THREE.Vector3(1, 1, 1) },
 };
 export function groundDefines(zones) {
   const d = {};
@@ -1360,14 +1363,14 @@ export function grassMaterial(ring, shared) {
   m.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, shared, ring);
     for (const k of ['uOrigin', 'uCloudSh', 'uTime', 'uNoiseTex', 'uCloudTex', 'uCloudOrg', 'uWind']) sh.uniforms[k] = U[k];
-    if (paint) { sh.uniforms.uFieldC = FIELD.uFieldC; sh.uniforms.uFieldM = FIELD.uFieldM; }
+    if (paint) { sh.uniforms.uFieldC = FIELD.uFieldC; sh.uniforms.uFieldM = FIELD.uFieldM; sh.uniforms.uBladeL = FIELD.uBladeL; sh.uniforms.uBladeR = FIELD.uBladeR; }
     // (no shadow-map code at all: the meadow beyond the banks is hardly ever in a shadow, and three.js would still work
     // out two shadow-map coordinates for every vertex of every blade)
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#undef USE_SHADOWMAP
 #include <common>
 ${CLOUD_V}
-uniform vec4 uG[${GRASS_N}], uGM[${GRASS_N / 4}], uGP, uGQ, uRing, uRingC, uRingD; uniform float uWind;${paint ? '\nuniform vec3 uFieldC, uFieldM;' : ''}
+uniform vec4 uG[${GRASS_N}], uGM[${GRASS_N / 4}], uGP, uGQ, uRing, uRingC, uRingD; uniform float uWind;${paint ? '\nuniform vec3 uFieldC, uFieldM, uBladeL, uBladeR;' : ''}
 varying vec3 vBladeCol;
 float gHash(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 vec3 gL(vec3 c){ return pow(c, vec3(2.2)); }`)
@@ -1428,7 +1431,8 @@ if (!gCull) {
   float gsw = mod(gs, ${S_WRAP.toFixed(1)}), gpu = abs(gu) - uGP.z - 2.1;
   float tone = 0.55 * (gHash(floor(vec2(gsw / 30.0, gpu / 34.0)) + (side > 0.0 ? 31.0 : 0.0)) - 0.5) * smoothstep(9.0, 30.0, gpu)
              + 0.4 * (vnoiseV(vec2(gsw, gu) * 0.018 + 5.3) - 0.5);
-  vec3 plot = uFieldM * uFieldC * vec3(0.86, 0.87, 0.48) * (1.0 + tone * vec3(1.8, 1.0, 0.2)) * (0.9 + 0.2 * nz);` : `
+  vec3 plot = uFieldM * uFieldC * vec3(0.86, 0.87, 0.48) * (1.0 + tone * vec3(1.8, 1.0, 0.2)) * (0.9 + 0.2 * nz);
+  plot *= side > 0.0 ? uBladeR : uBladeL; // (step 37: one side of the road lit at golden hour; 1 otherwise)` : `
   vec2 pid = floor(vec2(mod(gs, ${S_WRAP.toFixed(1)}) / 30.0, (abs(gu) - uGP.z - 2.1) / 17.0));
   vec3 plot = mix(gL(vec3(0.44, 0.66, 0.29)), gL(vec3(0.58, 0.77, 0.36)), 0.3 + 0.4 * gHash(pid + (side > 0.0 ? 31.0 : 0.0))) * (0.9 + 0.2 * nz);`}
   vBladeCol = flower ? (h6 < 0.75 ? vec3(0.92, 0.92, 0.86) : vec3(1.0, 0.68, 0.05)) : mix(plot * 0.5, plot * vec3(1.18, 1.16, 0.98), t) * (0.86 + 0.28 * h4);

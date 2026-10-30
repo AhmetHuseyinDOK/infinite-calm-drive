@@ -2,6 +2,61 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-30 · 12:34 — Sunset as painted, and golden hour's leftovers
+- **Sunset's ground as painted:** under a clear sky at sunset the country's fields turn a dusky mauve-lilac (they were an orange-brown),
+  the cherry avenue's lawns lilac (a dark teal), the coast's slope a warm olive-khaki and its round crowns a dark olive against the glow,
+  as the repaints have them.
+- **The street, the roads and the pavements a muted mauve-grey:** at sunset the shopping street lies in its houses' shade, lit by the low
+  sun's lilac sky alone; its asphalt and pavements were a saturated violet near-black. The avenue's, the coast's and the country's road
+  shade and the coast's wall top follow; the avenue stands in its trees' shade (the low sun no longer lights its left pavement salmon).
+- **Each zone's own sunset clouds:**
+  - the country's a dark purple-grey with rose-lit tops;
+  - the avenue's and the coast's salmon and orange over mauve;
+  - the city's pink (one salmon before).
+  
+  Turkey, the mountains and the snow country keep theirs.
+- **The cherry canopy a dusky mauve-rose at sunset** (it glowed hot magenta); the avenue's houses and the coast's house dusky mauve-grey
+  round their lit windows (they stood a dark magenta).
+- **Golden hour's sea deep blue beside the sun's path** (its tones had been read from inside the repaint's gold path: a grey-beige sheet),
+  the path drawn from the horizon under the sun as the evening sky draws it.
+- **The country at golden hour lit on one side,** its right-hand meadow a sunlit gold, the left-hand and far fields a dim olive; its far
+  mountains lilac-blue (they were a warm grey).
+- Against the repaints (share-weighted ΔE of region medians, Audit 2's boxes):
+  - sunset: city 18.8 → 11.6, avenue 16.5 → 5.4, coast 11.2 → 4.3, country 14.3 → 3.2;
+  - golden hour: country 8.9 → 5.9;
+  - by region:
+    - the country's near field 38.2 → 2.6, the avenue's lawn 13.7 → 3.0, the coast's slope 15.8 → 0.9;
+    - the city's road 26.4 → 2.1 and pavements 22 → 1.5;
+    - the country's clouds 19.5 → 1.3, the coast's house 22.7 → 1.5, the canopy 19.7 → 3.8;
+    - golden hour's open sea beside the path 37.9 → 3.6, the country's mountains 19.4 → 5.8.
+  - Worse:
+    - the city's far street at sunset 11.1 → 14.2 (its pink clouds fill the street's sky);
+    - the coast's golden frame 6.3 → 7.8 by its boxes (they hold the repaint's path; by eye the open sea is closer).
+- Noon, night and every Turkish zone unchanged: every staging capture byte-identical to a live one (desktop and phone; live alternates
+  between its own variants on some shots).
+- How:
+  - `main.js`: `F_SUNSET`, `F_GOLD.c`, `GH_S`, `BL_S` / `BLM_SUN`, `CV_S`, `BKV_S`; per-zone `RWZ` through `uNtRoad` / `uNtWalk` /
+    `uRoadN` / `uRoadF`; `HSZ` through `uHouseFill`; `SUNZ`, `CITY_GLOW`, `BLADE_T`; the country band row's tones.
+  - `painted.js`: `CL_SUNSET_Z` by zone weight; `band.blend`.
+  - `sea.js`: the `PAINT_GOLD` / `PAINT_SUNSET` open-sea tones re-read beside the path; the path under `uSkySun` in Japan.
+  - `materials.js`: `FIELD.uBladeL / R`, one multiply per blade vertex.
+  - No assets; +4.0 KB of code (+1.4 KB gzipped).
+- Checks:
+  - Programs: 63 desktop / 62 phone, as before; none compiled through sunset, night or rain.
+  - 0 shader errors in all eleven zones and on the phone tier at golden hour and sunset.
+  - No console errors at q=low, mid and high; the embed starts on tap.
+  - With the painted clouds, band and fields missing, it still falls back cleanly.
+- Cost: the same.
+  - Desktop sunset drives (GTX 1660, L S S L L S): city 3.88 → 4.05 ms (one 4.48 outlier), coast 4.47 → 4.38, country 4.84 → 4.84; the
+    avenue 4.69 → 4.83 over two rounds, per draw within live's own load-to-load spread (its canopy alternates 1.08 / 1.17 ms per load).
+  - Phone profile: city 3.40 → 3.39, avenue 3.72 → 3.62, coast 4.31 → 4.37, country 4.41 → 4.22.
+- Left over:
+  - the city's far street (its V filled by a cloud where the repaint glows);
+  - the sun's gold path on the sea (a narrow column, behind the tetrapods here; the repaint paints a wide one);
+  - the country's sunset fields one even lavender (the repaint bands them gold and violet);
+  - the avenue's lit/shaded pavements and wet-road mirror;
+  - the coast's verge clumps.
+
 ## 2026-10-30 · 09:26 — Galata as painted plates: every view along the route one anime painting, on a rough model of the real place
 
 - **Galata's buildings, near and far, are painted now: one painting per view, not boxes and stickers** (the user, on Galata-3: "maybe our

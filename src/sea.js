@@ -88,14 +88,21 @@ const PAINT = {
 // (ref/tod/coast_*.png; ~/cdtest/tod/tools/seatones.py, seatod.py): each tone by the same role as its day tone (a band of
 // distance from the wall and a lightness percentile, left of the tetrapods and away from the sun's path), moved from the day
 // tone by the difference the target shows (CIELAB); the path's tones are its lightest in the targets
+// (step 37: golden hour's open sea read BESIDE the sun's path (its repaint's path covers the bands those roles were first read in, x 0–22%:
+// they came out gold, and the whole sea a grey-beige): the repaint's deep steel blue from x 22–40% (~/cdtest/s37/tools/seagold.py; its
+// lightest tones the glints' warm white); the path itself drawn under the sun as the sky draws it, on the horizon (update). Was trough
+// [62, 71, 85], mid [100, 105, 118], face [157, 129, 131], lite [193, 169, 149], midD [82, 97, 123], midM [146, 129, 126], midF [212, 165,
+// 128], midL [242, 200, 139], farD [137, 119, 127], far [228, 186, 134], farF [246, 222, 154], farL [243, 227, 168], hz [238, 201, 149].
+// Sunset's far tones re-read the same way on ref/tod (a lighter mauve-rose: were farD [84, 58, 86], far [104, 70, 98], farF [124, 78, 100],
+// farL [146, 84, 98], hz [126, 76, 100]). The Bosphorus's own tables override every one of these)
 const PAINT_GOLD = {
-  trough: [62, 71, 85], mid: [100, 105, 118], face: [157, 129, 131], lite: [193, 169, 149], midD: [82, 97, 123], midM: [146, 129, 126], midF: [212, 165, 128], midL: [242, 200, 139],
-  farD: [137, 119, 127], far: [228, 186, 134], farF: [246, 222, 154], farL: [243, 227, 168], hz: [238, 201, 149], foam: [250, 223, 177], foamShade: [182, 164, 157],
+  trough: [56, 63, 91], mid: [86, 87, 122], face: [149, 140, 140], lite: [189, 169, 158], midD: [66, 90, 119], midM: [82, 104, 135], midF: [95, 108, 137], midL: [144, 142, 143],
+  farD: [82, 103, 128], far: [105, 125, 145], farF: [141, 140, 140], farL: [176, 160, 158], hz: [167, 141, 151], foam: [250, 223, 177], foamShade: [182, 164, 157],
   wBack: [63, 79, 98], wFace: [148, 128, 110], wLite: [181, 149, 139], wTurq: [94, 114, 112], path: [238, 197, 147], glint: [253, 232, 165], pk: [0.8, 0.8, 0.8], spark: [244, 214, 172],
 };
 const PAINT_SUNSET = {
   trough: [63, 47, 73], mid: [91, 73, 99], face: [129, 80, 110], lite: [202, 125, 125], midD: [74, 63, 95], midM: [94, 76, 105], midF: [101, 74, 105], midL: [122, 86, 102],
-  farD: [84, 58, 86], far: [104, 70, 98], farF: [124, 78, 100], farL: [146, 84, 98], hz: [126, 76, 100], foam: [247, 180, 162], foamShade: [177, 122, 140],
+  farD: [93, 66, 91], far: [123, 86, 104], farF: [150, 82, 95], farL: [164, 76, 91], hz: [144, 79, 99], foam: [247, 180, 162], foamShade: [177, 122, 140],
   wBack: [67, 56, 82], wFace: [125, 86, 95], wLite: [157, 106, 126], wTurq: [94, 84, 91], path: [244, 171, 118], glint: [255, 228, 149], pk: [1, 1, 1], spark: [196, 128, 128],
 };
 const PAINT_NIGHT = {
@@ -302,7 +309,7 @@ export function makeSea(lite = false) {
     /** grade: the grade pass's uniforms (the painted colours are its inverse); path, s: the road and where we are on it
      *  (the painted waves come in square to the coast in view); bos: how much the strait's tones (Turkey's weight here); gal:
      *  how much of those the Golden Horn's (the Galata Bridge's weight, W3) */
-    update(cam, time, fogD, vis = 1, grade = null, path = null, s = 0, bos = 0, gal = 0) {
+    update(cam, time, fogD, vis = 1, grade = null, path = null, s = 0, bos = 0, gal = 0, skySun = null) {
       mesh.position.x = cam.x; mesh.position.z = cam.z;
       if (path && vis > 0) coastDir(path, s, u.uSeaDir.value);
       u.uCalm.value = bos; // (the strait's water along the wall: calm)
@@ -331,7 +338,9 @@ export function makeSea(lite = false) {
         // (step 30: the moon's under the moon as it is drawn (TOD.moonSky), while it shows; as the coast's and the strait's night
         // repaints paint it, a column of glints from the horizon over the far water: the light's direction taken as low as the
         // setting sun's on the moon's bearing (from its real height, ~21°, the glints spread over the whole near sea))
-        const sun = TOD.sunEl > -0.04, m = TOD.moonSky, mh = Math.hypot(m.x, m.z) || 1, L = sun ? TOD.sunDir : _pl.set(m.x / mh * PATH_C, PATH_S, m.z / mh * PATH_C), hi = Math.min(Math.max((L.y - 0.3) / 0.3, 0), 1);
+        // (step 37: in Japan under the sun as the evening sky draws it, lowered to the horizon (main.js uSkySun), as the coast's golden-hour
+        // repaint has its gold path from the horizon; the real sun, 19° up then, put the path's middle by the wall. Turkey's keeps the real sun)
+        const sun = TOD.sunEl > -0.04, m = TOD.moonSky, mh = Math.hypot(m.x, m.z) || 1, L = !sun ? _pl.set(m.x / mh * PATH_C, PATH_S, m.z / mh * PATH_C) : skySun && bos < 1 ? _pl.copy(TOD.sunDir).lerp(skySun, 1 - bos).normalize() : TOD.sunDir, hi = Math.min(Math.max((L.y - 0.3) / 0.3, 0), 1);
         u.uPathK.value = P.rgb('pk')[0] * paint * u.uWaves.value * (1 - hi * hi * (3 - 2 * hi)) * (sun ? 1 : TOD.moonVis);
         if (u.uPathK.value > 0) { u.uPathDir.value.copy(L); P.ug(g, 'path', u.uPPath.value); P.ug(g, 'glint', u.uPGlint.value); }
       }

@@ -147,6 +147,7 @@ Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/clas
     rooms; without the shop rooms or the flower boxes, as before.
   - Seen in Chrome 156 (the desktop machine) and Chrome 148 (this box): the composite room texture, the boards, the racks and the そば wall render
     in both.
+- Cost re-timed on the desktop GTX 1660 after it came back (2026-10-30 ~23:5x; interleaved, 0923b61 → 50034b6, 0.9 km city drives): desktop 3.32 / 3.33 / 3.36 → 3.47 / 3.48 / 3.40 ms (+0.11), phone profile 4.40 / 4.43 / 4.32 → 4.08 / 4.07 / 4.08 ms (−0.31). The provisional phone cost below did not hold.
 - Cost (PROVISIONAL: the desktop machine's GTX 1660 was passed through to another session's virtual machine from ~18:00, so its Chrome drew with
   SwiftShader; the GPU numbers below are this box's Vega, interleaved with live, at load 7–17 from other sessions):
   - Per draw over 30 s city drives (L S S L): desktop profile at noon, the street's rooms 4.47 → 5.31 ms and the pieces 1.54 → 1.87 (the

@@ -948,6 +948,8 @@ export function makePaintedClouds(atlas, post, seed = 5) {
   // (MOON_C), or at least its disc and the first of its halo (MOON_M) if that is all there is. Each sprite's painted cloud taken as
   // ~0.92 of its card's width, its top half narrowing to half of that at its top
   const MOON_M = MOON_R + 1.8 * D2R, MOON_C = MOON_R + 5 * D2R, MOON_TURN = 0.4 * D2R;
+  // (step 42) a cumulus near the evening sun rimmed SUN_RIM more by it, fading over SUN_RW degrees off its side
+  const SUN_RIM = 0.6, SUN_RW = 14;
   /** how far the moon at world bearing `az` stands clear of the cumulus' sides with the ring turned by `rot` (radians; ≤ 0: behind one) */
   const moonClear = (az, rot) => {
     let g = 9;
@@ -974,12 +976,16 @@ export function makePaintedClouds(atlas, post, seed = 5) {
      *  start the ring opens round it (two towers flanking it, as the country's night repaint), and while it shows the ring turns
      *  (at most MOON_TURN a second: the clouds drifting) to keep it clear of them; `night`: the night's painted look's weight */
     moon: NaN, night: 0,
+    /** (step 42, main.js, each frame) the evening sun as it is drawn: its world bearing while it shows (NaN otherwise), and how much (0…1):
+     *  the cumulus near it rimmed by it, as the repaints paint them. (Its disc is drawn over any cloud: main.js's halo. Lifting the clouds over
+     *  it clear of it moved whole towers up over the blue the paintings keep, and turning their lit sides to it mirrored sprites in view) */
+    sun: NaN, sunK: 0,
     /** (step 37, main.js, each frame) the zones' weights here (path.js zoneW): Japan's zones' own sunset tones (CL_SUNSET_Z) by them */
     zw: null,
     /** (test) the layout, for checks */
     layout: C,
     update(camera, dt) {
-      const cam = camera.position, sunAz = Math.atan2(TOD.lightDir.x, TOD.lightDir.z);
+      const cam = camera.position, sk = api.sun === api.sun ? api.sunK : 0, sunAz = Math.atan2(TOD.lightDir.x, TOD.lightDir.z); // (sk: step 42)
       camera.getWorldDirection(fw);
       const camAz = Math.atan2(fw.x, fw.z), halfH = Math.atan(Math.tan((camera.fov * D2R) / 2) * camera.aspect);
       const moon = api.moon === api.moon;
@@ -999,6 +1005,7 @@ export function makePaintedClouds(atlas, post, seed = 5) {
         const fr = Math.max(Math.cos(dAz), 0), r0 = 0.35 + 0.9 * fr * fr * fr * (0.4 + TOD.warm);
         // (step 30: at night as painted, the clouds next to the moon catch its light along their edges, fading over ~15° from it)
         if (api.night > 0 && moon) { const e = Math.max(Math.abs(wrapA(c.phi - api.moon)) - c.half * 0.8, 0); aRim.setX(i, r0 + api.night * (0.25 + 1.35 * Math.exp(-e / (12 * D2R)) - r0)); }
+        else if (sk > 0) { const e = Math.max(Math.abs(wrapA(c.phi - api.sun)) - c.half * 0.8, 0); aRim.setX(i, r0 + sk * SUN_RIM * Math.exp(-e / (SUN_RW * D2R))); } // (step 42: rimmed by the evening sun, over ~25°)
         else aRim.setX(i, r0);
       }
       first = false;
@@ -1029,6 +1036,59 @@ export function makePaintedClouds(atlas, post, seed = 5) {
   return api;
 }
 
+// ------------------------------------------------------------------------------------------------ the evening sun's halo
+// (step 42) The evening sun and its glow as the repaints paint them (ref/tod/*_golden.png, *_sunset.png): a pale gold disc, the sky round it
+// gold to ~2° from its edge, orange to ~6°, rose further out (the sky dome's own disc and glow are a salmon pink: its sun's colour, shared
+// with the day's sky: main.js sets that sun under the drawn one). Patches of a sphere round the camera, centred on the sun as it is drawn
+// (main.js eveDir), blended over what is there (premultiplied: the painted tones by a cover falling off from the disc's edge as a Gaussian)
+// and depth-tested: the glow and the disc behind the painted horizon's ring and in front of the sky dome (the band, the 3D world and the sea
+// in front keep their own colours: the disc half set behind a ridge, as painted), the veil in front of the band. Shown only while the evening
+// sun is (main.js sets their tones and weight); one program, compiled at load
+export function makeSunHalo() {
+  const geo = new THREE.PlaneGeometry(2, 2, 10, 10);
+  const mat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, blending: THREE.NormalBlending, premultipliedAlpha: true, fog: false,
+    uniforms: {
+      uSun: { value: new THREE.Vector3(0, 0, 1) }, uD: { value: 4000 }, uSpan: { value: Math.tan(21 * D2R) }, uR: { value: 1.6 * D2R }, uK: { value: 0 },
+      uCd: { value: new THREE.Color() }, uC1: { value: new THREE.Color() }, uC2: { value: new THREE.Color() }, uC3: { value: new THREE.Color() },
+      // (the glow's cover at the disc's edge and 1 / its width (a Gaussian: its tones are bright, a long tail lit the sky far off); where its gold
+      // has turned orange, and its orange rose, from the edge;
+      // the disc's own weight (0: none, the veil) and how much brighter than its painted tone it is drawn, for the bloom's glare round it;
+      // uW: where the patch fades out (its cover is a few per cent there; the patch's size kept to that: blended over a 4× MSAA target, a
+      // patch a third of the screen cost ~0.25 ms on the desktop machine)
+      uA: { value: new THREE.Vector4(1, 1 / (9 * D2R), 4.5 * D2R, 11 * D2R) }, uDk: { value: new THREE.Vector2(1, 1) }, uW: { value: new THREE.Vector2(15 * D2R, 20 * D2R) },
+    },
+    vertexShader: /* glsl */`
+      uniform vec3 uSun; uniform float uD, uSpan; varying vec3 vDir;
+      void main(){
+        vec3 X = normalize(cross(uSun, vec3(0.0, 1.0, 0.0))), Y = cross(X, uSun); // (right and up as seen looking at the sun: facing the camera)
+        vDir = normalize(uSun + (position.x * X + position.y * Y) * uSpan);
+        gl_Position = projectionMatrix * viewMatrix * vec4(cameraPosition + vDir * uD, 1.0);
+      }`,
+    fragmentShader: /* glsl */`
+      uniform vec3 uSun, uCd, uC1, uC2, uC3; uniform vec4 uA; uniform vec2 uDk, uW; uniform float uR, uK; varying vec3 vDir;
+      void main(){
+        float th = sqrt(max(2.0 - 2.0 * dot(normalize(vDir), uSun), 0.0)), e = max(th - uR, 0.0); // (the angle from the sun (its chord), from its edge)
+        vec3 c = mix(mix(uC1, uC2, smoothstep(0.0, uA.z, e)), uC3, smoothstep(uA.z, uA.w, e));
+        float g = e * uA.y, d = (1.0 - smoothstep(uR - 0.0025, uR + 0.0015, th)) * uDk.x, a = max(uA.x * exp(-g * g) * (1.0 - smoothstep(uW.x, uW.y, th)), d) * uK;
+        if (a < 0.002) discard; // (no blend where it adds nothing)
+        gl_FragColor = vec4(mix(c, uCd * uDk.y, d) * a, a);
+      }`,
+  });
+  // the glow round the sun behind the band (main.js: uD between the band's ring and the sky dome) drawn before the clouds (they keep their own
+  // tones over it, rimmed by the sun: makePaintedClouds), a veil of it over what stands on the horizon near it (the ridges round a setting sun
+  // hazed in its light, as painted: in front of the band), and the disc with a thin corona drawn after the clouds (a cloud passing over it
+  // never hides it: its glare), all three one program
+  const glow = new THREE.Mesh(geo, mat), veil = new THREE.Mesh(geo, mat.clone()), disc = new THREE.Mesh(geo, mat.clone());
+  for (const m of [glow, veil, disc]) { m.frustumCulled = false; m.visible = false; }
+  glow.renderOrder = veil.renderOrder = -6; disc.renderOrder = 10; // (the clouds: -5)
+  glow.material.uniforms.uDk.value.set(0, 1); veil.material.uniforms.uDk.value.set(0, 1);
+  const vu = veil.material.uniforms; vu.uSpan.value = Math.tan(16 * D2R); vu.uW.value.set(11 * D2R, 15 * D2R); // (the veil narrower: main.js EVE_V, 7°)
+  const du = disc.material.uniforms; du.uSpan.value = Math.tan(6 * D2R); du.uA.value.set(1, 1 / (1.3 * D2R), 1 * D2R, 2 * D2R); du.uW.value.set(4 * D2R, 5.5 * D2R);
+  const H = m => ({ mesh: m, u: m.material.uniforms });
+  return { glow: H(glow), veil: H(veil), disc: H(disc), meshes: [glow, veil, disc] };
+}
+
 // ------------------------------------------------------------------------------------------------ the horizon band
 // A painted 360° horizon per zone (assets/band/, made by ~/cdtest/hb/scripts/band.py): far mountain ranges, forested
 // hills, headlands across the bay, painted in the reference art's style (Grok Imagine panoramas, keyed, ordered and
@@ -1055,6 +1115,26 @@ export function makePaintedClouds(atlas, post, seed = 5) {
 //  - Between zones the two bands cross-fade (premultiplied, so ridges dissolve rather than smear).
 // If the atlas can't be loaded the game keeps the procedural mountain rings.
 
+// (step 42) the rows' ridges, so the evening sun can be drawn half set on the ridge behind it (main.js): per band file (keyed by its hi
+// file's byte size: a re-made band has none until ~/cdtest/s42/tools/ridgetab.py is run on it), per zone row one character per degree
+// of its loop, the highest ridge in that degree (the painting's top where the shader keeps it), in 0.3° steps (base64's alphabet: A = 0°).
+// Japan's rows and the Turkish rows repainted in the evening (ref/tod/)
+const BAND_RIDGE = {
+  band3: { b: 439526, r: { country: 'SSRRRQRRSTTRQQPPQPOPPRSRQQRRQQONNNONMNOPPONOQQRTUTRQQPPQRQPPPPPPPOPQSTTQPOPPOQRUTSQQRPQRSSTTUTSSSTSSRSSRQQRQRRRRSSSSRSSS', coast: 'MMMNOONLNOOOMKKLLLNOONMMNOONNOPPPPPOQQOOOOPPQQOMNMPRSSRPNMMMLKKKJKKLLKJIHHHHJLMMLKLMMKKKKJJJJJJIKKIIJJKKKKJHHHKMNNLMMMLL', sakura: 'VVVUTSSTUVVVUSRQPQQRRRRQPPPRSTUUUUTSSTTTTSSSSRSSSSTUVVWWWWVVVWWXXXWWVUTSSSSTTUUUUVVUUVVWWWVVUTSSSRSSTTUUTTSTUVWWXWWVVVVV', mountain: 'eeedcdedeecabcdcbccabbcddccddeedddeefffedbbcaabbbcdddccddcbbaccbcdcbaceededcdeeeffffeeddeeeddccddcbbaccbcdcbaceededddeee', snow: 'aYZZXWYYXZaZXXXXWVVVWWVVXXWVUWYYXYYXWXYbeffffedddfeddccddcbbbccbcdcbbceededcdeeeedddcdccdfeefhheeddbZaaZabaaZbccccbabccc', city: 'UWWWVVXXYaaYVVWVVVVVVVVUWYZXZbbZVWWWXXWVTQSSVVSRQSXZZXTWTQQRSSPSYbbYSTUSTTRRUUUUTSSSQXaaXXTTZbbZTTQPQTUTWXZaccZZQUWUQQUS' } },
+  bandco1: { b: 39122, r: { coast: 'LHJKLMMLMNNMJGHGIKLLKKKJLOPOPPQRQPQSSQPPPRSSRQQQQSRQRRRQQNNPPQRRQQRRPNMMNPPOONNNOPNOOOOONLMOOPRRQOMMLLLLNOONNMMMOONOOQRQ' } },
+  bandtr1: { b: 159986, r: { bosphorus: 'NNPOSXZbbaYWLTRMMOMNNNNMNNNOOPRSMVXYaccaYVMORVXYYYZWVVVTTTWWWVWTSSTSQRRSSRRSTUUUVVVUTTTTTUVWWWWVVUXYYXYXWVVVSTVXUUXWVWXXXXabbabcZZbdebaYWVVUUUUVVWWWVVUTSSRQRRSSSRQPOOOOOOOOOOOOOOOO' } },
+  bandtr4: { b: 116064, r: { uchisar: 'abbbbbbaaabbbbbccccddddeeegeeefffdZURRRRRRSSSSTTTTTTTTTTVVSSSSSSTTTSQNLLMNQOOPPQQggjjz6655222030ulccWWZZWVUUTTTUWWWWWWWWWWVZZVVVWWWWgaYYYXXYYZZZZXUSRRRRRRSSSSSSTTTTTTTTVTSSSSSSTTUX' } },
+  bandtr5: { b: 76384, r: { pasabag: 'QQQQQPPNKKKKPPKLMLLLLRLMMMNNNOOONNPPPQQQQRRRRRQQPPPOOOPPPPOOOPPPQQQTRPQQQQPMKKJJKNPRSTTTSSRQNMMNOPQQQQPPPQQQQPPPPPQPPPPPQQQPOONOOPPPPQQQQQQPPPPQQQQQQPTRSVVSbaYaaUVRZZRXYRRSSSSSRQQQ' } },
+};
+const A64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+/** a band file's ridges ({ zone: Float32Array of radians, one per degree of the loop }), or null when it has none or isn't the one listed */
+function ridgeRows(name, J) {
+  const R = BAND_RIDGE[name]; if (!R || !J.bytes || R.b !== J.bytes.hi) return null;
+  const out = {};
+  for (const z in R.r) { const t = R.r[z], a = new Float32Array(t.length); for (let i = 0; i < t.length; i++) a[i] = A64.indexOf(t[i]) * 0.3 * D2R; out[z] = a; }
+  return out;
+}
+
 /** Loads the band atlas (assets/band/band3.*: the five zones' bands and, since Restyle 15, the shopping street's far city
  *  of pale high-rise flats in haze, ~/cdtest/hb2/scripts/band2.py): 'hi' (32 px/°) or 'lo' (16 px/°, phones). Resolves to
  *  null (never rejects) when the JSON or the image is missing, broken or too slow: the caller then keeps the procedural
@@ -1073,7 +1153,7 @@ export async function loadBandAtlas(tier, timeoutMs = 15000, name = 'band3') {
     }
     if (!Object.keys(zones).length) throw new Error('no zones listed');
     tex.wrapS = THREE.RepeatWrapping; // (each zone's row is one seamless loop)
-    return { tex, zones, ahead, period: J.period || 120, tier: file };
+    return { tex, zones, ahead, period: J.period || 120, tier: file, ridge: ridgeRows(name, J) };
   })(), timeoutMs, 'painted horizon unavailable, keeping the mountain rings:');
 }
 
@@ -1104,8 +1184,8 @@ const _bc = new THREE.Vector3(), _bn = new THREE.Color(), NOON_SUN = new THREE.C
  *  fading the zones it has in and out). A row can be turned to face a road (rot: { zone: the u straight ahead along a
  *  heading … }: the Galata Bridge's old city ahead down the bridge, W3); the rest keep the turn of the band's first view */
 export function makePaintedBand(atlas, post, fog, alias = null, haze0 = 0, winZone = 'city') {
-  const AL = (Array.isArray(atlas) ? atlas : [atlas]).filter(Boolean), Z = {}, ZT = {}, AH = {};
-  for (const at of AL) for (const z in at.zones) { Z[z] = at.zones[z]; ZT[z] = at.tex; if (at.ahead && at.ahead[z] !== undefined) AH[z] = at.ahead[z]; }
+  const AL = (Array.isArray(atlas) ? atlas : [atlas]).filter(Boolean), Z = {}, ZT = {}, AH = {}, RG = {};
+  for (const at of AL) for (const z in at.zones) { Z[z] = at.zones[z]; ZT[z] = at.tex; if (at.ahead && at.ahead[z] !== undefined) AH[z] = at.ahead[z]; RG[z] = (at.ridge && at.ridge[z]) || null; } // (step 42: its ridge)
   atlas = AL[0];
   const top = Math.max(...Object.values(Z).map(v => v.w)), N = 192, per = 360 / atlas.period;
   const wins = new Set(Array.isArray(winZone) ? winZone : [winZone]), hz0 = z => (typeof haze0 === 'number' ? haze0 : (haze0 && haze0[z]) || 0);
@@ -1215,6 +1295,14 @@ export function makePaintedBand(atlas, post, fog, alias = null, haze0 = 0, winZo
   let first = true;
   /** a row's own turn against the band's (uRot): 0, or for a row turned to face a road (rot[z]) the difference, in 0…1 */
   const rotOf = z => { const r = api.rot[z]; if (r === undefined) return 0; const d = r - u.uRot.value; return d - Math.floor(d); };
+  /** (step 42) row z's ridge at world bearing az (radians), the mean of three samples over ±hw, each read linearly between the table's
+   *  degrees: the shader's u (−az/2π · per + uRot + its own turn) wrapped into its loop */
+  const ridgeOf = (z, az, hw) => {
+    const r = RG[z], n = r.length, k = (hw / (Math.PI * 2)) * per * n; let c = (-az / (Math.PI * 2)) * per + u.uRot.value + rotOf(z), m = 0;
+    c = (c - Math.floor(c)) * n;
+    for (let j = -1; j <= 1; j++) { const x = c + j * k, i = Math.floor(x), f = x - i, i0 = ((i % n) + n) % n; m += r[i0] + (r[(i0 + 1) % n] - r[i0]) * f; }
+    return m / 3;
+  };
   const api = {
     mesh, zones: Z,
     /** the zones without a row of their own that borrow another's (it can change: Turkey's band loads later, main.js) */
@@ -1236,6 +1324,14 @@ export function makePaintedBand(atlas, post, fog, alias = null, haze0 = 0, winZo
      *  where the rows used to switch tables halfway through */
     blend: false,
     turnTo(z, h) { if (AH[z] === undefined) return; const r = AH[z] + (h / (Math.PI * 2)) * per; this.rot[z] = r - Math.floor(r); },
+    /** (step 42) how much band shows (update's return) and the rows on show (update sets them): for ridgeAt */
+    w: 0, ra: null, rb: null, rt: 0,
+    /** (step 42) the ridge's elevation (radians) at the world bearing az, averaged over ±hw (radians: the sun's disc) on the rows now on
+     *  show (two in a hand-over, by its mix); NaN where none of them has a ridge table (ridgeRows) */
+    ridgeAt(az, hw) {
+      const a = this.ra && RG[this.ra] ? ridgeOf(this.ra, az, hw) : NaN, b = this.rb && RG[this.rb] ? ridgeOf(this.rb, az, hw) : NaN;
+      return a !== a ? b : b !== b ? a : a + (b - a) * this.rt;
+    },
     /** m: { a, b, t } from path.zoneMix; camH: the camera's height above the ground; fogD / fogFar: the scene fog's
      *  exp² density and draw distance */
     update(camera, m, camH = 2.8, fogD = 0.0014, fogFar = 700) {
@@ -1249,6 +1345,8 @@ export function makePaintedBand(atlas, post, fog, alias = null, haze0 = 0, winZo
       else if (A || B) { u.uRowA.value.copy(A || B); u.map.value = ZT[za || zb]; u.uMix.value = 0; w = A ? (hA ? 0 : 1 - t) : (hB ? 0 : t); }
       u.uAlpha.value = w;
       mesh.visible = w > 0.002;
+      // (step 42: the rows on show, for ridgeAt: a hidden row's place taken by the other, as in the shader)
+      this.w = mesh.visible ? w : 0; this.ra = A && !hA ? za : B ? zb : null; this.rb = A && B && !hB && !hA ? zb : null; this.rt = A === B ? 0 : t;
       if (!mesh.visible) return 0;
       mesh.position.copy(camera.position); u.uGnd.value.set(camH, fogD, fogFar);
       // the ring from just under the 3D world's horizon (the world hides everything below; from a high camera its edge is

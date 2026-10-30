@@ -2,6 +2,84 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-30 · 23:47 — The evening sun as painted: a sun on the horizon at golden hour and sunset, its glow, its path on the sea and the wet avenue, the golden hour's streets
+- **A sun where the repaints paint one:** at golden hour and sunset under a clear sky the sun is now drawn where each zone's repaint has it, on
+  its far ridge: at sunset straight ahead at the end of the shopping street, the cherry avenue and the country road, over the bay on the coast,
+  over the strait under the bridge, to the right of Uçhisar's road, between Paşabağ's chimneys; at golden hour further out, low over the water on
+  the left by the coast and the strait, on the right in the avenue and the country (where their repaints glow and light them from). It stands a
+  little over its ridge at golden hour, half set behind it at sunset, and goes down behind it as the twilight comes. It used to be drawn 3.4°
+  up, under every zone's far ridge: no sun in 6 of the 7 sunset frames. On the shopping street and the avenue it sits low at the end of the
+  street, over the far towers and hills, which its glare washes out, as painted.
+- **Its disc and glow in the repaints' colours:** a pale gold disc (the paintings' own), the sky round it gold, then orange, then rose (the sky's
+  own disc and glow were a salmon pink), and a haze of its light over the ridges beside it. A cloud passing in front of it never hides its disc;
+  the clouds near it take a brighter rim.
+- **A broad path on the sea under it:** on the coast and the strait the water under the evening sun is lit in a wide column of its colour from
+  the horizon to the shore, glinting (honey and pale gold at golden hour, orange and rose at sunset), where it was a narrow faint line; the old
+  narrow path stays for the moon.
+- **The avenue's wet road mirrors it:** a streak from the end of the avenue towards the car, the wet road's mirror of the sun now that it stands
+  at the vanishing point.
+- **Golden hour's streets:** the shopping street's asphalt the repaint's neutral blue-grey instead of a saturated navy; the avenue's left pavement
+  and near road warm in the low sun instead of the trees' blue shade (its sunlit right pavement comes out a little bright).
+- Against the repaints (the desktop machine, GTX 1660; the gap tools, Audit 2's boxes; share-weighted ΔE of region medians, live → staging):
+  - golden hour: city 9.69 → 7.31, avenue 11.32 → 9.73, coast 7.81 → 5.84, country 5.85 → 5.11;
+  - sunset: city 9.13 → 8.57, avenue 5.44 → 5.29, coast 4.29 → 4.16, country 3.20 → 3.09;
+  - by region: the street's road at golden hour 18.2 → 1.4 (its shade 22.1 → 6.4), its far end 13.8 → 6.0 (sunset 14.2 → 2.2); the avenue's left
+    pavement 37.2 → 8.8, near road 17.4 → 11.6, far road at sunset 38.2 → 29.5; the coast's far sea at golden hour 34.1 → 10.9 (sunset 15.5 →
+    13.0), near sea 15.5 → 8.0 (sunset 7.0 → 5.6); the country's sky at golden hour 7.0 → 2.6;
+  - the sun (a 7% × 7% box at each sunset repaint's sun, ~/cdtest/s42/tools/sunbox.py; Audit 3's boxes were made differently): mean 44.6 → 26.3,
+    city 23.5 → 4.4, country 49.6 → 7.3, Uçhisar 38.9 → 10.3, Bosphorus 39.9 → 13.0, coast 55.0 → 41.6; the avenue's (45.1 → 47.3) and Paşabağ's
+    (60.1, unchanged) suns stand above their boxes; the share of near-white glow round it (L* ≥ 80 in a 30% window): 0.0–3.1% → 1.0–4.0%
+    (the repaints 1.9–7.3%);
+  - worse: the avenue's sunlit right pavement at golden hour 4.7 → 21.1 (the warm fill is by zone, not by side); the coast's far mountains at sunset
+    4.1 → 9.2 (the sun and its veil stand in that box).
+- Noon and night unchanged in every zone: on the desktop machine, the eleven zones' starts and the four audit places at noon, at night and on a
+  phone at noon, 2–18 captures a side: every staging capture byte-identical to a live one but for anti-aliasing variants of 1–3 levels at the
+  horizon on shots where live's own captures differ too (Np coast 465 px and avenue 330 px: 6 of 6 identical on this box's Chrome 148), and three
+  one-off load races of the first sweep (the country's verge banks in 1 of 18 captures, as live's own known race), each shot identical in all its
+  other captures. Galata and the Turkish town identical at golden hour and sunset too. Turkey's Bosphorus, Uçhisar and Paşabağ change in the
+  evening only, deliberately (their repaints' suns).
+- How:
+  - `main.js`: `EVE_SUN` (each zone's bearing at golden hour and sunset), `EVE_CAP` / `EVE_FRONT` (the street's and the avenue's sun 3.5° up, drawn
+    over their far band), `eveLift`, `EVE_DROP` (the sky dome's own sun set 6° under the drawn one: its disc behind the band), `EVE_H` (the disc's and
+    the glow's tones), `EVE_V`; `eveSun()` each frame (the drawn sun `eveDir`: bearing rate-limited, height on the band's ridge, blended with the old
+    drawn sun by the zones' weights, Galata and the town keeping the old); the halo made at load with ids from a generator of its own; `RWG` (golden
+    road keys in `RWZ`); test switch `st.evesun`; `__dbg.sunHalo`.
+  - `painted.js`: `BAND_RIDGE` (each band row's ridge per degree, 1.7 KB, keyed by its file's bytes; `~/cdtest/s42/tools/ridgetab.py`), `ridgeRows`,
+    `makePaintedBand().ridgeAt`; `makeSunHalo` (a glow behind the band and a veil in front of it, drawn before the clouds; the disc after them: one
+    program, three small patches); the clouds' rims by the evening sun (`sun`, `sunK`).
+  - `sea.js`: the broad path (`uPathK2`, `uPathW2`: a half-width by bearing growing towards the shore; `BROAD` / `BROAD_B` tones read in the
+    repaints' paths) where the drawn evening sun stands, in the shared `seaColour` (the shore strip seamless).
+  - No assets; code +9.3 KB (+3.9 KB gzipped).
+- Checks (the desktop machine, the final build):
+  - 0 shader errors in all eleven zones at noon and sunset (desktop tier) and at night and golden hour (phone tier), and the city / coast at
+    q=mid and q=low.
+  - No console errors at q=low, mid, high and the default; programs 66 desktop / 65 phone at a city start (live 65 / 64: the halo's); none
+    compiled through sunset, night or rain (compile, compile2 high and mid, progwatch city and coast); the embed starts on tap.
+  - Fallbacks: Japan's band missing (the sun over the mountain rings), its image truncated (rejected by its byte size), the coast's own row
+    missing, the painted clouds missing, the strait's band missing: no errors, as before.
+- Cost: the same (the desktop machine's GTX 1660, the final build).
+  - The whole step switched on and off in one page load (`st.evesun`, parked at the audit places, 11 paired windows each): the country +0.09 ms
+    at sunset and +0.15 at golden hour, the avenue +0.02 at sunset; the coast and the strait at sunset and the street at golden hour within their
+    noise (medians +0.05, +0.01, −0.28); the phone profile +0.04 (the coast at sunset, the country at golden hour); a switch nothing reads +0.02.
+  - Drives, interleaved live / staging (L S S L L S, 20 s): the desktop profile, the country at sunset 5.07 / 4.98 / 5.04 → 5.05 / 5.03 / 5.04 ms,
+    the coast at sunset 5.51 (a slow run) / 4.17 / 4.15 → 4.15 / 4.31 / 4.20, the avenue at sunset 5.00 / 4.99 / 5.03 → 5.04 / 5.06 / 5.03, the
+    street at golden hour 3.83 / 3.74 / 3.70 → 3.76 / 3.73 / 3.70; the phone profile, the coast at sunset 5.07 / 4.19 / 4.20 → 5.00 / 4.21 / 4.20,
+    the country at golden hour 4.45 / 4.51 / 4.46 → 4.45 / 4.48 / 4.47.
+  - The halo's three small patches draw only in the evening (0.07–0.10 ms together per draw timer, before they were trimmed to the size their
+    glow needs); one more program at load; no new textures or assets; the band's ridge, the sun's bearing and its tones a few hundred
+    arithmetic operations a frame on the CPU.
+- Left over:
+  - the clouds keep no clear gap round the sun as the step words it (lifting the clouds over it moved whole towers over the blue the paintings keep;
+    turning the ring can't clear the horizon: the towers' feet span 36–49°): its disc is drawn over any cloud instead;
+  - the avenue's wet-road streak is the mirror of the sun, narrower and paler than its repaint's broad orange streak (a gain on its mirror at dusk,
+    in the ground shader, next);
+  - the avenue's golden fill also brightens its sunlit right pavement (a fill by side needs the ground shader);
+  - the coast's and Paşabağ's suns sit 3–6° higher than painted (on their bands' ridges; the repaints' at the horizon);
+  - a glare round the disc (drawn 1.8× its tone, the bloom spreads it) looked closer (sun boxes 20.6) but cost 0.5 ms a frame on the desktop
+    machine at sunset (the bloom's mips no longer empty); left out;
+  - dawn keeps the old sun (no dawn repaint); the street's and the avenue's road at dawn take 40% of the new golden keys (todKeys' dawn key);
+  - the mountain and the snow country (no repaints) take the light's bearing on their ridges, unjudged against a painting.
+
 ## 2026-10-30 · 20:18 — The shopping street, second pass: painted boards, the painting's magazine racks and そば shop, homes behind the upper windows, calmer night shops
 - **Painted sign boards in place of the plain ones:** every shophouse's board is now a glossy enamel box sign as the city painting paints its navy
   洋品店 board (a bevelled rim catching the light, a soft gradient across its face, its sides in its own colour in shade), in the painting's

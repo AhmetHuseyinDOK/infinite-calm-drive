@@ -27,7 +27,7 @@ import { makePost } from './post.js';
 import { makeAudio } from './audio.js';
 import { makeParticles } from './particles.js';
 import { clamp, lerp, sstep, setSeed, hash2 } from './util.js';
-import { loadCloudAtlas, makePaintedClouds, loadBandAtlas, makePaintedBand, updatePainted, loadFieldTexture, loadFrontAtlas, loadPieceAtlas, loadRoomAtlas, roomTexture, roomGlass, roomSheets, loadHouseAtlas, loadHousePatch, loadTrHouseAtlas, loadTownAtlas, loadChainAtlas, loadFisherAtlas, loadPeopleAtlas, loadDolmus, loadTrain, loadCar, loadTram, loadGalFronts, loadFurniture, loadBoats, todTones, mixTones, paintSky, PAINT_TOD, BAND_R, BT_DAY, BT_GOLD, BT_SUNSET, BT_NIGHT } from './painted.js';
+import { loadCloudAtlas, makePaintedClouds, loadBandAtlas, makePaintedBand, updatePainted, loadFieldTexture, loadFrontAtlas, loadPieceAtlas, loadRoomAtlas, roomTexture, roomGlass, roomSheets, loadHouseAtlas, loadHousePatch, loadTrHouseAtlas, loadTownAtlas, loadChainAtlas, loadFisherAtlas, loadPeopleAtlas, loadDolmus, loadTrain, loadCar, loadTram, loadGalFronts, loadFurniture, loadBoats, todTones, mixTones, paintSky, PAINT_TOD, BAND_R, BT_DAY, BT_GOLD, BT_SUNSET, BT_NIGHT, makeSunHalo } from './painted.js';
 
 const QS = new URLSearchParams(location.search);
 // inside an X player card (or any iframe): lighter quality, compact UI, tap-only start
@@ -338,7 +338,7 @@ async function main() {
   U.uReflTex.value = post.refl.rt.texture;
   // the cumulus (painted or procedural) and the painted horizon: made once the road is built and the light prepared
   // (below), so their downloads overlap that work
-  let pclouds = null, clouds = null, band = null, bandTr = null, balloons = null, bandNear = -1, realSky = null; // (bandNear: step 28, below; realSky: step 35R)
+  let pclouds = null, clouds = null, band = null, bandTr = null, balloons = null, bandNear = -1, realSky = null, sunHalo = null; // (bandNear: step 28, below; realSky: step 35R; sunHalo: step 42)
   const hz = new THREE.Vector3(), camFlat = new THREE.Vector3(), REFL = QS.get('refl') || 'auto';
   const BACKLIT_K = QS.has('backlit') ? parseFloat(QS.get('backlit')) : 1; // (test hook)
   // the cherry blossom's shade tint (materials.js makeGhibliLeaf): a bright rose-magenta on a bright day (the shaded
@@ -454,7 +454,12 @@ async function main() {
   const ID3 = [1, 1, 1], RW1 = { r: ID3, w: ID3, n: ID3, f: ID3 }, HS0 = { f: [0, 0, 0] };
   const RWS = { city: { r: [3.4, 4.2, 2.0], w: [1.7, 1.9, 1.24], n: ID3, f: ID3 }, sakura: { r: [1.3, 2.7, 1.8], w: [1.0, 1.45, 1.1], n: ID3, f: ID3 },
     coast: { r: [1.03, 1.5, 1.13], w: [0.8, 1.2, 1.2], n: ID3, f: ID3 } /* (w: its wall's top too) */, country: { r: [1.34, 1.63, 1.25], w: ID3, n: [0.7, 0.4, 0.6], f: [0.7, 0.4, 0.6] } };
-  const RWZ = { city: todKeys(RW1, RWS.city, RW1, RW1), sakura: todKeys(RW1, RWS.sakura, RW1, RW1), coast: todKeys(RW1, RWS.coast, RW1, RW1), country: todKeys(RW1, RWS.country, RW1, RW1) };
+  // (step 42) …and at golden hour: the shopping street's asphalt its repaint's neutral blue-grey ((41, 45, 66), its shade (49, 47, 65)), where it
+  // stood a saturated navy ((20, 25, 67)); the avenue's left pavement and near road warm, as its repaint lights them (they lay in the trees' blue
+  // shade, (74, 75, 101) against (142, 107, 84)): its sunlit right pavement takes the same and comes out a little bright (fitted in-page,
+  // ~/cdtest/s42: the street's road sunlit 18.2 → 1.4, shade 22.1 → 5.7; the avenue's left pavement 37.2 → 8, near road 17.4 → 11, right 4.7 → 20)
+  const RWG = { city: { r: [1.8, 1.7, 1.15], w: ID3, n: ID3, f: ID3 }, sakura: { r: [1.6, 1.35, 1.05], w: [2.2, 1.6, 0.92], n: ID3, f: ID3 } };
+  const RWZ = { city: todKeys(RW1, RWS.city, RW1, RWG.city), sakura: todKeys(RW1, RWS.sakura, RW1, RWG.sakura), coast: todKeys(RW1, RWS.coast, RW1, RW1), country: todKeys(RW1, RWS.country, RW1, RW1) };
   const HSZ = { coast: todKeys(HS0, { f: [0.26, 0.32, 0.22] }, HS0, HS0), sakura: todKeys(HS0, { f: [0.42, 0.6, 0.6] }, HS0, HS0) };
   // (…and the city's haze towards the low sun, a factor on its glow (the frame loop's aerial perspective): its repaint at sunset ends its
   // street in a bright orange glow round the sun, where step 29's lower sun left ours a dim salmon haze)
@@ -531,6 +536,34 @@ async function main() {
   // coast and the strait, 16° right of Uçhisar's road, 5° left of Paşabağ's; blended by the zones' weights and turned at most
   // MOON_RATE a second (a zone's hand-over turns it slowly)
   const MOON_B = { city: 0, sakura: 0, coast: 14, country: 0, mountain: 0, snow: 0, bosphorus: 16, galata: 16, town: 0, uchisar: -16, pasabag: 5 }, MOON_RATE = 1 * Math.PI / 180;
+  // (step 42) the evening sun as painted (ref/tod/*_golden.png, *_sunset.png), under a clear sky: by zone, its bearing from the road's own mean
+  // heading at golden hour and at sunset (degrees, + left; null: the light's, sky.js sunBearing with the town's or Cappadocia's turn), where
+  // each repaint's glow and disc stand: at sunset straight ahead at the end of the shopping street, the avenue and the country road, ~20° left
+  // over the bay (its road at the audit place looks 6° right of its mean heading: 14° from that), ~14° left over the strait, ~21° right of
+  // Uçhisar's road, ~9° left of Paşabağ's; at golden hour further out, the avenue's
+  // and the country's on the right (their repaints' glow and light), the coast's and the strait's low over the water on the left. Its height:
+  // the painted horizon's ridge at that bearing (painted.js ridgeAt; EVE_EL without one), the disc a little over it at golden hour, half set
+  // at sunset, gone behind it by 0.765 (eveLift, in its radii EVE_R); turned at most EVE_RATE a second, its height following the ridge at
+  // most EVE_RR. The mountain and the snow country (no repaints) take the light's bearing on their own ridges; the Turkish town and Galata
+  // (no repaints; Galata's skyline is its plates') keep the old drawn sun. Its halo (painted.js makeSunHalo) by EVE_H
+  // (the shopping street's and the avenue's: at the end of the street, of the avenue ~3.5° up (EVE_CAP), its disc drawn over the far city's hazy
+  // towers or the far hills there, as their repaints wash them out in its glare (EVE_FRONT): on their bands' ridges it stood over them, 6–8° up,
+  // its glow on the blue over the street, and out of the avenue's wet road's mirror)
+  const EVE_SUN = { city: [0, 0], sakura: [-25, 0], coast: [26, 14], country: [-36, 0], mountain: [null, null], snow: [null, null], bosphorus: [36, 14], uchisar: [-22, -21], pasabag: [31, 9] };
+  const EVE_CAP = { city: 3.5 * Math.PI / 180, sakura: 3.5 * Math.PI / 180 }, EVE_FRONT = { city: 1, sakura: 1 };
+  const EVE_R = 1.75 * Math.PI / 180, EVE_RATE = 1 * Math.PI / 180, EVE_RR = 0.4 * Math.PI / 180, _es = new THREE.Vector3(), eveDir = new THREE.Vector3(0, 1, 0);
+  // (the sky dome's own sun, its salmon disc and glow (sky.js), set EVE_DROP under the drawn one where it is drawn: its disc behind the band, its
+  // glow low along the horizon; the halo draws the disc and the glow round it in the paintings' tones)
+  const EVE_DROP = 6 * Math.PI / 180;
+  const eveLift = t => 0.6 * (1 - sstep(0.7, 0.75, t)) - 1.6 * sstep(0.75, 0.765, t);
+  // (its disc and the glow round it (painted.js makeSunHalo; display sRGB): the sunset repaints' rings round their suns (~/cdtest/s42/tools:
+  // the disc a pale gold, the sky at its edge gold, ~6° out orange, ~12° out rose), at golden hour paler and more golden)
+  const EVE_HG = { d: [252, 242, 178], c1: [244, 212, 150], c2: [222, 168, 124], c3: [196, 146, 126] }, EVE_HS = { d: [253, 245, 162], c1: [251, 168, 96], c2: [218, 96, 84], c3: [172, 84, 92] };
+  const EVE_H = todTones([[0, EVE_HG], [0.7, EVE_HG], [0.75, EVE_HS], [1, EVE_HS]]);
+  // (the veil over the ridges near it: its cover at the disc's edge at golden hour and at sunset, its width (radians); the disc's brightness
+  // against its painted tone: 1, its tone (×1.8 for the bloom's glare round it cost the desktop machine 0.55 ms a frame: the bloom's mips were
+  // no longer near empty; the painted glow is the halo's)
+  const EVE_V = [0.15, 0.8, 7 * Math.PI / 180, 1];
   const LIGHTS_ON = QS.has('lightson') ? parseFloat(QS.get('lightson')) : -1; // (test hook)
   // the car's painter's sun (CAR_KEY): the real sun pulled round to within KEY_A of the car's heading (see the frame loop)
   const KEY_A = 1.4, carKey = new THREE.Vector3();
@@ -583,7 +616,7 @@ async function main() {
   // towards the kerb of the side the traffic keeps to (path.js trafficSide: left in Japan, right in Turkey), so through a
   // border tunnel the car moves over to the other side of the road with the traffic
   const MULT_MIN = 0.4, MULT_MAX = 5.5, SIDE0 = trafficSide(S0) < 0 ? -1 : 1;
-  const st = { s: S0, u: 1.65 * SIDE0 * (1 - zoneWeight(S0, 'galata') * clamp((zparam(S0, 'rw') - 3.4) / 1.85, 0, 1)), uHome: 1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, spray: QS.has('nospray') ? 0 : 1 /* test switch */, grass: 1 /* test switch: the meadow's blades */, pclouds: 1 /* test switch: painted clouds (0: the procedural ones, with ?clouds=both) */, band: 1 /* test switch: the painted horizon (0: the mountain rings) */, waves: 1 /* test switch: the painted sea's waves (0: its flat tones) */, shore: 1 /* test switch: the waves and foam along the sea wall (0: the open sea's colour there) */, surf: 1 /* test switch: the spray over the tetrapods */, tetra: 1 /* test switch: the tetrapods */, bark: 1 /* test switch: the bark's painted tones (0: the old colours, lit) */, trunks: 1 /* test switch: the painted trees' bark (0: hidden) */, todpaint: 1 /* test switch: the painted look at golden hour, sunset and night (0: only on a bright day, as before) */, road: 1 /* test switch: the coast's, the country's and the cherry avenue's painted asphalt (0: the old road; in the avenue's ground it also skips the tint's work) */, carkey: 1 /* test switch: the car lit by the painter's sun (0: by the real sun) */, sunroad: 1 /* test switch: the sun and the moon stand by the road's heading, as in the paintings (0: fixed in the world, as before) */, volkey: 1 /* test switch: the crowns and the tetrapods lit by the painted volumes' key (0: by the real sun) */, shsoft: 1 /* test switch: soft shadow edges near the camera (0: one tap everywhere, as before) */, shfit: 1 /* test switch: the sun's shadow box fitted to what can be seen at a low sun (0: the old square box) */, tuff: 1 /* test switch: Cappadocia's fairy chimneys in their painted tones (0: their own colours, lit) */, slope: 1 /* test switch: the coast's slope in the painting's lime with its painter's fill in the shade (0: as before, step 27) */, bandnear: 1 /* test switch: the country's painted horizon drawn just inside the world's far fade, over the next zone's far slopes (0: as before, step 28) */, banktod: 1 /* test switch: the country's verge banks' grass by the hour (0: lit only), step 28 */, evesky: 1 /* test switch: the painted evening sky (0: the old sky at golden hour and sunset), Audit 2 */, nightpaint: 1 /* test switch: the night as painted (0: as before), step 30 */, rooms: 1 /* test switch: the rooms behind the shop windows (0: their painted glass), step 31 */, tram: 1 /* test switch: the Galata Bridge's tram (0: hidden), step 33 */, fish: 1 /* test switch: the Galata Bridge's painted fishermen (0: hidden; their 3D rods and buckets stay), step 35a */, people: 1 /* test switch: the painted people, Paşabağ's tourists and Istanbul's (0: hidden), step 35f */, plates: 1 /* test switch: Galata's painted plates (0: its built look), step 35P */, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
+  const st = { s: S0, u: 1.65 * SIDE0 * (1 - zoneWeight(S0, 'galata') * clamp((zparam(S0, 'rw') - 3.4) / 1.85, 0, 1)), uHome: 1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, spray: QS.has('nospray') ? 0 : 1 /* test switch */, grass: 1 /* test switch: the meadow's blades */, pclouds: 1 /* test switch: painted clouds (0: the procedural ones, with ?clouds=both) */, band: 1 /* test switch: the painted horizon (0: the mountain rings) */, waves: 1 /* test switch: the painted sea's waves (0: its flat tones) */, shore: 1 /* test switch: the waves and foam along the sea wall (0: the open sea's colour there) */, surf: 1 /* test switch: the spray over the tetrapods */, tetra: 1 /* test switch: the tetrapods */, bark: 1 /* test switch: the bark's painted tones (0: the old colours, lit) */, trunks: 1 /* test switch: the painted trees' bark (0: hidden) */, todpaint: 1 /* test switch: the painted look at golden hour, sunset and night (0: only on a bright day, as before) */, road: 1 /* test switch: the coast's, the country's and the cherry avenue's painted asphalt (0: the old road; in the avenue's ground it also skips the tint's work) */, carkey: 1 /* test switch: the car lit by the painter's sun (0: by the real sun) */, sunroad: 1 /* test switch: the sun and the moon stand by the road's heading, as in the paintings (0: fixed in the world, as before) */, volkey: 1 /* test switch: the crowns and the tetrapods lit by the painted volumes' key (0: by the real sun) */, shsoft: 1 /* test switch: soft shadow edges near the camera (0: one tap everywhere, as before) */, shfit: 1 /* test switch: the sun's shadow box fitted to what can be seen at a low sun (0: the old square box) */, tuff: 1 /* test switch: Cappadocia's fairy chimneys in their painted tones (0: their own colours, lit) */, slope: 1 /* test switch: the coast's slope in the painting's lime with its painter's fill in the shade (0: as before, step 27) */, bandnear: 1 /* test switch: the country's painted horizon drawn just inside the world's far fade, over the next zone's far slopes (0: as before, step 28) */, banktod: 1 /* test switch: the country's verge banks' grass by the hour (0: lit only), step 28 */, evesky: 1 /* test switch: the painted evening sky (0: the old sky at golden hour and sunset), Audit 2 */, evesun: 1 /* test switch: the evening sun as painted: its bearing and height, its disc, glow and veil, its broad path on the sea, the clouds' rims by it (0: as before), step 42 */, eveW: 0, nightpaint: 1 /* test switch: the night as painted (0: as before), step 30 */, rooms: 1 /* test switch: the rooms behind the shop windows (0: their painted glass), step 31 */, tram: 1 /* test switch: the Galata Bridge's tram (0: hidden), step 33 */, fish: 1 /* test switch: the Galata Bridge's painted fishermen (0: hidden; their 3D rods and buckets stay), step 35a */, people: 1 /* test switch: the painted people, Paşabağ's tourists and Istanbul's (0: hidden), step 35f */, plates: 1 /* test switch: Galata's painted plates (0: its built look), step 35P */, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
   let started = false;
   // (the atlas's world variant and its shadow twin are made, and their programs compiled, at every start: without Turkey's
   // atlas yet, on a stand-in, its textures swapped in when they load (materials.js setWorldTex))
@@ -860,7 +893,12 @@ async function main() {
     bandTr = makeTrBand(trAtlases);
     if (band && zoneAt(st.s) === 'city') band.hero = 0.5; // (the street's far end: the far city's pale towers in haze, its second painting, not the first's green hill)
     { const ba = TR_START ? await balloonLoad : null; if (ba) { balloons = makeBalloons(ba, post, BALLOONS_N); scene.add(balloons.mesh); balloons.mesh.visible = true; } } // (seen to be compiled)
+    // (step 42) the evening sun's halo (painted.js makeSunHalo): its ids from a generator of its own (no random numbers drawn: seeded captures
+    // keep their particles, and the private generator's objects made later their ids), seen to be compiled with the sky's programs here
+    { const R0 = Math.random; let h = 0x5eed42; Math.random = () => { h = (Math.imul(h, 1664525) + 1013904223) >>> 0; return h / 4294967296; };
+      try { sunHalo = makeSunHalo(); } finally { Math.random = R0; } scene.add(...sunHalo.meshes); sunHalo.glow.mesh.visible = true; }
     renderer.setRenderTarget(post.composer.readBuffer); renderer.compile(scene, camera); renderer.setRenderTarget(null);
+    sunHalo.glow.mesh.visible = false;
     if (balloons) { renderer.initTexture(balloons.mesh.material.uniforms.map.value); balloons.mesh.visible = false; }
     if (pcAtlas) renderer.initTexture(pcAtlas.tex); if (bandAtlas) renderer.initTexture(bandAtlas.tex); if (bandAtlas && bandCo) renderer.initTexture(bandCo.tex); if (trAtlases) for (const a of trAtlases) if (a) renderer.initTexture(a.tex);
     // (step 35R) the real Galata zone's skyline: made last of all (its ids draw random numbers), its programs compiled and its sheet
@@ -1237,6 +1275,38 @@ async function main() {
   const lightAhead = (j, run, ds, out) => lightDirAt(st.tod + (run ? j * 0.001 : 0), out, TOD.head === null ? null : path.meanHeading(st.s + j * ds, SUN_W) + st.sunAdj);
   const RAILS = [-2.5335, -1.4665, 1.4665, 2.5335], AXLES = car.dims ? [...car.dims.axles] : [1.12, -1.12]; // rails of a crossing's two tracks (from sx); axles (from the car's centre; step 35e: the painted car's)
   const JOINTS = [-24.5, 24.5]; // a river bridge's expansion joints (from its centre, chunks.js placeRiver)
+  /** (step 42) the evening sun as painted (EVE_SUN), under a clear sky: the drawn sun (sky.js uSkySun) turned to its zone's bearing and set on the
+   *  painted horizon's ridge there, by the weight of the zones that have it (the rest keep the old drawn sun: blended in between), its halo,
+   *  and the painted clouds told where it stands. ev: the painted evening's weight (0: none), el: the real sun's height, w: the zones' weights */
+  function eveSun(ev, el, w, dt) {
+    let ew = 0; if (ev > 0 && st.evesun && TOD.head !== null) for (const z in EVE_SUN) ew += w[z] || 0;
+    st.eveW = ew > 0.001 ? ew : 0; // (the sea's broad path under it: sea.js)
+    if (!(ew > 0.001)) { st.eveB = st.eveR = undefined; eveDir.copy(sky.material.uniforms.uSkySun.value); if (sunHalo) sunHalo.glow.mesh.visible = sunHalo.veil.mesh.visible = sunHalo.disc.mesh.visible = false; if (pclouds) { pclouds.sun = NaN; pclouds.sunK = 0; } return; }
+    const t = TOD.t, gk = sstep(0.7, 0.75, t), lr = sunBearing(t) + st.sunAdj, D = Math.PI / 180; let b = 0;
+    for (const z in EVE_SUN) { const wz = w[z]; if (!(wz > 0)) continue; const E = EVE_SUN[z], g = E[0] === null ? lr : E[0] * D, s2 = E[1] === null ? lr : E[1] * D; b += wz * (g + (s2 - g) * gk); }
+    b /= ew; st.eveB = st.eveB === undefined ? b : st.eveB + clamp(b - st.eveB, -EVE_RATE * dt, EVE_RATE * dt);
+    // (its world bearing: from the light's at the evening's start to its own by golden hour; its height from the real sun's to the ridge's)
+    const sd = TOD.sunDir, azL = Math.atan2(sd.x, sd.z), a0 = TOD.head - st.sunAdj + st.eveB, az = azL + Math.atan2(Math.sin(a0 - azL), Math.cos(a0 - azL)) * ev;
+    const bv = band && band.mesh.visible ? band.w : 0, tv = bandTr && bandTr.mesh.visible ? bandTr.w : 0;
+    const rj = bv > 0 ? band.ridgeAt(az, EVE_R) : NaN, rt = tv > 0 ? bandTr.ridgeAt(az, EVE_R) : NaN, rd = rj !== rj ? rt : rt !== rt ? rj : (rj * bv + rt * tv) / (bv + tv);
+    if (rd === rd) st.eveR = st.eveR === undefined ? rd : st.eveR + clamp(rd - st.eveR, -EVE_RR * dt, EVE_RR * dt);
+    let er = st.eveR === undefined ? EVE_EL : st.eveR, fr = 0; // (its height on the ridge, or the zone's own: EVE_CAP; how much it is drawn in front)
+    for (const z in EVE_CAP) { const wz = w[z]; if (wz > 0) { er += (wz / ew) * (EVE_CAP[z] - er); fr += (wz / ew) * (EVE_FRONT[z] || 0); } }
+    const elD = lerp(el, er + EVE_R * eveLift(t), ev), ce = Math.cos(elD), U2 = sky.material.uniforms.uSkySun.value;
+    _es.set(ce * Math.sin(az), Math.sin(elD), ce * Math.cos(az));
+    if (ew < 0.999) eveDir.copy(U2).lerp(_es, ew).normalize(); else eveDir.copy(_es);
+    { const e3 = Math.asin(clamp(eveDir.y, -1, 1)) - EVE_DROP * ew, k3 = Math.cos(e3) / Math.max(Math.hypot(eveDir.x, eveDir.z), 1e-6); U2.set(eveDir.x * k3, Math.sin(e3), eveDir.z * k3); }
+    if (sunHalo) { // (its glow behind the band and its veil over it by the zones' weight and the evening's; its disc by the zones' weight alone, in
+      // place of the sky's from the evening's first moment; all gone as the disc sets behind the ridge)
+      const hd = ew * (1 - sstep(0.752, 0.766, t)), hk = hd * ev, H = sunHalo.glow.u, V = sunHalo.veil.u, Dk = sunHalo.disc.u, on = hd > 0.002;
+      sunHalo.glow.mesh.visible = sunHalo.veil.mesh.visible = sunHalo.disc.mesh.visible = on;
+      if (on) { const P = EVE_H.at(t), g = post.grade.uniforms; H.uSun.value.copy(eveDir); V.uSun.value.copy(eveDir); Dk.uSun.value.copy(eveDir); H.uK.value = hk; Dk.uK.value = hd;
+        V.uK.value = hk * lerp(lerp(EVE_V[0], EVE_V[1], gk), 0.9, fr); P.ug(g, 'c1', H.uC1.value); P.ug(g, 'c2', H.uC2.value); P.ug(g, 'c3', H.uC3.value);
+        V.uC1.value.copy(H.uC1.value); V.uC2.value.copy(H.uC2.value); V.uC3.value.copy(H.uC3.value); V.uA.value.y = 1 / EVE_V[2];
+        P.ug(g, 'd', Dk.uCd.value); Dk.uC1.value.copy(H.uC1.value); Dk.uC2.value.copy(H.uC1.value); Dk.uC3.value.copy(H.uC1.value); Dk.uDk.value.y = EVE_V[3];
+        V.uD.value = 0.92 * (band ? BAND_R * band.mesh.scale.x : 2300); Dk.uD.value = lerp(4000, V.uD.value, fr); } } // (the veil inside the band's ring, wherever it is drawn)
+    if (pclouds) { pclouds.sun = Math.atan2(eveDir.x, eveDir.z); pclouds.sunK = ew * ev; }
+  }
   function frame(now) {
     requestAnimationFrame(frame);
     const ft0 = performance.now();
@@ -1585,8 +1655,9 @@ async function main() {
         su.uEveG.value = P.rgb('g')[0] * (1 + w.city * CITY_GLOW.at(TOD.t).rgb('g')[1]); // (step 37: the city's street's end at sunset)
         const el = Math.asin(clamp(sd.y, -1, 1)), el2 = lerp(el, Math.min(el, EVE_EL), ev), k = Math.cos(el2) / Math.max(Math.hypot(sd.x, sd.z), 1e-6);
         su.uSkySun.value.set(sd.x * k, Math.sin(el2), sd.z * k);
+        eveSun(ev, el, w, dt); // (step 42)
       } else {
-        su.uSkySun.value.copy(TOD.sunDir);
+        su.uSkySun.value.copy(TOD.sunDir); eveSun(0, 0, w, dt);
         if (NP > 0) { const P = NSKY.at(TOD.t), g = post.grade.uniforms; P.ug(g, 'z', su.uEveZ.value); P.ug(g, 'm', su.uEveM.value); P.ug(g, 'h', su.uEveH.value); P.ug(g, 't', su.uEveT.value);
           U.uSkyHor.value.lerp(su.uEveM.value, NP); U.uSkyZen.value.lerp(su.uEveZ.value, NP); } // (…and what the wet road and the car's paint mirror: the painted night sky)
       }
@@ -1651,7 +1722,7 @@ async function main() {
     // the coast's row: the bay's end), eased in and out over a few seconds
     if (band) { const kc = sea.mesh.visible || st.bandnear === 0 ? 0 : w.country; bandNear = bandNear < 0 ? kc : bandNear + (kc - bandNear) * Math.min(1, dt * 0.7);
       band.mesh.scale.setScalar(1 - (1 - BAND_NEAR / BAND_R) * bandNear); }
-    PAINT_TOD.on = st.todpaint; sea.u.uWaves.value = st.waves; sea.u.uShoreW.value = st.shore; M.surf.visible = st.surf > 0; M.tetra.visible = st.tetra > 0; M.bark.visible = st.trunks > 0; sea.update(camera.position, t, fogD * 0.8, sstep(0.0, 0.35, seaW), post.grade.uniforms, path, st.s, regionWeight(st.s, 'tr'), Math.max(w.galata, zoneWeight(st.s + 150, 'galata')), sky.material.uniforms.uSkySun.value); // (and the shore's foam and surf; the strait's tones in Turkey, the Golden Horn's by the Galata Bridge; the sun's path under the sun as drawn, step 37)
+    PAINT_TOD.on = st.todpaint; sea.u.uWaves.value = st.waves; sea.u.uShoreW.value = st.shore; M.surf.visible = st.surf > 0; M.tetra.visible = st.tetra > 0; M.bark.visible = st.trunks > 0; sea.update(camera.position, t, fogD * 0.8, sstep(0.0, 0.35, seaW), post.grade.uniforms, path, st.s, regionWeight(st.s, 'tr'), Math.max(w.galata, zoneWeight(st.s + 150, 'galata')), eveDir, st.eveW); // (and the shore's foam and surf; the strait's tones in Turkey, the Golden Horn's by the Galata Bridge; the sun's path under the sun as drawn, step 37)
     if (ferry) { const sv = sea.mesh.visible ? 1 : 0; ferry.update(dt, path, st.s, world.origin, (w.bosphorus + w.galata) * sv, w.galata * sv); }
     riverMat.uniforms.uTime.value = t; riverMat.uniforms.uFogD.value = scene.fog.near; riverMat.uniforms.uNight.value = TOD.night; riverMat.uniforms.uSpecK.value = 1 - TOD.overcast * 0.85;
     U.uSunDir.value.copy(TOD.lightDir); U.uSunCol.value.copy(TOD.sunCol);
@@ -1884,7 +1955,7 @@ async function main() {
     if (started && frames > 150 && dt > 0.03) slowT += dt; else slowT = Math.max(0, slowT - dt * 0.5);
     if (slowT > 3 && !QS.has('q')) { slowT = 0; stepDown(); }
   }
-  window.__dbg = { renderer, st, scene, camera, world, TOD, KEYS, X, train, weather, U, birds, cine, post, car, sun, M, cells: atlas.cells, clouds, pclouds, band, get bandTr() { return bandTr; }, sky, mountains, shadowDir, CM, spray, grass, sea, get ferry() { return ferry; }, get tram() { return tram; }, get fishers() { return fishers; }, people, get dolmus() { return M.atlasDol || null; }, get furn() { return M.atlasF || null; }, furnTris, get boats() { return { jp: !!BOATS.jp, tr: !!BOATS.tr }; }, get trainPaint() { return M.train || null; }, get balloons() { return balloons; }, get realSky() { return realSky; }, get plates() { return plates; }, TRL, get audio() { return audio; }, uch: { TF_DAY, TF_GOLD, TF_SUNSET, TF_NIGHT, UG_DAY, UCH }, pas: { TFP_DAY, TFP_GOLD, TFP_SUNSET, TFP_NIGHT, PG_DAY, PG_GOLD, PG_SUNSET, PG_NIGHT, PAS_Z, PAS_R, pasAz }, night: { NT, NTZ, NSKY_N, MOON_B, CF_N } };
+  window.__dbg = { renderer, st, scene, camera, world, TOD, KEYS, X, train, weather, U, birds, cine, post, car, sun, M, cells: atlas.cells, clouds, pclouds, band, get bandTr() { return bandTr; }, sky, mountains, shadowDir, CM, spray, grass, sea, get ferry() { return ferry; }, get tram() { return tram; }, get fishers() { return fishers; }, people, get dolmus() { return M.atlasDol || null; }, get furn() { return M.atlasF || null; }, furnTris, get boats() { return { jp: !!BOATS.jp, tr: !!BOATS.tr }; }, get trainPaint() { return M.train || null; }, get balloons() { return balloons; }, get realSky() { return realSky; }, get sunHalo() { return sunHalo; }, get plates() { return plates; }, TRL, get audio() { return audio; }, uch: { TF_DAY, TF_GOLD, TF_SUNSET, TF_NIGHT, UG_DAY, UCH }, pas: { TFP_DAY, TFP_GOLD, TFP_SUNSET, TFP_NIGHT, PG_DAY, PG_GOLD, PG_SUNSET, PG_NIGHT, PAS_Z, PAS_R, pasAz }, night: { NT, NTZ, NSKY_N, MOON_B, CF_N } };
   status('');
   $start.classList.add('ready');
   if (QS.has('auto')) begin();

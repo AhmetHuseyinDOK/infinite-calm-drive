@@ -1559,6 +1559,20 @@ export function makeChainRooms(M, base, R) {
   m.customProgramCacheKey = () => 'atlasi-v1'; m.userData.rooms = R;
   return m;
 }
+/** (step 35P) Galata's fronts under the painted plates (their meshes' material in mode 1: plates.js): their built look (base: M.atlasGI, its
+ *  shops' rooms, or M.atlasG) drawn over the painted walls where the plates saw them too thinly for the view (hook: plates.js pxFrontsHook,
+ *  its weight their alpha: the facade beside the car on a narrow street), and the shops' rooms behind their glass always (the user's rule).
+ *  Transparent (blended over the plates); a program of its own, made with the plates' index (main.js) */
+export function makePlateFronts(M, base, rooms, hook) {
+  // (cloned without its userData: three's Material.copy copies userData through JSON, which would encode the rooms' textures' bitmaps (a slow
+  // frame, and a throw once they are uploaded and closed, as in Turkey's lazy load); the clone shares them)
+  const ud = base.userData; let m; base.userData = {}; try { m = base.clone(); } finally { base.userData = ud; }
+  m.userData = { ...ud }; m.map = base.map; m.emissiveMap = base.emissiveMap; m.emissiveIntensity = base.emissiveIntensity; m.transparent = true;
+  const bk = base.customProgramCacheKey(), on = base.onBeforeCompile;
+  m.onBeforeCompile = (sh, r) => { on(sh, r); hook(sh); };
+  m.customProgramCacheKey = () => bk + (rooms ? '-pxfronts-v1' : '-pxfronts0-v1');
+  return m;
+}
 function roomsAtlas(sh, R) {
   Object.assign(sh.uniforms, R);
   sh.vertexShader = sh.vertexShader

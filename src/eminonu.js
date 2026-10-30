@@ -233,9 +233,14 @@ export function* placeEminonu(world, G, s0, s1, road, rwAt, ox, oz, path) {
   const loc = (E, N) => { galWorld(zs, E, N, _q); return [_q[0] - ox, _q[1] - oz]; };
   G.emin.setM(IDENT); G.color.setM(IDENT);
   const at = (l) => l >= l0 && l < l1 && world.galOn(zs + l);
-  if (at(KASRI.l)) { const yg = road(zs + KASRI.l); G.emin.aoY0 = yg; kasri(G, KASRI.p.map(([E, N]) => loc(E, N)), yg); G.emin.aoY0 = NaN; yield; }
-  if (at(RAMP.l)) { const yg = road(zs + RAMP.l); ramp(G, RAMP.p.map(([E, N]) => loc(E, N)), yg); yield; }
-  if (at(GWALL.l)) { const yg = road(zs + GWALL.l); gardenWall(G, GWALL.p.map(([E, N]) => loc(E, N)), yg); yield; }
+  // (step 35P: under the painted plates the pavilion, its ramp and the garden's wall are part of their proxy: its own GBs (chunks.js G.prx))
+  const X = G.prx, e0 = G.emin, c0 = G.color, px = on => { if (!X) return; G.emin = on ? X.e : e0; G.color = on ? X.w : c0; G.emin.setM(IDENT); G.color.setM(IDENT); };
+  px(true);
+  try {
+    if (at(KASRI.l)) { const yg = road(zs + KASRI.l); G.emin.aoY0 = yg; kasri(G, KASRI.p.map(([E, N]) => loc(E, N)), yg); G.emin.aoY0 = NaN; yield; }
+    if (at(RAMP.l)) { const yg = road(zs + RAMP.l); ramp(G, RAMP.p.map(([E, N]) => loc(E, N)), yg); yield; }
+    if (at(GWALL.l)) { const yg = road(zs + GWALL.l); gardenWall(G, GWALL.p.map(([E, N]) => loc(E, N)), yg); yield; }
+  } finally { px(false); }
   if (at(NIMET.l)) {
     // (facing the square: towards the road, square to it there)
     const s = zs + NIMET.l, f = path.at(s, {}), p = loc(NIMET.E, NIMET.N), yg = road(s) + 0.15;

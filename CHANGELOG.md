@@ -2,6 +2,146 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-30 · 09:26 — Galata as painted plates: every view along the route one anime painting, on a rough model of the real place
+
+- **Galata's buildings, near and far, are painted now: one painting per view, not boxes and stickers** (the user, on Galata-3: "maybe our
+  technique is wrong … lets try your way"). The route runs from Karaköy's Kemeraltı Caddesi over the Galata Bridge to Eminönü and up Reşadiye
+  Caddesi towards Sirkeci. 44 views along it are each painted as one anime background in the references' style: warm cream and ochre stone,
+  crisp shadows, painted windows, awnings, plants and signs without text.
+  - Each painting is projected back onto a rough model of the real place:
+    - Karaköy's and Eminönü's OpenStreetMap blocks, Yeni Cami and the Sultan's pavilion;
+    - the bridge's two control towers, with glazing, blue panels, a blank sign and the roof vault;
+    - the T1's shelters;
+    - the old city's ~6,200 buildings on the real ground across the water, and the far shores.
+  - The two paintings round the car paint the model together and hand over smoothly as it drives. Each paints only what its own camera saw,
+    so buildings keep their places and their parallax.
+  - Only the near things stay true 3D: the road, the tram's rails, wires and masts, railings, lamps, trees, the tram, people, boats, the sea,
+    the sky and its clouds, and the car. The shops' windows keep their 3D rooms behind the glass.
+  - The far city recedes into the same haze as the landmark cards over it (and loses a third of its colour with distance). No card floats
+    (checked every 25 m).
+  - Phones held upright get their own taller paintings, which reach the near facades' tops; landscape screens get theirs.
+  - By the hour, the paintings are relit as the cards are. At night, the night paintings fade in: the same views painted at night, windows
+    lit.
+  - Without the plates' index, Galata is exactly as before. A start far from Galata loads none of them until the drive comes within 3.2 km.
+- **No smeared facade beside the car** (the coordinator's review: on Kemeraltı the near right-hand facade was streaked, its top a pale
+  blank). There, the plates in use see the facade only edge-on or from far behind, so their texels are stretched several times over in
+  the view. Wherever the view would magnify the plates' texels more than 2–4 times (the facade beside the car on a narrow street; anything
+  hidden from both plates or outside their frames), the surface fades smoothly to its built look:
+  - Galata's crisp painted fronts, drawn over the painting with that weight;
+  - the walls' and the awnings', plants' and signs' own colours under the hour's light;
+  - the shops' 3D rooms behind their glass, always.
+  - Elsewhere the painting is untouched. The weight follows the plates' own blend, so a hand-over doesn't pop it: a seeded drive over
+    Kemeraltı changes from frame to frame exactly as before (mean 21.2 against 21.3, no spikes).
+- **The T1 shelters' glass is glass again**, in its built look, not a painted opaque wall with plants that glowed green at night.
+- **Smooth while it streams**:
+  - A painting is sent to the GPU a quarter at a time, one quarter a frame. On the shared box's phone profile at 4× CPU throttle, a whole
+    one took 24 ms of a frame and a quarter takes 1.3 ms; on the desktop machine a quarter takes 0.6 ms.
+  - Each frame does at most one of these heavy steps: a quarter of a painting, or one painting's depth map.
+  - The far city comes in parts of 1,000 buildings. Phones load it after the start, and Turkey's lazy load brings it in too. Each part is
+    built in a frame of its own, then sent up in another. Before, it all landed in one frame: 32–37 ms on the desktop machine.
+- How:
+  - `src/plates.js` (new, after the bake-off prototype):
+    - `loadPlates`: the index, checked whole.
+    - `loadMass` and `massPart`: the old city's data from GALATA-3, unused until now.
+    - The plate material: two plates' projections, each with its own depth test; frontality weights; the night set; the hour's relight and
+      haze. The far ring is a backstop.
+    - The depth material.
+    - `makePlates`:
+      - 2 plates active and 2 fetched ahead; the rest are let go.
+      - Each plate's depth map is drawn once its chunks are in, and again only if new chunks arrive within what it paints.
+      - Banded uploads.
+      - The far city in parts.
+      - Its programs are compiled at load or in Turkey's lazy load.
+      - The tools' layout, masks and poses.
+  - `chunks.js`:
+    - With the index in, Galata's chunks build their buildings into GBs of their own (`G.prx`): walls wound out, domes and Yeni Cami,
+      fronts, shops' glass, Eminönü's pavilion, the towers and shelters.
+    - Plus the layout's extras: awnings, potted plants, blade signs and cornices. The storeys down to the ground on every seen wall are
+      built only for the painter's layout, never in a drive.
+    - Also new: `galExposed`, and on `World`: `pxHook`, `plateVer`, `pxIn`, `pxSince`.
+  - `props.js`: `galShopProps`, `galLow`, `galTowerX`, `galFrontCornice`; `galFront`'s shop row now goes into `G.galfS`.
+  - `eminonu.js`: its pavilion, ramp and wall go into the proxy.
+  - `materials.js`: `makePlateFronts`, Galata's fronts over the plates (their built look with the fade's weight, the shops' rooms always). It
+    is cloned without its userData, because three copies userData through JSON, which encoded the rooms' bitmaps.
+  - `plates.js` again: the fade (`pxSeen`, `pxFadeAt`, `pxFrontsHook`; the walls' and extras' plate material with their colours); the
+    fronts drawn over the plates only within 70 m of the eye; the shelters' glass (`G.prx.sg`) drawn as built and in the depth maps.
+  - `props.js` again: `galShelter`'s glass into `G.shGlass` (under the plates).
+  - `main.js`:
+    - The index, the far city and the first two plates come with Turkey's assets at a start in or near Galata (`PL_START`), before the
+      title; otherwise `platesLazy` or `trLazy` bring them.
+    - `plates.update` runs each frame before the frame is drawn.
+    - Test switch: `st.plates`.
+  - The pipeline (`~/cdtest/s35p`):
+    - `tools/layout.mjs`: the layouts, masks and poses.
+    - FLUX.2 [klein] 4B on the desktop machine, used as an instruction editor on the layout (`scripts/paint.py`, `mkjobs.py`): prompt "s3"
+      plus a clause per place, seed 11, 4 steps.
+    - The streets are chained: each painting's input is the previous plate projected into the next view (`chainrun.sh`, `tools/chain.mjs`,
+      `chainin.py`).
+    - Portraits are painted from their landscape plate (`prun.sh`); nights by `night.sh`.
+    - `pack.py`: a colour lock on lead and grey stone, the sky cut, the checks, WebP q64.
+    - `index.py`.
+- Assets (`assets/real/galata/plates1/`):
+  - `plates1.json` (22 KB): the 44 stops' poses and every file's bytes.
+  - 352 WebP: landscape and portrait × day and night × hi (1280×720; portrait 720×1280) and lo (960×540; portrait 540×960), 9.99 MB in
+    all.
+  - `CREDITS5.md`: FLUX.2 [klein] 4B and its VAE, Apache-2.0; map data © OpenStreetMap contributors.
+- Bytes a drive fetches through the zone:
+  - desktop (landscape hi): 2.09 MB by day, +1.49 MB at night;
+  - phone held upright (portrait lo): 1.13 MB by day, +0.53 MB at night;
+  - a start by Galata: index + 2 plates, 181 KB on a desktop, 134 KB on a phone;
+  - the far city: 210 KB on desktops, 130 KB on phones.
+- Code: +44.4 KB minified, +17.0 KB gzipped.
+- Checks:
+  - Seeded captures:
+    - Every other zone's start is identical to live: the city, sakura, coast, country, mountain, snow, the Bosphorus, the town, Uçhisar
+      and Paşabağ.
+    - Galata without the index is identical to live at s 150, 600, 1000 and 1200 at noon, and at 1000 at night.
+    - Galata painted, before and after the streaming changes: the same frames (only the gulls move).
+    - After the edge-on fade: the city and sakura starts, and Galata without the index (s 150, 300, 600 and 1200 at noon, 300 and 1000
+      at night), identical to live again.
+  - Shader errors: 0 in all 11 zones, at Galata s 1150 and 300, and on the phone tier at noon and night.
+  - Console errors: none at q=low, mid and high.
+  - Embed: starts on tap.
+  - Programs:
+    - a Galata start: 89 on desktops, 88 on phones (live 83 / 82). The +6 are the plate material, the far ring's, the walls' and extras'
+      (with their colours), the plates' depth material, a shadow-depth variant, and Galata's fronts over the plates;
+    - Turkey's lazy load from a Japanese start: 63 → 87 on desktops, 62 → 86 on phones (live 63 → 82, 62 → 81).
+    - Nothing compiles mid-drive: along the route, at sunset, at night and in rain (progwatch and the route's own check), in Turkey's lazy
+      load, or in the plates' own lazy load.
+  - cardcheck: PASS (61 places, every 25 m).
+  - The whole route's seeded drive (s 100 → 1816, 80 s at 24 fps):
+    - no frame-change spikes;
+    - mean frame-to-frame change 16.6 (live 15.2), and in the buildings' band 23.5 (live 20.1);
+    - 37 hand-overs, 43 depth maps and 42 plate fetches, no failures.
+  - Per plate (the painting against its layout):
+    - outlines lost: median 0.083 landscape and 0.058 portrait, against the layout's own floor of 0.21;
+    - median colour drift: 16.
+- Cost (desktop machine, GTX 1660; live → staging, interleaved L S S L L S). These final timings ran after another session's C++ build had
+  stopped: load 0.3–2.8 on 6 cores, logged per batch. The earlier ones, taken under that build at load 4–5, are superseded.
+  - Whole frame over 40 s drives over the bridge: desktop 3.26 / 2.94 / 2.96 → 3.04 / 2.89 / 2.92 ms, alike; phone tier 3.62 / 3.50 / 3.59
+    → 3.67 / 3.81 / 3.77 ms (+0.18 ms, +5 %). Kemeraltı, with the edge-on fade (where it works hardest): desktop 2.94 / 2.95 / 2.90 →
+    2.97 / 2.93 / 3.02 ms, alike; phone tier 3.64 / 3.67 / 3.62 → 3.92 / 3.76 / 3.79 ms (+0.18 ms, +5 %, as before the fade).
+  - Galata's world build (genbench, ms per 20 chunks, medians): desktop 97.3 / 101.4 / 95.4 → 105.3 / 115.1 / 113.1 (+13 %); phone 97.3 /
+    93.9 / 90.3 → 104.9 / 108.4 / 103.5 (+13 %). The layout's own storeys aren't built in a drive any more; before that it was +20 %.
+  - Flat out at 4× throttle on a phone (fastphone, 30 s):
+    - world-build spikes: 0 → 0;
+    - frames over 12 ms: 1 / 6 / 2 → 3 / 4 / 6;
+    - frame pacing: median 16.6 ms in both; p95 20.0 → 20.2 ms; worst 26.6 → 26.4 ms; none over 50 ms in either.
+    - The plates' own work: at most 4.0 ms in a frame (p95 0.7). A quarter of a painting takes 0.6 ms (worst 1.4); a depth map 0.6 ms
+      (worst 2.7).
+  - Turkey's lazy load from a Japanese start, and the plates' own lazy load from the mountain pass: no frame over 20 ms on the way into
+    Galata (before: one of 32–37 ms, the far city sent up in one go). Frames over 12 ms in the lazy load: desktop 1 → 3, phone 2 → 0.
+  - First visit on a 3 Mbps phone: ready 12003 / 11968 / 11984 → 12136 / 12117 / 12186 ms (+0.16 s; +105 KB: the index and two plates).
+- Left over:
+  - The facade beside the car on a narrow street now shows its built look (crisp, the fronts' grey or cream stone), not the painting's
+    warmer cream: a change of style as it comes alongside, smooth but visible.
+  - The shops' 3D rooms streak when seen almost edge-on (their interior mapping's side walls), as in the built look.
+  - Some generic fronts don't match the real building, e.g. the dark glass office at s 1200.
+  - The palette is warmer than the real greyer stone.
+  - Overhead wires: only the T1's catenary (its 3D); central Istanbul's cables run underground.
+  - The zone hands over to the town before Sirkeci (as before).
+  - The portrait night plates were painted at 576×1024.
+
 ## 2026-10-30 · 00:04 — Boats and the city ferry as anime film props: the coast's fishing boats, Istanbul's kayıks and motor boats, a 3D vapur
 - **The coast's fishing boats are painted boats now, not boxes** (the user: "i want high quality but with anime style"; the brief's rule: no
   box boats). A Japanese coastal fishing boat, 7.6 m long, as `ref/coast.png` and the brief's reference paint it:

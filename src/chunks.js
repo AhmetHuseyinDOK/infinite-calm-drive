@@ -8,6 +8,7 @@ import { placeEminonu, eminSkip, eminFree } from './eminonu.js'; // (step 35R-ga
 import { TOWN_SHOPS } from './textures.js';
 import { xingPosts } from './crossing.js';
 import { GB } from './geom.js';
+import { PLATES, PX_LAYER } from './plates.js'; // (step 35P: Galata's painted plates: its proxy split from the built look)
 import * as P from './props.js';
 const P_ = P; // (the props, where a builder's locals use P)
 import { rng, hash2, clamp, sstep } from './util.js';
@@ -40,6 +41,28 @@ const nearPoly = (E, N, P, m) => { let inn = false, d2 = Infinity; for (let i = 
   const ex = x2 - x1, ey = y2 - y1, t = Math.max(0, Math.min(1, ((E - x1) * ex + (N - y1) * ey) / (ex * ex + ey * ey || 1))), qx = x1 + ex * t - E, qy = y1 + ey * t - N; d2 = Math.min(d2, qx * qx + qy * qy); }
   return inn || d2 < m * m; };
 const mid = P => { let x = 0, y = 0; for (const p of P) { x += p[0] / P.length; y += p[1] / P.length; } return [x, y]; };
+/** (step 35P, after GALATA-3's D3) whether a near block's wall i can be seen: anywhere along it (five points, 1.2 m out) in no other near block's
+ *  outline, or over a neighbour lower by a storey or more. Party walls hidden by their neighbours take no painted storeys in the plates' layout.
+ *  Once per block, in the zone's frame */
+const GAL_EXP = new Map();
+function galExposed(b, i) {
+  let x = GAL_EXP.get(b);
+  if (!x) {
+    const P = b.p, n = P.length; x = new Uint8Array(n);
+    for (let k = 0; k < n; k++) {
+      const a = P[k], e = P[(k + 1) % n], dE = e[0] - a[0], dN = e[1] - a[1], L = Math.hypot(dE, dN) || 1;
+      let open = 0;
+      for (let t = 0.1; t < 1 && !open; t += 0.2) {
+        const E = a[0] + dE * t + (dN / L) * 1.2, N = a[1] + dN * t - (dE / L) * 1.2; let hit = null;
+        for (const q of GR.blk) if (q !== b && Math.abs(q.l - b.l) < 120 && nearPoly(E, N, q.p, 0)) { hit = q; break; }
+        if (!hit || hit.h < b.h - 3) open = 1;
+      }
+      x[k] = open;
+    }
+    GAL_EXP.set(b, x);
+  }
+  return x[i] === 1;
+}
 const GAL_DOL = [[588, 15, 0], [598.5, 20.4, 1], [570, 36.9, 0]]; // (Karaköy's car park: where its dolmuşes stand, l, u, livery)
 /** (step 35h) the boats moored at Karaköy's fish-market quay, along the real shore (the zone's water raster: each one's footprint seated in the
  *  water 0.3 m clear of the quay, ~/cdtest/s35h/tools/moor.mjs): six along the fish market's waterfront, two at the car park's quay. [l, u, its
@@ -211,6 +234,7 @@ export class World {
     this.group = new THREE.Group(); scene.add(this.group);
     this.chunks = new Map(); this.origin = { x: 0, z: 0 }; this.reveal = [];
     this.ahead = 760; this.behind = 40; this.trReady = true; this.eminWait = false; // (eminWait: step 35R-galata-2, main.js galLazy)
+    this.pxHook = null; this.plateVer = 0; this.pxRing = new Float64Array(32); // (step 35P: the plates' hook for a chunk's proxy meshes as it is built (plates.js), a count of the chunks with them revealed, and the last 16 of them: [version, s0])
     this.fishVer = 0; // (step 35a: counts the chunks with painted fishermen (step 35f: or people) coming and going: fishers.js gathers them anew)
     this._dolC = null; this._dolF = ch => { // (step 35b: a chunk's dolmuş, its near mesh within DOL_NEAR of the camera, else its far one)
       const m = ch.dol; if (!m) return;
@@ -229,7 +253,7 @@ export class World {
     const c0 = Math.floor((s - this.behind) / CH), c1 = Math.floor((s + this.ahead) / CH);
     for (const [k, ch] of this.chunks) if (k < c0 - 1 || k > c1 + 1) { this.dispose(ch); this.chunks.delete(k); }
     if (this.job && (this.job.c < c0 - 1 || this.job.c > c1 + 1)) this.job = null;
-    { const ch = this.reveal[0]; if (ch) { const m = ch.pending.shift(); if (m) ch.group.add(m); if (!ch.pending.length) this.reveal.shift(); } }
+    { const ch = this.reveal[0]; if (ch) { const m = ch.pending.shift(); if (m) ch.group.add(m); if (!ch.pending.length) { this.reveal.shift(); if (ch.px) this.pxIn(ch); } } }
     const t0 = performance.now();
     for (;;) {
       if (!this.job) {
@@ -244,6 +268,7 @@ export class World {
       const res = this.job.it.next();
       if (res.done) { // stage the meshes: they are revealed one per frame so their GPU uploads don't all land at once
         const ch = res.value; ch.pending = ch.group.children.slice(); ch.group.clear();
+        if (ch.px && this.pxHook) this.pxHook(ch); // (step 35P: its proxy as the plates have it now)
         this.chunks.set(this.job.c, ch); this.group.add(ch.group); this.reveal.push(ch); this.job = null; if (ch.fishers || ch.people) this.fishVer++;
       }
       if (performance.now() - t0 > budgetMs) return 1;
@@ -275,7 +300,11 @@ export class World {
     });
   }
   /** reveal everything staged right away (used while the title screen is up) */
-  flush() { for (const ch of this.reveal) { for (const m of ch.pending) ch.group.add(m); ch.pending.length = 0; } this.reveal.length = 0; }
+  flush() { for (const ch of this.reveal) { for (const m of ch.pending) ch.group.add(m); ch.pending.length = 0; if (ch.px) this.pxIn(ch); } this.reveal.length = 0; }
+  /** (step 35P) a chunk with Galata's proxy revealed: its version and its place, for the plates' depth maps (plates.js) */
+  pxIn(ch) { this.plateVer++; const k = (this.plateVer % 16) * 2; this.pxRing[k] = this.plateVer; this.pxRing[k + 1] = ch.s0; }
+  /** whether a chunk with proxy revealed after version v lies within [s0, s1] (the last 16 such chunks; older: assumed so) */
+  pxSince(v, s0, s1) { if (this.plateVer - v > 15) return true; for (let k = 0; k < 32; k += 2) if (this.pxRing[k] > v && this.pxRing[k + 1] >= s0 - CH && this.pxRing[k + 1] <= s1) return true; return false; }
 
   *gen(c) {
     const path = this.path, s0 = c * CH, s1 = s0 + CH;
@@ -301,6 +330,14 @@ export class World {
     G.fishers = []; // (step 35a: the painted fishermen, 8 numbers each: his feet (chunk-local), his facing (x, z), his scale, the sheet, the pose: fishers.js)
     G.people = []; // (step 35f: painted people, 8 numbers each: feet (chunk-local), facing (x, z), scale, sheet, cast (0 Paşabağ's tourists, 1 Istanbul's): fishers.js)
     G.spots = []; // (step 35f: …and what they keep clear of: the squares' trees, [s, u, r] each)
+    // (step 35P) Galata's buildings under the painted plates: with the plates' index in, a Galata chunk builds its buildings into GBs of their
+    // own (the same look and materials as before: the plates' fallback and their painter's layout), each its own mesh the plates paint or hide
+    // (plates.js MODE_PX): w the walls, roofs and cornices, wi the domes and Yeni Cami's smooth parts, a the windows' atlas cells, g the fronts'
+    // storeys, gs their shops (the rooms behind the glass stay), e Eminönü's pavilion; and the layout's extras, shown only under the plates: x
+    // the shops' awnings, plants and signs, xg the storeys on the side and back walls
+    G.prx = null; G.galfS = null;
+    if (PLATES.on && (zoneW(s0).galata >= 0.25 || zoneW(s1).galata >= 0.25)) G.prx = { w: new GB({ ao: true }), wi: new GB({ ao: true, idx: true }), a: new GB({ uv: true, ao: true, lit: true }),
+      g: new GB({ uv: true, ao: true, lit: true }), gs: new GB({ uv: true, ao: true, lit: true }), e: new GB({ uv: true, ao: true, lit: true }), x: new GB({ ao: true }), xg: new GB({ uv: true, ao: true, lit: true }), sg: new GB({ ao: true }) };
     const ground = new GroundB(), shore = { rows: [], puffs: [] }, river = [];
     G.lamps = []; // lights that can light the car: chunk-local x, y, z, power … (props.js lampAt)
     const f = {}, f2 = {};
@@ -498,7 +535,22 @@ export class World {
     const zset = new Set();
     for (const sq of [s0, s0 + 20, s0 + 40, s1]) { const m = zoneMix(sq); zset.add(m.a); if (m.t > 0) zset.add(m.b); }
     { const b = borderNear(s0 + CH / 2); if (b && b.s + 2 * T_RIDGE + CH > s0 && b.s - 2 * T_RIDGE - CH < s1) { zset.clear(); zset.add(b.a); zset.add(b.b); zset.add('border'); } }
-    add(ground.build(), groundMaterialFor([...zset]), false, true); yield;
+    { const gm = add(ground.build(), groundMaterialFor([...zset]), false, true); if (gm) gm.userData.ground = true; } yield; // (step 35P: the ground, for the plates' layout)
+    // (step 35P) Galata's proxy (G.prx: placeGalBlocks, placeEminonu): each GB its mesh in its built look (that look is the plates' fallback and
+    // their painter's layout; plates.js swaps their materials), the extras hidden until the plates paint; the painted kinds on the plates' layer
+    let pxList = null;
+    if (G.prx) {
+      const X = G.prx, M = this.M; pxList = [];
+      const mk = (gb, lm, k, cast, order, dm) => { const m = lm && add(gb.build(), lm, cast, true, order); if (!m) return; m.userData.px = k; m.userData.lm = lm; m.userData.dm = dm || null; if (dm) m.customDepthMaterial = dm;
+        if (k === 'w' || k === 'wi' || k === 'e' || k === 'x' || k === 'sg') m.layers.enable(PX_LAYER); if (k === 'x' || k === 'xg') m.visible = false; pxList.push(m); };
+      mk(X.w, M.color, 'w', true, 0, PROP_DEPTH); mk(X.wi, M.color, 'wi', true, 0, PROP_DEPTH);
+      // (each in the material the chunk's merged mesh would have had: the atlas's variant by all its cells' flags, the fronts' by all their bays')
+      { const W = G.atlas.world, R = G.atlas.rooms && (W ? M.atlasWI : M.atlasI); mk(X.a, R || (W ? M.atlasW : M.atlas), 'a', true, 0, W ? M.atlasWDepth : M.atlasDepth); }
+      { const gm = ((X.g.rooms || X.gs.rooms) && M.atlasGI) || M.atlasG; mk(X.g, gm, 'g', false, -1); mk(X.gs, gm, 'gs', false, -1); } mk(X.xg, M.atlasG, 'xg', false, -1);
+      mk(X.e, M.atlasEm, 'e', true, 0, M.atlasEmDepth); mk(X.x, M.color, 'x', true, 0, PROP_DEPTH); mk(X.sg, M.color, 'sg', true, 0, PROP_DEPTH); // (the shelters' glass: as built, in the plates' depth)
+      if (!pxList.length) pxList = null;
+      yield;
+    }
     { const W = G.atlas.world, R = G.atlas.rooms && (W ? this.M.atlasWI : this.M.atlasI), m = add(G.atlas.build(), R || (W ? this.M.atlasW : this.M.atlas), true, true); if (m) m.customDepthMaterial = W ? this.M.atlasWDepth : this.M.atlasDepth; } yield; // (the painted cells' outlines in the shadow pass too; the world atlas's cells in its variant; painted shop bays in the rooms' variant, step 31; the Turkish town's shop bays in the world variant's, step 34)
     if (G.fishers.length) G.color.expandFrom(G.fish); // (step 35a: the painted fishermen's rods, lines and buckets drawn with the props, a draw less a chunk)
     { const m = add(G.color.build(), this.M.color, true, true); if (m) m.customDepthMaterial = PROP_DEPTH; } yield; // (wires cast no shadow)
@@ -547,7 +599,7 @@ export class World {
     if (shore.puffs.length) add(surfGeometry(shore.puffs), this.M.surf, false, false, 2, 'small'); // (the surf over the tetrapods)
     for (const g of river) add(g, this.riverMat, false, true);
     grp.position.set(ox - this.origin.x, 0, oz - this.origin.z);
-    return { group: grp, ox, oz, s0, lamps: new Float32Array(G.lamps), chains: G.chainList.length ? G.chainList : null, fishers: G.fishers.length ? new Float32Array(G.fishers) : null, people: G.people.length ? new Float32Array(G.people) : null, dol, furn: G.furnList.length ? G.furnList : null };
+    return { group: grp, ox, oz, s0, lamps: new Float32Array(G.lamps), chains: G.chainList.length ? G.chainList : null, fishers: G.fishers.length ? new Float32Array(G.fishers) : null, people: G.people.length ? new Float32Array(G.people) : null, dol, furn: G.furnList.length ? G.furnList : null, px: pxList };
   }
 
   // poles + overhead wires (country / coast / city share the rule so wires connect across zones)
@@ -1622,7 +1674,7 @@ export class World {
       for (let l = a + 3; l <= b - 3; l += 2) { const w = -(galSect(l, rwAt(zs + l), Gs).med + rwAt(zs + l)); if (w >= 3.4) { if (r0 !== r0) r0 = l; r1 = l; wm = Math.min(wm, w); } }
       if (!(r1 - r0 > 12)) continue;
       const sm = zs + (r0 + r1) / 2;
-      P.galShelter(G, matAt(sm, -rwAt(sm) - 0.4, road(sm) + 0.15), r1 - r0, Math.min(2.6, wm - 1.2));
+      { const X = G.prx, c0 = G.color; if (X) { G.color = X.w; G.shGlass = X.sg; } P.galShelter(G, matAt(sm, -rwAt(sm) - 0.4, road(sm) + 0.15), r1 - r0, Math.min(2.6, wm - 1.2)); G.color = c0; G.shGlass = null; } // (step 35P: painted by the plates, its glass as built)
     }
     yield;
     // the T1's masts every 30 m: on the bridge between its tracks, their lamps over both carriageways; along the street on the
@@ -1652,7 +1704,9 @@ export class World {
     for (const t of TW) {
       const sm = zs + (t[0] + t[1]) / 2; if (sm < s0 || sm >= s1 || !dk(sm)) continue;
       const e = road(sm), sd = t[2] > 0 ? 1 : -1, uIn = sd > 0 ? rwAt(sm) + GAL_WALK : GAL_L, len = t[1] - t[0], dep = Math.min(14, Math.abs(t[3]) - uIn);
-      P.galTower(G, matAt(sm, sd * uIn, e), len, Math.max(8, dep), 11.5);
+      // (step 35P: under the plates the towers are part of their proxy, with their front details in the layout's extras)
+      { const X = G.prx, c0 = G.color, tm = matAt(sm, sd * uIn, e); if (X) G.color = X.w; P.galTower(G, tm, len, Math.max(8, dep), 11.5);
+        if (X) { G.color = X.x; P.galTowerX(G, tm, len, Math.max(8, dep), 11.5); G.color = c0; } }
       // (a barrier across the walkway at the span's near end, and one across the tram's reserve)
       const sb = zs + t[0] - 3.5, g = sect(sb);
       if (sb >= s0 && sb < s1) P.galBarrier(G, matAt(sb, sd > 0 ? rwAt(sb) + GAL_WALK / 2 + 0.6 : -(GAL_L - 3.1), road(sb) + 0.18, Math.PI / 2), sd > 0 ? 4.6 : 5.2);
@@ -1707,6 +1761,13 @@ export class World {
    *  with their shops and windows (props.js galFacade) */
   *placeGalBlocks(G, s0, s1, road, ox, oz) {
     if (zoneW(s0).galata < 0.25 && zoneW(s1).galata < 0.25) return;
+    // (step 35P: under the plates, into the proxy's own GBs: the same buildings, their own meshes)
+    const X = G.prx, c0 = G.color, f0 = G.fish, a0 = G.atlas, g0 = G.galf;
+    if (X) { G.color = X.w; G.fish = X.wi; G.atlas = X.a; G.galf = X.g; G.galfS = X.gs; }
+    try { yield* this.placeGalBlocks0(G, s0, s1, road, ox, oz, X); }
+    finally { if (X) { G.color = c0; G.fish = f0; G.atlas = a0; G.galf = g0; G.galfS = null; if (X.a.world) a0.world = true; if (X.a.rooms) a0.rooms = true; } } // (the chunk's atlas mesh in its variant as before)
+  }
+  *placeGalBlocks0(G, s0, s1, road, ox, oz, X) {
     const zs = s0 - galL(s0), l0 = s0 - zs, l1 = s1 - zs, B = GR.blk, q = [0, 0], c = G.color, farWin = P_.bankStep() > 1 ? 40 : 70; // (the far walls' windows: phones nearer)
     // Yeni Cami (its outline's middle and the axis from its courtyard to its prayer hall: real_galata.js yeni)
     { const Y = GR.yeni, mid = Y && Y.l; if (Y && mid >= l0 && mid < l1 && this.galOn(zs + mid)) {
@@ -1730,9 +1791,12 @@ export class World {
       let ar = 0, cx = 0, cz = 0; for (let i = 0; i < m; i++) { const [x0, z0] = P[i], [x1, z1] = P[(i + 1) % m]; ar += x0 * z1 - x1 * z0; cx += x0 / m; cz += z0 / m; }
       const out = ar > 0 ? 1 : -1; // (the walls' quads face out with the order kept, else reversed)
       c.setM(IDENT);
+      // (step 35P: the built look's walls face in (their fronts cover the near ones, and through them the far walls' insides look like walls); the
+      // plates' proxy needs them facing out, the faces its plates saw: under the plates they are wound the other way)
+      const wo = X ? -out : out;
       for (let i = 0; i < m; i++) {
         const a = P[i], e = P[(i + 1) % m];
-        if (out > 0) c.quad([a[0], y0, a[1]], [e[0], y0, e[1]], [e[0], y1, e[1]], [a[0], y1, a[1]], i % 2 ? tint : dark);
+        if (wo > 0) c.quad([a[0], y0, a[1]], [e[0], y0, e[1]], [e[0], y1, e[1]], [a[0], y1, a[1]], i % 2 ? tint : dark);
         else c.quad([e[0], y0, e[1]], [a[0], y0, a[1]], [a[0], y1, a[1]], [e[0], y1, e[1]], i % 2 ? tint : dark);
       }
       // the roof: its outline triangulated (a parapet's band round it)
@@ -1746,12 +1810,29 @@ export class World {
       // (and the other long walls their windows: the corners and the backs over the lower ones seen from the road)
       // (a church's, a mosque's, a ferry terminal's and the bazaar's walls their windows, no shops; the shops' fronts the blocks' only)
       if (ft || (b.k !== 'shed' && b.k !== 'site' && b.k !== 'tomb')) for (let i = 0; i < m; i++) {
-        const fr = (ft || b.k === 'block') && b.f && b.f.includes(i) && (farWin > 40 || b.d < 40), a = P[i], e = P[(i + 1) % m], dx = e[0] - a[0], dz = e[1] - a[1], w = Math.hypot(dx, dz); if (w < (fr ? 2.5 : 4.5) || (!fr && b.d > farWin)) continue;
+        const fr = (ft || b.k === 'block') && b.f && b.f.includes(i) && (farWin > 40 || b.d < 40), a = P[i], e = P[(i + 1) % m], dx = e[0] - a[0], dz = e[1] - a[1], w = Math.hypot(dx, dz);
+        // (step 35P: the plates' extras: a drive's (the shops' clutter, the cornice of a seen wall the built look leaves plain), or the
+        // painter's layout's (PLATES.layout: every seen wall's storeys too))
+        const built = !(w < (fr ? 2.5 : 4.5) || (!fr && b.d > farWin)), xtra = !!X && !!ft && w >= 2.0 && (fr || ((PLATES.layout || !built) && galExposed(b, i)));
+        if (!built && !xtra) continue;
         const nx = (out > 0 ? dz : -dz) / w, nz = (out > 0 ? -dx : dx) / w; // (its outward normal)
         const M = new THREE.Matrix4().makeRotationY(Math.atan2(-nx, -nz)); M.setPosition((a[0] + e[0]) / 2, y0 + 0.3 + 0.15, (a[1] + e[1]) / 2);
         // (its x along the edge: the frame's x is (cos, −sin) of the turn; a front painted left to right, either way)
-        if (ft) P_.galFront(G, M, w, ft, b.lv, fr, vt);
-        else P_.galFacade(G, M, rng(b.id * 131 + i), w, b.k === 'block' ? Math.max(2, b.lv) : Math.max(2, Math.round((b.h - 1) / 3.6)), tint, fr);
+        if (built) {
+          if (ft) P_.galFront(G, M, w, ft, b.lv, fr, vt);
+          else P_.galFacade(G, M, rng(b.id * 131 + i), w, b.k === 'block' ? Math.max(2, b.lv) : Math.max(2, Math.round((b.h - 1) / 3.6)), tint, fr);
+        }
+        // (step 35P) the plates' layout: the painter keeps what it is given and invents nothing, so every wall the road sees wears its
+        // building's storeys down to the ground (xg: a front's or a side's band under its storeys, or the whole of a wall the built look
+        // leaves plain) and the shops their awnings, plants and signs (x). xg is the layout's alone (never drawn in a drive): a drive builds
+        // of it only what stands out of the wall, the cornice (x)
+        if (xtra) {
+          const cg = G.color, gg = G.galf; G.color = X.x; G.galf = X.xg;
+          if (fr) { if (built) P_.galShopProps(G, M, w, ft, b.lv, rng(b.id * 977 + i)); }
+          else if (PLATES.layout) { if (!built) P_.galFront(G, M, w, ft, b.lv, false, vt); P_.galLow(G, M, w, ft, vt); }
+          else P_.galFrontCornice(G, M, w, ft, b.lv, vt);
+          G.color = cg; G.galf = gg;
+        }
       }
       // (Surp Krikor Lusavoriç's drum and conical dome over its roof)
       if (ft === 'K') { const f = G.fish; f.setM(IDENT); P_.galKrikorDome(f, cx, y1, cz); }

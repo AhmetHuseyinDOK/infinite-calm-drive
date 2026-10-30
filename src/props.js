@@ -1854,6 +1854,44 @@ function paintedFisher(G, c, M, drop, yaw, h, sit, s, L, el0, sw, bucket) {
  *  round-headed arch through it at the walkway's level, the control room's band of windows under its roof, a curved hood over the
  *  roof's outer half */
 const TW_PAN = C('#a7bac0'), TW_JNT = C('#869ba3'), TW_GL = C('#2d3a45'), TW_HOOD = C('#c3d1d4'), TW_IN = C('#5d6f76');
+/** (step 35P) a control tower's front details for the painted plates' layout (as the real towers, Street View s 700–765: a blue lower band of
+ *  panels under the grey cladding, the control room's glazing at its upper corners, a lattice band over the walkway's arch at each end, a blank
+ *  blue sign, the white vault over its roof): G.color is the proxy's x GB there (chunks.js), shown only under the plates. Its frame as
+ *  galTower's (x along the road from −len/2, z 0 its face to the road, d to the water, the deck at y 0) */
+const TWX_BLUE = C('#5b82ad'), TWX_BLUED = C('#456a92'), TWX_GL = C('#33475c'), TWX_FR = C('#dfe5e8'), TWX_VAULT = C('#eef1f2'), TWX_LAT = C('#8c9ca6'), TWX_SIGN = C('#2f5f9f');
+export function galTowerX(G, M, len = 15, d = 11, H = 11.5) {
+  const c = G.color; c.setM(M);
+  const hl = len / 2, e = 0.04, za = 0.6, zb = 4.6, top = 2.6 + 2.0;
+  // (its face to the road: the blue band, its joints, the glazing at both upper corners, a blank sign)
+  c.quad([hl, 0, -e], [-hl, 0, -e], [-hl, 3.4, -e], [hl, 3.4, -e], TWX_BLUE);
+  for (let x = -hl + 1.6; x < hl - 0.3; x += 1.6) c.quad([x + 0.03, 0, -e - 0.01], [x - 0.03, 0, -e - 0.01], [x - 0.03, 3.4, -e - 0.01], [x + 0.03, 3.4, -e - 0.01], TWX_BLUED);
+  c.box(-hl - 0.02, 3.4, -e - 0.06, hl + 0.02, 3.6, 0, TWX_FR);
+  for (const sx of [-1, 1]) {
+    const x0 = sx < 0 ? -hl + 0.5 : hl - 4.3, x1 = x0 + 3.8;
+    c.box(x0 - 0.12, H - 3.7, -0.1, x1 + 0.12, H - 1.3, 0, TWX_FR);
+    for (let k = 0; k < 3; k++) { const xa = x0 + k * (3.8 / 3) + 0.06, xb = xa + 3.8 / 3 - 0.12; c.quad([xb, H - 3.58, -0.12], [xa, H - 3.58, -0.12], [xa, H - 1.42, -0.12], [xb, H - 1.42, -0.12], TWX_GL); }
+  }
+  c.box(-1.2, 4.4, -0.12, 1.2, 5.3, 0, TWX_SIGN, null, { py: TWX_FR, ny: TWX_FR });
+  // (each end: the blue band beside the walkway's arch, the lattice band over it, the control room's corner window)
+  for (const sx of [-1, 1]) {
+    const x = sx * (hl + e), q = (z0, y0, z1, y1, col) => sx < 0 ? c.quad([x, y0, z0], [x, y0, z1], [x, y1, z1], [x, y1, z0], col) : c.quad([x, y0, z1], [x, y0, z0], [x, y1, z0], [x, y1, z1], col);
+    q(0, 0, za - 0.1, 3.4, TWX_BLUE); q(zb + 0.1, 0, d, 3.4, TWX_BLUE);
+    q(za - 0.3, top + 0.3, zb + 0.3, top + 0.42, TWX_FR); q(za - 0.3, top + 1.8, zb + 0.3, top + 1.92, TWX_FR);
+    for (let z = za - 0.3; z < zb + 0.3; z += 0.42) { q(z, top + 0.42, z + 0.05, top + 1.8, TWX_LAT); }
+    for (let y = top + 0.42; y < top + 1.8; y += 0.42) q(za - 0.3, y, zb + 0.3, y + 0.04, TWX_LAT);
+    q(d - 3.6, H - 3.6, d - 0.5, H - 1.4, TWX_GL);
+  }
+  // (the white vault over its roof, along it)
+  const vr = Math.min(2.2, d * 0.22), vz = d / 2, vl = hl * 0.7, N = 10;
+  for (let k = 0; k < N; k++) {
+    const t0 = (k / N) * Math.PI, t1 = ((k + 1) / N) * Math.PI, p = (x, t) => [x, H + 0.2 + vr * Math.sin(t), vz - vr * Math.cos(t)];
+    c.quad(p(vl, t0), p(-vl, t0), p(-vl, t1), p(vl, t1), TWX_VAULT);
+  }
+  for (const sx of [-1, 1]) for (let k = 0; k < N; k++) { // (its ends)
+    const t0 = (k / N) * Math.PI, t1 = ((k + 1) / N) * Math.PI, x = sx * vl, a = [x, H + 0.2, vz], b = [x, H + 0.2 + vr * Math.sin(t0), vz - vr * Math.cos(t0)], cc = [x, H + 0.2 + vr * Math.sin(t1), vz - vr * Math.cos(t1)];
+    if (sx > 0) c.quad(a, b, cc, cc, mulC(TWX_VAULT, 0.9)); else c.quad(a, cc, b, b, mulC(TWX_VAULT, 0.9));
+  }
+}
 export function galTower(G, M, len = 15, d = 11, H = 11.5) {
   const c = G.color; c.setM(M);
   const hl = len / 2, y0 = -5.2, za = 0.6, zb = 4.6, ys = 2.6, R = (zb - za) / 2, zc = (za + zb) / 2, N = 12;
@@ -1912,7 +1950,7 @@ export function galShelter(G, M, len, depth = 2.6) {
     c.box(x - 0.06, H - 0.18, -0.2, x + 0.06, H, depth + 0.2, SH_FR);
   }
   c.box(-L - 0.3, H, -0.45, L + 0.3, H + 0.14, depth + 0.35, SH_RF, null, { ny: C('#b8c2c2') });
-  c.box(-L, 0, depth - 0.04, L, 0.7, depth + 0.04, SH_BS); c.box(-L, 0.7, depth - 0.02, L, H - 0.2, depth + 0.02, SH_GL);
+  c.box(-L, 0, depth - 0.04, L, 0.7, depth + 0.04, SH_BS); { const g = G.shGlass || c; g.setM(M); g.box(-L, 0.7, depth - 0.02, L, H - 0.2, depth + 0.02, SH_GL); } // (step 35P: its glass in the built look under the plates: chunks.js G.prx.sg)
   for (let x = -L + 3; x < L - 2; x += 9) { c.box(x, 0.42, depth - 0.7, x + 2.2, 0.48, depth - 0.25, SH_BN); for (const xx of [x + 0.1, x + 2.0]) c.box(xx, 0, depth - 0.6, xx + 0.1, 0.42, depth - 0.35, SH_BN); }
   lampAt(G, M, 0, H - 0.3, depth / 2, 0.8);
 }
@@ -2357,19 +2395,82 @@ function galRow(G, M, t, w, cell, y0, lamps, vt = W1) {
  *  the ferry terminals' halls, the church's wall) and its storeys' bays over them; on its other walls only the storeys' (their ground floor
  *  the plain wall); the cornice under the roof in the painting's wall colour. vt: the building's own tint (galTint) */
 export function galFront(G, M, w, t, lv, front, vt = W1) {
-  const g = G.galf, c = G.color, T = GAL_FT[t]; g.setM(M); c.setM(M);
+  const g = G.galf, c = G.color, T = GAL_FT[t], gs = G.galfS || g; g.setM(M); c.setM(M); if (gs !== g) gs.setM(M); // (step 35P: under the plates its shops in a GB of their own: their rooms stay)
   const gh = GAL_F.m[T.g][1], nu = galNU(T, lv), H = galFrontH(t, lv);
-  if (front) galRow(G, M, g, w, T.g, 0, true, vt);
+  if (front) galRow(G, M, gs, w, T.g, 0, true, vt);
   if (T.u) for (let f = 0; f < nu; f++) galRow(G, M, g, w, T.u, gh + f * GAL_F.m[T.u][1], false, vt);
+  galCornice(c, T, w, H, vt);
+}
+/** a Galata front's cornice along its top (H): its own (step 35P: under the plates, a wall's whose storeys are the plates' alone) */
+function galCornice(c, T, w, H, vt) {
   const cor = [T.tint[0] * vt[0] * 1.04, T.tint[1] * vt[1] * 1.04, T.tint[2] * vt[2] * 1.04];
   c.box(-w / 2 - 0.05, H - 0.1, -0.4, w / 2 + 0.05, H + 0.3, 0.0, cor, null, { ny: mulC(cor, 0.67) }); // (the cornice)
 }
+/** (step 35P) in a drive under the plates, a side wall's front the built look leaves plain: its cornice alone (it stands out of the wall: the
+ *  plates were painted with it), its storeys the plates' (the painter's layout's own: galFront, galLow) */
+export function galFrontCornice(G, M, w, t, lv, vt = W1) { const c = G.color; c.setM(M); galCornice(c, GAL_FT[t], w, galFrontH(t, lv), vt); }
 /** a building's own tint over its type's painting (h: a hash of it, 0…1): the street's kinds of building (lower-case types: the 51 grey stone
  *  hans share one painting) a little lighter or darker, warmer or cooler, as each one's stone and its soot; the landmarks as painted */
 export function galTint(t, h) {
   if (t < 'a') return W1;
   const v = 0.93 + 0.11 * h, k = 0.035 * (((h * 7.31) % 1) - 0.5) * 2; // (its value, ±7 %; its warmth, ±3.5 %)
   return [v * (1 + k), v, v * (1 - k)];
+}
+// ---- (step 35P) the plates' layout: what the painter is given is what it paints (it keeps blank walls blank and invents nothing), so the
+// zone's walls wear their storeys to the ground and its shops the refs' clutter: awnings, potted plants, signs without text (chunks.js,
+// the proxy's x and xg GBs, shown only under the plates)
+/** a side or back wall's band under its storeys (the built look leaves it plain): its storeys' bays down to the ground */
+export function galLow(G, M, w, t, vt = W1) {
+  const T = GAL_FT[t]; if (!T.u) return;
+  const g = G.galf; g.setM(M);
+  const gh = GAL_F.m[T.g][1], uh = GAL_F.m[T.u][1];
+  for (let y = gh - uh; y > -uh * 0.6; y -= uh) galRow(G, M, g, w, T.u, y, false, vt);
+}
+// (Istanbul's awnings: brick red, wine, bottle green, navy, cornflower, terracotta, canvas; potted plants' pots and leaves; signs' boards)
+const GSP_AWN = ['#a8322c', '#7a2630', '#2f6a46', '#24466f', '#2f62a0', '#c4632e', '#d9cfb8'].map(C), GSP_AW = C('#efe9dc');
+const GSP_POT = ['#a65a3a', '#8a8a86', '#3b3f42', '#b8794f'].map(C), GSP_LEAF = ['#3f7a3a', '#4f8a3f', '#2f6a3a', '#5a8f44'].map(C), GSP_LD = C('#244a28');
+const GSP_BL = ['#c8332e', '#1f4f8f', '#e7d9b3', '#2d6b4f', '#5a2f6e', '#d7a531', '#f2f0ea'].map(C), GSP_FR = C('#2b2b2d');
+/** each kind of building's shops: the share of its bays with an awning, a potted plant, a blade sign (the fish market's restaurants and
+ *  Eminönü's hans the busiest, the offices the plainest; the landmarks none) */
+const SHOP_P = { f: [0.7, 0.45, 0.1], p: [0.5, 0.3, 0.2], s: [0.32, 0.14, 0.25], h: [0.55, 0.12, 0.35], m: [0.12, 0.16, 0.15], o: [0.08, 0.1, 0.1] };
+/** an awning over a shop bay in the front's frame (x along it, −z out to the road): from xa to xb, its top on the wall at y, d out and
+ *  dropping dr to its valance; canvas of one colour or striped */
+function galAwning(c, xa, xb, y, d, dr, col, stripe) {
+  const yf = y - dr, yv = yf - 0.28, dark = mulC(col, 0.62);
+  const n = stripe ? Math.max(2, Math.round((xb - xa) / 0.42)) : 1, sw = (xb - xa) / n;
+  for (let k = 0; k < n; k++) {
+    const x0 = xa + k * sw, x1 = x0 + sw, cc = stripe && k % 2 ? GSP_AW : col;
+    c.quad([x0, y, 0], [x1, y, 0], [x1, yf, -d], [x0, yf, -d], cc); // (its canvas, up and out)
+    c.quad([x0, yf, -d], [x1, yf, -d], [x1, yv, -d], [x0, yv, -d], cc); // (its valance)
+    c.quad([x0, y - 0.03, 0], [x0, yf - 0.03, -d], [x1, yf - 0.03, -d], [x1, y - 0.03, 0], mulC(cc, 0.6)); // (its underside, in its own shade)
+  }
+  c.quad([xa, y, 0], [xa, yf, -d], [xa, yv, -d], [xa, y - 0.12, 0], dark); c.quad([xb, y, 0], [xb, y - 0.12, 0], [xb, yv, -d], [xb, yf, -d], dark); // (its cheeks)
+}
+/** a potted plant on the pavement before a shop: its pot, its bush (or a small tree's crown on a stem) */
+function galPlant(c, x, z, r) {
+  const pot = GSP_POT[Math.floor(r() * GSP_POT.length)], lf = GSP_LEAF[Math.floor(r() * GSP_LEAF.length)], tall = r() < 0.3, ph = 0.36 + r() * 0.16, pr = 0.2 + r() * 0.08;
+  c.cyl(x, 0, z, pr * 0.82, pr, ph, 8, pot); c.cyl(x, ph, z, pr * 1.06, pr * 1.06, 0.05, 8, mulC(pot, 0.85));
+  if (tall) { c.cyl(x, ph, z, 0.03, 0.025, 0.9, 5, C('#5a4632')); c.blob(x, ph + 1.15, z, 0.42 + r() * 0.12, lf, GSP_LD, Math.floor(r() * 7)); }
+  else { const br = 0.3 + r() * 0.16; c.blob(x, ph + br * 0.75, z, br, lf, GSP_LD, Math.floor(r() * 7)); if (r() < 0.5) c.blob(x + 0.12, ph + br * 1.25, z - 0.05, br * 0.7, lf, GSP_LD, Math.floor(r() * 7)); }
+}
+/** a blade sign out from the wall at x (no text: a coloured board in a dark frame on its brackets) */
+function galBlade(c, x, y, col) {
+  c.box(x - 0.05, y, -1.0, x + 0.05, y + 0.95, -0.2, GSP_FR);
+  c.box(x - 0.055, y + 0.07, -0.93, x + 0.055, y + 0.88, -0.27, col, null, { py: GSP_FR, ny: GSP_FR, pz: GSP_FR, nz: GSP_FR });
+  c.box(x - 0.02, y + 0.8, -0.2, x + 0.02, y + 0.84, 0, GSP_FR); c.box(x - 0.02, y + 0.1, -0.2, x + 0.02, y + 0.14, 0, GSP_FR); // (its brackets)
+}
+/** a front's shops' clutter (G.color: the proxy's x GB), bay by bay as galRow lays the type's ground bays */
+export function galShopProps(G, M, w, t, lv, r) {
+  const T = GAL_FT[t], P = SHOP_P[t]; if (!P || !T) return;
+  const cell = T.g, mw = GAL_F.m[cell][0], mh = GAL_F.m[cell][1]; if (GAL_F.kind[cell] !== 'shop') return;
+  const c = G.color; c.setM(M);
+  const nb = Math.max(1, Math.round(w / mw)), bw = w / nb, yA = Math.min(3.5, mh - 1.0), col = GSP_AWN[Math.floor(r() * GSP_AWN.length)], stripe = r() < 0.3;
+  for (let i = 0; i < nb; i++) {
+    const xa = -w / 2 + i * bw, xb = xa + bw;
+    if (r() < P[0] && bw > 2.2) galAwning(c, xa + 0.2, xb - 0.2, yA, 1.15 + r() * 0.35, 0.55 + r() * 0.2, r() < 0.7 ? col : GSP_AWN[Math.floor(r() * GSP_AWN.length)], stripe);
+    if (r() < P[1]) galPlant(c, r() < 0.5 ? xa + 0.42 : xb - 0.42, -0.45, r);
+    if (r() < P[2] && i < nb - 1) galBlade(c, xb, yA + 0.35, GSP_BL[Math.floor(r() * GSP_BL.length)]);
+  }
 }
 /** Surp Krikor Lusavoriç's drum and its conical dome over its roof (step 35R-galata-2: Armenian, as the church's photos have it: a round
  *  drum of the church's dark stone with a band of arched windows, a slate-grey cone, a cross), in the indexed GB f at (x, y, z) */

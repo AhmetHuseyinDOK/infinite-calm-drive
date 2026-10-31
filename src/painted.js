@@ -817,7 +817,8 @@ function layout(list, seed) {
       else if (role === 'mid') phi = a0 + (i + 0.5) * step * (ROLES[0][1] / n) + r.range(-0.2, 0.2) * step;
       else if (role === 'high') phi = a0 + (i * (ROLES[0][1] / n) + 0.5) * step + r.range(-0.3, 0.3) * step;
       else phi = a0 + ((i + r()) / n) * Math.PI * 2;
-      out.push({ role, kinds, phi, d: r.range(dR[0], dR[1]), e0: r.range(eR[0], eR[1]) * D2R, ah: r.range(hR[0], hR[1]) * D2R, haze, k: -1, flip: false });
+      // (open, saved, b0..b3: step 44's portrait towers, in the literal so every cloud keeps one shape; no random numbers drawn for them)
+      out.push({ role, kinds, phi, d: r.range(dR[0], dR[1]), e0: r.range(eR[0], eR[1]) * D2R, ah: r.range(hR[0], hR[1]) * D2R, haze, k: -1, flip: false, open: false, saved: false, b0: 0, b1: 0, b2: 0, b3: 0 });
     }
   }
   // sprites: the least used one of the preferred kinds that has no other use within SEP (a random pick among equals)
@@ -941,7 +942,21 @@ export function makePaintedClouds(atlas, post, seed = 5) {
     for (const c of C) c.phi += rot;
     if (raise) for (const c of new Set([a, b])) { // (taller, keeping the sprite's aspect; not round the moon at night: the repaints keep its sky open)
       const ah = Math.max(c.ah, 31 * D2R), h = c.d * Math.tan(c.e0 + ah) - c.y0;
-      c.w *= h / c.h; c.h = h; c.ah = ah; c.half = Math.atan2(c.w / 2, c.d);
+      c.w *= h / c.h; c.h = h; c.ah = ah; c.half = Math.atan2(c.w / 2, c.d); c.open = mode === 'center';
+    }
+  }
+  // (step 44) a phone held upright sees ~35° up (a landscape screen ~26°): there every tower reaches at least api.towP up, and the
+  // opening's centred one (the cherry avenue's, over the road) api.towO, by api.tall (0: as before, each tower's own size put back
+  // exactly); taller keeping the sprite's aspect, as frame() does. Run only when api.tall or the heights change (a turn of the phone,
+  // the drive into Galata)
+  let tk = 0, tp = 32, to = 38; // (api's defaults: a landscape screen never calls portrait())
+  function portrait() {
+    for (const c of C) {
+      if (c.role !== 'tower') continue;
+      if (!c.saved) { c.saved = true; c.b0 = c.ah; c.b1 = c.h; c.b2 = c.w; c.b3 = c.half; }
+      if (!(tk > 0)) { c.ah = c.b0; c.h = c.b1; c.w = c.b2; c.half = c.b3; continue; }
+      const ah = c.b0 + (Math.max(c.b0, (c.open ? to : tp) * D2R) - c.b0) * Math.min(tk, 1), h = c.d * Math.tan(c.e0 + ah) - c.y0;
+      c.ah = ah; c.h = h; c.w = (c.b2 * h) / c.b1; c.half = Math.atan2(c.w / 2, c.d);
     }
   }
   // (step 30) the moon kept clear of the cumulus, as in all the night repaints: a few of its diameters from the nearest cloud's side
@@ -982,6 +997,9 @@ export function makePaintedClouds(atlas, post, seed = 5) {
     sun: NaN, sunK: 0,
     /** (step 37, main.js, each frame) the zones' weights here (path.js zoneW): Japan's zones' own sunset tones (CL_SUNSET_Z) by them */
     zw: null,
+    /** (step 44, main.js, each frame) how far the screen is a phone held upright (0 landscape … 1; 0 in Galata, whose plates keep their
+     *  framing), and the towers' least heights there (degrees): every tower's, and the 'center' opening's over the road */
+    tall: 0, towP: 32, towO: 38,
     /** (test) the layout, for checks */
     layout: C,
     update(camera, dt) {
@@ -990,6 +1008,7 @@ export function makePaintedClouds(atlas, post, seed = 5) {
       const camAz = Math.atan2(fw.x, fw.z), halfH = Math.atan(Math.tan((camera.fov * D2R) / 2) * camera.aspect);
       const moon = api.moon === api.moon;
       if (first) frame(moon ? api.moon : camAz, moon ? 'flank' : api.opening, !moon);
+      if (api.tall !== tk || api.towP !== tp || api.towO !== to) { tk = api.tall; tp = api.towP; to = api.towO; portrait(); } // (step 44)
       if (moon) { const r = moonTurn(api.moon), k = first ? r : Math.min(Math.max(r, -MOON_TURN * dt), MOON_TURN * dt); if (k !== 0) for (const c of C) c.phi += k; }
       for (let i = 0; i < N; i++) {
         const c = C[i];

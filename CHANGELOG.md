@@ -2,6 +2,112 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-31 · 03:38 — Phone portrait as painted: the car in the lower third, cumulus towers to the top of the frame, faint wisps instead of streaks
+- **The car where the paintings would put it in portrait:** on a phone held upright, the chase camera now sits 5.8 m behind the car (it was
+  6.8 m) and narrows its upright view from 80° to 68° (on a Pixel 7, its view across from 45° to 36°). The car is larger and sits in the lower
+  third: its tail lamps are at 77–78% of the frame's height, where each painting's centre column has them (75–76%); they were at 67–68%. The
+  empty road below the car took about a quarter of the frame's height; it now takes about an eighth. The frame reaches about 33° above the
+  horizon instead of 39°.
+- **Cumulus towers up to the top of the frame:** held upright, the frame sees about 33° up, where a landscape screen sees about 25°. The painted
+  cumulus towers stopped at 22–33°, so the top of the frame was bare blue. There, every tower now reaches at least 32° up, and the cherry
+  avenue's tower over the road 38°. Each keeps its painted shape: it grows taller and wider together, as the opening's two towers already did.
+- **Faint wisps instead of broad streaks:** the sky's brushed cirrus filled the top of the portrait frame with broad streaks. On a phone held
+  upright it is now at 30% of its strength, a few faint wisps as in the paintings.
+- **No new wires or crowns over the road:** Audit 3 compared the portrait frame's sky with the whole landscape paintings' (the street 33.2%
+  against 13.6%, the avenue 27.6% against 15.1%). Cut to a phone's shape, the paintings show as much sky as the portrait frame already did.
+  Each painting cut to its full height and a centre column of the phone's shape has 29.9% sky (street), 29.6% (avenue), 39.9% (coast) and
+  43.6% (country); live's portrait frames had 30.4%, 26.2%, 43.6% and 45.7%. More wires over the street or crowns over the avenue would have
+  taken their sky below the paintings', so the step's overhead additions were left out. What differed was what fills the top of the frame and
+  where the car sits.
+- Against each painting (noon) or its repaint (golden hour, sunset, night), cut to the phone's shape (the painting's full height, a centre
+  column 1082 / 2202 as wide as tall, resized to the 1082 × 2202 frame). Desktop machine (GTX 1660), seeded captures in the Pixel 7 profile
+  at the four audit places, live → staging:
+  - mean ΔE of a 3 × 4 grid of median colours (thirds across, quarters down):
+    - noon: street 20.73 → 20.22, avenue 21.57 → 13.55, coast 13.80 → 12.28, country 16.41 → 9.77;
+    - golden hour: street 19.95 → 16.28, avenue 17.80 → 13.86, coast 19.31 → 20.53 (worse), country 20.86 → 18.15;
+    - sunset: street 17.09 → 13.80, avenue 23.38 → 19.81, coast 18.11 → 19.34 (worse), country 17.71 → 16.02;
+    - night: street 13.58 → 10.56, avenue 12.44 → 9.26, coast 13.35 → 12.36, country 17.23 → 14.11;
+  - the top quarter at noon: street 29.8 → 25.8, avenue 52.2 → 25.3, coast 32.7 → 28.3, country 34.6 → 9.8;
+  - sky in the frame at noon (crop's): street 30.4 → 29.2% (29.9), avenue 26.2 → 24.8% (29.6), coast 43.6 → 41.9% (39.9), country 45.7 →
+    44.6% (43.6);
+  - cumulus in the frame's top half at noon (crop's): street 17.8 → 25.3% (21.0), avenue 19.6 → 43.2% (33.3), coast 44.9 → 56.7% (44.0),
+    country 49.7 → 62.4% (59.6). The towers now carry a little more white than painted;
+  - the tail lamps' row at noon, golden hour and night: 67.1–67.8% → 76.7–77.7% of the frame's height (crop's 74.8–76.3%).
+  - The coast at golden hour and sunset is worse by this measure (+1.2): at golden hour the towers' shaded lower flanks stand where the repaint
+    has lit cream cloud; at sunset a tower covers the top left, where the repaint keeps its violet sky.
+  - Sky is blue seeds grown through cloud colours, kept above the horizon (the paintings' by eye, the frames' from the camera) and reaching the
+    frame's top (`~/cdtest/s44/tools/sky.py`, `measure.py`, `table.py`). Cumulus is white sky pixels (L* > 72, C* < 26).
+- Unchanged:
+  - Desktops and every landscape screen (desktop machine, seeded captures, 3–9 a shot):
+    - 68 shots at 1280 × 720: the eleven zones' starts and the four audit places, each at noon, golden hour, sunset and night; rain and grey
+      skies at night in the street, the country and on the Bosphorus; the X card's embed at 506 × 285. Every shot has a staging capture
+      byte-identical to a live one.
+    - Nine of them first came out as foliage variants: the avenue's flower beds, the country's and the coast's verge banks, a Bosphorus bush,
+      the mountain's autumn crowns, and 22–45 px of 1-level noise in the Turkish town. Re-shot with four more live and two more staging
+      captures, each has a staging capture identical to a live one; live itself showed 2–3 variants on seven of them.
+  - A phone held sideways (the phone tier; 12 shots: the four audit places at noon and night, the coast at golden hour, the Bosphorus,
+    Uçhisar and Galata at noon):
+    - 11 have a staging capture byte-identical to a live one.
+    - The avenue at night came out three times as a third variant of its flower beds (95 px, at most 4 levels; 18 of its 19 differing 16-px
+      cells are cells where live's own two variants differ).
+  - The X card (the embed's film camera at 506 × 285) is byte-identical, and it starts on a tap.
+  - Galata held upright: byte-identical at its start, 300, 700 and 1,100 m, at noon and at night. Its portrait plates were painted for the old
+    framing, so the new framing fades out over the drive into Galata (by its zone weight) and back in after it.
+- Every zone held upright takes the new framing: the mountain, the snow country, the Bosphorus, the Turkish town, Uçhisar and Paşabağ too.
+  A tablet held upright (aspect 0.75) takes 62% of it. Turning the phone puts each tower's own size back exactly.
+- How (no assets, no new programs, no shader edits; uniforms and the camera):
+  - `main.js`: `PORT` (`a`, the screen's weight by its aspect from `resize()`: 0 at 1 and wider, 1 at 0.6 and narrower; `k = a × (1 −`
+    Galata's zone weight) each frame; `zoom` 1.25, `back` 5.8 m, `cir` 0.7). `RIGS[0].back` moves towards `back` by `k`, unless the test hook
+    `?rig=` is given. The field of view is `f0`: `baseFov`'s tangent divided by `1 + 0.25 k`, with the speed's kick capped by it as before.
+    The sky's `uCirrus` is scaled by `1 − 0.7 k`, and `pclouds.tall = k`. Test switch `st.portrait`; `__dbg.portrait`.
+  - `painted.js` `makePaintedClouds`: `portrait()` raises every tower to at least `api.towP` (32°) and the 'center' opening's tower
+    (`c.open`, marked in `frame()`) to `api.towO` (38°), by `api.tall`, keeping the sprite's aspect. Each tower's own size is saved once
+    (`b0`–`b3`) and put back exactly at `tall` 0. It runs only when `tall` or the heights change. The new fields are in the cloud objects'
+    literal, so their shape stays one, and no random numbers are drawn.
+  - Code +0.9 KB (+0.46 KB gzipped).
+- Checks (desktop machine, final build; it rebooted itself once mid-way, so the checks were run again in full):
+  - 0 shader errors in all eleven zones at noon (desktop tier) and at night (phone tier); also 0 for the street and the coast at noon at q=low
+    and at the default tier.
+  - No console errors at q=low, mid, high or the default. Programs at a street start: 65 at low and mid, 66 at high and the default, as live (66).
+  - None compiled through sunset, night or rain (compile; compile2 high 66, mid 65), nor on drives (progwatch: the country in rain, the street
+    at night, the coast).
+  - Held upright (Pixel 7, the street, the avenue, the coast, the country):
+    - 65 programs at load and after sunset, night and rain, as live held upright (65); no errors.
+    - Turned sideways: weight 0, the field of view back to 52°, every tower's size back bit for bit to its saved size (the same heights,
+      to 0.1°, as live's in the street and on the coast). Upright again: raised again.
+    - Galata held upright keeps weight 0 and 80° throughout.
+  - The embed starts on a tap.
+  - A 12 s drive held upright, recorded on the street (staging): the car steady in the lower third, the clouds steady, nothing popping.
+  - Fallbacks:
+    - The painted clouds' files blocked, held upright (coast, avenue) and on a desktop: the procedural clouds; no errors but the blocked
+      request's.
+    - The band blocked, held upright: no errors.
+    - The fields: 11 of 11 painted.
+- Cost: small. The taller towers add blended cloud at the top of a phone's frame; the narrower view draws less of the street.
+  - Drives on the desktop machine (GTX 1660), the phone profile held upright, interleaved live / staging (L S S L L S, 20 s), medians:
+    - noon: street 3.61 → 3.38 ms (−0.23), avenue 4.21 → 4.31 (+0.10), coast 3.64 → 3.74 (+0.10), country 3.81 → 3.89 (+0.08);
+    - the coast at night 4.10 → 4.10 (one slow staging drive, 4.45, among 4.08–4.10).
+    - The control, the same build six times (live, the coast at noon): 3.61–3.65.
+  - The desktop profile (landscape: the code path as before) stays within its noise: street 3.61 → 3.63, coast 3.31 → 3.36 (live's own
+    drives 3.15–3.32, staging's 3.28–3.64).
+  - A first visit on a 3 Mbps phone (40 ms; time to the start button, interleaved, medians): street 8,665 → 8,697 ms, avenue 8,592 →
+    8,567 (each side's own spread 25–78 ms); 2,781 → 2,782 KB.
+  - Flat-out drives on the phone profile at ×4 CPU throttle (fastphone): no world-build spikes on either side; the worst world step, street
+    9.5 → 9.5 ms (medians), avenue 10.0 → 9.2.
+  - No new programs, textures or assets; no per-frame allocations; the towers' sizes are worked out only when the screen's shape changes or
+    the drive enters or leaves Galata.
+  - The desktop machine rebooted itself three times during the checks and the timing: every interrupted run was repeated after it came
+    back.
+- Left over:
+  - The coast at golden hour and sunset (above): the tower raise could follow the repaints' evening sky more closely (lower towers over the
+    violet top left at sunset).
+  - The towers carry 3–12 points more white in the top half than the paintings' centre columns. In the sweep, towers of at least 30° came a
+    little nearer them (street 23.4, avenue 39.9, coast 54.3, country 60.0%) at the same grid ΔE (within 0.25 in the street, the coast and
+    the country). 32° was kept: the frame's top is about 33° up, so the towers reach it and leave a thin band of zenith blue over them.
+    The avenue's gain comes from its tower over the road at 38° (36° gave 16.15 at noon, 38° 13.55).
+  - The street's portrait top: the painting's centre column has the near pole and its wires across the sky; ours shows the far blocks. That
+    is the shopping street's own scale (its near buildings are lower than painted, Audit 3's rank 1), not the portrait's.
+
 ## 2026-10-31 · 01:26 — The night headlights as the repaints paint them: a short, soft glow beside the car's nose
 - **A soft glow beside the nose instead of a yellow flare:** at night under a clear sky, the headlights now throw a short, soft, warm tan
   glow on the road on both sides of the car's nose. It fades out a few metres ahead, as the coast's, the country's and the strait's night

@@ -625,7 +625,7 @@ async function main() {
   // towards the kerb of the side the traffic keeps to (path.js trafficSide: left in Japan, right in Turkey), so through a
   // border tunnel the car moves over to the other side of the road with the traffic
   const MULT_MIN = 0.4, MULT_MAX = 5.5, SIDE0 = trafficSide(S0) < 0 ? -1 : 1;
-  const st = { s: S0, u: 1.65 * SIDE0 * (1 - zoneWeight(S0, 'galata') * clamp((zparam(S0, 'rw') - 3.4) / 1.85, 0, 1)), uHome: 1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, spray: QS.has('nospray') ? 0 : 1 /* test switch */, grass: 1 /* test switch: the meadow's blades */, pclouds: 1 /* test switch: painted clouds (0: the procedural ones, with ?clouds=both) */, band: 1 /* test switch: the painted horizon (0: the mountain rings) */, waves: 1 /* test switch: the painted sea's waves (0: its flat tones) */, shore: 1 /* test switch: the waves and foam along the sea wall (0: the open sea's colour there) */, surf: 1 /* test switch: the spray over the tetrapods */, tetra: 1 /* test switch: the tetrapods */, bark: 1 /* test switch: the bark's painted tones (0: the old colours, lit) */, trunks: 1 /* test switch: the painted trees' bark (0: hidden) */, todpaint: 1 /* test switch: the painted look at golden hour, sunset and night (0: only on a bright day, as before) */, road: 1 /* test switch: the coast's, the country's and the cherry avenue's painted asphalt (0: the old road; in the avenue's ground it also skips the tint's work) */, carkey: 1 /* test switch: the car lit by the painter's sun (0: by the real sun) */, sunroad: 1 /* test switch: the sun and the moon stand by the road's heading, as in the paintings (0: fixed in the world, as before) */, volkey: 1 /* test switch: the crowns and the tetrapods lit by the painted volumes' key (0: by the real sun) */, shsoft: 1 /* test switch: soft shadow edges near the camera (0: one tap everywhere, as before) */, shfit: 1 /* test switch: the sun's shadow box fitted to what can be seen at a low sun (0: the old square box) */, tuff: 1 /* test switch: Cappadocia's fairy chimneys in their painted tones (0: their own colours, lit) */, slope: 1 /* test switch: the coast's slope in the painting's lime with its painter's fill in the shade (0: as before, step 27) */, bandnear: 1 /* test switch: the country's painted horizon drawn just inside the world's far fade, over the next zone's far slopes (0: as before, step 28) */, banktod: 1 /* test switch: the country's verge banks' grass by the hour (0: lit only), step 28 */, evesky: 1 /* test switch: the painted evening sky (0: the old sky at golden hour and sunset), Audit 2 */, evesun: 1 /* test switch: the evening sun as painted: its bearing and height, its disc, glow and veil, its broad path on the sea, the clouds' rims by it (0: as before), step 42 */, eveW: 0, nightpaint: 1 /* test switch: the night as painted (0: as before), step 30 */, rooms: 1 /* test switch: the rooms behind the shop windows (0: their painted glass), step 31 */, tram: 1 /* test switch: the Galata Bridge's tram (0: hidden), step 33 */, fish: 1 /* test switch: the Galata Bridge's painted fishermen (0: hidden; their 3D rods and buckets stay), step 35a */, people: 1 /* test switch: the painted people, Paşabağ's tourists and Istanbul's (0: hidden), step 35f */, plates: 1 /* test switch: Galata's painted plates (0: its built look), step 35P */, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
+  const st = { s: S0, u: 1.65 * SIDE0 * (1 - zoneWeight(S0, 'galata') * clamp((zparam(S0, 'rw') - 3.4) / 1.85, 0, 1)), uHome: 1.65, speed: 0, mult: 1, steer: 0, lastInput: -1e9, tod: clamp(parseFloat(QS.get('t')) || 0.4, 0, 0.999), todPaused: QS.has('freeze'), dist: 0, spray: QS.has('nospray') ? 0 : 1 /* test switch */, grass: 1 /* test switch: the meadow's blades */, pclouds: 1 /* test switch: painted clouds (0: the procedural ones, with ?clouds=both) */, band: 1 /* test switch: the painted horizon (0: the mountain rings) */, waves: 1 /* test switch: the painted sea's waves (0: its flat tones) */, shore: 1 /* test switch: the waves and foam along the sea wall (0: the open sea's colour there) */, surf: 1 /* test switch: the spray over the tetrapods */, tetra: 1 /* test switch: the tetrapods */, bark: 1 /* test switch: the bark's painted tones (0: the old colours, lit) */, trunks: 1 /* test switch: the painted trees' bark (0: hidden) */, todpaint: 1 /* test switch: the painted look at golden hour, sunset and night (0: only on a bright day, as before) */, road: 1 /* test switch: the coast's, the country's and the cherry avenue's painted asphalt (0: the old road; in the avenue's ground it also skips the tint's work) */, carkey: 1 /* test switch: the car lit by the painter's sun (0: by the real sun) */, sunroad: 1 /* test switch: the sun and the moon stand by the road's heading, as in the paintings (0: fixed in the world, as before) */, volkey: 1 /* test switch: the crowns and the tetrapods lit by the painted volumes' key (0: by the real sun) */, shsoft: 1 /* test switch: soft shadow edges near the camera (0: one tap everywhere, as before) */, shfit: 1 /* test switch: the sun's shadow box fitted to what can be seen at a low sun (0: the old square box) */, tuff: 1 /* test switch: Cappadocia's fairy chimneys in their painted tones (0: their own colours, lit) */, slope: 1 /* test switch: the coast's slope in the painting's lime with its painter's fill in the shade (0: as before, step 27) */, bandnear: 1 /* test switch: the country's painted horizon drawn just inside the world's far fade, over the next zone's far slopes (0: as before, step 28) */, banktod: 1 /* test switch: the country's verge banks' grass by the hour (0: lit only), step 28 */, evesky: 1 /* test switch: the painted evening sky (0: the old sky at golden hour and sunset), Audit 2 */, evesun: 1 /* test switch: the evening sun as painted: its bearing and height, its disc, glow and veil, its broad path on the sea, the clouds' rims by it (0: as before), step 42 */, eveW: 0, nightpaint: 1 /* test switch: the night as painted (0: as before), step 30 */, rooms: 1 /* test switch: the rooms behind the shop windows (0: their painted glass), step 31 */, tram: 1 /* test switch: the Galata Bridge's tram (0: hidden), step 33 */, fish: 1 /* test switch: the Galata Bridge's painted fishermen (0: hidden; their 3D rods and buckets stay), step 35a */, people: 1 /* test switch: the painted people, Paşabağ's tourists and Istanbul's (0: hidden), step 35f */, plates: 1 /* test switch: Galata's painted plates (0: its built look), step 35P */, portrait: 1 /* test switch: a phone held upright framed as the paintings would be in portrait (0: as before), step 44 */, cam: { low: 1, eye: 2, top: 3, film: 4 }[QS.get('cam')] ?? (EMBED ? 4 : 0) };
   let started = false;
   // (the atlas's world variant and its shadow twin are made, and their programs compiled, at every start: without Turkey's
   // atlas yet, on a stand-in, its textures swapped in when they load (materials.js setWorldTex))
@@ -1238,6 +1238,12 @@ async function main() {
   // Resizing clears the canvas, so it only ever happens at the start of a frame, right before we draw —
   // never between frames (that showed a blank flash on phones when the toolbar or orientation changed).
   let needResize = false, lastSize = '', baseFov = 52, fovKick = 0;
+  // (step 44) a phone held upright, framed as the paintings would be in portrait: the car larger and in the lower third, the road below it
+  // short, the frame reaching ~35° up instead of ~40° (zoom: the vertical view narrowed by it; back: the chase camera's distance), the
+  // cirrus streaks faint (cir: their share taken away) and the cumulus towers up to the frame's top (painted.js). a: the screen's weight
+  // (0 at aspect ≥ 1 … 1 at 0.6 and narrower), from resize(); k: a × (1 − Galata's weight: its portrait plates keep the framing they were
+  // painted for), each frame (test switch st.portrait). Landscape screens (k = 0) take none of it: their frames are as before
+  const PORT = { a: 0, k: 0, zoom: 1.25, back: 5.8, cir: 0.7 };
   function resize() {
     const w = innerWidth, h = innerHeight, asp = w / h, key = w + 'x' + h + '@' + DPR;
     if (key === lastSize) return;
@@ -1245,6 +1251,7 @@ async function main() {
     renderer.setPixelRatio(DPR); renderer.setSize(w, h, false);
     post.composer.setPixelRatio(DPR); post.composer.setSize(w, h);
     camera.aspect = asp;
+    PORT.a = asp >= 1 ? 0 : clamp((1 - asp) / 0.4, 0, 1);
     baseFov = asp >= 1 ? 52 : clamp((2 * Math.atan(Math.tan((34 * Math.PI) / 180) / asp) * 180) / Math.PI, 52, 80);
     camera.fov = baseFov + fovKick;
     camera.updateProjectionMatrix();
@@ -1454,6 +1461,8 @@ async function main() {
     const RIGS = [{ back: 6.8, up: 2.4, ahead: 22, lookY: 2.0, cu: 0.85, lu: 0.5 }, { back: 7.0, up: 1.3, ahead: 26, lookY: 2.9, cu: 0.85, lu: 0.5, side: 1.15 }, { back: -0.6, up: 1.55, ahead: 30, lookY: 2.3, cu: 1, lu: 0.6 },
       { back: 0.01, up: parseFloat(QS.get('top')) || 45, ahead: 0, lookY: 0, cu: 0, lu: 0 }]; // [3] = test-only top-down view
     if (QS.has('rig')) { const [b, u, a, l] = QS.get('rig').split(',').map(Number); Object.assign(RIGS[0], { back: b, up: u, ahead: a, lookY: l }); } // test hook: chase framing
+    PORT.k = st.portrait ? PORT.a * (1 - zoneWeight(st.s, 'galata')) : 0; // (step 44: the portrait framing's weight, above)
+    if (PORT.k > 0 && !QS.has('rig')) RIGS[0].back += (PORT.back - RIGS[0].back) * PORT.k; // (the chase camera nearer the car)
     const lt = new THREE.Vector3();
     let follow = 6, hideCar = st.cam === 2;
     if (st.cam === 4) {
@@ -1495,8 +1504,9 @@ async function main() {
     // at speed the camera keeps up (it used to trail ~v/6 m further back) and the view widens a little
     const fast = 1 + Math.max(0, st.speed - 12) / 12;
     camPos.lerp(tmp, 1 - Math.exp(-dt * follow * fast)); look.lerp(lt, 1 - Math.exp(-dt * Math.min(follow, 8) * fast));
-    { const k = st.cam === 3 ? 0 : Math.min(clamp((st.speed - 16) * 0.22, 0, 11), Math.max(0, 84 - baseFov)); fovKick += (k - fovKick) * Math.min(1, dt * 1.5); // (portrait views are wide already: at most 84°)
-      if (Math.abs(camera.fov - (baseFov + fovKick)) > 0.02) { camera.fov = baseFov + fovKick; camera.updateProjectionMatrix(); } }
+    { const f0 = PORT.k > 0 ? (360 / Math.PI) * Math.atan(Math.tan((baseFov * Math.PI) / 360) / (1 + (PORT.zoom - 1) * PORT.k)) : baseFov; // (step 44: portrait narrowed)
+      const k = st.cam === 3 ? 0 : Math.min(clamp((st.speed - 16) * 0.22, 0, 11), Math.max(0, 84 - f0)); fovKick += (k - fovKick) * Math.min(1, dt * 1.5); // (portrait views are wide already: at most 84°)
+      if (Math.abs(camera.fov - (f0 + fovKick)) > 0.02) { camera.fov = f0 + fovKick; camera.updateProjectionMatrix(); } }
     camera.position.copy(camPos); camera.lookAt(look);
     if (QS.has('yaw')) camera.rotateY((parseFloat(QS.get('yaw')) * Math.PI) / 180); // test hook: look sideways
     if (QS.has('pitch')) camera.rotateX((parseFloat(QS.get('pitch')) * Math.PI) / 180); // test hook: look up / down
@@ -1651,6 +1661,7 @@ async function main() {
     su.uBright.value = TOD.bright;
     su.uNight.value = TOD.night; su.uWarm.value = TOD.warm; su.uTime.value = t; su.uCirrusCol.value.copy(TOD.cLit).lerp(TOD.horizon, 0.25);
     su.uCirrus.value = 0.6 * (1 - ov) * (1 - 0.65 * sstep(0.4, 0.9, TOD.night)); su.uOvercast.value = ov;
+    if (PORT.k > 0) su.uCirrus.value *= 1 - PORT.cir * PORT.k; // (step 44: the portrait's top, a few faint wisps as painted, not broad streaks)
     su.uMilky.value = sstep(0.55, 0.95, TOD.night) * (1 - ov);
     // the moon (the night's light: ahead and to the left, sky.js) shows once the twilight has gone, not beside the sunset
     // glow ahead (a full moon there read wrong); and fades out before dawn
@@ -1700,7 +1711,7 @@ async function main() {
       }
       if (pclouds) { pclouds.moon = su.uMoon.value > 0 && NP > 0 ? Math.atan2(TOD.moonSky.x, TOD.moonSky.z) : NaN; pclouds.night = NP; pclouds.zw = w; } }
     { const painted = !!pclouds && (st.pclouds !== 0 || !clouds);
-      if (pclouds) { pclouds.mesh.visible = painted; if (painted) pclouds.update(camera, dt); }
+      if (pclouds) { pclouds.mesh.visible = painted; pclouds.tall = PORT.k; if (painted) pclouds.update(camera, dt); } // (tall: step 44)
       if (clouds) { clouds.group.visible = !painted; if (!painted) clouds.update(camera.position, dt); } }
     // the painted horizon of the zone ahead (it changes while the next zone's scenery comes into view), and the mountain
     // rings wherever it doesn't cover the far horizon
@@ -1966,7 +1977,7 @@ async function main() {
     if (started && frames > 150 && dt > 0.03) slowT += dt; else slowT = Math.max(0, slowT - dt * 0.5);
     if (slowT > 3 && !QS.has('q')) { slowT = 0; stepDown(); }
   }
-  window.__dbg = { renderer, st, scene, camera, world, TOD, KEYS, X, train, weather, U, birds, cine, post, car, sun, M, cells: atlas.cells, clouds, pclouds, band, get bandTr() { return bandTr; }, sky, mountains, shadowDir, CM, spray, grass, sea, get ferry() { return ferry; }, get tram() { return tram; }, get fishers() { return fishers; }, people, get dolmus() { return M.atlasDol || null; }, get furn() { return M.atlasF || null; }, furnTris, get boats() { return { jp: !!BOATS.jp, tr: !!BOATS.tr }; }, get trainPaint() { return M.train || null; }, get balloons() { return balloons; }, get realSky() { return realSky; }, get sunHalo() { return sunHalo; }, get plates() { return plates; }, TRL, get audio() { return audio; }, uch: { TF_DAY, TF_GOLD, TF_SUNSET, TF_NIGHT, UG_DAY, UCH }, pas: { TFP_DAY, TFP_GOLD, TFP_SUNSET, TFP_NIGHT, PG_DAY, PG_GOLD, PG_SUNSET, PG_NIGHT, PAS_Z, PAS_R, pasAz }, night: { NT, NTZ, NSKY_N, MOON_B, CF_N } };
+  window.__dbg = { renderer, st, scene, camera, world, TOD, KEYS, X, train, weather, U, birds, cine, post, car, sun, M, cells: atlas.cells, clouds, pclouds, band, get bandTr() { return bandTr; }, sky, mountains, shadowDir, CM, spray, grass, sea, get ferry() { return ferry; }, get tram() { return tram; }, get fishers() { return fishers; }, people, get dolmus() { return M.atlasDol || null; }, get furn() { return M.atlasF || null; }, furnTris, get boats() { return { jp: !!BOATS.jp, tr: !!BOATS.tr }; }, get trainPaint() { return M.train || null; }, get balloons() { return balloons; }, get realSky() { return realSky; }, get sunHalo() { return sunHalo; }, get plates() { return plates; }, TRL, get audio() { return audio; }, uch: { TF_DAY, TF_GOLD, TF_SUNSET, TF_NIGHT, UG_DAY, UCH }, pas: { TFP_DAY, TFP_GOLD, TFP_SUNSET, TFP_NIGHT, PG_DAY, PG_GOLD, PG_SUNSET, PG_NIGHT, PAS_Z, PAS_R, pasAz }, night: { NT, NTZ, NSKY_N, MOON_B, CF_N }, portrait: PORT };
   status('');
   $start.classList.add('ready');
   if (QS.has('auto')) begin();

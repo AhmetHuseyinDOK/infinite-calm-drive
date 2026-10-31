@@ -2,6 +2,95 @@
 
 Live: https://calm-drive.ustalabs.com · the original 2D version lives at `/classic.html`.
 
+## 2026-10-31 · 07:29 — Fix: no black or smeared slabs on the Bosphorus shore before Galata; what Galata's plates never saw isn't painted
+
+- **No black boxes before Galata** (a live bug, found by step 44's hand-over sheet: a Bosphorus start at s 1150–1300 showed big black slabs to
+  the left of the road on a phone held upright, flat grey ones on a landscape screen, and at s 1400 a smeared slab over a building's top).
+  Now the strait, its far shore, the Bosphorus Bridge and Galata ahead show there, as they should.
+- What it was: Galata's painted plates switch on 560 m before the zone (300 m before its hand-over starts), when the drive can first see it.
+  Until the car reaches the first plate's stop (90 m before the zone), that one plate is all there is. Two kinds of surface in the plates'
+  model were then in view that no plate ever saw:
+  - the old city's model ("the far city", ~6,200 OpenStreetMap buildings round the real route) reaches behind the route's start, and in the
+    game that ground is the Bosphorus zone's strait and hillside: 1,583 of its buildings stand behind the first plate's camera;
+  - the bodies and tops of the nine buildings at the zone's start, beside the road, above and beside the first plate's frame.
+  The plate material gave any point outside both plates' frames (or behind their cameras) its uv clamped to the frame's edge, so the
+  painting's edge was smeared over the surface: black where that edge is the painting's transparent sky (the portrait plates' top edge),
+  grey or streaked elsewhere.
+- Now, where the plates in use never saw a surface, it isn't painted:
+  - outside every plate's frame (or behind its camera), always;
+  - and while the plates in use are stand-ins (the camera before the first stop or past the last, or the plate planned behind the camera
+    not in yet: a slow network, a missing file), also wherever they saw it hidden.
+  - Such a surface takes its **built look** instead, so no building beside the road ends where a plate's frame did:
+    - the far city's buildings by the route (the nine at the zone's start, within 60 m of the plates' path): the painter's layout's own
+      massing, the look the plates were painted from (each building's plaster, its storeys of framed windows with the sky's light in the
+      glass, its shopfronts, roofs and cornice), lit by the hour: moonlit blue at night with a third of its windows lit;
+    - Galata's walls, awnings, plants and signs within 70 m: 35P's fade (their own colours, the crisp fronts and the shops' rooms), as
+      before.
+  - Not drawn there: Galata's walls beyond 70 m (their built look has no windows that far: whole unpainted blocks would stand across the
+    water as blank walls), the rest of the far city (among it the real buildings behind the route's start, on the Bosphorus's own ground;
+    its walls face the route only, so a new viewpoint would see their open backs) and Eminönü's pavilion.
+  - Inside Galata with its plates in, nothing changes: no surface outside every frame was ever in view there (0 px at 9 places × 2 screen
+    shapes), and the surfaces they saw hidden (0.1–0.3 % of a frame: slivers, awnings seen edge-on) keep the painting's local tone as before.
+- Checked (this box, Chrome 148 on the AMD iGPU: the desktop machine was down from 03:58 for the whole step; seeded captures, live → staging):
+  - The hand-over every 50 m (a Bosphorus start, s 900–1500, a phone held upright and a 1280 × 720 screen, noon and night):
+    - s 900 and 950 (the plates not on yet) and s 1450 and 1500 (past the first stop) are byte-identical to live, noon and night, both
+      screen shapes; so is s 1560, inside Galata;
+    - s 1000–1350: on the upright phone the near-black pixels go from 47,444–654,659 per frame to 0–1,115 (the overhead wires); s 1000–
+      1400 on the landscape screen, the flat grey slab blocks (16 px) from 221–986 to 46–282 (the plaster between the built windows); at
+      s 1400 live's slab is the smeared one: the building is whole now (the sheets);
+    - with the first plate blocked (its neighbour stands in), or every plate delayed 4 s or 9 s: the upright phone's near-black pixels at
+      s 1150–1300 go from 111,750–773,540 to 6–204; with every plate blocked, or the plates' index blocked, Galata is built as before,
+      byte-identical to live.
+  - Out of Galata into the town (a parked Galata start, carried through l 1430–1530): no plate fallback in view in either build;
+    landscape identical, the upright phone within 2–81 px (a sliver of facade at the far end of the street).
+  - Galata with its plates in, at l 150, 300, 600, 900, 1050, 1100, 1250 and 1400 (both screen shapes, noon) and 300 and 1100 at night:
+    20 of 20 byte-identical to live, with the far city on its new program. Every other zone's start: city, sakura, coast, country,
+    mountain, snow, Bosphorus, Uçhisar and Paşabağ identical; the town within 2–3 px at two spots where live's own three captures differ
+    from each other by 4–7 px (the plates never exist at a town start).
+  - Drives in real time, recorded:
+    - a Bosphorus start at 3 Mbps into Galata: the upright phone's near-black pixels per capture over s 975–1350 go from 66,503–143,935
+      to 37–697; frame-to-frame change over s 1250–1475 alike (mean 4.11 → 4.33, max 59.97 → 57.58: no pops);
+    - a Japanese start 4.3 km from the border at 3 Mbps (Turkey and the plates loaded lazily) into Galata: over its hand-over the near-
+      black pixels per capture go from 65,393–294,540 to 9–822;
+    - at night, with the first plate blocked, and with every plate delayed 3 s at 3 Mbps: clean; the programs never change in a drive.
+  - Shader errors: 0 in all eleven zones at noon (desktop tier) and at night (phone tier), at the hand-over (s 1150, 1300, 1450; 1300 also at
+    night on the phone tier and at q=low) and in Galata (s 300, 1150).
+  - Console errors: none at q=low, mid and high, at Galata and at the hand-over; none in any capture with a file blocked or delayed but
+    the blocked requests' own.
+  - Programs: one more where Galata's plates are made (the far city's program): a Galata start 92 → 93 on desktops, 91 → 92 on phones; a
+    Bosphorus start the same; Turkey's lazy load from a Japanese start 66 → 91 (live 90), the plates' own lazy load 85 → 91 (live 90).
+    None compiles mid-drive: along Galata's route through sunset, night and rain (93 → 93 desktop, 92 → 92 phone), progwatch (country in
+    rain 66, the Bosphorus at night 93, the city at night 66), compile and compile2 (66, 66, 65), and every drive above.
+  - The embed starts on tap.
+- Cost (this box's AMD iGPU, Chrome 148: the desktop machine was down; interleaved L S S L L S over 40 s drives; re-time on the GTX):
+  - The approach to Galata (a Bosphorus start, s 950 → 1560): desktop profile 21.44 / 19.97 / 20.51 → 23.01 / 21.56 / 22.34 ms (+1.7 ms);
+    phone profile 10.55 / 10.27 / 10.74 → 11.70 / 11.83 / 11.80 ms (+1.3 ms). In the page, the test switch at s 1300: +2.26 ± 0.35 ms
+    desktop, +1.25 ± 0.36 ms phone (A/A ±0.6). This is the scenery the slabs were hiding (the sky, the painted clouds, the far shore's
+    band), now drawn there as everywhere else on the strait; the built facades cover a few per cent of the frame.
+  - Galata itself (s 150 → 1080): desktop 20.44 / 20.32 / 20.63 → 20.45 / 20.57 / 21.04 ms, phone 10.27 / 9.83 / 10.18 → 10.03 / 9.91 /
+    10.30 ms: alike. The test switch at s 600: −0.02 ms desktop, +0.04 ms phone (medians).
+  - The far city's build: `nearGrid` 1–4 ms once when it arrives, `nearB` under 2.5 ms per 1,000-building part (one part a frame).
+  - Code: +9.0 KB minified.
+- Left over:
+  - The nine buildings at the zone's start show their built look from the strait until the car reaches the first plate's stop (about
+    s 1000–1410 of a Bosphorus start): complete and lit by the hour, but plainer than the paintings. Painting a few stops for the approach
+    (m120 … m300, both screen shapes, day and night) would paint them; the desktop machine, where the painter runs, was down all step.
+  - Galata's own blocks that no plate saw, beyond 70 m, aren't drawn on the approach (whole blocks across the water; no partly painted
+    block showed a cut in the captures).
+  - A start inside the town's hand-over (l 1450–1490 of a Galata start) never finishes loading in the seeded harness here (the Eminönü
+    square waits for its sheet, which only loads once the game has started): pre-existing, players don't start there.
+  - On a 3 Mbps start the plates' index can miss its 15 s timeout among the start's downloads (the landscape live drive here): Galata is then
+    built as before, without its paintings (pre-existing).
+- How (`src/plates.js`, `src/main.js`; no assets):
+  - `plateMaterial`: `uSeen` (1: outside every active plate's frame; 2: seen by neither; 0: as before); the walls' and extras' material
+    (`PX_FADE`) keeps the fade's built look within `PX_FAR` there and discards beyond it; the pavilion's discards there.
+  - The far city's own plate material (`PX_MASS`, `matM`: one new program, compiled at load and in both lazy loads): the layout's massing
+    (`mPlaster`, `massFacade`) where no plate saw it, for the buildings by the route (`aNr`), discarded for the rest.
+  - `nearGrid` / `nearB`: which buildings stand within `NEAR_R` (60 m) of the stops' path, measured per part as the far city is built (a grid
+    of 30 m cells marks the path's neighbourhood: 1–4 ms once, then under 2.5 ms per part).
+  - `makePlates().update`: `stand` (the camera before the first stop or past the last, or a stand-in for the plate behind it), `P.stand`,
+    `U.uSeen`; `P.cover` (the test switch `st.platecover`, 0: as before); the tools' one-plate mode (`P.only`) keeps the old look.
+
 ## 2026-10-31 · 03:38 — Phone portrait as painted: the car in the lower third, cumulus towers to the top of the frame, faint wisps instead of streaks
 - **The car where the paintings would put it in portrait:** on a phone held upright, the chase camera now sits 5.8 m behind the car (it was
   6.8 m) and narrows its upright view from 80° to 68° (on a Pixel 7, its view across from 45° to 36°). The car is larger and sits in the lower

@@ -98,7 +98,7 @@ const massSpans = D => { const s = []; for (let i = 0; i < D.nB; i += MASS_N) s.
  *  frame): buildings i0 … i1 − 1, each one's walls where they face the road somewhere (the binary's mask) with their facade's coordinates
  *  (aF), its roof (flat, hipped, a mosque's dome); with tail, each minaret and each tree; its index buffer as four stretches of the route,
  *  each what can be seen from it (userData.ranges: start, count each; the minarets and trees in all four) */
-function massPart(D, i0, i1, tail) {
+function massPart(D, i0, i1, tail, near = null) {
   const { B, V, Mn, nM, Tr, nT } = D;
   let nv = 0, ni = 0, o0 = 0;
   for (let i = 0; i < i0; i++) o0 += B.n[i];
@@ -110,17 +110,18 @@ function massPart(D, i0, i1, tail) {
     if (B.roof[i] === 3) { nv += k * 4; ni += k * 6; }
   }
   if (tail) { nv += nM * 6 * 2 * 4; ni += nM * 6 * 6 * 4; nv += nT * 7; ni += nT * 10 * 3; }
-  const pos = new Float32Array(nv * 3), nrm = new Int8Array(nv * 3), af = new Float32Array(nv * 4), idx = new Uint32Array(ni);
+  const pos = new Float32Array(nv * 3), nrm = new Int8Array(nv * 3), af = new Float32Array(nv * 4), idx = new Uint32Array(ni), anr = new Uint8Array(nv);
+  let nr0 = 0; // (step 43B: the building being built stands by the route (nearB): its vertices' aNr)
   let v = 0, t = 0;
   const vert = (x, y, z, nx, ny, nz, a, b, c, d) => {
     pos[v * 3] = x; pos[v * 3 + 1] = y; pos[v * 3 + 2] = z;
     nrm[v * 3] = Math.round(nx * 127); nrm[v * 3 + 1] = Math.round(ny * 127); nrm[v * 3 + 2] = Math.round(nz * 127);
-    af[v * 4] = a; af[v * 4 + 1] = b; af[v * 4 + 2] = c; af[v * 4 + 3] = d; return v++;
+    af[v * 4] = a; af[v * 4 + 1] = b; af[v * 4 + 2] = c; af[v * 4 + 3] = d; anr[v] = nr0; return v++;
   };
   const tri = (a, b, c) => { idx[t++] = a; idx[t++] = b; idx[t++] = c; };
   const pts = [], nb = i1 - i0, T0 = new Uint32Array(nb + 1);
   for (let i = i0, o = o0; i < i1; o += B.n[i], i++) {
-    T0[i - i0] = t;
+    T0[i - i0] = t; nr0 = near && nearB(near, D, i, o) ? 255 : 0;
     const k = B.n[i], y0 = B.base[i], y1 = B.top[i], code = B.kind[i] + 8 * B.tint[i], H = y1 - y0 - 1.5;
     let cx = 0, cz = 0, per = 0;
     for (let e = 0; e < k; e++) { cx -= V[(o + e) * 2] / k; cz += V[(o + e) * 2 + 1] / k; }
@@ -206,13 +207,46 @@ function massPart(D, i0, i1, tail) {
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos.subarray(0, v * 3), 3)); g.setAttribute('normal', new THREE.BufferAttribute(nrm.subarray(0, v * 3), 3, true));
-  g.setAttribute('aF', new THREE.BufferAttribute(af.subarray(0, v * 4), 4)); g.setIndex(new THREE.BufferAttribute(all, 1));
+  g.setAttribute('aF', new THREE.BufferAttribute(af.subarray(0, v * 4), 4)); g.setAttribute('aNr', new THREE.BufferAttribute(anr.subarray(0, v), 1, true)); g.setIndex(new THREE.BufferAttribute(all, 1));
   g.userData.ranges = ranges; g.setDrawRange(ranges[0], ranges[1]);
   return g;
 }
 /** the stretch of the route whose far city is drawn, by l (m into the zone) */
 const massQ = l => (l < 380 ? 0 : l < 700 ? 1 : l < 1080 ? 2 : 3);
-
+/** (step 43B) which of the far city's buildings stand by the route (a footprint corner within NEAR_R m of the plates' stops' path, in the zone's
+ *  frame): where no plate in use saw them they take their built look (the plate material's PX_MASS), so a building beside the road never ends
+ *  where a plate's frame did; the rest of the far city isn't drawn there. nearGrid: a grid of NEAR_C m cells round the path, each with the path's
+ *  segments that reach it (lo … hi), made once; nearB: whether building b stands by the route, measured only where the grid says (massPart, a
+ *  part a frame) */
+const NEAR_R = 60, NEAR_C = 30;
+function nearGrid(stops) {
+  const n = stops.length, P = new Float64Array(n * 2);
+  let e0 = Infinity, e1 = -Infinity, n0 = Infinity, n1 = -Infinity;
+  for (let k = 0; k < n; k++) { const c = stops[k].L.c; P[k * 2] = c[0]; P[k * 2 + 1] = c[1]; e0 = Math.min(e0, c[0]); e1 = Math.max(e1, c[0]); n0 = Math.min(n0, c[1]); n1 = Math.max(n1, c[1]); }
+  const pad = NEAR_R + NEAR_C; e0 -= pad; n0 -= pad; e1 += pad; n1 += pad;
+  const gw = Math.ceil((e1 - e0) / NEAR_C), gh = Math.ceil((n1 - n0) / NEAR_C), G = { P, n, e0, n0, gw, gh, lo: new Int16Array(gw * gh).fill(-1), hi: new Int16Array(gw * gh) };
+  const reach = (NEAR_R + NEAR_C * 0.75) ** 2, rr = Math.sqrt(reach); // (a cell holds the segments whose reach covers its middle: any point in it within NEAR_R of the path is then measured against them)
+  for (let k = 0; k < n - 1; k++) { // (each segment marks the cells round it: segments in order, so a cell's own are lo … hi)
+    const i0 = Math.max(0, Math.floor((Math.min(P[k * 2], P[k * 2 + 2]) - rr - e0) / NEAR_C)), i1 = Math.min(gw - 1, Math.floor((Math.max(P[k * 2], P[k * 2 + 2]) + rr - e0) / NEAR_C));
+    const j0 = Math.max(0, Math.floor((Math.min(P[k * 2 + 1], P[k * 2 + 3]) - rr - n0) / NEAR_C)), j1 = Math.min(gh - 1, Math.floor((Math.max(P[k * 2 + 1], P[k * 2 + 3]) + rr - n0) / NEAR_C));
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { const c = j * gw + i;
+      if (nearD2(G, e0 + (i + 0.5) * NEAR_C, n0 + (j + 0.5) * NEAR_C, k) < reach) { if (G.lo[c] < 0) G.lo[c] = k; G.hi[c] = k; } }
+  }
+  return G;
+}
+/** the squared distance from (x, y) (E', N') to the path's segment k */
+function nearD2(G, x, y, k) { const P = G.P, ax = P[k * 2], ay = P[k * 2 + 1], dx = P[k * 2 + 2] - ax, dy = P[k * 2 + 3] - ay, L2 = dx * dx + dy * dy || 1;
+  const t = Math.min(1, Math.max(0, ((x - ax) * dx + (y - ay) * dy) / L2)), ex = x - ax - t * dx, ey = y - ay - t * dy; return ex * ex + ey * ey; }
+/** whether building b (its first corner at o in D.V) stands by the route */
+function nearB(G, D, b, o) {
+  const R2 = NEAR_R * NEAR_R, V = D.V;
+  for (let e = 0; e < D.B.n[b]; e++) {
+    const x = V[(o + e) * 2], y = V[(o + e) * 2 + 1], i = Math.floor((x - G.e0) / NEAR_C), j = Math.floor((y - G.n0) / NEAR_C);
+    if (i < 0 || j < 0 || i >= G.gw || j >= G.gh) continue; const c = j * G.gw + i; if (G.lo[c] < 0) continue;
+    for (let k = G.lo[c]; k <= G.hi[c]; k++) if (nearD2(G, x, y, k) < R2) return true;
+  }
+  return false;
+}
 /** the far city's look in the painter's input (the tools' layout only, never in a drive): GALATA-3's (5c882da) painted massing, its
  *  plaster by its own hash, its windows box-filtered, its roofs, domes, minarets and crowns, lit by a painter's key, in a light haze */
 function layoutMassMaterial(post, fog) {
@@ -274,9 +308,35 @@ const PLATE_VS = /* glsl */`varying vec3 vW; varying float vD;
   #ifdef PX_FADE
   varying vec3 vPxC;
   #endif
+  #ifdef PX_MASS
+  // (step 43B) the far city's built look where no plate in use saw it: the painter's layout's own massing (layoutMassMaterial: its plaster by
+  // each building's hash, its roofs, domes, minarets and crowns), unlit here (the fragment lights it by the hour)
+  attribute vec4 aF; attribute float aNr; varying vec4 vF; varying vec3 vMW, vMN; varying float vNr;
+  float mh1(float x){ return fract(sin(x * 127.1) * 43758.5453); }
+  vec3 mPlaster(float kind, float t){
+    float a = mh1(t * 3.17 + 0.37), b = mh1(t * 7.13 + 1.3); vec3 c;
+    if (a < 0.20) c = vec3(0.93, 0.89, 0.80); else if (a < 0.36) c = vec3(0.88, 0.80, 0.66); else if (a < 0.47) c = vec3(0.86, 0.73, 0.54);
+    else if (a < 0.57) c = vec3(0.88, 0.73, 0.66); else if (a < 0.74) c = vec3(0.95, 0.94, 0.91); else if (a < 0.82) c = vec3(0.92, 0.88, 0.68);
+    else if (a < 0.92) c = vec3(0.79, 0.78, 0.75); else c = vec3(0.80, 0.84, 0.87);
+    if (kind > 1.5 && kind < 2.5) c = mix(c, vec3(0.80, 0.74, 0.64), 0.55); else if (kind > 2.5 && kind < 3.5) c = mix(c, vec3(0.88, 0.89, 0.90), 0.7);
+    else if (kind > 3.5 && kind < 5.5) c = vec3(0.88, 0.86, 0.80); else if (kind > 5.5) c = mix(c, vec3(0.86, 0.80, 0.70), 0.4);
+    return c * (0.95 + 0.09 * b);
+  }
+  #endif
   void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; vec4 mv = viewMatrix * w; vD = -mv.z; gl_Position = projectionMatrix * mv;
     #ifdef PX_FADE
     vPxC = color;
+    #endif
+    #ifdef PX_MASS
+    vF = aF; vNr = aNr; vMN = normalize(mat3(modelMatrix) * normal); float code = floor(aF.w + 0.5);
+    if (code < 999.5) vMW = mPlaster(mod(code, 8.0), floor(code / 8.0));
+    else if (code < 1999.5) vMW = mix(vec3(0.66, 0.64, 0.61), vec3(0.75, 0.72, 0.66), mh1(code));
+    else if (code < 2999.5) vMW = mix(vec3(0.72, 0.39, 0.28), vec3(0.63, 0.42, 0.34), mh1(code * 1.3));
+    else if (code < 3999.5) vMW = vec3(0.55, 0.59, 0.65);
+    else if (code < 4999.5) vMW = vec3(0.88, 0.87, 0.83);
+    else if (code < 5999.5) vMW = vec3(0.50, 0.55, 0.62);
+    else if (code < 6999.5) vMW = vec3(0.74, 0.73, 0.70);
+    else vMW = mix(vec3(0.22, 0.38, 0.21), vec3(0.36, 0.52, 0.27), mh1((code - 7000.0) * 0.77)) * (0.86 + 0.22 * clamp(aF.y * 0.5 + 0.5, 0.0, 1.0));
     #endif
   }`;
 // ---- (step 35P) the built look where the plates saw a surface too thinly for the view. A plate's texels on a surface go as f / l (f: how
@@ -326,17 +386,48 @@ export function pxFrontsHook(rooms) {
  *  cards are (realsky.js: the painting itself on a bright day, its colours relit under the hour's light, the band's tones far off at
  *  dusk), the band's haze far off. uRing: the far ring's (a backstop: the sky where no plate saw it). uDbg: the tools' (1 coverage,
  *  2 plate a's own colours) */
-function plateMaterial(post, U, ring, fade = false) {
+function plateMaterial(post, U, ring, fade = false, mass = false) {
   return new THREE.ShaderMaterial({
-    fog: false, side: THREE.FrontSide, vertexColors: fade, defines: fade ? { PX_FADE: '' } : {},
+    fog: false, side: THREE.FrontSide, vertexColors: fade, defines: fade ? { PX_FADE: '' } : mass ? { PX_MASS: '' } : {},
     uniforms: { ...U, uRing: { value: ring ? 1 : 0 } },
     vertexShader: PLATE_VS,
     fragmentShader: '#include <packing>\n' + UNGRADE + PX_FADE + /* glsl */`
       uniform sampler2D uP0, uP1, uQ0, uQ1, uD0, uD1; uniform mat4 uM0, uM1; uniform vec3 uC0, uC1; uniform vec2 uW, uOk;
-      uniform float uNight, uRing, uDbg, uPaint, uTone, uBCh, uHaze; uniform vec3 uFogC, uLightC, uBS, uBM, uBH;
+      uniform float uNight, uRing, uDbg, uPaint, uTone, uBCh, uHaze, uSeen; uniform vec3 uFogC, uLightC, uBS, uBM, uBH;
       varying vec3 vW; varying float vD;
       #ifdef PX_FADE
       uniform float uFade; uniform vec3 uLDir; varying vec3 vPxC;
+      #endif
+      #ifdef PX_MASS
+      uniform vec3 uLDir; varying vec4 vF; varying vec3 vMW, vMN; varying float vNr;
+      float mh1f(float x){ return fract(sin(x * 127.1) * 43758.5453); }
+      float mPulse(float x, float d, float w){ w = max(w, 1e-4); float o = 0.5 - 0.5 * d, a = x - 0.5 * w, b = x + 0.5 * w;
+        return ((floor(b) * d + clamp(fract(b) - o, 0.0, d)) - (floor(a) * d + clamp(fract(a) - o, 0.0, d))) / w; }
+      // (step 43B: the far city's built look's facade, as the painter's layout draws it (layoutMassMaterial): each storey's windows
+      // box-filtered (dF: the facade coordinates' fwidth, taken where every pixel runs), the shopfronts on the ground floor; .w its windows lit at
+      // night, by each window's hash)
+      vec4 massFacade(vec2 dF){
+        float code = floor(vF.w + 0.5); vec3 c = vMW; float lit = 0.0;
+        if (code < 999.5) {
+          float kind = mod(code, 8.0), u = vF.x, v = vF.y, H = vF.z;
+          vec4 K = kind < 0.5 ? vec4(2.3, 0.85, 2.9, 1.45) : kind < 1.5 ? vec4(2.8, 1.15, 3.2, 1.5) : kind < 2.5 ? vec4(3.3, 1.5, 3.6, 2.0) : kind < 3.5 ? vec4(3.0, 2.5, 3.2, 1.7) : kind < 5.5 ? vec4(4.2, 1.0, 4.5, 2.4) : vec4(3.6, 1.6, 4.0, 2.2);
+          float gh = kind < 0.5 ? 0.4 : kind > 3.5 && kind < 5.5 ? 1.6 : kind > 5.5 ? 1.0 : 4.0;
+          float x = u / K.x, yw = (v - gh - 0.9 - 0.5 * K.w) / K.z + 0.5, fx = dF.x / K.x, fy = dF.y / K.z;
+          float inUp = clamp((v - gh + 0.15) / 0.3, 0.0, 1.0) * clamp((H - 1.15 - v) / 0.3, 0.0, 1.0);
+          float pw = K.y / K.x, ph = K.w / K.z, fw = 0.13 / K.x, fh = 0.13 / K.z; // (the pane's share of its bay and storey; a 13 cm frame)
+          float win = (fx > 0.7 ? pw * ph : mPulse(x, pw, fx) * mPulse(yw, ph, fy)) * inUp;
+          float frm = (fx > 0.7 ? (pw + 2.0 * fw) * (ph + 2.0 * fh) : mPulse(x, pw + 2.0 * fw, fx) * mPulse(yw, ph + 2.0 * fh, fy)) * inUp;
+          // (the glass as painted windows have it: dark below, the sky's light rising up the pane; its mean where a pane is under a pixel)
+          float gt = clamp((fract(yw) - 0.5 + 0.5 * ph) / ph, 0.0, 1.0), gk = smoothstep(0.35, 0.05, fy);
+          vec3 glass = mix(vec3(0.25, 0.30, 0.38), mix(vec3(0.21, 0.26, 0.34), vec3(0.47, 0.57, 0.69), gt * gt), gk);
+          c = mix(mix(vMW, min(vMW * 1.13 + 0.04, vec3(0.97)), frm), glass, win);
+          if (v < gh && kind > 0.5 && kind < 3.5) { float xs = u / 3.4; c = mix(vMW * 0.84, vec3(0.19, 0.21, 0.24), mPulse(xs, 0.74, dF.x / 3.4) * clamp((v - 0.15) * 5.0, 0.0, 1.0) * clamp((gh - 0.95 - v) * 5.0, 0.0, 1.0)); }
+          c *= 1.0 + 0.12 * clamp((v - H + 1.0) * 8.0, 0.0, 1.0) * clamp((H - 0.5 - v) * 8.0, 0.0, 1.0);
+          c *= 0.84 + 0.16 * clamp((v + 0.5) / 3.0, 0.0, 1.0);
+          lit = win * step(0.7, mh1f(floor(x) * 7.31 + floor(yw) * 3.17 + code * 0.013));
+        }
+        return vec4(c, lit);
+      }
       #endif
       // (where this point falls in a plate (st: the painting's uv) and whether its camera saw it: inside its frame and not behind the
       // proxy's nearer surface there, by the plate's depth map)
@@ -359,6 +450,9 @@ function plateMaterial(post, U, ring, fade = false) {
         // (how squarely each plate saw it: a surface seen edge-on stretches the painting, so that plate says less (view-dependent
         // texturing's weight); the normal from the surface's own derivatives)
         vec3 nn = normalize(cross(dFdx(vW), dFdy(vW)));
+        #ifdef PX_MASS
+        vec2 dF = fwidth(vF.xy);
+        #endif
         float f0 = abs(dot(nn, normalize(vW - uC0))), f1 = abs(dot(nn, normalize(vW - uC1)));
         vec4 a = texture2D(uP0, s0), b = texture2D(uP1, s1), ab = texture2D(uP0, s0, 4.0), bb = texture2D(uP1, s1, 4.0);
         float w0 = v0 * smoothstep(0.06, 0.3, f0) * (uW.x + 0.002), w1 = v1 * smoothstep(0.06, 0.3, f1) * (uW.y + 0.002), ws = w0 + w1;
@@ -368,12 +462,34 @@ function plateMaterial(post, U, ring, fade = false) {
         float gm = smoothstep(0.06, 0.18, max(v0 * f0, v1 * f1));
         c.rgb = mix(cb.rgb, c.rgb, gm);
         if (uRing > 0.5 && v0 + v1 < 0.5) discard; // (the far ring is only a backstop)
+        // (step 43B) where the plates in use never saw a surface there is no painting of it: a point outside every plate's frame (or behind
+        // its camera) took its uv clamped to the frame's edge, the edge's texels smeared over the surface (black where that edge is the
+        // painting's transparent sky). Such a surface (uSeen 1), and while the plates are stand-ins (uSeen 2: the camera before the first stop
+        // or past the last, or the plate planned behind it not in) whatever they saw hidden too, isn't painted but takes its built look, so
+        // no building beside the road ends where a plate's frame did: Galata's walls and extras within PX_FAR (the fade's: their colours, the
+        // crisp fronts over them), the far city's buildings by the route (vNr: nearB) their layout's own massing and windows (PX_MASS). Not
+        // drawn there: Galata's walls beyond PX_FAR (their built look has no windows that far: blank walls), the rest of the far city (among it
+        // the real buildings behind the route's start, which stand on the Bosphorus zone's own ground before Galata; and its walls face the
+        // route only, so new viewpoints would see its open backs), and Eminönü's pavilion
+        float seenBy = uSeen > 1.5 ? v0 + v1 : uSeen > 0.5 ? max(i0 * uOk.x, i1 * uOk.y) : 1.0;
+        #ifdef PX_MASS
+        float mB = 0.0; vec4 mf = vec4(0.0);
+        if (seenBy < 0.5) {
+          if (vNr < 0.5) discard;
+          mf = massFacade(dF); mB = 1.0; c = vec4(mf.rgb * mix(0.74, 1.0, smoothstep(-0.15, 0.35, dot(vMN, uLDir))), 1.0);
+        }
+        #else
+        #ifndef PX_FADE
+        if (seenBy < 0.5) discard;
+        #endif
+        #endif
         float pxE = 0.0; vec3 nf = nn;
         #ifdef PX_FADE
         // (seen too thinly by the plates in use for this view: the walls' and the extras' own colours, under the hour's light (the fronts
         // over them their built look: pxFrontsHook))
         nf = nn * sign(dot(nn, cameraPosition - vW) + 1e-6);
         if (uFade > 0.5 && length(cameraPosition - vW) < ${PX_FAR.toFixed(1)}) pxE = pxFadeAt(uD0, uD1, uM0, uM1, uC0, uC1, uW, vW, nf);
+        if (seenBy < 0.5 && pxE < 0.5) discard;
         #endif
         if (ws > 1e-5 && c.a < 0.5 && pxE < 0.5) discard; // (the painting's sky)
         if (uDbg > 0.5) { gl_FragColor = vec4(ungrade(uDbg < 1.5 ? vec3(v0, v1, step(0.5, c.a)) : a.rgb), 1.0); return; }
@@ -384,6 +500,9 @@ function plateMaterial(post, U, ring, fade = false) {
         if (uNight > 0.004) { // (the night plates, the same paintings at night)
           vec4 an = texture2D(uQ0, s0), bn = texture2D(uQ1, s1), cn = mix(texture2D(uQ1, s1, 4.0), texture2D(uQ0, s0, 4.0), pa);
           vec3 n = mix(cn.rgb, ws > 1e-5 ? (an.rgb * w0 + bn.rgb * w1) / ws : cn.rgb, gm);
+          #ifdef PX_MASS
+          if (mB > 0.5) n = dot(c.rgb, vec3(0.299, 0.587, 0.114)) * vec3(0.17, 0.22, 0.47) * (1.0 - mf.w) + mf.w * vec3(0.72, 0.53, 0.29); // (the built look at night as the night plates paint the city: moonlit blue plaster and glass, a third of the windows lit warm, below the bloom)
+          #endif
           col = mix(col, ungrade(n), uNight);
         }
         #ifdef PX_FADE
@@ -423,11 +542,11 @@ export function makePlates(o) {
     uP0: { value: blank }, uP1: { value: blank }, uQ0: { value: blank }, uQ1: { value: blank }, uD0: PXU.uD0, uD1: PXU.uD1,
     uM0: PXU.uM0, uM1: PXU.uM1, uC0: PXU.uC0, uC1: PXU.uC1, uW: PXU.uW, uOk: { value: new THREE.Vector2(0, 0) }, uNight: { value: 0 }, uDbg: { value: 0 },
     uLightC: { value: new THREE.Color(1, 1, 1) }, uPaint: { value: 1 }, uTone: { value: 0 }, uBS: { value: new THREE.Vector3() }, uBM: { value: new THREE.Vector3() },
-    uBH: { value: new THREE.Vector3() }, uBCh: { value: 0 }, uHaze: { value: 0 }, uFogC: { value: o.fog }, uFade: PXU.uFade, uLDir: { value: TOD.lightDir }, ...gradeUniforms(post),
+    uBH: { value: new THREE.Vector3() }, uBCh: { value: 0 }, uHaze: { value: 0 }, uSeen: { value: 1 }, uFogC: { value: o.fog }, uFade: PXU.uFade, uLDir: { value: TOD.lightDir }, ...gradeUniforms(post),
   };
   // (the plate material; the far ring's; the depth maps'; and the proxy's walls' and extras' (the built look's colours where the plates saw
   // them too thinly: PX_FADE))
-  const [mat, ringMat, dMat, matF] = quietIds(() => [plateMaterial(post, U, false), plateMaterial(post, U, true), depthMaterial(), plateMaterial(post, U, false, true)]);
+  const [mat, ringMat, dMat, matF, matM] = quietIds(() => [plateMaterial(post, U, false), plateMaterial(post, U, true), depthMaterial(), plateMaterial(post, U, false, true), plateMaterial(post, U, false, false, true)]); // (matM: the far city's, its built look where no plate saw it: step 43B)
   const pcam = quietIds(() => new THREE.PerspectiveCamera(60, 16 / 9, 0.5, DFAR)); pcam.layers.set(PX_LAYER);
   let ring = o.ring, ringOrig = ring ? ring.material : null;
   // (the far city: under the plates only)
@@ -435,19 +554,20 @@ export function makePlates(o) {
   // all at once, before the title (addMass); in a drive a part's build a frame, then its upload a frame (addMassAsync))
   let mass = null, massQNow = -1, wrt = null;
   const wsc = quietIds(() => new THREE.Scene()); wsc.overrideMaterial = dMat;
-  const massMesh = g => { const m = new THREE.Mesh(g, mat); m.frustumCulled = false; m.renderOrder = 997; m.layers.enable(PX_LAYER); return m; };
+  const massMesh = g => { const m = new THREE.Mesh(g, matM); m.frustumCulled = false; m.renderOrder = 997; m.layers.enable(PX_LAYER); return m; };
   const warmPart = m => {
     if (!wrt) wrt = quietIds(() => new THREE.WebGLRenderTarget(4, 4));
     const pt = renderer.getRenderTarget(), au = renderer.shadowMap.autoUpdate; wsc.add(m); renderer.shadowMap.autoUpdate = false;
     renderer.setRenderTarget(wrt); renderer.render(wsc, pcam); renderer.setRenderTarget(pt); renderer.shadowMap.autoUpdate = au; wsc.remove(m);
   };
   const massIn = parts => { mass = quietIds(() => new THREE.Group()); mass.visible = false; for (const m of parts) mass.add(m); massQNow = -1; scene.add(mass); if (wrt) { wrt.dispose(); wrt = null; } };
-  const addMass = D => { if (mass || !D) return null; const parts = []; for (const [i0, i1, tl] of massSpans(D)) { const m = quietIds(() => massMesh(massPart(D, i0, i1, tl))); warmPart(m); parts.push(m); } massIn(parts); return mass; };
+  const addMass = D => { if (mass || !D) return null; const parts = [], ng = nearGrid(stops); for (const [i0, i1, tl] of massSpans(D)) { const m = quietIds(() => massMesh(massPart(D, i0, i1, tl, ng))); warmPart(m); parts.push(m); } massIn(parts); return mass; };
   // each stop's state: its painting (day, night: 0 idle, 1 fetching, 2 decoded, 3 ready, 4 failed), its depth map, its camera now
   const mkSlot = () => ({ tok: 0, img: null, tex: null, st: 0, ub: 0, nimg: null, ntex: null, nst: 0, nub: 0, rt: null, dv: -1, df: -1e9, mat: new THREE.Matrix4(), cp: new THREE.Vector3() });
   let slots = stops.map(mkSlot);
   let set = 'L', mode = 0, pver = -1, frame = 0, inflight = 0, zsNow = NaN, gen = 0;
-  const P = { mat, ringMat, matF, fade: true, depthMat: dMat, mode: 0, a: 0, b: 0, t: 0, camL: 0, set: 'L', ok: false, depthMs: 0, depthN: 0, loads: 0, fails: 0, ov: null, only: null, frozen: null, layout: false, clean: false, keep: null };
+  const P = { mat, ringMat, matF, matM, fade: true, depthMat: dMat, mode: 0, a: 0, b: 0, t: 0, camL: 0, set: 'L', ok: false, depthMs: 0, depthN: 0, loads: 0, fails: 0, ov: null, only: null, frozen: null, layout: false, clean: false, keep: null,
+    cover: true, stand: false }; // (step 43B: cover, what no plate in use saw isn't painted (main.js's test switch st.platecover); stand, the plates in use are stand-ins)
   if (o.mass) addMass(o.mass);
 
   // ---- the camera of stop i in the scene now (zone start zs, the world's origin): pcam placed, the stop's matrix and place written
@@ -545,7 +665,7 @@ export function makePlates(o) {
   const applyAll = () => {
     world.chunks.forEach(applyChunk);
     if (ring) ring.material = mode === 1 ? ringMat : ringOrig;
-    if (mass) { mass.visible = mode !== 0; const mm = mode === 2 ? (P.massLayout || (P.massLayout = quietIds(() => layoutMassMaterial(post, o.fog)))) : mat; for (const m of mass.children) m.material = mm; }
+    if (mass) { mass.visible = mode !== 0; const mm = mode === 2 ? (P.massLayout || (P.massLayout = quietIds(() => layoutMassMaterial(post, o.fog)))) : matM; for (const m of mass.children) m.material = mm; }
   };
   const setMode = m => { if (m !== mode || pver !== world.plateVer) { mode = m; P.mode = m; pver = world.plateVer; applyAll(); } };
   // (the fronts over the plates drawn only near the eye: their fade is within PX_FAR m of it)
@@ -592,18 +712,22 @@ export function makePlates(o) {
       if (sl.st === 2) { if (band(sl, false)) sl.st = 3; did = true; } else if (sl.st === 3 && dOK && depthDue(sl, i, k, zs)) { renderDepth(i, zs); did = true; } }
     for (let k = 0; k < 3 && !did; k++) { const i = k === 0 ? a : k === 1 ? b : b + 1; if (i >= n) continue; const sl = slots[i];
       if (sl.nst === 2) { if (band(sl, true)) sl.nst = 3; did = true; } }
-    // (should the two not be ready, the nearest ready ones: a stale plate paints better than none)
+    // (should the two not be ready, the nearest ready ones: a stale plate paints better than none, but only what it saw (stand: uSeen))
+    let stand = camL < stops[0].l || camL > stops[n - 1].l; // (step 43B: before the first stop or past the last, the plates in use are stand-ins too)
     if (!ready(a) || !ready(b)) {
       let best = -1, bd = Infinity; for (let i = 0; i < n; i++) if (ready(i) && Math.abs(stops[i].l - camL) < bd) { bd = Math.abs(stops[i].l - camL); best = i; }
-      if (!ready(a) && !ready(b)) { if (best < 0) { setMode(0); P.ok = false; return false; } a = b = best; t = 0; }
-      else if (!ready(a)) { a = b; t = 0; } else { b = a; t = 0; }
+      if (!ready(a) && !ready(b)) { if (best < 0) { setMode(0); P.ok = false; return false; } a = b = best; t = 0; stand = true; }
+      else if (!ready(a)) { a = b; t = 0; stand = true; } else { b = a; t = 0; }
     }
-    P.a = a; P.b = b; P.t = t;
+    P.a = a; P.b = b; P.t = t; P.stand = stand;
     place(a, zs); place(b, zs);
     const sa = slots[a], sb = slots[b];
     U.uP0.value = sa.tex; U.uP1.value = sb.tex; U.uD0.value = sa.rt.texture; U.uD1.value = sb.rt.texture;
     U.uM0.value.copy(sa.mat); U.uM1.value.copy(sb.mat); U.uC0.value.copy(sa.cp); U.uC1.value.copy(sb.cp);
     U.uW.value.set(1 - t, t); U.uOk.value.set(1, 1); U.uDbg.value = P.dbg || 0;
+    // (step 43B: what the plates in use never saw isn't painted; P.cover off (the test switch st.platecover 0) and the tools' one plate
+    // (P.only) as before, edge-smeared)
+    U.uSeen.value = !P.cover || P.only !== null ? 0 : stand ? 2 : 1;
     // (by the hour as the landmark cards: realsky.js)
     _c.copy(TOD.sunCol).multiplyScalar(TOD.sunI); let r = _c.r, g = _c.g, bl = _c.b;
     _c.copy(TOD.hemiSky).multiplyScalar(TOD.hemiI * 2); r += _c.r; g += _c.g; bl += _c.b;
@@ -626,8 +750,9 @@ export function makePlates(o) {
     const t = new THREE.BufferGeometry(); t.setAttribute('position', new THREE.Float32BufferAttribute([0, -60, 0, 0.01, -60, 0, 0, -59.99, 0], 3));
     const tn = t.clone(); tn.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
     const tc = tn.clone(); tc.setAttribute('color', new THREE.BufferAttribute(new Uint8Array(9).fill(255), 3, true)); // (as the proxy's GBs: geom.js)
-    const q = new THREE.Scene(); for (const x of [new THREE.Mesh(tn, mat), new THREE.Mesh(t, ringMat), new THREE.Mesh(tc, matF)]) { x.frustumCulled = false; x.layers.enable(PX_LAYER); q.add(x); }
-    return [q, [t, tn, tc]];
+    const tm = t.clone(); tm.setAttribute('normal', new THREE.BufferAttribute(new Int8Array([0, 127, 0, 0, 127, 0, 0, 127, 0]), 3, true)); tm.setAttribute('aF', new THREE.Float32BufferAttribute(new Array(12).fill(0), 4)); tm.setAttribute('aNr', new THREE.BufferAttribute(new Uint8Array(3), 1, true)); // (as the far city's parts: massPart)
+    const q = new THREE.Scene(); for (const x of [new THREE.Mesh(tn, mat), new THREE.Mesh(t, ringMat), new THREE.Mesh(tc, matF), new THREE.Mesh(tm, matM)]) { x.frustumCulled = false; x.layers.enable(PX_LAYER); q.add(x); }
+    return [q, [t, tn, tc, tm]];
   });
   P.warm = (camera, target) => {
     const [sc, geos] = warmScene(), rt = quietIds(() => new THREE.WebGLRenderTarget(4, 4)), pt = renderer.getRenderTarget();
@@ -658,7 +783,8 @@ export function makePlates(o) {
    *  frame, then in, every plate's depth map drawn again with it */
   P.addMassAsync = async (D, nextFrame) => {
     if (mass || !D) return; const parts = [];
-    for (const [i0, i1, tl] of massSpans(D)) { await nextFrame(); if (mass) return; parts.push(quietIds(() => massMesh(massPart(D, i0, i1, tl)))); }
+    const ng = nearGrid(stops); // (step 43B: the route's neighbourhood, for the buildings by it)
+    for (const [i0, i1, tl] of massSpans(D)) { await nextFrame(); if (mass) return; parts.push(quietIds(() => massMesh(massPart(D, i0, i1, tl, ng)))); }
     for (const m of parts) { await nextFrame(); if (mass) return; warmPart(m); }
     await nextFrame(); if (mass) return; massIn(parts); P.invalidate();
   };
